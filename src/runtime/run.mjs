@@ -186,8 +186,8 @@ export async function runNode(ctx) {
     clearTimeout: timers.clearTimeout,
     setInterval: timers.setInterval,
     clearInterval: timers.clearInterval,
-    setImmediate: (cb, ...args) => timers.setTimeout(cb, 0, ...args),
-    clearImmediate: timers.clearTimeout,
+    setImmediate: timers.setImmediate,
+    clearImmediate: timers.clearImmediate,
     fetch: fetchStub,
     WebSocket: WebSocketStub,
   });

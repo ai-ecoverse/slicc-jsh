@@ -1,9 +1,11 @@
 /**
- * setTimeout / setInterval with Node's Timeout.ref()/unref() and handle counting.
- * User callbacks run as Timeout._onTimeout so uncaught stacks match Node.
+ * setTimeout / setInterval / setImmediate with Node's Timeout / Immediate
+ * ref()/unref() and handle counting. User callbacks run as Timeout._onTimeout
+ * or Immediate._onImmediate so uncaught stacks match Node.
  */
 
 function Timeout() {}
+function Immediate() {}
 
 export function createTimers(handles, { onCallbackError } = {}) {
   const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
@@ -13,9 +15,9 @@ export function createTimers(handles, { onCallbackError } = {}) {
 
   const byId = new Map();
 
-  const runOnTimeout = (handle, args) => {
+  const runMethod = (handle, method, args) => {
     try {
-      handle._onTimeout(...args);
+      handle[method](...args);
     } catch (err) {
       if (onCallbackError) onCallbackError(err);
       else throw err;
@@ -24,14 +26,7 @@ export function createTimers(handles, { onCallbackError } = {}) {
     }
   };
 
-  const makeTimeout = (fn, delay, args, repeating) => {
-    const state = {
-      refed: true,
-      id: null,
-      repeating,
-    };
-    const handle = new Timeout();
-    handle._onTimeout = fn;
+  const attachRefApi = (handle, state) => {
     handle.ref = function ref() {
       if (!state.refed) {
         state.refed = true;
@@ -52,15 +47,47 @@ export function createTimers(handles, { onCallbackError } = {}) {
     handle[Symbol.toPrimitive] = function toPrimitive() {
       return state.id;
     };
+  };
+
+  const makeTimeout = (fn, delay, args, repeating) => {
+    const state = {
+      refed: true,
+      id: null,
+      repeating,
+    };
+    const handle = new Timeout();
+    handle._onTimeout = fn;
+    attachRefApi(handle, state);
 
     const fire = () => {
       if (!state.repeating) {
         byId.delete(state.id);
         handles.delete(state);
       }
-      runOnTimeout(handle, args);
+      runMethod(handle, '_onTimeout', args);
     };
     state.id = repeating ? nativeSetInterval(fire, delay ?? 0) : nativeSetTimeout(fire, delay ?? 0);
+    byId.set(state.id, state);
+    handles.add(state);
+    return handle;
+  };
+
+  const makeImmediate = (fn, args) => {
+    const state = {
+      refed: true,
+      id: null,
+      repeating: false,
+    };
+    const handle = new Immediate();
+    handle._onImmediate = fn;
+    attachRefApi(handle, state);
+
+    const fire = () => {
+      byId.delete(state.id);
+      handles.delete(state);
+      runMethod(handle, '_onImmediate', args);
+    };
+    state.id = nativeSetTimeout(fire, 0);
     byId.set(state.id, state);
     handles.add(state);
     return handle;
@@ -90,6 +117,11 @@ export function createTimers(handles, { onCallbackError } = {}) {
       return makeTimeout(fn, delay, args, true);
     },
     clearInterval: (handle) => clear(handle, nativeClearInterval),
+    setImmediate: (fn, ...args) => {
+      if (typeof fn !== 'function') return nativeSetTimeout(fn, 0, ...args);
+      return makeImmediate(fn, args);
+    },
+    clearImmediate: (handle) => clear(handle, nativeClearTimeout),
     clearPending() {
       for (const [id, state] of byId) {
         if (state.repeating) nativeClearInterval(id);

@@ -7,8 +7,8 @@ export function createTimersModule(timers) {
     clearTimeout: timers.clearTimeout,
     setInterval: timers.setInterval,
     clearInterval: timers.clearInterval,
-    setImmediate: (fn, ...args) => timers.setTimeout(fn, 0, ...args),
-    clearImmediate: timers.clearTimeout,
+    setImmediate: timers.setImmediate,
+    clearImmediate: timers.clearImmediate,
   };
 }
 
@@ -29,7 +29,7 @@ export function createTimersPromises(timers, handles) {
       return trackPromise(
         handles,
         new Promise((resolve) => {
-          timers.setTimeout(() => resolve(value), 0);
+          timers.setImmediate(() => resolve(value));
         })
       );
     },

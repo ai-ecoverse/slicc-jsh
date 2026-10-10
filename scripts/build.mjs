@@ -95,6 +95,49 @@ const decoder = await esbuild.build({
   logLevel: 'info',
   metafile: true,
   alias: { ...vendorBufferAlias },
+  plugins: [
+    {
+      // npm string_decoder 1.3 emits one U+FFFD for incomplete multibyte; Node
+      // emits one per buffered byte (#22626). Keep resume index in lastNeed.
+      name: 'utf8-replacement-22626',
+      setup(build) {
+        build.onLoad({ filter: /string_decoder[/\\]lib[/\\]string_decoder\.js$/ }, async (args) => {
+          const { readFile } = await import('node:fs/promises');
+          let text = await readFile(args.path, 'utf8');
+          text = text.replace(
+            /function utf8CheckExtraBytes\(self, buf, p\) \{[\s\S]*?\n\}/,
+            `function utf8CheckExtraBytes(self, buf, p) {
+  // Match V8/Node replacement counts for incomplete/invalid UTF-8 (#22626).
+  function replacements(n) {
+    const slice = self.lastChar.slice(0, n);
+    return new TextDecoder('utf-8').decode(slice);
+  }
+  if ((buf[0] & 0xC0) !== 0x80) {
+    self.lastNeed = 0;
+    return replacements(p > 0 ? p : 1);
+  }
+  if (self.lastNeed > 1 && buf.length > 1) {
+    if ((buf[1] & 0xC0) !== 0x80) {
+      self.lastChar[p] = buf[0];
+      self.lastNeed = 1;
+      return replacements(p + 1);
+    }
+    if (self.lastNeed > 2 && buf.length > 2) {
+      if ((buf[2] & 0xC0) !== 0x80) {
+        self.lastChar[p] = buf[0];
+        self.lastChar[p + 1] = buf[1];
+        self.lastNeed = 2;
+        return replacements(p + 2);
+      }
+    }
+  }
+}`
+          );
+          return { contents: text, loader: 'js' };
+        });
+      },
+    },
+  ],
 });
 
 writeFileSync(join(dist, 'meta-main.json'), JSON.stringify(main.metafile));

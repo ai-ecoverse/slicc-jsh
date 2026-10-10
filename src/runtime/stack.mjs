@@ -44,15 +44,30 @@ function remapFileName(file) {
   if (!file) return file;
   if (file.startsWith('data:')) return null;
   if (file.startsWith('node:internal')) return null;
+  if (file === 'unknown') return null;
   return file;
+}
+
+/**
+ * new Function + //# sourceURL often leaves getFileName() empty while
+ * getEvalOrigin() still holds the script URL (e.g. /os/t.js).
+ */
+function scriptUrlFromOrigin(origin) {
+  if (typeof origin !== 'string' || !origin) return null;
+  if (origin === '[eval]' || origin.startsWith('/')) return origin;
+  const inParens = /\((\[eval\]|\/[^:)]+):(\d+):(\d+)\)/.exec(origin);
+  if (inParens) return inParens[1];
+  // Bare path without spaces (our sourceURL case).
+  if (!/[\s(]/.test(origin)) return origin;
+  return null;
 }
 
 /** Parse name / path:line:col from CallSite.toString (getters are often empty with sourceURL). */
 function parseSite(frame) {
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
   const withName =
-    /^\s*(?:async\s+)?(?:new\s+)?([^\s(]+)\s+\((\[eval\]|[^)]+):(\d+):(\d+)\)/.exec(text);
-  if (withName) {
+    /^\s*(?:async\s+)?(?:new\s+)?(.+?)\s+\((\[eval\]|\/[^)]+|unknown):(\d+):(\d+)\)/.exec(text);
+  if (withName && withName[2] !== 'unknown') {
     return {
       name: withName[1],
       file: withName[2],
@@ -67,28 +82,46 @@ function parseSite(frame) {
   return null;
 }
 
+function resolveFile(frame, parsed) {
+  return remapFileName(
+    frame.getFileName?.() ||
+      parsed?.file ||
+      scriptUrlFromOrigin(frame.getEvalOrigin?.()) ||
+      null
+  );
+}
+
 /** Wrap a V8 CallSite so getters match err.stack remapping. */
 export function wrapCallSite(frame) {
   const parsed = parseSite(frame);
-  const file = remapFileName(frame.getFileName?.() || parsed?.file || null);
+  const file = resolveFile(frame, parsed);
   const rawLine = frame.getLineNumber?.() ?? parsed?.line;
   const line = adjustLine(rawLine);
   const col = frame.getColumnNumber?.() ?? parsed?.column ?? 0;
 
   const method = frame.getMethodName?.();
   const typeName = frame.getTypeName?.();
+  const userName = frame.getFunctionName?.();
 
-  let fn = frame.getFunctionName?.() || null;
-  if (fn === 'eval' || fn === 'Object.eval') fn = 'Object.<anonymous>';
-  if (fn === '<anonymous>') fn = null;
+  let fn = userName || null;
+  if (fn === 'eval' || fn === 'Object.eval' || fn === '<anonymous>') {
+    fn = 'Object.<anonymous>';
+  }
+  const isAnon = fn === 'Object.<anonymous>';
 
-  // Prefer Type.method when V8 reports a method call (Timeout._onTimeout).
-  // Do not trust parsed.toString names — they may already say Object.<anonymous>.
+  // Timeout._onTimeout / Immediate._onImmediate; named → Type.name [as method].
+  // Anonymous timer callbacks: Node prints Timeout._onTimeout, not Type.<anonymous>.
   if (method && typeName && typeName !== 'Object') {
-    fn = `${typeName}.${method}`;
+    if (fn && !isAnon && fn !== method) {
+      fn = `${typeName}.${fn} [as ${method}]`;
+    } else {
+      fn = `${typeName}.${method}`;
+    }
   } else if (!fn) {
     fn = parsed?.name || null;
-    if (fn === '<anonymous>') fn = null;
+    if (fn === 'eval' || fn === 'Object.eval' || fn === '<anonymous>') {
+      fn = 'Object.<anonymous>';
+    }
   }
   if (fn && fn !== 'Object.<anonymous>' && typeName === 'Object' && method && fn === method) {
     fn = `Object.${method}`;
@@ -96,6 +129,7 @@ export function wrapCallSite(frame) {
     fn &&
     fn !== 'Object.<anonymous>' &&
     !fn.includes('.') &&
+    !fn.includes(' [as ') &&
     /^[a-z]/.test(fn) &&
     typeName === 'Object'
   ) {
@@ -119,6 +153,8 @@ export function wrapCallSite(frame) {
       if (fn === 'Object.<anonymous>') return null;
       if (isToplevel && !ctor) return null;
       if (fn?.startsWith('Object.') && !ctor) return fn.slice(7);
+      const as = fn && /^[^.[]+\.([^ ]+) \[as /.exec(fn);
+      if (as) return as[1];
       // Timeout._onTimeout: CallSite function name stays null; method carries it.
       if (fn && method && typeName && fn === `${typeName}.${method}`) return null;
       return fn;
@@ -147,7 +183,6 @@ export function wrapCallSite(frame) {
     },
   };
 }
-
 function formatFrame(frame) {
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
   if (/^\[eval\]:\d+:\d+$/.test(text)) return `    at ${text}`;
