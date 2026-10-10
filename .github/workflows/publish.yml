@@ -8,6 +8,15 @@
 #   and publishes it. It downloads nothing from third parties and runs no build.
 # npm trusts this workflow file by name, so it is not reusable.
 #
+# FIRST VERSION: trusted publishing (OIDC) can only be configured once the
+# package already exists on npm. The coordinator publishes the first certified
+# tarball by hand, then sets up trust on this workflow; every later version
+# goes through this file. Do not expect the first release to succeed via OIDC.
+#
+# The publish job uses Node 24.21.0 so its bundled npm is ≥ 11.5.1 (OIDC
+# trusted publishing). Node 22.x ships npm 10.x, which cannot do OIDC. The
+# verify job stays on Node 22.22.0 to match the package's Node 22 target.
+#
 # M1–M3 pre-releases publish with --tag next (also package.json publishConfig.tag).
 # The coordinator certifies and dispatches this workflow; agents do not publish.
 name: publish
@@ -86,9 +95,10 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v5
+      # Node 24.21.0 → npm ≥ 11.5.1 for OIDC trusted publishing (not npm 10 on Node 22).
       - uses: actions/setup-node@v5
         with:
-          node-version: '22.22.0'
+          node-version: '24.21.0'
           registry-url: 'https://registry.npmjs.org'
       - uses: actions/download-artifact@v5
         with:
