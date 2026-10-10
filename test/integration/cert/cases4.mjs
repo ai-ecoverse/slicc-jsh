@@ -35,4 +35,13 @@ export const cases = [
   { name: 'u-subclass', argv: ['main.js'], files: { 'main.js': "class MyError extends Error {\n  constructor(m) { super(m); this.name = 'MyError'; this.status = 404 }\n}\nthrow new MyError('custom')\n" } },
   { name: 'u-in-required', argv: ['main.js'], files: { 'main.js': "require('./lib/bad')\n", 'lib/bad.js': "\n\nconst x = 1;\nnull.boom()\n" } },
   { name: 'u-reject-nonerror', argv: ['-e', "Promise.reject({ code: 7, msg: 'plain object' })"] },
+  // 0.1.0-6: globals + no fabricated node:internal frames + CJS redeclare
+  // #297: process/Buffer/setImmediate/clearImmediate are writable; require stays fixed undefined (host Node has globalThis.require).
+  { name: 'g-globals', argv: ['-e', "console.log(global.process === process, globalThis.Buffer === Buffer, typeof globalThis.setImmediate, typeof globalThis.clearImmediate)"] },
+
+  { name: 'g-cjs-redeclare', argv: ['main.js'], files: { 'main.js': "const process = require('process');\nconst { Buffer } = require('buffer');\nconst console = require('console');\nconsole.log(typeof process.version, Buffer.isBuffer(Buffer.alloc(1)), typeof console.log);\n" } },
+  { name: 'g-no-internal-stack', argv: ['main.js'], files: { 'main.js': "try { require('./lib') } catch (e) { console.log(!/node:internal/.test(e.stack||''), !/Module\\._compile/.test(e.stack||'')) }\n", 'lib.js': "throw new Error('x')\n" } },
+  { name: 'b-compare-equals-type', argv: ['-e', "const b=Buffer.alloc(1); for (const f of [()=>Buffer.compare(b,'abc'), ()=>Buffer.compare('abc',b), ()=>b.equals('abc'), ()=>b.compare('abc')]) { try { f(); console.log('noerr') } catch (e) { console.log(e.code, e.message) } }"] },
+  // 0.1.0-6: jsh Buffer must satisfy undici Response/Request body paths (kernel 1.48.3 vacates host Buffer)
+  { name: 'g-undici-bodies', argv: ['-e', "(async()=>{ console.log(globalThis.Buffer===Buffer, await new Response('x').text(), await Response.json({a:1}).text(), new TextDecoder().decode(await new Response('hi').arrayBuffer()), await new Request('http://e',{method:'POST',body:'z'}).text()) })()"] },
 ];

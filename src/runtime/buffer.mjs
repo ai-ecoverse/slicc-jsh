@@ -35,6 +35,23 @@ function toBase64(bytes, url) {
   return b64;
 }
 
+function isBufView(value) {
+  return value instanceof Uint8Array || ArrayBuffer.isView(value);
+}
+
+function throwBufferArgType(name, value) {
+  let received;
+  if (value === null) received = 'null';
+  else if (typeof value === 'string') received = `type string ('${value}')`;
+  else if (typeof value === 'object') received = `an instance of ${value.constructor?.name || 'Object'}`;
+  else received = `type ${typeof value}`;
+  const err = new TypeError(
+    `The "${name}" argument must be an instance of Buffer or Uint8Array. Received ${received}`
+  );
+  err.code = 'ERR_INVALID_ARG_TYPE';
+  throw err;
+}
+
 function asUint8(value, encoding = 'utf8') {
   if (value instanceof Uint8Array) return value;
   if (typeof value === 'string') {
@@ -826,8 +843,10 @@ export function createBuffer() {
     }
 
     static compare(a, b) {
-      const aa = a instanceof Uint8Array ? a : asUint8(a);
-      const bb = b instanceof Uint8Array ? b : asUint8(b);
+      if (!isBufView(a)) throwBufferArgType('buf1', a);
+      if (!isBufView(b)) throwBufferArgType('buf2', b);
+      const aa = a;
+      const bb = b;
       const len = Math.min(aa.length, bb.length);
       for (let i = 0; i < len; i++) {
         if (aa[i] !== bb[i]) return aa[i] < bb[i] ? -1 : 1;
@@ -846,6 +865,7 @@ export function createBuffer() {
     }
 
     equals(other) {
+      if (!isBufView(other)) throwBufferArgType('otherBuffer', other);
       return Buffer.compare(this, other) === 0;
     }
 
@@ -892,8 +912,9 @@ export function createBuffer() {
       return n;
     }
 
-    compare(other) {
-      return Buffer.compare(this, other);
+    compare(target) {
+      if (!isBufView(target)) throwBufferArgType('target', target);
+      return Buffer.compare(this, target);
     }
 
     slice(start, end) {

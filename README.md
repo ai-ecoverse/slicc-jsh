@@ -6,9 +6,9 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 ## Status
 
-**M1 candidate (0.1.0-3)** — hardening after the `0.1.0-2` cert FAIL. Cert harness: 80 + 50 cases (hb2), kernel loaded from a plain dist path, minimal stderr masking.
+**M1 candidate (0.1.0-6)** — Node-entry lockdown ([slicc-kernel#297](https://github.com/ai-ecoverse/slicc-kernel/issues/297)): CJS wrapper is Node's 5-arg form; `process` / `Buffer` / timers are real globals; no fabricated `node:internal` frames. Cert harness: cases 1–4 (hb2), kernel loaded from a plain dist path.
 
-**Not in M1 (by design):** `child_process` / `net` / `http` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED`. ESM (`.mjs` / `"type":"module"`) is M2. Global `fetch` / `WebSocket` are present but throw `ERR_NOT_SUPPORTED` until M2 (`ctx.fetch` / `ctx.websocket` / http). Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`) until servers land.
+**Not in M1 (by design):** `child_process` / `net` / `http` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED`. ESM (`.mjs` / `"type":"module"`) is M2. Under kernel ≥ 1.48.3, `globalThis.fetch` / `WebSocket` stay non-configurable `undefined` (same withhold as `require`); use `ctx.fetch` / `ctx.websocket` until the kernel leaves those slots writable. Requires `slicc-kernel` ≥ 1.48.3.
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

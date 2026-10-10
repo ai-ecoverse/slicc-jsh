@@ -1,6 +1,6 @@
 {
   "name": "@ai-ecoverse/slicc-jsh",
-  "version": "0.1.0-5",
+  "version": "0.1.0-6",
   "description": "Node.js-compatible runtime for slicc-kernel: the node and jsh commands (abi: js)",
   "type": "module",
   "license": "Apache-2.0",
@@ -14,7 +14,7 @@
   },
   "engines": {
     "node": ">=22",
-    "slicc-kernel": ">=1.40.1"
+    "slicc-kernel": ">=1.48.3"
   },
   "publishConfig": {
     "access": "public",
@@ -57,7 +57,7 @@
     "golden:record": "node --max-old-space-size=512 scripts/golden.mjs record"
   },
   "devDependencies": {
-    "@ai-ecoverse/slicc-kernel": "1.42.1",
+    "@ai-ecoverse/slicc-kernel": "1.48.3",
     "abort-controller": "3.0.0",
     "esbuild": "0.28.2",
     "node-inspect-extracted": "3.3.3",

@@ -2,32 +2,35 @@
  * Error.prepareStackTrace: drop kernel-origin frames; rename Object.eval →
  * Object.<anonymous>; correct V8 new-Function line numbers (−2).
  * CallSites passed to user prepareStackTrace are remapped the same way.
+ *
+ * Do NOT fabricate node:internal/modules/cjs/loader frames — jsh has no such
+ * module; those CallSites are filtered as kernel frames.
  */
 
 const KERNEL_HINT =
   /node-process-worker|runJsProcess|createNodeKernel|data:text\/javascript|@ai-ecoverse\/slicc-kernel|\/slicc-kernel\/|slicc-jsh\/dist\/|at new Function\b/i;
 
-/** Node 22.22.0 loader CallSite positions used by cert goldens. */
-const LOADER_COMPILE = { file: 'node:internal/modules/cjs/loader', line: 1706, column: 14 };
-const LOADER_EXT_JS = { file: 'node:internal/modules/cjs/loader', line: 1839, column: 10 };
-
-function isLoaderCompatFrame(frame) {
+function isLoaderImplFrame(frame) {
+  // Our Module.prototype._compile / Module._extensions['.js'] live in the bundle.
   const method = frame.getMethodName?.();
   const type = frame.getTypeName?.();
   const fn = frame.getFunctionName?.() || '';
   if (method === '_compile' && (type === 'Module' || fn.includes('_compile'))) return true;
-  if (method === '.js') return true;
+  if (method === '.js' && type === 'Object') return true;
   if (fn === 'Module._compile' || fn === '_compile') return true;
   return false;
 }
 
 function isKernelFrame(frame) {
-  if (isLoaderCompatFrame(frame)) return false;
+  if (isLoaderImplFrame(frame)) return true;
   const file = frame.getFileName?.() || '';
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
   const fn = frame.getFunctionName?.() || '';
   if (KERNEL_HINT.test(file) || KERNEL_HINT.test(text) || KERNEL_HINT.test(fn)) return true;
   if (file.startsWith('data:')) return true;
+  // Never surface fabricated or accidental node:internal frames from the shim.
+  if (file.startsWith('node:internal')) return true;
+  if (text.includes('node:internal')) return true;
   return false;
 }
 
@@ -40,13 +43,13 @@ function adjustLine(n) {
 function remapFileName(file) {
   if (!file) return file;
   if (file.startsWith('data:')) return null;
+  if (file.startsWith('node:internal')) return null;
   return file;
 }
 
 /** Parse name / path:line:col from CallSite.toString (getters are often empty with sourceURL). */
 function parseSite(frame) {
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
-  // `new F (file:line:col)` / `async a (file:…)` / `name (file:…)`
   const withName =
     /^\s*(?:async\s+)?(?:new\s+)?([^\s(]+)\s+\((\[eval\]|[^)]+):(\d+):(\d+)\)/.exec(text);
   if (withName) {
@@ -57,7 +60,7 @@ function parseSite(frame) {
       column: Number(withName[4]),
     };
   }
-  const bare = /(?:^|\s)(\[eval\]|\/[^:\s]+|node:[^:]+):(\d+):(\d+)/.exec(text);
+  const bare = /(?:^|\s)(\[eval\]|\/[^:\s]+):(\d+):(\d+)/.exec(text);
   if (bare) {
     return { name: null, file: bare[1], line: Number(bare[2]), column: Number(bare[3]) };
   }
@@ -67,18 +70,17 @@ function parseSite(frame) {
 /** Wrap a V8 CallSite so getters match err.stack remapping. */
 export function wrapCallSite(frame) {
   const parsed = parseSite(frame);
-  let file = remapFileName(frame.getFileName?.() || parsed?.file || null);
-  let rawLine = frame.getLineNumber?.() ?? parsed?.line;
-  let line = adjustLine(rawLine);
-  let col = frame.getColumnNumber?.() ?? parsed?.column ?? 0;
+  const file = remapFileName(frame.getFileName?.() || parsed?.file || null);
+  const rawLine = frame.getLineNumber?.() ?? parsed?.line;
+  const line = adjustLine(rawLine);
+  const col = frame.getColumnNumber?.() ?? parsed?.column ?? 0;
 
   let fn = frame.getFunctionName?.() || parsed?.name || null;
   if (fn === 'eval' || fn === 'Object.eval') fn = 'Object.<anonymous>';
   if (fn === '<anonymous>') fn = 'Object.<anonymous>';
-  // `new F` parse edge: name captured as constructor name already via (?:new\s+)?
 
   const method = frame.getMethodName?.();
-  let typeName = frame.getTypeName?.();
+  const typeName = frame.getTypeName?.();
   if (fn && fn !== 'Object.<anonymous>' && typeName === 'Object' && method && fn === method) {
     fn = `Object.${method}`;
   } else if (
@@ -94,43 +96,23 @@ export function wrapCallSite(frame) {
 
   const ctor = typeof frame.isConstructor === 'function' ? frame.isConstructor() : false;
   const v8Top = typeof frame.isToplevel === 'function' ? !!frame.isToplevel() : null;
-  // Named functions are never toplevel (V8 marks Function-body frames as toplevel).
   const hasName = !!(fn && fn !== 'Object.<anonymous>');
   const isToplevel = !ctor && !hasName && (v8Top ?? true);
 
   if (ctor && parsed?.name && (!fn || fn === 'Object.<anonymous>')) fn = parsed.name;
   if (ctor && fn === 'Object.<anonymous>') fn = parsed?.name || fn;
 
-  // Remap our Module._compile / extensions['.js'] frames to Node's loader paths.
-  const loaderCompile =
-    method === '_compile' && (typeName === 'Module' || fn === '_compile' || fn === 'Module._compile');
-  const loaderExt = method === '.js';
-  if (loaderCompile) {
-    file = LOADER_COMPILE.file;
-    line = LOADER_COMPILE.line;
-    col = LOADER_COMPILE.column;
-    fn = null;
-    typeName = 'Module';
-  } else if (loaderExt) {
-    file = LOADER_EXT_JS.file;
-    line = LOADER_EXT_JS.line;
-    col = LOADER_EXT_JS.column;
-    fn = null;
-    typeName = 'Object';
-  }
-
   return {
     getThis: () => frame.getThis?.(),
-    getTypeName: () => (loaderCompile ? 'Module' : loaderExt ? 'Object' : ctor ? null : typeName),
+    getTypeName: () => (ctor ? null : typeName),
     getFunction: () => frame.getFunction?.(),
     getFunctionName: () => {
-      if (loaderCompile || loaderExt) return null;
       if (fn === 'Object.<anonymous>') return null;
       if (isToplevel && !ctor) return null;
       if (fn?.startsWith('Object.') && !ctor) return fn.slice(7);
       return fn;
     },
-    getMethodName: () => (loaderCompile ? '_compile' : loaderExt ? '.js' : method),
+    getMethodName: () => method,
     getFileName: () => file,
     getLineNumber: () => line,
     getColumnNumber: () => col,
@@ -143,12 +125,6 @@ export function wrapCallSite(frame) {
     isPromiseAll: () => frame.isPromiseAll?.() ?? false,
     getPromiseIndex: () => frame.getPromiseIndex?.(),
     toString() {
-      if (loaderCompile) {
-        return `Module._compile (${file}:${line}:${col})`;
-      }
-      if (loaderExt) {
-        return `Object..js (${file}:${line}:${col})`;
-      }
       const f = file || 'unknown';
       const pos = line != null ? `:${line}:${col ?? 0}` : '';
       const label = fn || 'Object.<anonymous>';

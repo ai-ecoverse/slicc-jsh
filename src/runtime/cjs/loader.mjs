@@ -87,31 +87,14 @@ export function createCjs({
   };
 
   /**
-   * Run the compiled wrapper — named like Node's Module._compile so CallSites
-   * can be remapped to node:internal/modules/cjs/loader.
+   * Node's Module._compile shape: wrapper is
+   * `(function (exports, require, module, __filename, __dirname) { … })`.
+   * process/Buffer/console/timers are real globals (installed on globalThis).
    */
   Module.prototype._compile = function _compile(wrapper, filename) {
     const dirname = path.dirname(filename);
     const require = makeRequire(filename, this);
-    wrapper.call(
-      this.exports,
-      this.exports,
-      require,
-      this,
-      filename,
-      dirname,
-      process,
-      console,
-      Buffer,
-      timers.setTimeout,
-      timers.clearTimeout,
-      timers.setInterval,
-      timers.clearInterval,
-      (fn, ...args) => timers.setTimeout(fn, 0, ...args),
-      timers.clearTimeout,
-      fetchBinding ?? globalThis.fetch,
-      webSocketBinding ?? globalThis.WebSocket
-    );
+    wrapper.call(this.exports, this.exports, require, this, filename, dirname);
   };
 
   Module._extensions = {
@@ -178,8 +161,8 @@ export function createCjs({
     }
 
     const body = stripHashbang(source);
-    // No leading "use strict" line so user line 1 maps to Function body line 1
-    // after the engine's implicit prologue; sourceURL names the file for stacks.
+    // Exact Node CJS wrapper arity — only these five parameters.
+    // process/Buffer/console/timers/fetch come from globalThis.
     let wrapper;
     try {
       wrapper = new Function(
@@ -188,23 +171,11 @@ export function createCjs({
         'module',
         '__filename',
         '__dirname',
-        'process',
-        'console',
-        'Buffer',
-        'setTimeout',
-        'clearTimeout',
-        'setInterval',
-        'clearInterval',
-        'setImmediate',
-        'clearImmediate',
-        'fetch',
-        'WebSocket',
         `${body}\n//# sourceURL=${filename}`
       );
     } catch (err) {
       if (err instanceof SyntaxError) {
         const first = body.split('\n')[0] ?? '';
-        // Prefer caret under the first `;` / unexpected token when present.
         let caretAt = first.indexOf(';');
         if (caretAt < 0) caretAt = Math.max(0, first.length - 1);
         const caret = `${' '.repeat(caretAt)}^`;
@@ -214,7 +185,6 @@ export function createCjs({
       }
       throw err;
     }
-    // Run via Module._compile so CallSites include a remappable loader frame.
     mod._compile(wrapper, filename);
   }
 

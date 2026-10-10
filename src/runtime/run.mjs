@@ -15,6 +15,46 @@ import { createTimers } from './timers.mjs';
 const decoder = new TextDecoder();
 
 /**
+ * Install jsh bindings on globalThis (slicc-kernel #297 Node-entry lockdown).
+ * Writable slots after lockdown: process, Buffer, global, setImmediate, clearImmediate.
+ * console / web timers are left alone by the kernel — we still overwrite them for
+ * Node-shaped console + ref/unref timers. require/module/exports/__filename/__dirname
+ * and fetch/WebSocket are fixed non-configurable undefined; defineProperty no-ops there.
+ */
+function installJshGlobals(bindings) {
+  const saved = new Map();
+  for (const name of Object.keys(bindings)) {
+    saved.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+  }
+  for (const [name, value] of Object.entries(bindings)) {
+    try {
+      Object.defineProperty(globalThis, name, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    } catch {
+      try {
+        globalThis[name] = value;
+      } catch {
+        /* frozen / non-configurable (#297 fetch/WebSocket/require/…) */
+      }
+    }
+  }
+  return () => {
+    for (const [name, desc] of saved) {
+      try {
+        if (desc === undefined) delete globalThis[name];
+        else Object.defineProperty(globalThis, name, desc);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+}
+
+/**
  * Run the node CLI against a JsProgramContext. Resolves with an exit status.
  */
 export async function runNode(ctx) {
@@ -23,6 +63,8 @@ export async function runNode(ctx) {
   const nextTick = createNextTick();
   let exitStatus;
   let lastEvalCode;
+  let restoreGlobals = () => {};
+  const removeCtxHooks = [];
   const util = createUtil();
   const printUncaught = (err) => {
     const { body } = formatUncaughtError(err, {
@@ -81,34 +123,24 @@ export async function runNode(ctx) {
 
   const console = createConsole(writeStdout, writeStderr, util);
 
-  // M1 gap: present for typeof checks; call throws ERR_NOT_SUPPORTED (M2: ctx.fetch).
-  async function fetchStub() {
+  // Prefer ctx.fetch / ctx.websocket when present. #297 freezes globalThis.fetch /
+  // WebSocket as non-configurable undefined, so installJshGlobals cannot publish
+  // these until the kernel leaves those slots writable (same as process/Buffer).
+  async function fetchStub(input, init) {
+    if (typeof ctx.fetch === 'function') return ctx.fetch(input, init);
     const err = new Error("slicc-jsh: 'fetch' is not supported yet");
     err.code = 'ERR_NOT_SUPPORTED';
     throw err;
   }
   class WebSocketStub {
     constructor() {
-      const err = new Error("slicc-jsh: 'WebSocket' is not supported yet");
+      const err = new Error(
+        typeof ctx.websocket === 'function'
+          ? 'slicc-jsh: use ctx.websocket (global WebSocket frozen by #297)'
+          : "slicc-jsh: 'WebSocket' is not supported yet"
+      );
       err.code = 'ERR_NOT_SUPPORTED';
       throw err;
-    }
-  }
-  for (const [name, value] of [
-    ['fetch', fetchStub],
-    ['WebSocket', WebSocketStub],
-  ]) {
-    try {
-      const desc = Object.getOwnPropertyDescriptor(globalThis, name);
-      if (desc && desc.configurable === false && desc.writable === false) continue;
-      Object.defineProperty(globalThis, name, {
-        value,
-        writable: true,
-        configurable: true,
-        enumerable: false,
-      });
-    } catch {
-      /* kernel may freeze the name; bindings are also injected into user Function scopes */
     }
   }
 
@@ -141,10 +173,25 @@ export async function runNode(ctx) {
     },
   });
 
-  // The kernel installs trapStrays on the host process before main(). Replace
-  // those listeners so user process.on('unhandledRejection'|'uncaughtException')
-  // can run; otherwise the host prints "node: …" and exits 1.
+  // Pre-#297 fallback: host process may still exist before we overwrite globalThis.
   const hostProcess = globalThis.process;
+
+  // Install jsh globals into #297 writable slots (+ console/timers the kernel leaves alone).
+  restoreGlobals = installJshGlobals({
+    process,
+    Buffer,
+    console,
+    global: globalThis,
+    setTimeout: timers.setTimeout,
+    clearTimeout: timers.clearTimeout,
+    setInterval: timers.setInterval,
+    clearInterval: timers.clearInterval,
+    setImmediate: (cb, ...args) => timers.setTimeout(cb, 0, ...args),
+    clearImmediate: timers.clearTimeout,
+    fetch: fetchStub,
+    WebSocket: WebSocketStub,
+  });
+
   const fatal = (err) => {
     try {
       printUncaught(err);
@@ -190,20 +237,40 @@ export async function runNode(ctx) {
     }
     fatal(err);
   };
-  if (hostProcess && typeof hostProcess.removeAllListeners === 'function') {
-    hostProcess.removeAllListeners('unhandledRejection');
-    hostProcess.removeAllListeners('uncaughtException');
-    hostProcess.on('unhandledRejection', rejectionHandler);
-    hostProcess.on('uncaughtException', exceptionHandler);
-  } else if (typeof globalThis.addEventListener === 'function') {
-    globalThis.addEventListener('unhandledrejection', (ev) => {
-      try {
-        ev.preventDefault?.();
-      } catch {
-        /* ignore */
-      }
-      rejectionHandler(ev.reason);
-    });
+
+  // #297: prefer ctx.onUncaught / ctx.onUnhandledRejection. While registered, the
+  // kernel skips its default (status 1 + message). Fall back to host process /
+  // window events on older kernels.
+  if (typeof ctx.onUnhandledRejection === 'function') {
+    removeCtxHooks.push(
+      ctx.onUnhandledRejection((error, promise) => {
+        rejectionHandler(error, promise);
+      })
+    );
+  }
+  if (typeof ctx.onUncaught === 'function') {
+    removeCtxHooks.push(
+      ctx.onUncaught((error) => {
+        exceptionHandler(error);
+      })
+    );
+  }
+  if (removeCtxHooks.length === 0) {
+    if (hostProcess && typeof hostProcess.removeAllListeners === 'function') {
+      hostProcess.removeAllListeners('unhandledRejection');
+      hostProcess.removeAllListeners('uncaughtException');
+      hostProcess.on('unhandledRejection', rejectionHandler);
+      hostProcess.on('uncaughtException', exceptionHandler);
+    } else if (typeof globalThis.addEventListener === 'function') {
+      globalThis.addEventListener('unhandledrejection', (ev) => {
+        try {
+          ev.preventDefault?.();
+        } catch {
+          /* ignore */
+        }
+        rejectionHandler(ev.reason);
+      });
+    }
   }
 
   const cjs = createCjs({
@@ -274,47 +341,13 @@ export async function runNode(ctx) {
       const require = cjs.makeRequire(`${process.cwd()}/[eval]`);
       const exports = {};
       const module = { exports, id: '[eval]' };
-      const body = parsed.print ? `return (${parsed.code}\n)` : parsed.code;
-      const fn = new Function(
-        'process',
-        'console',
-        'Buffer',
-        'require',
-        'exports',
-        'module',
-        '__filename',
-        '__dirname',
-        'setTimeout',
-        'clearTimeout',
-        'setInterval',
-        'clearInterval',
-        'setImmediate',
-        'clearImmediate',
-        'queueMicrotask',
-        'fetch',
-        'WebSocket',
-        `${body}\n//# sourceURL=[eval]`
-      );
+      // Same 5-arg Node wrapper as CJS files — process/Buffer/console are globals.
+      const body = parsed.print
+        ? `return (${parsed.code}\n)\n//# sourceURL=[eval]`
+        : `${parsed.code}\n//# sourceURL=[eval]`;
+      const fn = new Function('exports', 'require', 'module', '__filename', '__dirname', body);
       try {
-        const result = fn(
-          process,
-          console,
-          Buffer,
-          require,
-          exports,
-          module,
-          '[eval]',
-          process.cwd(),
-          timers.setTimeout,
-          timers.clearTimeout,
-          timers.setInterval,
-          timers.clearInterval,
-          (cb, ...args) => timers.setTimeout(cb, 0, ...args),
-          timers.clearTimeout,
-          globalThis.queueMicrotask.bind(globalThis),
-          fetchStub,
-          WebSocketStub
-        );
+        const result = fn(exports, require, module, '[eval]', process.cwd());
         // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
         if (result != null && typeof result.then === 'function') {
           trackPromise(handles, result);
@@ -381,6 +414,17 @@ export async function runNode(ctx) {
       },
     });
 
+    // #297: unhandled rejections are reported on a later turn. Keep ctx hooks
+    // registered through a few macrotasks so the kernel does not see an empty
+    // listener set and print its default `node: …` line.
+    for (let i = 0; i < 3; i++) {
+      if (exitStatus !== undefined || getDidExit()) break;
+      await new Promise((resolve) => {
+        timers.setTimeout(resolve, 0);
+      });
+      nextTick.flushSync();
+    }
+
     if (exitStatus !== undefined) {
       try {
         emitExit(exitStatus);
@@ -388,6 +432,9 @@ export async function runNode(ctx) {
         /* ignore */
       }
       return exitStatus;
+    }
+    if (getDidExit()) {
+      return getExitCode();
     }
     const code = getExitCode();
     try {
@@ -409,5 +456,18 @@ export async function runNode(ctx) {
     return 1;
   } finally {
     timers.clearPending();
+    // Drop hooks only after the turn above; worker teardown follows.
+    for (const remove of removeCtxHooks) {
+      try {
+        remove?.();
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      restoreGlobals();
+    } catch {
+      /* ignore */
+    }
   }
 }

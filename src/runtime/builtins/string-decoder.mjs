@@ -1,5 +1,6 @@
 /**
  * string_decoder — lazy-loaded npm string_decoder (MIT), Node's own code.
+ * Must remain a callable function constructor (StringDecoder.call(obj) works).
  */
 import { loadVendorCjs } from '../vendor-load.mjs';
 
@@ -20,13 +21,15 @@ export function createStringDecoder({ ctx, process, Buffer } = {}) {
         globals: { process, Buffer },
       });
       const Base = mod.StringDecoder;
-      // npm string_decoder@1.3 lacks base64url; Node 22 accepts it (same as base64 here).
-      class StringDecoder extends Base {
-        constructor(encoding) {
-          const enc = encoding === 'base64url' ? 'base64' : encoding;
-          super(enc);
-        }
+      // Keep a function constructor (not class) so StringDecoder.call(obj) works
+      // like Node. Map base64url → base64 (npm 1.3 lacks base64url).
+      function StringDecoder(encoding) {
+        const enc = encoding === 'base64url' ? 'base64' : encoding;
+        return Base.call(this, enc);
       }
+      StringDecoder.prototype = Base.prototype;
+      Object.setPrototypeOf(StringDecoder, Base);
+      Object.defineProperty(StringDecoder, 'name', { value: 'StringDecoder' });
       cached = { StringDecoder };
     }
     return cached;

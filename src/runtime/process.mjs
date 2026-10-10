@@ -236,6 +236,33 @@ class Process extends EventEmitter {
     this.nextTick = nextTick.nextTick.bind(nextTick);
     this._umask = 0o022;
     this._cpuPrev = { user: 0, system: 0 };
+    // Node exposes process.config (build-time variables). Minimal M1 shape.
+    this.config = {
+      target_defaults: {},
+      variables: {
+        host_arch: 'x64',
+        target_arch: 'x64',
+        node_use_openssl: false,
+        node_shared_openssl: false,
+        asio_no_deprecated: true,
+        icu_gyp_path: 'tools/icu/icu-generic.gyp',
+        v8_enable_i18n_support: 0,
+        v8_no_strict_aliasing: 1,
+        force_dynamic_crt: 0,
+      },
+    };
+    // test/common and Node APIs read process.features.*
+    this.features = {
+      inspector: false,
+      debug: false,
+      uv: true,
+      ipv6: true,
+      tls_alpn: false,
+      tls_sni: false,
+      tls_ocsp: false,
+      tls: false,
+      cached_builtins: true,
+    };
 
     const writeStdout = (value) => ctx.sync.write(1, toBytes(value));
     const writeStderr = (value) => ctx.sync.write(2, toBytes(value));

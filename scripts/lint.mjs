@@ -34,8 +34,13 @@ function check(path) {
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 if (pkg.name !== '@ai-ecoverse/slicc-jsh') issues.push('package.json: bad name');
 if (pkg.license !== 'Apache-2.0') issues.push('package.json: license must be Apache-2.0');
-if (pkg.engines?.['slicc-kernel'] !== '>=1.40.1') {
-  issues.push('package.json: engines.slicc-kernel must be >=1.40.1');
+{
+  const eng = pkg.engines?.['slicc-kernel'] ?? '';
+  const m = /^>=(\d+)\.(\d+)\.(\d+)$/.exec(eng);
+  const ok = m && (Number(m[1]) > 1 || (Number(m[1]) === 1 && (Number(m[2]) > 48 || (Number(m[2]) === 48 && Number(m[3]) >= 3))));
+  if (!ok) {
+    issues.push('package.json: engines.slicc-kernel must be >=1.48.3 (Node lockdown #297)');
+  }
 }
 if (!pkg.files?.includes('dist') || pkg.files?.some((f) => f === 'test' || f.startsWith('test/'))) {
   issues.push('package.json: files must allowlist dist and must not ship test/');

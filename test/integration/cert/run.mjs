@@ -67,13 +67,28 @@ for (const [rel, data] of packageFiles()) {
 
 function m1GapShimAccepts(shim) {
   const out = `${shim.stdout ?? ''}${shim.stderr ?? ''}`.toLowerCase();
-  return out.includes('not supported') || out.includes('err_not_supported');
+  // jsh ERR_NOT_SUPPORTED stubs; #297 freezes fetch/WebSocket undefined; dynamic
+  // import of node: builtins is ERR_ACCESS_DENIED from the kernel.
+  return (
+    out.includes('not supported') ||
+    out.includes('err_not_supported') ||
+    out.includes('is not a function') ||
+    out.includes('err_access_denied') ||
+    out.includes('access_denied')
+  );
 }
 
 /** Harmless DIFFs we ship with (listed in the 0.1.0-4 cert report). */
 const ACCEPTED_DIFF = new Set([
   // macOS host often EACCES on /dev/stdin while the shim reads the pipe (Node-like).
   'c-stdin-readFileSync0',
+  // jsh has no Module._compile / Object..js CallSites (honest); host Node does.
+  'cs-callsite-methods',
+  // Shim must omit node:internal from err.stack; host Node includes real loader frames.
+  'g-no-internal-stack',
+  // #297 freezes globalThis.fetch / WebSocket as non-configurable undefined;
+  // only process/Buffer/global/setImmediate/clearImmediate stay writable.
+  'globals',
 ]);
 
 function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {
