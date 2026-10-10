@@ -4,6 +4,7 @@ node_modules/
 !test/golden/fixtures/**/node_modules/**
 # Cert harness scratch output
 test/integration/cert/last-diff.json
+test/integration/cert/.host-workspace/
 coverage/
 dist/
 *.tgz

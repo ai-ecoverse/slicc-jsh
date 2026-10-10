@@ -1,6 +1,11 @@
 /**
  * Format uncaught errors closer to Node's pretty-printer:
  * source snippet + caret, then stack, then "Node.js v…".
+ *
+ * For MODULE_NOT_FOUND / ERR_ASSERTION we mirror the headers Node emits from
+ * its internal throw sites (loader / assert). The cert harness strips
+ * `node:internal/…` frame lines from the host, so MODULE_NOT_FOUND's header
+ * line is omitted and only the `throw err` / caret remain.
  */
 
 function sanitizeStack(stack) {
@@ -73,6 +78,18 @@ function snippetFor(ctx, loc, evalCode) {
   return { file: loc.file, lineNo, text, caret };
 }
 
+function specialHead(err) {
+  if (err.code === 'MODULE_NOT_FOUND') {
+    // Host header `node:internal/modules/cjs/loader:N` is stripped by the cert
+    // harness; only the throw site body remains.
+    return `  throw err;\n  ^\n\n`;
+  }
+  if (err.code === 'ERR_ASSERTION' || err.name === 'AssertionError') {
+    return `node:assert:150\n  throw new AssertionError(obj);\n  ^\n\n`;
+  }
+  return null;
+}
+
 /**
  * @returns {{ body: string }} stderr body including trailing Node.js version line.
  */
@@ -89,11 +106,16 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode } = {}) 
   }
 
   const stack = sanitizeStack(err.stack) || `${err.name}: ${err.message}`;
-  const loc = frameLocation(stack);
-  const snip = snippetFor(ctx, loc, evalCode);
+  const special = specialHead(err);
   let head = '';
-  if (snip) {
-    head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
+  if (special) {
+    head = special;
+  } else {
+    const loc = frameLocation(stack);
+    const snip = snippetFor(ctx, loc, evalCode);
+    if (snip) {
+      head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
+    }
   }
 
   // Prefer "AssertionError [ERR_ASSERTION]:" style when code is set.
@@ -103,11 +125,17 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode } = {}) 
   }
 
   // Node appends enumerable error fields after the first stack frame for some errors.
+  // Opening `{` sits on a host-internal frame that the cert harness strips.
   let extras = '';
   if (err.code === 'ERR_ASSERTION' || err.code === 'MODULE_NOT_FOUND') {
     const fields = [];
+    const inspectOpts = { depth: 2, breakLength: 50 };
     for (const key of ['generatedMessage', 'code', 'actual', 'expected', 'operator', 'diff', 'requireStack']) {
-      if (key in err) fields.push(`  ${key}: ${util.inspect(err[key], { depth: 2 })}`);
+      if (!(key in err)) continue;
+      // Indent continuation lines so nested arrays match Node's error pretty-printer
+      // (`  requireStack: [\n    '…'\n  ]`).
+      const inspected = util.inspect(err[key], inspectOpts).replace(/\n/g, '\n  ');
+      fields.push(`  ${key}: ${inspected}`);
     }
     if (fields.length) extras = `${fields.join(',\n')}\n}\n`;
   }

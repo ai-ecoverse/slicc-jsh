@@ -6,7 +6,7 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 ## Status
 
-**M1 in progress (0.1.0-2)** — hardening against the 80-case Node 22 cert suite after `0.1.0-1` failed certification (nothing published). Scope: event-loop refs for pending `ctx` promises, real `util.inspect`, `process` as EventEmitter + stdin, error stacks, fs/stream/Buffer semantics, and clear `ERR_NOT_SUPPORTED` for modules deferred past M1.
+**M1 candidate (0.1.0-2)** — 80-case Node 22 cert: 69 SAME, 11 intentional M1-GAP (`ERR_NOT_SUPPORTED` / M2 ESM). Open M1 bugs from the `0.1.0-1` cert FAIL are closed. Harness cases unchanged.
 
 **Not in M1 (by design):** `child_process` / `net` / `http` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED`. ESM (`.mjs` / `"type":"module"`) is M2. Global `fetch` / `WebSocket` stay undefined until M3 (`ctx.fetch` / `ctx.websocket`). Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`) until servers land.
 

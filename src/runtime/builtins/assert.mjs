@@ -14,7 +14,7 @@ function defaultMessage({ actual, expected, operator }) {
 }
 
 class AssertionError extends Error {
-  constructor({ message, actual, expected, operator } = {}) {
+  constructor({ message, actual, expected, operator, diff } = {}) {
     const generated = !message;
     super(message || defaultMessage({ actual, expected, operator }));
     this.name = 'AssertionError';
@@ -23,6 +23,8 @@ class AssertionError extends Error {
     this.operator = operator || '';
     this.generatedMessage = generated;
     this.code = 'ERR_ASSERTION';
+    // Node 22 AssertionError always exposes diff ('simple' | 'full').
+    this.diff = diff ?? 'simple';
   }
 }
 
