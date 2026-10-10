@@ -1,0 +1,5 @@
+{
+  "description": "relative require('./dep.js')",
+  "argv": ["main.js"],
+  "shim": true
+}

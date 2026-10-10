@@ -1,0 +1,5 @@
+{
+  "description": "require.cache singleton and require.resolve",
+  "argv": ["main.js"],
+  "shim": true
+}

@@ -1,0 +1,5 @@
+{
+  "description": "package.json exports require/default conditions and subpath",
+  "argv": ["main.js"],
+  "shim": true
+}

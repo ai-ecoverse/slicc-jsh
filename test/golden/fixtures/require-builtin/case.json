@@ -1,0 +1,5 @@
+{
+  "description": "require('path') and require('buffer') builtins",
+  "argv": ["main.js"],
+  "shim": true
+}

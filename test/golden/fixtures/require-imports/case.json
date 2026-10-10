@@ -1,0 +1,5 @@
+{
+  "description": "package.json imports #local",
+  "argv": ["main.js"],
+  "shim": true
+}

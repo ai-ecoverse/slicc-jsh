@@ -49,4 +49,26 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
       close();
     }
   });
+
+  it('resolves CJS require over node_modules on the memory root', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile(
+        '/os/node_modules/demo/package.json',
+        JSON.stringify({ name: 'demo', main: 'index.js' })
+      );
+      await kernel.writeFile('/os/node_modules/demo/index.js', 'module.exports = { v: 42 };\n');
+      await kernel.writeFile(
+        '/os/app.js',
+        "const d = require('demo'); console.log(d.v, require('path').join('x', 'y'));\n"
+      );
+      assert.deepEqual(await run(['node', 'app.js']), {
+        status: 0,
+        stdout: '42 x/y\n',
+        stderr: '',
+      });
+    } finally {
+      close();
+    }
+  });
 });

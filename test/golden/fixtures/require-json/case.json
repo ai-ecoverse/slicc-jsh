@@ -1,0 +1,5 @@
+{
+  "description": "require .json and directory index.js",
+  "argv": ["main.js"],
+  "shim": true
+}
