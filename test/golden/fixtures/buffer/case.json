@@ -1,0 +1,5 @@
+{
+  "description": "Buffer.from / concat / alloc",
+  "argv": ["-e", "const b=Buffer.from('ab'); console.log(b.toString()); console.log(Buffer.concat([b,Buffer.from('c')]).toString()); console.log(Buffer.alloc(3).toString('hex'))"],
+  "shim": true
+}

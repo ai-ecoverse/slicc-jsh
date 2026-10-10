@@ -1,0 +1,5 @@
+{
+  "description": "ref'd timer keeps the process alive until it fires",
+  "argv": ["-e", "setTimeout(()=>console.log('fire'), 20)"],
+  "shim": true
+}

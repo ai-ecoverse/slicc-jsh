@@ -1,0 +1,5 @@
+{
+  "description": "process.argv after -e (slice from 1; argv0 path differs host vs shim)",
+  "argv": ["-e", "process.stdout.write(JSON.stringify(process.argv.slice(1))+\"\\n\")", "a", "b c"],
+  "shim": true
+}

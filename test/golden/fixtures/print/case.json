@@ -1,0 +1,5 @@
+{
+  "description": "node -p prints the expression result",
+  "argv": ["-p", "1+1"],
+  "shim": true
+}

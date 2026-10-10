@@ -1,0 +1,5 @@
+{
+  "description": "unref'd timer alone does not keep the process alive",
+  "argv": ["-e", "setTimeout(()=>console.log('nope'), 1000).unref(); console.log('done')"],
+  "shim": true
+}

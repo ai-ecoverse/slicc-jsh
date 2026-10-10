@@ -1,0 +1,5 @@
+{
+  "description": "process.versions.node is 22.22.0 (shim claims the same as CI Node)",
+  "argv": ["-e", "console.log(process.versions.node); console.log(process.version)"],
+  "shim": true
+}
