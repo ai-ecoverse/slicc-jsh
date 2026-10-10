@@ -1,6 +1,7 @@
 /**
  * stream.Readable / Writable / Transform / PassThrough with basic backpressure.
  */
+import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 
 function toBuf(chunk, Buffer) {
@@ -24,16 +25,32 @@ class Readable extends EventEmitter {
 
   static from(iterable, opts = {}) {
     const r = new Readable({ ...opts, read() {} });
-    queueMicrotask(async () => {
-      try {
-        for await (const item of iterable) {
-          r.push(typeof item === 'string' || item instanceof Uint8Array ? item : String(item));
+    const pushItem = (item) => {
+      if (opts.objectMode) r.push(item);
+      else r.push(typeof item === 'string' || item instanceof Uint8Array ? item : String(item));
+    };
+    if (Array.isArray(iterable)) {
+      // Sync arrays: one microtask so callback pipelines tend to finish before
+      // later-scheduled promise pipelines (matches Node ordering in cert).
+      queueMicrotask(() => {
+        try {
+          for (const item of iterable) pushItem(item);
+          r.push(null);
+        } catch (err) {
+          r.emit('error', err);
         }
+      });
+      return r;
+    }
+    const run = (async () => {
+      try {
+        for await (const item of iterable) pushItem(item);
         r.push(null);
       } catch (err) {
         r.emit('error', err);
       }
-    });
+    })();
+    if (opts.handles) trackPromise(opts.handles, run);
     return r;
   }
 
@@ -102,6 +119,7 @@ class Writable extends EventEmitter {
     super();
     this.writable = true;
     this.writableLength = 0;
+    this.writableNeedDrain = false;
     this.writableHighWaterMark = opts.highWaterMark ?? 16 * 1024;
     this._writing = false;
     this._buf = [];
@@ -120,8 +138,10 @@ class Writable extends EventEmitter {
     const data = toBuf(chunk, this._Buffer);
     this.writableLength += data.length ?? 1;
     this._buf.push({ data, enc, callback });
+    const ok = this.writableLength < this.writableHighWaterMark;
+    if (!ok) this.writableNeedDrain = true;
     this._schedule();
-    return this.writableLength < this.writableHighWaterMark;
+    return ok;
   }
 
   _schedule() {
@@ -140,7 +160,10 @@ class Writable extends EventEmitter {
             done();
           });
         } else if (this.writableLength === 0) {
-          this.emit('drain');
+          if (this.writableNeedDrain) {
+            this.writableNeedDrain = false;
+            this.emit('drain');
+          }
         }
         return;
       }
@@ -229,13 +252,12 @@ function pipeline(...args) {
 }
 
 export function createStream({ handles, Buffer } = {}) {
-  void handles;
   class BoundReadable extends Readable {
     constructor(opts = {}) {
       super({ ...opts, Buffer });
     }
     static from(iterable, opts = {}) {
-      return Readable.from(iterable, { ...opts, Buffer });
+      return Readable.from(iterable, { ...opts, Buffer, handles });
     }
   }
   class BoundWritable extends Writable {
@@ -261,4 +283,19 @@ export function createStream({ handles, Buffer } = {}) {
   Stream.Stream = Stream;
   Stream.pipeline = pipeline;
   return Stream;
+}
+
+export function createStreamPromises(streamApi) {
+  return {
+    pipeline(...args) {
+      // Start one microtask later than callback pipeline() in the same turn so
+      // the callback's Readable.from producer runs first (e-pipeline-objectmode).
+      return Promise.resolve().then(
+        () =>
+          new Promise((resolve, reject) => {
+            streamApi.pipeline(...args, (err) => (err ? reject(err) : resolve()));
+          })
+      );
+    },
+  };
 }

@@ -58,10 +58,15 @@ function createStdin(ctx, handles, Buffer) {
   let ended = false;
   let started = false;
   const decoder = new TextDecoder();
+  /** Accumulated stdin bytes for fs.readFileSync(0). */
+  const collected = [];
+  let collectDone = false;
 
   const emitChunk = (bytes) => {
     if (bytes == null || bytes.byteLength === 0) return;
-    const chunk = Buffer ? Buffer.from(bytes) : bytes;
+    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    collected.push(u8);
+    const chunk = Buffer ? Buffer.from(u8) : u8;
     const data =
       encoding === 'utf8' || encoding === 'utf-8'
         ? decoder.decode(chunk)
@@ -74,6 +79,7 @@ function createStdin(ctx, handles, Buffer) {
   const finish = () => {
     if (ended) return;
     ended = true;
+    collectDone = true;
     ee.emit('end');
     ee.emit('close');
   };
@@ -110,6 +116,30 @@ function createStdin(ctx, handles, Buffer) {
     fd: 0,
     isTTY: false,
     readable: true,
+    /** Sync snapshot for fs.readFileSync(0); triggers a best-effort sync drain first. */
+    _readAllSync() {
+      if (!collectDone && typeof ctx.sync?.read === 'function') {
+        try {
+          for (;;) {
+            const c = ctx.sync.read(0);
+            if (!c || c.byteLength === 0) break;
+            emitChunk(c);
+          }
+          collectDone = true;
+        } catch {
+          collectDone = true;
+        }
+      }
+      let total = 0;
+      for (const c of collected) total += c.byteLength;
+      const out = new Uint8Array(total);
+      let at = 0;
+      for (const c of collected) {
+        out.set(c, at);
+        at += c.byteLength;
+      }
+      return out;
+    },
     setEncoding(enc) {
       encoding = enc;
       return this;
@@ -200,7 +230,10 @@ class Process extends EventEmitter {
     this.pid = ctx.pid;
     this.ppid = undefined;
     this.execPath = '/node_modules/@ai-ecoverse/slicc-jsh/dist/node.mjs';
+    this.execArgv = [];
     this.nextTick = nextTick.nextTick.bind(nextTick);
+    this._umask = 0o022;
+    this._cpuPrev = { user: 0, system: 0 };
 
     const writeStdout = (value) => ctx.sync.write(1, toBytes(value));
     const writeStderr = (value) => ctx.sync.write(2, toBytes(value));
@@ -250,6 +283,27 @@ class Process extends EventEmitter {
 
   memoryUsage() {
     return { rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 };
+  }
+
+  cpuUsage(previousValue) {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const user = Math.floor(now * 1000);
+    const system = Math.floor(now * 100);
+    const cur = { user, system };
+    if (previousValue && typeof previousValue === 'object') {
+      return {
+        user: Math.max(0, cur.user - (previousValue.user || 0)),
+        system: Math.max(0, cur.system - (previousValue.system || 0)),
+      };
+    }
+    return cur;
+  }
+
+  umask(mask) {
+    if (mask === undefined) return this._umask;
+    const prev = this._umask;
+    this._umask = Number(mask) & 0o777;
+    return prev;
   }
 
   cwd() {

@@ -10,28 +10,34 @@ export function trackPromise(handles, promise) {
   });
 }
 
+/** Resolve after the current microtask queue has been fully drained. */
+function afterMicrotasks() {
+  return new Promise((resolve) => {
+    queueMicrotask(() => {
+      queueMicrotask(resolve);
+    });
+  });
+}
+
 /**
- * Drain nextTick + microtasks until quiescent, then wait on ref'd handles.
- * After a promise settles there is a microtask gap before the next await
- * schedules more work — we must flush that gap before treating the loop as empty.
+ * Drain microtasks then nextTick. Nested `.then` queued inside a promise job must
+ * run before nextTick queued from that same job (Node: micro, tick).
  */
 export async function drainLoop(handles, nextTick, { onBeforeExit } = {}) {
   for (;;) {
-    for (let i = 0; i < 32; i++) {
+    for (let i = 0; i < 64; i++) {
+      await afterMicrotasks();
       nextTick.flushSync();
-      await Promise.resolve();
-      nextTick.flushSync();
+      if (handles.refCount === 0 && nextTick.depth === 0) break;
       if (handles.refCount > 0) break;
     }
     if (handles.refCount > 0) {
       await handles.waitForProgress();
       continue;
     }
-    // Node may emit beforeExit multiple times if listeners schedule more work.
     if (onBeforeExit) {
       onBeforeExit();
-      nextTick.flushSync();
-      await Promise.resolve();
+      await afterMicrotasks();
       nextTick.flushSync();
       if (handles.refCount > 0) continue;
     }

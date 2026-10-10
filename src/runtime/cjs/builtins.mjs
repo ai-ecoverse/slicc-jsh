@@ -3,7 +3,7 @@ import { createEvents } from '../builtins/events.mjs';
 import { createFs } from '../builtins/fs.mjs';
 import { createOs } from '../builtins/os.mjs';
 import { createQuerystring } from '../builtins/querystring.mjs';
-import { createStream } from '../builtins/stream.mjs';
+import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
 import { createUrl } from '../builtins/url.mjs';
@@ -24,6 +24,7 @@ const BUILTIN_LIST = [
   'process',
   'querystring',
   'stream',
+  'stream/promises',
   'string_decoder',
   'timers',
   'timers/promises',
@@ -77,6 +78,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const querystring = createQuerystring();
   const stringDecoder = createStringDecoder();
   const stream = createStream({ handles, Buffer });
+  const streamPromises = createStreamPromises(stream);
   const timersMod = createTimersModule(timers);
   const timersPromises = createTimersPromises(timers, handles);
 
@@ -105,6 +107,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     querystring: () => querystring,
     string_decoder: () => stringDecoder,
     stream: () => stream,
+    'stream/promises': () => streamPromises,
     timers: () => timersMod,
     'timers/promises': () => timersPromises,
   };

@@ -6,9 +6,9 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 ## Status
 
-**M1 candidate (0.1.0-2)** — 80-case Node 22 cert: 69 SAME, 11 intentional M1-GAP (`ERR_NOT_SUPPORTED` / M2 ESM). Open M1 bugs from the `0.1.0-1` cert FAIL are closed. Harness cases unchanged.
+**M1 candidate (0.1.0-3)** — hardening after the `0.1.0-2` cert FAIL. Cert harness: 80 + 50 cases (hb2), kernel loaded from a plain dist path, minimal stderr masking.
 
-**Not in M1 (by design):** `child_process` / `net` / `http` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED`. ESM (`.mjs` / `"type":"module"`) is M2. Global `fetch` / `WebSocket` stay undefined until M3 (`ctx.fetch` / `ctx.websocket`). Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`) until servers land.
+**Not in M1 (by design):** `child_process` / `net` / `http` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED`. ESM (`.mjs` / `"type":"module"`) is M2. Global `fetch` / `WebSocket` are present but throw `ERR_NOT_SUPPORTED` until M2 (`ctx.fetch` / `ctx.websocket` / http). Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`) until servers land.
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

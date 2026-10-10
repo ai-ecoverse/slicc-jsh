@@ -1,21 +1,13 @@
-/** process.nextTick queue (not a keep-alive handle). */
+/**
+ * process.nextTick queue.
+ *
+ * Must NOT schedule via queueMicrotask: Node drains remaining Promise jobs before
+ * nextTicks that were queued from inside a microtask (micro, then tick). Auto-
+ * scheduling ticks as microtasks inverts that. Drain only via flushSync from the
+ * event loop (after script / after a microtask checkpoint / after timers).
+ */
 export function createNextTick() {
   const queue = [];
-  let scheduled = false;
-
-  const drain = () => {
-    scheduled = false;
-    while (queue.length > 0) {
-      const batch = queue.splice(0);
-      for (const job of batch) job();
-    }
-  };
-
-  const schedule = () => {
-    if (scheduled) return;
-    scheduled = true;
-    queueMicrotask(drain);
-  };
 
   return {
     nextTick(fn, ...args) {
@@ -25,15 +17,13 @@ export function createNextTick() {
         throw err;
       }
       queue.push(() => fn(...args));
-      schedule();
     },
-    /** Run queued ticks synchronously (after user script / timer callbacks). */
+    /** Run queued ticks synchronously. */
     flushSync() {
       while (queue.length > 0) {
         const batch = queue.splice(0);
         for (const job of batch) job();
       }
-      scheduled = false;
     },
     get depth() {
       return queue.length;

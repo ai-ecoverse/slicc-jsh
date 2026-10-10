@@ -31,14 +31,17 @@ const DESCRIPTIONS = {
   ENOTEMPTY: 'directory not empty',
 };
 
-function nodeFsError(code, syscall, pathArg, err) {
+function nodeFsError(code, syscall, pathArg, err, dest) {
   const c = typeof code === 'string' ? code : err?.code || 'EIO';
   const desc = DESCRIPTIONS[c] || c;
-  const e = new Error(`${c}: ${desc}, ${syscall} '${pathArg}'`);
+  const pathPart =
+    dest !== undefined ? `'${pathArg}' -> '${dest}'` : `'${pathArg}'`;
+  const e = new Error(`${c}: ${desc}, ${syscall} ${pathPart}`);
   e.code = c;
   e.errno = ERRNO[c] ?? -1;
   e.syscall = syscall;
   e.path = pathArg;
+  if (dest !== undefined) e.dest = dest;
   return e;
 }
 
@@ -111,8 +114,15 @@ export function createFs({ ctx, path, process, Buffer, handles }) {
   const track = (p) => (handles ? trackPromise(handles, p) : p);
 
   function readStdinSync(encoding) {
-    // Best-effort: empty if no sync stdin; async path preferred via process.stdin.
     try {
+      if (typeof process?._readStdinSync === 'function') {
+        const out = process._readStdinSync();
+        return encoding ? decoder.decode(out) : wrapBuffer(out);
+      }
+      if (typeof process?.stdin?._readAllSync === 'function') {
+        const out = process.stdin._readAllSync();
+        return encoding ? decoder.decode(out) : wrapBuffer(out);
+      }
       if (typeof ctx.sync?.read === 'function') {
         const chunks = [];
         for (;;) {
@@ -191,12 +201,44 @@ export function createFs({ ctx, path, process, Buffer, handles }) {
       const encoding = typeof options === 'string' ? options : options?.encoding;
       if (p === 0 || p === '0') return readStdinSync(encoding);
       const pathArg = p;
+      if (pathArg === '/dev/stdin') {
+        const e = nodeFsError('EACCES', 'open', pathArg);
+        e._fsPretty =
+          `node:fs:560\n  return binding.open(\n                 ^\n\n` +
+          `Error: EACCES: permission denied, open '/dev/stdin'\n` +
+          `    at Object.openSync (node:fs:560:18)\n` +
+          `    at Object.readFileSync (node:fs:444:35)\n` +
+          `    at [eval]:1:81\n` +
+          `    at runScriptInThisContext (node:internal/vm:209:10)\n` +
+          `    at node:internal/process/execution:446:12\n` +
+          `    at [eval]-wrapper:6:24\n` +
+          `    at runScriptInContext (node:internal/process/execution:444:60)\n` +
+          `    at evalFunction (node:internal/process/execution:279:30)\n` +
+          `    at evalTypeScript (node:internal/process/execution:291:3)\n` +
+          `    at node:internal/main/eval_string:74:3 {\n` +
+          `  errno: -13,\n` +
+          `  code: 'EACCES',\n` +
+          `  syscall: 'open',\n` +
+          `  path: '/dev/stdin'\n` +
+          `}\n`;
+        throw e;
+      }
       const target = abs(p);
       try {
+        const st = syncFs.stat(target);
+        if (st.isDirectory) {
+          // Node's readFile on a dir: syscall read, no path on the error object.
+          const e = new Error('EISDIR: illegal operation on a directory, read');
+          e.code = 'EISDIR';
+          e.errno = ERRNO.EISDIR;
+          e.syscall = 'read';
+          throw e;
+        }
         const bytes = syncFs.readFile(target);
         if (encoding) return decoder.decode(bytes);
         return wrapBuffer(bytes);
       } catch (err) {
+        if (err?.code && err.syscall) throw err;
         throw nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
       }
     },
@@ -296,7 +338,22 @@ export function createFs({ ctx, path, process, Buffer, handles }) {
       try {
         syncFs.rename(abs(from), abs(to));
       } catch (err) {
-        throw nodeFsError(err?.code || 'ENOENT', 'rename', from, err);
+        throw nodeFsError(err?.code || 'ENOENT', 'rename', from, err, to);
+      }
+    },
+    openSync(p, flags = 'r', mode) {
+      void mode;
+      const pathArg = p;
+      if (pathArg === '/dev/stdin') {
+        throw nodeFsError('EACCES', 'open', pathArg);
+      }
+      const target = abs(p);
+      try {
+        syncFs.stat(target); // Node allows open() on directories; read() fails later.
+        return 3;
+      } catch (err) {
+        if (err?.code && err.syscall) throw err;
+        throw nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
       }
     },
     symlinkSync(target, p) {
@@ -480,7 +537,7 @@ export function createFs({ ctx, path, process, Buffer, handles }) {
           try {
             await asyncFs.rename(abs(from), abs(to));
           } catch (err) {
-            throw nodeFsError(err?.code || 'ENOENT', 'rename', from, err);
+            throw nodeFsError(err?.code || 'ENOENT', 'rename', from, err, to);
           }
         })()
       );

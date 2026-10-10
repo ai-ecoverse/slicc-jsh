@@ -283,6 +283,7 @@ const BUILTIN_NAMES = new Set([
   'process',
   'querystring',
   'stream',
+  'stream/promises',
   'string_decoder',
   'timers',
   'timers/promises',

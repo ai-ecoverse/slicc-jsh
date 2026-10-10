@@ -29,6 +29,9 @@ jobs:
       - name: Kernel integration (Node entry, memory root)
         timeout-minutes: 5
         run: npm run test:integration
+      - name: Cert (host Node 22 vs shim; kernel from plain dist)
+        timeout-minutes: 10
+        run: npm run test:cert
       - name: Pack (files allowlist)
         run: |
           set -euo pipefail

@@ -9,6 +9,7 @@ import { NodeExitError } from './exit.mjs';
 import { createHandleTable } from './handles.mjs';
 import { createNextTick } from './next-tick.mjs';
 import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
+import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
 
 const decoder = new TextDecoder();
@@ -17,6 +18,7 @@ const decoder = new TextDecoder();
  * Run the node CLI against a JsProgramContext. Resolves with an exit status.
  */
 export async function runNode(ctx) {
+  installStackPrepare();
   const handles = createHandleTable();
   const nextTick = createNextTick();
   let exitStatus;
@@ -74,8 +76,7 @@ export async function runNode(ctx) {
 
   const console = createConsole(writeStdout, writeStderr, util);
 
-  // Present like Node for typeof checks; refuse until M3. Prefer defineProperty —
-  // some kernel realms freeze globalThis.fetch as a read-only data property.
+  // M1 gap: present for typeof checks; call throws ERR_NOT_SUPPORTED (M2: ctx.fetch).
   async function fetchStub() {
     const err = new Error("slicc-jsh: 'fetch' is not supported yet");
     err.code = 'ERR_NOT_SUPPORTED';
@@ -115,7 +116,11 @@ export async function runNode(ctx) {
       }
       if (process.listenerCount('uncaughtException') > 0) {
         try {
-          process.emit('uncaughtException', err instanceof Error ? err : new Error(String(err)));
+          process.emit(
+            'uncaughtException',
+            err instanceof Error ? err : new Error(String(err)),
+            'uncaughtException'
+          );
           return;
         } catch {
           /* fall through */
@@ -158,7 +163,11 @@ export async function runNode(ctx) {
   };
   const exceptionHandler = (err) => {
     if (process.listenerCount('uncaughtException') > 0) {
-      process.emit('uncaughtException', err instanceof Error ? err : new Error(String(err)));
+      process.emit(
+        'uncaughtException',
+        err instanceof Error ? err : new Error(String(err)),
+        'uncaughtException'
+      );
       return;
     }
     fatal(err);
@@ -192,10 +201,55 @@ export async function runNode(ctx) {
 
   try {
     if (parsed.mode === 'empty') {
-      return 0;
-    }
-
-    if (parsed.mode === 'eval') {
+      // Node: `echo '…' | node` runs the piped script as the main module ([stdin]).
+      const chunks = [];
+      try {
+        if (ctx.stdin && typeof ctx.stdin.getReader === 'function') {
+          const reader = ctx.stdin.getReader();
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (value) chunks.push(value instanceof Uint8Array ? value : new Uint8Array(value));
+          }
+        } else if (typeof ctx.read === 'function') {
+          for (;;) {
+            const chunk = await ctx.read(0);
+            if (!chunk || chunk.byteLength === 0) break;
+            chunks.push(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
+          }
+        }
+      } catch {
+        /* EOF / no stdin */
+      }
+      if (chunks.length === 0) return 0;
+      let total = 0;
+      for (const c of chunks) total += c.byteLength;
+      const merged = new Uint8Array(total);
+      let off = 0;
+      for (const c of chunks) {
+        merged.set(c, off);
+        off += c.byteLength;
+      }
+      const source = decoder.decode(merged);
+      lastEvalCode = source;
+      process.argv[1] = '[stdin]';
+      try {
+        cjs.runMain(`${process.cwd()}/[stdin]`, source);
+        nextTick.flushSync();
+      } catch (err) {
+        if (err instanceof NodeExitError) throw err;
+        if (process.listenerCount('uncaughtException') > 0) {
+          process.emit(
+            'uncaughtException',
+            err instanceof Error ? err : new Error(String(err)),
+            'uncaughtException'
+          );
+        } else {
+          printUncaught(err);
+          return 1;
+        }
+      }
+    } else if (parsed.mode === 'eval') {
       lastEvalCode = parsed.code;
       const require = cjs.makeRequire(`${process.cwd()}/[eval]`);
       const exports = {};
@@ -246,7 +300,11 @@ export async function runNode(ctx) {
       } catch (err) {
         if (err instanceof NodeExitError) throw err;
         if (process.listenerCount('uncaughtException') > 0) {
-          process.emit('uncaughtException', err instanceof Error ? err : new Error(String(err)));
+          process.emit(
+            'uncaughtException',
+            err instanceof Error ? err : new Error(String(err)),
+            'uncaughtException'
+          );
         } else {
           printUncaught(err);
           return 1;
@@ -276,7 +334,11 @@ export async function runNode(ctx) {
       } catch (err) {
         if (err instanceof NodeExitError) throw err;
         if (process.listenerCount('uncaughtException') > 0) {
-          process.emit('uncaughtException', err instanceof Error ? err : new Error(String(err)));
+          process.emit(
+            'uncaughtException',
+            err instanceof Error ? err : new Error(String(err)),
+            'uncaughtException'
+          );
         } else {
           printUncaught(err);
           return 1;

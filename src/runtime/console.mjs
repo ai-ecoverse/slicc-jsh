@@ -17,32 +17,52 @@ function formatArgs(util, args) {
   return args.map((a) => (typeof a === 'string' ? a : util.inspect(a, { colors: false }))).join(' ');
 }
 
+function tableCell(value, util) {
+  if (value === undefined) return '';
+  if (value === null) return 'null';
+  if (typeof value === 'string') return util.inspect(value, { colors: false });
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return String(value);
+  }
+  return util.inspect(value, { colors: false, depth: 0 });
+}
+
 function renderTable(tabularData, util) {
   if (!Array.isArray(tabularData) || tabularData.length === 0) {
     return util.inspect(tabularData, { depth: 2 });
   }
-  const keys = [...new Set(tabularData.flatMap((r) => (r && typeof r === 'object' ? Object.keys(r) : [])))];
-  const rows = tabularData.map((r, i) => {
-    const cells = keys.map((k) => String(r?.[k] ?? ''));
-    return [String(i), ...cells];
-  });
-  const headers = ['(index)', ...keys];
+  const primitive = tabularData.every((r) => r === null || typeof r !== 'object');
+  let headers;
+  let rows;
+  if (primitive) {
+    headers = ['(index)', 'Values'];
+    rows = tabularData.map((r, i) => [String(i), tableCell(r, util)]);
+  } else {
+    const keys = [
+      ...new Set(tabularData.flatMap((r) => (r && typeof r === 'object' ? Object.keys(r) : []))),
+    ];
+    headers = ['(index)', ...keys];
+    rows = tabularData.map((r, i) => {
+      const cells = keys.map((k) =>
+        r && typeof r === 'object' && k in r ? tableCell(r[k], util) : ''
+      );
+      return [String(i), ...cells];
+    });
+  }
   const widths = headers.map((h, col) =>
     Math.max(h.length, ...rows.map((r) => (r[col] ?? '').length))
   );
   const pad = (s, w) => s + ' '.repeat(Math.max(0, w - s.length));
   const line = (left, mid, right, fill) =>
     left + widths.map((w) => fill.repeat(w + 2)).join(mid) + right;
-  const rowLine = (cells) =>
-    `│ ${cells.map((c, i) => pad(c, widths[i])).join(' │ ')} │`;
-  const out = [
+  const rowLine = (cells) => `│ ${cells.map((c, i) => pad(c, widths[i])).join(' │ ')} │`;
+  return [
     line('┌', '┬', '┐', '─'),
     rowLine(headers),
     line('├', '┼', '┤', '─'),
     ...rows.map(rowLine),
     line('└', '┴', '┘', '─'),
-  ];
-  return out.join('\n');
+  ].join('\n');
 }
 
 export function createConsole(writeStdout, writeStderr, util) {

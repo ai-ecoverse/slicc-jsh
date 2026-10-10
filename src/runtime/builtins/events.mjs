@@ -42,7 +42,11 @@ export class EventEmitter {
   emit(event, ...args) {
     const list = this._events.get(event);
     if ((!list || list.length === 0) && event === 'error') {
-      const err = args[0] instanceof Error ? args[0] : new Error('Unhandled error event');
+      const arg = args[0];
+      if (arg instanceof Error) throw arg;
+      const err = new Error(`Unhandled error. (${typeof arg === 'string' ? `'${arg}'` : String(arg)})`);
+      err.code = 'ERR_UNHANDLED_ERROR';
+      err.context = arg;
       throw err;
     }
     if (!list || list.length === 0) return false;

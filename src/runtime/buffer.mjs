@@ -228,29 +228,136 @@ export function createBuffer() {
       return this.indexOf(value, byteOffset) !== -1;
     }
 
+    _dv(offset, len) {
+      return new DataView(this.buffer, this.byteOffset + offset, len);
+    }
+
+    readUInt8(offset = 0) {
+      return this[offset];
+    }
+    readInt8(offset = 0) {
+      return (this[offset] << 24) >> 24;
+    }
+    readUInt16LE(offset = 0) {
+      return this._dv(offset, 2).getUint16(0, true);
+    }
     readUInt16BE(offset = 0) {
-      return (this[offset] << 8) | this[offset + 1];
+      return this._dv(offset, 2).getUint16(0, false);
     }
-
+    readInt16LE(offset = 0) {
+      return this._dv(offset, 2).getInt16(0, true);
+    }
+    readInt16BE(offset = 0) {
+      return this._dv(offset, 2).getInt16(0, false);
+    }
+    readUInt32LE(offset = 0) {
+      return this._dv(offset, 4).getUint32(0, true);
+    }
+    readUInt32BE(offset = 0) {
+      return this._dv(offset, 4).getUint32(0, false);
+    }
     readInt32LE(offset = 0) {
-      return (
-        this[offset] |
-        (this[offset + 1] << 8) |
-        (this[offset + 2] << 16) |
-        (this[offset + 3] << 24)
-      );
+      return this._dv(offset, 4).getInt32(0, true);
+    }
+    readInt32BE(offset = 0) {
+      return this._dv(offset, 4).getInt32(0, false);
+    }
+    readFloatLE(offset = 0) {
+      return this._dv(offset, 4).getFloat32(0, true);
+    }
+    readFloatBE(offset = 0) {
+      return this._dv(offset, 4).getFloat32(0, false);
+    }
+    readDoubleLE(offset = 0) {
+      return this._dv(offset, 8).getFloat64(0, true);
+    }
+    readDoubleBE(offset = 0) {
+      return this._dv(offset, 8).getFloat64(0, false);
+    }
+    readBigUInt64LE(offset = 0) {
+      return this._dv(offset, 8).getBigUint64(0, true);
+    }
+    readBigUInt64BE(offset = 0) {
+      return this._dv(offset, 8).getBigUint64(0, false);
+    }
+    readBigInt64LE(offset = 0) {
+      return this._dv(offset, 8).getBigInt64(0, true);
+    }
+    readBigInt64BE(offset = 0) {
+      return this._dv(offset, 8).getBigInt64(0, false);
     }
 
-    writeUInt32BE(value, offset = 0) {
-      this[offset] = (value >>> 24) & 0xff;
-      this[offset + 1] = (value >>> 16) & 0xff;
-      this[offset + 2] = (value >>> 8) & 0xff;
-      this[offset + 3] = value & 0xff;
+    writeUInt8(value, offset = 0) {
+      this[offset] = value & 0xff;
+      return offset + 1;
+    }
+    writeInt8(value, offset = 0) {
+      this[offset] = value & 0xff;
+      return offset + 1;
+    }
+    writeUInt16LE(value, offset = 0) {
+      this._dv(offset, 2).setUint16(0, value, true);
+      return offset + 2;
+    }
+    writeUInt16BE(value, offset = 0) {
+      this._dv(offset, 2).setUint16(0, value, false);
+      return offset + 2;
+    }
+    writeInt16LE(value, offset = 0) {
+      this._dv(offset, 2).setInt16(0, value, true);
+      return offset + 2;
+    }
+    writeInt16BE(value, offset = 0) {
+      this._dv(offset, 2).setInt16(0, value, false);
+      return offset + 2;
+    }
+    writeUInt32LE(value, offset = 0) {
+      this._dv(offset, 4).setUint32(0, value, true);
       return offset + 4;
     }
-
-    writeDoubleLE() {
-      return 0;
+    writeUInt32BE(value, offset = 0) {
+      this._dv(offset, 4).setUint32(0, value, false);
+      return offset + 4;
+    }
+    writeInt32LE(value, offset = 0) {
+      this._dv(offset, 4).setInt32(0, value, true);
+      return offset + 4;
+    }
+    writeInt32BE(value, offset = 0) {
+      this._dv(offset, 4).setInt32(0, value, false);
+      return offset + 4;
+    }
+    writeFloatLE(value, offset = 0) {
+      this._dv(offset, 4).setFloat32(0, value, true);
+      return offset + 4;
+    }
+    writeFloatBE(value, offset = 0) {
+      this._dv(offset, 4).setFloat32(0, value, false);
+      return offset + 4;
+    }
+    writeDoubleLE(value, offset = 0) {
+      this._dv(offset, 8).setFloat64(0, value, true);
+      return offset + 8;
+    }
+    writeDoubleBE(value, offset = 0) {
+      this._dv(offset, 8).setFloat64(0, value, false);
+      return offset + 8;
+    }
+    writeBigUInt64LE(value, offset = 0) {
+      this._dv(offset, 8).setBigUint64(0, BigInt(value), true);
+      return offset + 8;
+    }
+    writeBigUInt64BE(value, offset = 0) {
+      this._dv(offset, 8).setBigUint64(0, BigInt(value), false);
+      return offset + 8;
+    }
+    writeBigInt64LE(value, offset = 0) {
+      this._dv(offset, 8).setBigInt64(0, BigInt(value), true);
+      return offset + 8;
+    }
+    writeBigInt64BE(value, offset = 0) {
+      this._dv(offset, 8).setBigInt64(0, BigInt(value), false);
+      return offset + 8;
     }
 
     swap16() {

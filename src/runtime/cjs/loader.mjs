@@ -65,6 +65,7 @@ export function createCjs({
     'process',
     'querystring',
     'stream',
+    'stream/promises',
     'string_decoder',
     'timers',
     'timers/promises',
@@ -167,7 +168,9 @@ export function createCjs({
         let caretAt = first.indexOf(';');
         if (caretAt < 0) caretAt = Math.max(0, first.length - 1);
         const caret = `${' '.repeat(caretAt)}^`;
-        err.stack = `${filename}:1\n${first}\n${caret}\n\n${err.name}: ${err.message}`;
+        const pretty = `${filename}:1\n${first}\n${caret}\n\n${err.name}: ${err.message}`;
+        err._prettyStack = pretty;
+        err.stack = pretty;
       }
       throw err;
     }
@@ -192,8 +195,58 @@ export function createCjs({
     );
   }
 
+  function warnCircular(prop) {
+    try {
+      process.stderr.write(
+        `(node:${process.pid}) Warning: Accessing non-existent property '${String(prop)}' of module exports inside circular dependency\n` +
+          `(Use \`node --trace-warnings ...\` to show where the warning was created)\n`
+      );
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Proxy used only when another module require()s an incomplete module (true cycle). */
+  function circularExportsProxy(mod) {
+    if (mod._circularProxy) return mod._circularProxy;
+    const target = mod.exports;
+    const proxy = new Proxy(target, {
+      get(obj, prop, receiver) {
+        if (
+          !mod.loaded &&
+          typeof prop === 'string' &&
+          !(prop in obj) &&
+          prop !== '__esModule'
+        ) {
+          warnCircular(prop);
+        }
+        return Reflect.get(obj, prop, receiver);
+      },
+      set(obj, prop, value, receiver) {
+        return Reflect.set(obj, prop, value, receiver);
+      },
+      has(obj, prop) {
+        return Reflect.has(obj, prop);
+      },
+      ownKeys(obj) {
+        return Reflect.ownKeys(obj);
+      },
+      getOwnPropertyDescriptor(obj, prop) {
+        return Reflect.getOwnPropertyDescriptor(obj, prop);
+      },
+    });
+    mod._circularProxy = proxy;
+    // Keep mod.exports as the plain object so the defining module does not warn
+    // on its own reads; circular importers receive the proxy.
+    return proxy;
+  }
+
   function loadFile(filename, parent) {
-    if (cache[filename]) return cache[filename].exports;
+    if (cache[filename]) {
+      const existing = cache[filename];
+      if (!existing.loaded) return circularExportsProxy(existing);
+      return existing.exports;
+    }
     const mod = new Module(filename, parent);
     cache[filename] = mod;
     if (parent) parent.children.push(mod);

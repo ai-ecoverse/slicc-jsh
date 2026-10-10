@@ -89,7 +89,10 @@ const types = {
 export function createUtil() {
   // node-inspect-extracted lags Node 22's Symbol-key brackets: `[Symbol(s)]:`.
   const inspect = (value, opts) =>
-    nodeInspect(value, opts).replace(/(^|[,{\s])Symbol\(([^)]*)\):/g, '$1[Symbol($2)]:');
+    nodeInspect(value, opts)
+      .replace(/(^|[,{\s])Symbol\(([^)]*)\):/g, '$1[Symbol($2)]:')
+      // node-inspect-extracted brackets ArrayBuffer.byteLength; Node 22 does not.
+      .replace(/\[byteLength\]:/g, 'byteLength:');
   inspect.custom = INSPECT_CUSTOM;
   inspect.defaultOptions = nodeInspect.defaultOptions ?? { depth: 2, colors: false };
 
