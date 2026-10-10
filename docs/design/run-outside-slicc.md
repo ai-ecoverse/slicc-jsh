@@ -1,40 +1,43 @@
 # `jsh` outside SLICC
 
-Status: **design, not approved.** Tracks [#20](https://github.com/ai-ecoverse/slicc-jsh/issues/20). Builds on the in-kernel design, [node-shim-on-js-programs.md](https://github.com/ai-ecoverse/slicc-kernel/blob/design/node-shim-on-js-programs/docs/design/node-shim-on-js-programs.md) ([slicc-kernel#68](https://github.com/ai-ecoverse/slicc-kernel/issues/68)).
+Status: **decided on 2026-10-10 and shipped in [#22](https://github.com/ai-ecoverse/slicc-jsh/pull/22).** That PR covers H1 and H2 (see "Milestones"). `sliccy:browser` (H3) is [slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40). Tracks [#20](https://github.com/ai-ecoverse/slicc-jsh/issues/20). Builds on the in-kernel design, [node-shim-on-js-programs.md](https://github.com/ai-ecoverse/slicc-kernel/blob/design/node-shim-on-js-programs/docs/design/node-shim-on-js-programs.md) ([slicc-kernel#68](https://github.com/ai-ecoverse/slicc-kernel/issues/68)).
 
-Goal: a `.jsh` script runs on an ordinary macOS or Linux machine with `jsh script.jsh args…`, or as `./script.jsh` with a `#!/usr/bin/env jsh` line. On that machine:
+Goal: a `.jsh` script runs on an ordinary macOS or Linux machine as `jsh script.jsh args…`, or as `./script.jsh` with `#!/usr/bin/env jsh`. On the host, the JavaScript runs on the host's own Node, and `sliccy:browser` drives a real Chrome over CDP. Tables say exactly what matches inside SLICC and what doesn't. A script that sticks to the portable surface runs the same three ways:
+- in SLICC v6;
+- under the kernel `jsh` (`abi: "js"`);
+- under the host `jsh`.
 
-- the JavaScript runs on the host's Node;
-- `sliccy:browser` drives a real Chrome over CDP;
-- tables say exactly what behaves the same as inside SLICC and what doesn't.
+## Decisions (Lars, 2026-10-10)
 
-A script that uses only the portable surface then runs the same way in three places: SLICC v6, the kernel `jsh` (`abi: "js"`), and the host `jsh`.
+1. **`fs` is Node's.** There's no compatibility layer for v6's promise-returning `fs`: "the closer to node, the better". Scripts that relied on v6's `fs` move to Node's API.
+2. **`sliccy:http` and `sliccy:skill` are built into slicc-jsh**, like `cli`, `color`, `fmt`, `time`, `pool` and `exec`.
+3. **`skill.token(id)` only calls `oauth-token <id>`.** There's no fallback to an environment variable and no other command.
+4. **Colour depends on whether stdout is a TTY**, everywhere. `FORCE_COLOR` and `NO_COLOR` override.
+5. **`sliccy-browser` lives in slicc-cdp** ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)).
 
-## What a `.jsh` is today
+## What a `.jsh` is in v6
 
-In v6 (`packages/webapp/src/kernel/realm/`), a `.jsh` file is the **body of an async function**, run in sloppy mode:
-
-- The function's parameters are `process, console, require, module, exports, fetch, __dirname, __filename`, in that order (`runUserCode` in `realm-module-system.ts`).
-- Because it is a function body, top-level `await` and top-level `return` work. Static `import` declarations do not.
-- `process.argv` is `['node', script, ...args]`, and it also has a non-enumerable `parseFlags()`.
+In v6 (`packages/webapp/src/kernel/realm/`), a `.jsh` file is the **body of an async function**, run sloppy:
+- Its parameters are `process, console, require, module, exports, fetch, __dirname, __filename`, in that order (`runUserCode` in `realm-module-system.ts`). Top-level `await` and `return` therefore work.
+- **Static `import`:** if the entry contains `import` declarations or `import()`, v6's module loader lowers the entry to CommonJS before it runs (`transpileEntry` in `shell/ipk/module-loader.ts`), and then runs it strict.
+- `process.argv` is `['node', script, ...args]`, with a non-enumerable `parseFlags()`.
 - `require` resolves names in this order:
   1. `sliccy:<name>`;
-  2. the shim's own built-in modules;
+  2. the shim's built-in modules;
   3. refusals for native-addon packages;
   4. shimmed packages (`playwright`);
   5. `node_modules`.
-- **`require('fs')` is not Node's `fs`.** Its methods return promises and take no callbacks, and it has a few calls of its own:
-  - `readFile(p)` resolves to a string unless the encoding is `null` or `'buffer'`;
-  - `stat(p)` resolves to `{ isDirectory, isFile, size }` with **boolean properties**, not methods;
-  - `mkdir` always creates parent directories;
-  - extra calls: `readFileBinary`, `writeFileBinary`, `readDir`, `exists`, `fetchToFile`;
+- **`require('fs')` is v6's own `fs`, not Node's.** Calls return promises and take no callbacks:
+  - `readFile(p)` resolves to a string;
+  - `stat(p)` resolves to `{ isDirectory, isFile, size }` with boolean properties;
+  - it adds `readFileBinary`, `writeFileBinary`, `readDir`, `exists` and `fetchToFile`;
   - `fs.promises === fs`;
-  - only the `*Sync` methods behave like Node's (`realm-fs-bridge.ts`).
-- Stdin is read in full before the script starts, so `process.stdin.read()` returns all of it at once.
-- The script ends when its promise settles. In-flight work then gets a short, bounded grace period to finish, and timers still pending at that point are dropped.
+  - only the `*Sync` calls behave like Node's (`realm-fs-bridge.ts`).
+- Stdin is buffered whole, so `process.stdin.read()` returns all of it.
+- The script ends when its promise settles. In-flight work then gets a short, bounded grace period, and timers still pending at that point are dropped.
 - `globalThis.SLICC_VERSION` is set.
 
-**The scripts in use today** (83 `.jsh` files: 82 in [ai-ecoverse/skills](https://github.com/ai-ecoverse/skills) at `01d62a5`, 1 in slicc's `packages/vfs-root` at `d407a914e`):
+**Existing scripts:** 83 `.jsh` files. 82 are in [ai-ecoverse/skills](https://github.com/ai-ecoverse/skills) at `01d62a5`, and 1 is in slicc's `packages/vfs-root` at `d407a914e`.
 
 | use | scripts |
 |---|---|
@@ -45,166 +48,136 @@ In v6 (`packages/webapp/src/kernel/realm/`), a `.jsh` file is the **body of an a
 | `sliccy:usb` (no `agent`, `hid`, `serial`, `computer`, `pool`) | 1 |
 | `process.argv.parseFlags()` | 56 |
 | `require('fs')` | 53 |
-| …and v6's promise-returning `fs` (`await fs.readFile(…)`, `fs.exists`, `readFileBinary`, …) | 47 |
-| …reading `stat().isDirectory` as a property | 5 |
-| `process.stdin` (5 of them rely on the whole-buffer `read()`) | 9 |
-| a `/workspace/…` literal path | 13 |
-| top-level `return` / dynamic `import()` / static `import` / `#!` | 2 / 4 / 0 / 0 |
+| …of these, using v6's promise-returning `fs` (`await fs.readFile(…)`, `fs.exists`, `readFileBinary`, …) | 47 |
+| …of these, reading `stat().isDirectory` as a property | 5 |
+| `process.stdin` (5 rely on `read()` returning everything) | 9 |
+| a literal `/workspace/…` path | 13 |
+| top-level `return` / `import()` / static `import` / `#!` | 2 / 4 / 0 / 0 |
 
-47 of the 83 use no `browser` or device module. 41 of those also contain no `/workspace` literal, so they can run on a host without changes once the pure helpers and the `fs` compatibility layer are in place.
-
-Through `exec(…)`, the scripts mostly call `playwright-cli` (38 calls), `webhook` (21), `crontask` (10) and `oauth-token` (3). Then come ordinary tools: `git`, `curl`, `cat`, `ls`, `rm`.
+Under decision 1, the 47 scripts that use v6's `fs` must migrate. That means `require('fs').promises` (or `fs/promises`) with explicit encodings, `stat().isDirectory()` called as a method, `fs.existsSync`, and so on. The code they end up with is ordinary Node code. It runs under both `jsh`s, and under v6's `*Sync` calls as well.
 
 ## Engine options
 
-| | A. host Node (**proposed**) | B. slicc-kernel's Node entry | C. QuickJS |
+| | A. host Node (**chosen**) | B. slicc-kernel's Node entry | C. QuickJS |
 |---|---|---|---|
-| how it works | Run the `.jsh` wrapper on the host's real Node 22+ and its real builtins | Boot `@ai-ecoverse/slicc-kernel/node`, map a host directory as root, run the kernel `jsh` inside it | Run slicc-jsh's own runtime on QuickJS, with `ctx` implemented over qjs `std`/`os` |
-| Node API fidelity | Exact: it *is* Node 22, the reference the shim is certified against | Whatever the shim offers | Whatever the shim offers, plus gaps in QuickJS itself (no Intl, slower) |
-| host tools in `exec` | Real host commands | Only wasm commands installed in the kernel | Real host commands |
-| match with SLICC | Differs where the shim differs from Node; the tables cover this | Highest | Same as B, minus the kernel |
-| cost | Small: a launcher plus the shared `.jsh` layer | The README calls the Node entry "a testing entry, not a supported runtime"; slow start, no OPFS | A third engine to certify; a `ctx` port |
-| install | `npm i -g`; `npx` works | Same, but heavy | Single binary (attractive later) |
+| how it works | run the `.jsh` layer on the host's real Node 22+ and its real builtins | boot `@ai-ecoverse/slicc-kernel/node` and run the kernel `jsh` inside it | run slicc-jsh's own runtime on QuickJS, with `ctx` implemented over qjs `std`/`os` |
+| Node API fidelity | exact: this *is* Node 22, the reference the shim is certified against | whatever the shim offers | the shim's, plus QuickJS's own gaps |
+| commands `exec` can run | real host commands | only wasm commands installed in the kernel | real host commands |
+| cost | a launcher plus the shared `.jsh` layer | the README calls the Node entry "a testing entry, not a supported runtime" | a third engine to certify |
 
-**Proposal: A.** The point of running outside SLICC is to use the host's own files, commands and network, and real Node is the baseline the kernel shim is already measured against.
-
-- **B** isn't a product, but it is the right tool for parity CI (see Testing).
-- **C** remains possible later. The runtime only talks to `ctx`, so a QuickJS host means implementing `JsProgramContext`, with no rewrite. It stays separate from pi-codemode's QuickJS, as #68 asks.
+**A** is the point of running outside SLICC: the host's files, commands and network, on the Node the shim is measured against.
+- **B** is still useful for checking parity: `npm run test:jsh` runs every case under B.
+- **C** remains possible later. The runtime only talks to `ctx`, so QuickJS would mean implementing `JsProgramContext` again, not rewriting the runtime. It stays separate from pi-codemode's QuickJS, as #68 asks.
 
 ## Design
 
 ### One `.jsh` layer, two engines
 
-`.jsh` semantics live in one module, `src/jsh/`, which knows nothing about the engine:
+`src/jsh/` doesn't depend on either engine. It holds:
+- `run.mjs`: `jsh`'s own arguments, the `#!` handling, the wrapper and its parameters, `require`, exit rules, and `process.versions.jsh`;
+- `parse-flags.mjs`;
+- `sliccy/`: the built-in modules and the resolver.
 
-- reading the file and stripping the `#!` line;
-- the wrapper's parameter list;
-- `parseFlags`;
-- `sliccy:` resolution;
-- the `fs` compatibility layer (below);
-- exit rules.
+It is used twice:
+- **kernel `jsh`** = `src/jsh/` + the `node` runtime on `ctx` (`src/jsh.mjs`);
+- **host `jsh`** = `src/jsh/` + real Node (`src/host/jsh.mjs`, bundled to `dist/host/jsh.mjs`).
 
-It is used in two ways:
+Each engine passes in what differs:
 
-- **kernel `jsh`** = `src/jsh/` + `src/runtime/` (the Node shim on `ctx`);
-- **host `jsh`** = `src/jsh/` + a thin adapter over real Node (`src/host/`).
+| | kernel | host |
+|---|---|---|
+| `readSource` | `ctx.sync.fs.readFile` | `fs.readFileSync` |
+| `compile` | indirect `eval` with `//# sourceURL` | `vm.runInThisContext` with `USE_MAIN_CONTEXT_DEFAULT_LOADER` |
+| `createRequire` | the shim's `module.createRequire` | Node's |
+| `selfRequire` (for `sliccy-*` packages) | from `/node_modules/@ai-ecoverse/slicc-jsh` | from slicc-jsh's install location |
+| `spawn` | `ctx.spawn` with pipes | `child_process.spawn` |
+| `shell` for `exec(cmd)` | `sh -c` (the kernel's `sh` is bash) | `bash -c` if bash is on `PATH`, else `sh -c` |
+| `fetch` | `ctx.fetch` | the global `fetch` |
+| `stdoutIsTTY` | `ctx.isatty(1)` | `process.stdout.isTTY` |
+| `exit` | `ctx.exit` | `process.exit` |
 
-Each engine passes in what the layer needs:
+### Wrapper and exit rules (both engines)
 
-```js
-// src/jsh/index.mjs (sketch)
-export async function runJsh({ filename, source, argv, engine }) {}
-// engine: {
-//   createRequire(filename) -> require    // Node's algorithm (shim or real)
-//   nodeFs                                // the engine's real `fs`
-//   compile(body, params, filename)      -> async function   // keeps file:line in stacks
-//   process, console, fetch, exit(code)
-// }
-```
-
-Today `src/jsh.mjs` just calls `runNode`. The wrapper still has to be written for the kernel, so writing it once, behind this interface, costs nothing extra and makes the two engines behave alike by construction.
-
-### Host package and install
-
-- `package.json` gets `"bin": { "jsh": "dist/host/jsh.mjs" }`.
-  - That file is bundled by esbuild for `platform: node` and starts with `#!/usr/bin/env node`.
-  - `files` already ships `dist`.
-  - `engines.node` stays `>=22`.
-- Install with `npm i -g @ai-ecoverse/slicc-jsh`, or run one-off with `npx @ai-ecoverse/slicc-jsh script.jsh`.
-- **`#!/usr/bin/env jsh` is the portable shebang.**
-  - The kernel already resolves `#!/usr/bin/env name` and `#!/usr/bin/jsh`.
-  - On a host, `#!/usr/bin/jsh` (as written in #20) only works if someone links `jsh` there.
-- Host systems have no binfmt rule, so a `.jsh` without `#!` is run as `jsh file.jsh`. (Root users on Linux could register `binfmt_misc`; that's out of scope.)
-- Windows runs `jsh file.jsh` through npm's `.cmd` shim. Shebangs don't apply there.
-
-### Running the script on Node
-
-1. Read the file as UTF-8. Replace a leading `#!…` line with an empty line so line numbers stay correct.
-2. Compile it with `vm.runInThisContext`, wrapped as `(async function (process, console, require, module, exports, fetch, __dirname, __filename) {\n<body>\n})`.
-   - Pass `filename` and `lineOffset: -1` so stack frames read `/path/x.jsh:LINE:COL`.
-   - Pass `importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER`. Then `import('./x.mjs')` and `import('pkg')` resolve against the script's location, as Node itself would. Tested on Node 22 and 24: a plain `new AsyncFunction` resolves neither.
-   - Node 22 prints an `ExperimentalWarning` for that constant. The launcher filters that one message in `process.emitWarning` and lets every other warning through.
-3. Pass in the arguments:
-   - `process` is the real `process`, with `argv` set to `[process.execPath, script, ...args]` and `argv.parseFlags` defined on it as non-enumerable;
-   - `console` and `fetch` are the real globals;
-   - `module` is a real `Module` for `filename`, and `exports` is its `exports`;
-   - `require` is `module.createRequire(filename)`, wrapped (next section).
+1. Read the file as UTF-8. Drop a BOM, and blank a leading `#!…` line so line numbers stay the same.
+2. Wrap it as `(async function (process, console, require, module, exports, fetch, __dirname, __filename) {<body>\n})`.
+   - The wrapper's header sits on the body's first line, so stack line numbers are the file's own.
+   - The code runs sloppy, as in v6.
+   - A static `import` is a `SyntaxError`; use `await import()`.
+3. Call it:
+   - `process.argv` is `[runtime, /abs/script.jsh, ...args]` with `parseFlags()`;
+   - `module` is a CommonJS module object for the script, `require.main === module`, and `exports === module.exports`.
 4. Exit:
-   - When the promise resolves, nothing special happens: the process exits when the event loop is empty, as in Node and as the kernel shim does.
-   - When it rejects, the layer prints `err.stack` to stderr and calls `process.exit(1)`, the same as v6's `runUserCode`.
-   - `process.exit(n)` exits immediately.
+   - When the body resolves, the program lives on until its event loop is empty, as in Node.
+   - When it throws, the stack goes to stderr and the program exits 1 at once, pending timers included.
+   - `process.exit(n)` exits at once.
 
-The script runs sloppy, not strict, as in v6.
+**Host.** `vm.runInThisContext` with `importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER` resolves `import('./x.mjs')` and `import('pkg')` against the script, as Node does; a plain `new AsyncFunction` resolves neither. Node 22 prints an `ExperimentalWarning` for that constant. The launcher drops that one warning in `process.emitWarning` and passes every other warning through. The launcher doesn't use a top-level `await`, so a script whose promise never settles ends the way a Node program does when its loop is empty, not with Node's exit code 13.
+
+**Kernel.** `src/jsh.mjs` reuses the `node` runtime's eval entry. It runs `node -e <boot> <script> args…` with `ctx.argv` replaced, and the eval code hands the runtime's `process`, `console`, `Buffer`, `require` and timers to the shared layer. A `.jsh` therefore gets exactly what a `node` script gets. Three details:
+- The boot makes `process`, `Buffer`, the timers and `fetch` (`ctx.fetch`) globals, as Node's are.
+- While the body is pending, the boot holds a ref'd interval, because the M1 runtime doesn't yet count every kernel call as a handle.
+- `ctx.exit` ends the program, which makes the "exit at once" rules hold.
 
 ### `require` inside a `.jsh`
 
-The wrapper handles three kinds of name itself and passes everything else to Node:
+- `sliccy:<name>`: see below.
+- Anything else goes to the engine's Node `require` from the script's location. `fs`, `path`, `node_modules`, `exports` conditions and builtins all behave as in Node, or as the shim does. A package that isn't installed fails with `MODULE_NOT_FOUND`; there is no esm.sh or `ipk` fallback.
+- `require.resolve('sliccy:x')` returns `'sliccy:x'`.
 
-- `sliccy:<name>` → see `sliccy:` modules.
-- `fs`, `node:fs`, `fs/promises`, `node:fs/promises` → the **`.jsh` `fs` compatibility layer**.
-- Anything else → Node's `require` from the script's location. `node_modules`, `exports` conditions and builtins all behave exactly as in Node. A package that isn't installed fails with `MODULE_NOT_FOUND`; there is no esm.sh or `ipk` fallback.
+### `sliccy:` modules
 
-The compatibility layer applies only to the `require` given to `.jsh` files. Packages loaded from `node_modules` get Node's own `fs`.
+The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 
-### The `.jsh` `fs` compatibility layer (affects the kernel `jsh` too)
+1. Built in: `cli`, `color`, `exec`, `fmt`, `http`, `pool`, `skill`, `time`.
+2. `@ai-ecoverse/sliccy-<name>`, then `sliccy-<name>`, resolved with Node's algorithm, first from the script's directory and then from slicc-jsh's own location. The second step makes a global install next to a global `jsh` work.
+3. Otherwise an error:
+   - `agent`, `usb`, `serial`, `hid` and `computer` say `sliccy:<name> is only available inside SLICC`;
+   - other names give v6's message plus `Install @ai-ecoverse/sliccy-<name> to provide it.`
 
-47 of 83 scripts depend on v6's `fs`, and code can't serve both v6 and Node, as one example shows: v6 expects `if (st.isDirectory)` (a property), Node `st.isDirectory()` (a method). The in-kernel design says a v6 script "runs unchanged when it uses only those globals and the pure `sliccy:` helpers", but under real `fs` these 47 would break in the kernel `jsh` as well. So the shared layer gives `.jsh` files Node's `fs`, with one rule added:
+**The `slicc` export condition:** the kernel shim resolves every `require` with the conditions `['slicc', 'require', 'node', 'default']`, and host Node never sets `slicc`. A package, `sliccy-*` or any other, can therefore ship separate code for slicc-kernel.
 
-- **With a callback, or a `*Sync` name, it is Node.** Node's signatures, `Stats` and errors, unchanged.
-- **Without a callback, it is v6.** It returns a promise with v6's results:
-  - `readFile` without an encoding resolves to a UTF-8 string (`null` or `'buffer'` gives a `Buffer`);
-  - `stat` resolves to an object with **boolean** `isDirectory`/`isFile`, plus `size` and `mtimeMs`;
-  - `mkdir` is always recursive;
-  - `rm`, `cp`, `rename`, `access`, `unlink`, `copyFile`, `appendFile`, `mkdtemp` behave as in v6;
-  - plus v6's own calls: `readFileBinary`, `writeFileBinary`, `readDir`/`readdir` (names only), `exists`, `fetchToFile(url, path)`.
-- `fs.promises` and `fs/promises` are the promise half of that rule, as `fs.promises === fs` was in v6.
+| module | host `jsh` and kernel `jsh` | v6 |
+|---|---|---|
+| `cli`, `fmt`, `time`, `pool` | same code as v6 | |
+| `color` | **on when stdout is a TTY**. `FORCE_COLOR` (anything but `''`, `0`, `false`) forces it on and `FORCE_COLOR=0` off; otherwise a non-empty `NO_COLOR` turns it off | on unless `NO_COLOR` |
+| `exec` | `exec(cmd)` runs the engine's shell; `exec.spawn(argv)` uses no shell; `exec.start()` is v6's killable, buffered-stdin handle; results are `{ stdout, stderr, exitCode }`; a missing command gives 127 and `<cmd>: command not found` | just-bash |
+| `http` | v6's `http.client`, over the engine's `fetch` | same, over the realm `fetch` |
+| `skill` | `dir`/`refs`/`assets` from `argv[1]`; `config()` uses Node's `fs`; `token(id)` runs `oauth-token <id>` and nothing else | same, over v6's `fs` and its shell |
+| `browser` | `@ai-ecoverse/sliccy-browser` over CDP ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)) | RPC to SLICC's CDP owner |
+| `agent`, `usb`, `serial`, `hid`, `computer` | error: SLICC only | yes |
 
-A script that wants pure Node semantics uses `require('node:fs')` through `module.createRequire`. Equivalently, it `require`s a `.js` helper, which gets real `fs`. The layer can be removed once v6 is retired and the scripts are migrated (open question 1).
+### `sliccy:browser` over CDP ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40))
 
-### `sliccy:` modules on the host
-
-Resolution follows decision 3 of the in-kernel design: the module is either built into the shim or comes from a `sliccy-<name>` package. "The usual way" of finding that package is made exact here, and the kernel `jsh` must follow the same rule:
-
-1. Names built into slicc-jsh.
-2. `@ai-ecoverse/sliccy-<name>`, then `sliccy-<name>`, resolved with Node's algorithm, first from the script's directory, then from slicc-jsh's own install location. The second step makes a global install of `@ai-ecoverse/sliccy-browser` next to a global `jsh` work.
-3. Otherwise an error. For a name that only exists inside SLICC, the error says so (`sliccy:usb is only available inside SLICC`). For any other name it gives v6's message, plus `npm i @ai-ecoverse/sliccy-<name>`.
-
-If a package needs different code inside and outside the kernel, it can provide an `exports` condition named **`slicc`**. The kernel `jsh` resolves `sliccy-*` packages with `['slicc', 'require', 'node', 'default']`; the host never sets `slicc`.
-
-| module | v6 | host `jsh` | same? |
-|---|---|---|---|
-| `cli`, `color`, `fmt`, `time`, `pool` | pure helpers | built in, same code as the kernel `jsh` | yes. `color` is on unless `NO_COLOR` is set, in all three; open question 4 |
-| `exec` | runs the command in just-bash | `exec(cmd)` runs `bash -c cmd` if `bash` is on `PATH`, else `sh -c` (the kernel's `sh` is bash; Debian's is dash). `exec.spawn(argv)` runs argv with no shell. `exec.start` is built on `child_process.spawn` | same API; the **commands are the host's** (next table) |
-| `http` | `http.client` over `fetch` | the same code over Node's `fetch` | yes. Host requests skip CORS and the kernel transport |
-| `skill` | `dir`/`refs`/`assets`/`config()`; `token(id)` runs `oauth-token <id>` | same; `token` runs whatever `oauth-token` is on `PATH` | yes, except `token` fails unless the host provides `oauth-token` (open question 3) |
-| `browser` | RPC to SLICC's CDP owner | `@ai-ecoverse/sliccy-browser` over CDP (below) | `findTab`/`ensureTab`/`eval`/`evalAsync`/`cookie`/`localStorage`/`fetch` are the same; `websocket` sinks differ |
-| `agent` | runs the `agent` command | not available | no (later, perhaps via a slicc-cli link) |
-| `usb`, `serial`, `hid`, `computer` | WebUSB/WebSerial/WebHID, desktop | not available | no |
-
-The in-kernel note lists `http` and `skill` as modules the embedder provides. Both use nothing but `fetch`, `fs` and `exec`, so this proposes building them into slicc-jsh, the same as `cli` (open question 2).
-
-### `sliccy:browser` over CDP
-
-- **Package:** `@ai-ecoverse/sliccy-browser`, built on slicc-cdp's JS `CDPClient`/`connect`. The slicc-cdp repo would be its natural home.
-- **Connecting:** the same order `playwright-cli` and `curlwright` use:
+- **Package:** `@ai-ecoverse/sliccy-browser`, built on slicc-cdp's JS `CDPClient`/`connect`.
+- **Connecting:** the same order `playwright-cli` uses:
   1. `SLICC_CDP_URL`;
-  2. otherwise `GET http://127.0.0.1:9222/json/version` and its `webSocketDebuggerUrl`.
+  2. otherwise `http://127.0.0.1:9222/json/version`.
 
-  `slicc launch` (slicc-cli) starts such a browser in a separate profile and prints its URL. Inside the kernel, `SLICC_CDP_URL` is already set to the kernel's 9222. The same package can therefore serve both places if the kernel `jsh` provides a global `WebSocket` over `ctx.websocket`. If it doesn't, the `slicc` export condition covers the difference.
-- **Mapping the calls:**
-  - `findTab`/`ensureTab` → `Target.getTargets`/`createTarget`;
-  - `eval`/`evalAsync` → `Runtime.evaluate` (with `awaitPromise` and `returnByValue`);
+  `slicc launch` (slicc-cli) starts such a browser on a host. Inside the kernel, `SLICC_CDP_URL` is the kernel's 9222.
+- **Calls:**
+  - `findTab`/`ensureTab` → `Target.*`;
+  - `eval`/`evalAsync` → `Runtime.evaluate`;
   - `cookie` → `Network.getCookies`;
-  - `localStorage` and `fetch` → an evaluate call in the page, using v6's `buildBrowserFetchScript`, so cookies and origin rules are the tab's.
-- **`browser.websocket`:** the router installed into the page is v6's (`ws-router-page.ts`), and it reports back through `Runtime.addBinding`.
-  - Sink `'log'`: supported.
-  - Sink `'vfs'`: supported, for any absolute path the user can write. v6's `/workspace/` prefix is a SLICC rule and doesn't apply on a host.
-  - Sinks `'webhook'` and `'scoop'`: SLICC only; they reject with `ENOTSUP`.
-- **`require('playwright')`:** v6's built-in replacement is SLICC only. On a host, a real `playwright`, if installed, is used as it is.
+  - `localStorage` and `fetch` → evaluated in the page, so the tab's cookies apply.
+- **`websocket` sinks:**
+  - `'log'`: works the same;
+  - `'vfs'`: any absolute path the user can write;
+  - `'webhook'` and `'scoop'`: SLICC only; they reject with `ENOTSUP`.
+- **`require('playwright')`:** on a host, a real installed `playwright` is used as it is.
+
+### Install and run
+
+- `"bin": { "jsh": "dist/host/jsh.mjs" }`, so `npm i -g @ai-ecoverse/slicc-jsh` or `npx @ai-ecoverse/slicc-jsh script.jsh` works.
+- `jsh [--version | --help] <script.jsh> [args…]`:
+  - with no script it prints usage and exits 2;
+  - an unknown option exits 9, as Node does;
+  - a file that can't be read exits 1 with `jsh: cannot open <path>: <code>`.
+- **`#!/usr/bin/env jsh` is the portable shebang.** The kernel also runs `#!/usr/bin/jsh` and, through binfmt, a `.jsh` file with no `#!` line. On a host, `#!/usr/bin/jsh` only works if someone links `jsh` there. A host has no binfmt, so a file without `#!` runs as `jsh file.jsh`.
+- Windows runs `jsh file.jsh` through npm's `.cmd` shim.
 
 ### Detecting the host
 
-`process.versions.jsh` holds the slicc-jsh version in both engines. `globalThis.SLICC_VERSION` exists only inside SLICC. A script that needs to branch checks `typeof SLICC_VERSION`.
+`process.versions.jsh` is the slicc-jsh version in both engines. `globalThis.SLICC_VERSION` exists only inside SLICC.
 
 ## Parity tables
 
@@ -212,65 +185,56 @@ The in-kernel note lists `http` and `skill` as modules the embedder provides. Bo
 
 | | v6 | kernel `jsh` | host `jsh` |
 |---|---|---|---|
-| wrapper, sloppy, top-level `await`/`return` | yes | yes (shared layer) | yes (shared layer) |
-| static `import` | lowered by the host | SyntaxError | SyntaxError (0 scripts use it) |
-| `import()` | yes | `ctx.loadModule` | Node's loader, resolved against the script |
-| `process.argv[0]` | `'node'` | the shim's `argv0` | `process.execPath`. Use `argv.slice(2)` or `parseFlags()` |
-| `fs` (in `.jsh`) | v6 fs | compatibility layer | compatibility layer |
+| async body, sloppy, top-level `await`/`return` | yes | yes | yes |
+| static `import` | lowered to CJS, run strict | SyntaxError | SyntaxError (0 scripts use it) |
+| `import()` | lowered | not yet (needs `ctx.loadModule`, kernel item 7) | Node's loader, relative to the script |
+| `process.argv[0]` | `'node'` | `'jsh'` | `process.execPath`; use `argv.slice(2)` or `parseFlags()` |
+| `require('fs')` | v6's promise-returning `fs` | Node's (the shim's) | Node's |
 | `fs.*Sync` | snapshot taken at start, flushed at exit | live | live |
-| `process.stdin.read()` | the whole buffer | Node stream | Node stream. **5 scripts break**; `fs.readFileSync(0, 'utf8')` works in all three |
-| exit | when the promise settles, plus a short grace period | when the event loop is empty | when the event loop is empty. An open interval or socket keeps the script running |
-| `process.exit()` | throws an exception user code can catch | exits | exits |
-| uncaught error | stack to stderr, status 1 | same | same |
-| stack frames | `<anonymous>` | `file:line` | `file:line` |
-| `SLICC_VERSION` | set | set | unset |
+| stdin | buffered; `read()` returns all of it | Node stream; `fs.readFileSync(0)` once the M1 chain lands (#15) | Node stream; `fs.readFileSync(0, 'utf8')` |
+| exit | when the promise settles, after a short grace period | when the event loop is empty | when the event loop is empty |
+| `process.exit()` | an exception user code can catch | exits at once | exits at once |
+| uncaught error | stack to stderr, status 1 | same, at once | same, at once |
+| `sliccy:color` | on unless `NO_COLOR` | on a TTY | on a TTY |
+| `SLICC_VERSION` | set | unset | unset |
 
 ### Environment
 
 | | inside SLICC | host `jsh` |
 |---|---|---|
-| file system | OPFS/VFS: `/workspace`, `/shared`, `/tmp` | the real one. Paths like `/workspace/…` don't exist (13 scripts); `skill.dir` is the portable way to find a skill's files |
-| `PATH` commands for `exec` | kernel commands; `.jsh` scripts on `PATH` | host commands; `.jsh` scripts run if they have `#!/usr/bin/env jsh` |
+| file system | OPFS/VFS: `/workspace`, `/shared`, `/tmp` | the real one. `/workspace/…` paths don't exist (13 scripts); `skill.dir` is the portable way to find a skill's files |
+| `PATH` commands for `exec` | kernel commands; `.jsh` scripts on `PATH` | host commands; `.jsh` scripts with `#!/usr/bin/env jsh` |
 | `playwright-cli`, `curlwright` | built in | install `@ai-ecoverse/slicc-cdp` (native binaries) |
-| `webhook`, `crontask`, `oauth-token`, `agent` | built in | not present |
-| network | kernel transport / proxy | direct; no CORS |
-| `process.env` | shell env plus the selected provider's API key | the host env as it is |
-| stdin, TTY, signals | kernel fds, terminal, signals | the real ones |
+| `webhook`, `crontask`, `oauth-token`, `agent` | built in | not present; `skill.token` fails unless an `oauth-token` is on `PATH` |
+| network | kernel transport / proxy | direct, no CORS |
+| `process.env` | shell env plus the selected provider's API key | the host env |
 
 ## Testing
 
-- **Shared fixtures:** `test/jsh/fixtures/<case>/` with a `.jsh` file plus the expected stdout, stderr and status, as the golden tests do now.
-  - **The host `jsh` records the baseline**, as `npx node@22` does for `node`.
-  - The kernel `jsh` must match it byte for byte on the Node entry (engine B). Rows the tables mark as different are pinned by their own fixtures, so any drift fails CI.
-- **The tables are tested:** every row of the script-semantics table gets at least one fixture. That covers the compatibility layer's two halves, `parseFlags`, top-level `return`, `import()`, exit timing, and the error output.
-- **Real scripts:** a CI job checks out ai-ecoverse/skills and runs each `.jsh` that uses no `browser` or device module with `--help` under the host `jsh`, comparing against the kernel `jsh`. Scripts that can't run on a host go on an allowlist that records why.
-- **CDP:** `sliccy-browser` runs against headless Chrome (`--remote-debugging-port=0`) in CI: find/ensure a tab, eval, cookie, `fetch` with the page's cookies, and the `log` sink.
-- **Packaging:** `npm pack`, install the tarball globally into a temporary prefix, then run `./x.jsh` through `#!/usr/bin/env jsh` and `npx`.
+- **`npm run test:jsh`** (`scripts/jsh-golden.mjs`) runs `test/jsh/fixtures/<case>/main.jsh` two ways:
+  - **The host `jsh` on Node 22.22.0 records the baseline**, as `npx node@22` does for `node`. It runs in a temporary copy of the fixture.
+  - The kernel `jsh` on the Node entry must match stdout, stderr and status byte for byte.
+  - `"stderr": "error-line"` compares only the `…Error: …` line, because stack frames name engine paths.
+  - `"kernel": false` (with `kernelReason`) skips the kernel run. Today that applies to `import()` (kernel item 7), stdin through fd 0 (the M1 chain, #15), and `exec(cmd)`, since the test kernel installs no bash.
+  - Every row of the script-semantics table has a case.
+- **`test/integration/jsh.test.mjs`:**
+  - kernel: `--version`/`--help`/bad option/missing file; a `.jsh` run through binfmt and through `#!/usr/bin/jsh`; the `slicc` condition winning in the kernel;
+  - host: the `slicc` condition ignored; `./tool.jsh` through `#!/usr/bin/env jsh`.
+- **CI:** besides those, CI installs the packed tarball globally and runs `jsh --version` and an executable `#!/usr/bin/env jsh` script.
 
 ## Milestones
 
-- **H1, layer and launcher:**
-  - `src/jsh/` (wrapper, `#!` handling, `parseFlags`, exit rules, the `fs` compatibility layer);
-  - `src/host/` and the `jsh` bin;
-  - the kernel `jsh` switched over to the same layer;
-  - shared fixtures.
-- **H2, portable `sliccy:` modules:** `cli`, `color`, `fmt`, `time`, `pool`, `exec`, plus `http` and `skill` if approved; built into slicc-jsh and used by both engines.
-- **H3, `sliccy:browser`:** `@ai-ecoverse/sliccy-browser` over slicc-cdp, with the CDP CI job.
-- **H4, the real-script job:** checks against the skills corpus; migrate the 5 stdin scripts to `fs.readFileSync(0)`.
-
-H1 and H2 depend on nothing new in the kernel. H3 depends on slicc-cdp's JS client, already exported on its `main`.
+- **H1 (shipped):** the `.jsh` layer, the host launcher and `bin`, the kernel `jsh` on the same layer, the `slicc` condition, and the parity harness.
+- **H2 (shipped):** built-in `cli`, `color`, `fmt`, `time`, `pool`, `exec`, `http`, `skill`.
+- **H3:** `@ai-ecoverse/sliccy-browser` in slicc-cdp ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)).
+- **H4:**
+  - a CI job over ai-ecoverse/skills: each `.jsh` that uses no `browser` or device module runs with `--help` under both `jsh`s;
+  - migrate the 47 scripts that use v6's `fs` and the 5 that rely on whole-buffer stdin.
+- **Kernel follow-ups:** `import()` from the VFS (`ctx.loadModule`), and bash in the test kernel for `exec(cmd)`. Once the M1 chain lands, drop the boot's keep-alive in favour of the runtime's handle counting.
 
 ## Out of scope
 
-- QuickJS (engine C), Deno and Bun. Bun or Deno might run the launcher, since it only uses `node:vm` and `node:module`, but neither is tested.
+- QuickJS (engine C), Deno and Bun.
 - `sliccy:agent` and the device modules on a host.
 - Remapping SLICC's paths (`/workspace` → a directory) or a `--root` option.
-- `binfmt_misc` registration, and a REPL (`jsh` with no file prints usage).
-
-## Open questions for Lars
-
-1. **`fs` compatibility layer:** keep v6's promise form for `.jsh` files in both engines (proposed), or migrate the 47 scripts and give `.jsh` plain Node `fs`?
-2. **`http` and `skill`:** build them into slicc-jsh (proposed), or make them `sliccy-*` packages, as the in-kernel note has it?
-3. **`skill.token` on a host:** only an `oauth-token` command on `PATH` (proposed), or also an environment fallback such as `SLICC_TOKEN_<PROVIDER>`, or a `slicc oauth-token` command in slicc-cli?
-4. **Colour:** keep v6's rule everywhere (on unless `NO_COLOR`), or switch all three to "on when stdout is a TTY, `NO_COLOR`/`FORCE_COLOR` override"? The kernel can tell a TTY now, so this could change everywhere at once.
-5. **Where `sliccy-browser` lives:** in slicc-cdp (proposed), or its own repo?
+- `binfmt_misc` registration, and a REPL.

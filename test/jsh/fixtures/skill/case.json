@@ -1,0 +1,4 @@
+{
+  "description": "sliccy:skill: dir/refs/assets from argv[1], config() round trip, token() calls only oauth-token",
+  "args": []
+}

@@ -1,0 +1,6 @@
+{
+  "description": "import() resolves against the script, relative and bare",
+  "args": [],
+  "kernel": false,
+  "kernelReason": "ESM from the VFS needs ctx.loadModule (kernel item 7)"
+}

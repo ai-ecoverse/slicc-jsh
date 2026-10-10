@@ -1,0 +1,4 @@
+{
+  "description": "require('fs') is Node's fs (decided on #22): callbacks, Stats methods, fs.promises",
+  "args": []
+}

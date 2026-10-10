@@ -1,0 +1,4 @@
+{
+  "description": "Script semantics: async body, sloppy mode, top-level await and return, v6's parameters",
+  "args": ["one", "two"]
+}

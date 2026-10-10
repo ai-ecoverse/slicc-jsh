@@ -1,0 +1,4 @@
+{
+  "description": "Exit: the body settles, then the program lives until its event loop is empty, as in Node",
+  "args": []
+}

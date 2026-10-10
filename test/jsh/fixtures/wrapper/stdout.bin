@@ -1,0 +1,7 @@
+sloppy true
+await 42
+module object true true
+filename true true
+argv 4 true ["one","two"]
+fetch function
+version string true

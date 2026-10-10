@@ -1,0 +1,5 @@
+{
+  "description": "A syntax error is reported and exits 1; static import is not supported",
+  "args": [],
+  "stderr": "error-line"
+}

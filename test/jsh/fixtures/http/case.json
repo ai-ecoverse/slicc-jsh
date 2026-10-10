@@ -1,0 +1,4 @@
+{
+  "description": "sliccy:http client over fetch (a data: URL needs no network in either engine)",
+  "args": []
+}

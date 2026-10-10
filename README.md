@@ -2,7 +2,7 @@
 
 A Node.js-compatible runtime for [slicc-kernel](https://github.com/ai-ecoverse/slicc-kernel): the `node` and `jsh` commands, built on the kernel's `abi: "js"` programs.
 
-Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-kernel/issues/68). Running `jsh` outside SLICC (host Node, CDP): [docs/design/run-outside-slicc.md](docs/design/run-outside-slicc.md) (#20, not approved yet).
+Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-kernel/issues/68). Running `jsh` outside SLICC (host Node, CDP): [docs/design/run-outside-slicc.md](docs/design/run-outside-slicc.md) (#20).
 
 ## Status
 
@@ -17,6 +17,18 @@ JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `di
 | `node` | `dist/node.mjs` | Node 22.x-compatible entry |
 | `jsh` | `dist/jsh.mjs` | `.jsh` scripts; binfmt maps `.jsh` → `jsh` |
 
+## `jsh` outside SLICC
+
+The package's `bin` is the host `jsh` (`dist/host/jsh.mjs`), which runs `.jsh` scripts on the host's own Node 22+:
+
+```bash
+npm i -g @ai-ecoverse/slicc-jsh
+jsh script.jsh args…          # or ./script.jsh with #!/usr/bin/env jsh
+npx @ai-ecoverse/slicc-jsh script.jsh
+```
+
+A `.jsh` file is the body of an async function with `process`, `console`, `require`, `module`, `exports`, `fetch`, `__dirname` and `__filename` in scope, the same in the kernel and on the host. `require('fs')` is Node's `fs`. Built-in `sliccy:` modules are `cli`, `color`, `exec`, `fmt`, `http`, `pool`, `skill` and `time`. Any other `sliccy:<name>` resolves to an `@ai-ecoverse/sliccy-<name>` or `sliccy-<name>` package; `sliccy:browser` over CDP comes from slicc-cdp ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)). The parity tables are in the [design note](docs/design/run-outside-slicc.md#parity-tables).
+
 ## Develop
 
 ```bash
@@ -24,6 +36,7 @@ npm ci
 npm run build
 npm run lint
 npm run test:golden          # host Node 22 baselines (npx node@22)
+npm run test:jsh             # .jsh parity: host jsh baseline vs kernel jsh
 npm run test:integration     # slicc-kernel Node entry, memory root
 ```
 
@@ -31,6 +44,7 @@ Golden fixtures live under `test/golden/fixtures/` and are **not** published (`f
 
 ```bash
 npm run golden:record
+npm run jsh:record           # .jsh cases under test/jsh/fixtures/, recorded with the host jsh
 ```
 
 ## Publish

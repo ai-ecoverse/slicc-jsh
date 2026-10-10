@@ -1,0 +1,4 @@
+{
+  "description": "process.argv.parseFlags(): positional, --k=v, --k v, -abc, repeats, --",
+  "args": ["sub", "--name=x", "--n", "2", "-ab", "--flag", "--name", "y", "pos", "--", "--raw", "z"]
+}

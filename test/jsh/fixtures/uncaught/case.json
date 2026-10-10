@@ -1,0 +1,5 @@
+{
+  "description": "A throw prints the stack and exits 1; pending timers do not run",
+  "args": [],
+  "stderr": "error-line"
+}

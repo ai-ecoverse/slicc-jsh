@@ -1,0 +1,4 @@
+{
+  "description": "A leading #! line is blanked, so stack line numbers are the file's own",
+  "args": []
+}

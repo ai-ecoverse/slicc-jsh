@@ -1,0 +1,5 @@
+{
+  "description": "Colour is decided on a TTY; FORCE_COLOR forces it on (decided on #22)",
+  "args": [],
+  "env": { "FORCE_COLOR": "1" }
+}

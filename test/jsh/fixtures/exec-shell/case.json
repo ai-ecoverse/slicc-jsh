@@ -1,0 +1,6 @@
+{
+  "description": "exec(cmd) runs through bash -c (sh -c without bash)",
+  "args": [],
+  "kernel": false,
+  "kernelReason": "the test kernel installs no bash; covered once wasm-bash is a dev dependency"
+}

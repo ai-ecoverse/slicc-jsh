@@ -1,0 +1,8 @@
+sync "hello from a file\n"
+buffer true
+stat function true true
+callback null "hello from a file\n"
+promises "hello from a file\n"
+promises.stat true
+fs/promises true
+no v6 extras undefined undefined undefined

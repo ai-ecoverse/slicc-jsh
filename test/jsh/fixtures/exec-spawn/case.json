@@ -1,0 +1,4 @@
+{
+  "description": "sliccy:exec spawn runs argv without a shell; a missing command gives 127",
+  "args": []
+}
