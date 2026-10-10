@@ -1,0 +1,7 @@
+{
+  "name": "imports-app",
+  "imports": {
+    "#local": "./lib/local.js"
+  },
+  "type": "commonjs"
+}

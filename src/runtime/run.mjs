@@ -1,4 +1,5 @@
 import { createBuffer } from './buffer.mjs';
+import { createCjs } from './cjs/loader.mjs';
 import { parseNodeArgv } from './cli.mjs';
 import { createConsole } from './console.mjs';
 import { NodeExitError } from './exit.mjs';
@@ -8,14 +9,6 @@ import { createProcess } from './process.mjs';
 import { createTimers } from './timers.mjs';
 
 const decoder = new TextDecoder();
-
-function runInScope(code, filename, scope) {
-  const names = Object.keys(scope);
-  const values = names.map((k) => scope[k]);
-  // eslint-disable-next-line no-new-func
-  const fn = new Function(...names, `"use strict";\n${code}\n//# sourceURL=${filename}`);
-  return fn(...values);
-}
 
 async function drain(handles, nextTick) {
   for (;;) {
@@ -67,18 +60,7 @@ export async function runNode(ctx) {
     },
   });
 
-  const scope = {
-    process,
-    console,
-    Buffer,
-    setTimeout: timers.setTimeout,
-    clearTimeout: timers.clearTimeout,
-    setInterval: timers.setInterval,
-    clearInterval: timers.clearInterval,
-    setImmediate: (fn, ...args) => timers.setTimeout(fn, 0, ...args),
-    clearImmediate: timers.clearTimeout,
-    queueMicrotask: globalThis.queueMicrotask.bind(globalThis),
-  };
+  const cjs = createCjs({ ctx, process, Buffer, console, timers });
 
   try {
     if (parsed.mode === 'empty') {
@@ -86,35 +68,58 @@ export async function runNode(ctx) {
     }
 
     if (parsed.mode === 'eval') {
-      // -p must return the completion value; wrap so ExpressionStatement works.
-      const body = parsed.print ? `return (${parsed.code}\n)` : parsed.code;
-      const result = runInScope(body, '[eval]', scope);
+      const require = cjs.makeRequire(`${process.cwd()}/[eval]`);
+      const exports = {};
+      const module = { exports };
+      const fn = new Function(
+        'process',
+        'console',
+        'Buffer',
+        'require',
+        'exports',
+        'module',
+        '__filename',
+        '__dirname',
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'setImmediate',
+        'clearImmediate',
+        'queueMicrotask',
+        `"use strict";\n${parsed.print ? `return (${parsed.code}\n)` : parsed.code}\n//# sourceURL=[eval]`
+      );
+      const result = fn(
+        process,
+        console,
+        Buffer,
+        require,
+        exports,
+        module,
+        '[eval]',
+        process.cwd(),
+        timers.setTimeout,
+        timers.clearTimeout,
+        timers.setInterval,
+        timers.clearInterval,
+        (cb, ...args) => timers.setTimeout(cb, 0, ...args),
+        timers.clearTimeout,
+        globalThis.queueMicrotask.bind(globalThis)
+      );
       nextTick.flushSync();
-      if (parsed.print) {
-        writeStdout(`${result}\n`);
-      }
+      if (parsed.print) writeStdout(`${result}\n`);
     } else if (parsed.mode === 'file') {
-      const path = ctx.resolve(parsed.script);
+      const filePath = ctx.resolve(parsed.script);
       let source;
       try {
-        source = decoder.decode(ctx.sync.fs.readFile(path));
+        source = decoder.decode(ctx.sync.fs.readFile(filePath));
       } catch (err) {
         const msg = err?.message ?? String(err);
         await ctx.write(2, `${ctx.argv[0]}: cannot open ${parsed.script}: ${msg}\n`);
         return 1;
       }
-      // process.argv[1] should be the resolved path (Node uses the absolute path).
-      process.argv[1] = path;
-      runInScope(source, path, {
-        ...scope,
-        __filename: path,
-        __dirname: path.includes('/') ? path.slice(0, path.lastIndexOf('/')) || '/' : '.',
-        exports: {},
-        module: { exports: {} },
-        require: () => {
-          throw new Error('require is not implemented yet (M1 PR3)');
-        },
-      });
+      process.argv[1] = filePath;
+      cjs.runMain(filePath, source);
       nextTick.flushSync();
     }
 

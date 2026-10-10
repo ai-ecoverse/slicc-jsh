@@ -1,0 +1,289 @@
+/**
+ * Node 22-ish CJS resolution over a sync FS (ctx.sync).
+ * Covers relative paths, node_modules, package.json main/exports/imports,
+ * .js/.cjs/.json, and directory index files.
+ */
+import { moduleNotFound, packagePathNotExported } from './errors.mjs';
+
+const CONDITIONS = ['require', 'node', 'default'];
+
+export function createResolver({ fs, path, readPackageJson }) {
+  const tryStat = (p) => {
+    try {
+      if (!fs.exists(p)) return null;
+      return fs.stat(p);
+    } catch {
+      return null;
+    }
+  };
+
+  const tryFile = (p) => {
+    const st = tryStat(p);
+    return st?.isFile ? p : null;
+  };
+
+  const tryExtensions = (p) => {
+    if (tryFile(p)) return p;
+    for (const ext of ['.js', '.cjs', '.json']) {
+      const withExt = p + ext;
+      if (tryFile(withExt)) return withExt;
+    }
+    return null;
+  };
+
+  const loadAsDirectory = (dir) => {
+    const pkgPath = path.join(dir, 'package.json');
+    if (tryFile(pkgPath)) {
+      const pkg = readPackageJson(pkgPath);
+      if (pkg?.exports !== undefined) {
+        const resolved = resolveExports(pkg.exports, '.', pkgPath, dir);
+        if (resolved) return resolved;
+      }
+      if (typeof pkg?.main === 'string') {
+        const mainPath = path.resolve(dir, pkg.main);
+        const asFile = tryExtensions(mainPath);
+        if (asFile) return asFile;
+        const asDir = loadAsDirectory(mainPath);
+        if (asDir) return asDir;
+      }
+    }
+    return tryExtensions(path.join(dir, 'index'));
+  };
+
+  const loadAsFileOrDir = (p) => {
+    const asFile = tryExtensions(p);
+    if (asFile) return asFile;
+    const st = tryStat(p);
+    if (st?.isDirectory) return loadAsDirectory(p);
+    return null;
+  };
+
+  function matchExportTarget(target, pkgDir) {
+    if (target === null) return null;
+    if (typeof target === 'string') {
+      if (!target.startsWith('./')) return null;
+      return loadAsFileOrDir(path.resolve(pkgDir, target));
+    }
+    if (Array.isArray(target)) {
+      for (const item of target) {
+        const hit = matchExportTarget(item, pkgDir);
+        if (hit) return hit;
+      }
+      return null;
+    }
+    if (typeof target === 'object') {
+      for (const key of CONDITIONS) {
+        if (Object.prototype.hasOwnProperty.call(target, key)) {
+          const hit = matchExportTarget(target[key], pkgDir);
+          if (hit) return hit;
+        }
+      }
+      // Fallback: some packages use bare "." key only
+      if (Object.prototype.hasOwnProperty.call(target, '.')) {
+        return matchExportTarget(target['.'], pkgDir);
+      }
+    }
+    return null;
+  }
+
+  function resolveExports(exportsField, subpath, pkgJsonPath, pkgDir) {
+    if (typeof exportsField === 'string' || Array.isArray(exportsField)) {
+      if (subpath !== '.') throw packagePathNotExported(subpath, pkgJsonPath);
+      return matchExportTarget(exportsField, pkgDir);
+    }
+    if (typeof exportsField !== 'object' || exportsField === null) return null;
+
+    // Conditional exports at top level (no "." key) — treat as target for "."
+    const keys = Object.keys(exportsField);
+    const hasDotOrSlash = keys.some((k) => k === '.' || k.startsWith('./'));
+    if (!hasDotOrSlash) {
+      if (subpath !== '.') throw packagePathNotExported(subpath, pkgJsonPath);
+      return matchExportTarget(exportsField, pkgDir);
+    }
+
+    const key = subpath === '.' ? '.' : subpath.startsWith('./') ? subpath : `./${subpath}`;
+    if (Object.prototype.hasOwnProperty.call(exportsField, key)) {
+      const hit = matchExportTarget(exportsField[key], pkgDir);
+      if (hit) return hit;
+      throw packagePathNotExported(subpath, pkgJsonPath);
+    }
+
+    // Pattern exports: "./features/*" → "./features/*.js"
+    for (const [pattern, target] of Object.entries(exportsField)) {
+      if (!pattern.includes('*')) continue;
+      const [pre, post] = pattern.split('*');
+      if (!key.startsWith(pre) || !key.endsWith(post ?? '')) continue;
+      const star = key.slice(pre.length, key.length - (post?.length ?? 0));
+      const mapped = mapStar(target, star);
+      const hit = matchExportTarget(mapped, pkgDir);
+      if (hit) return hit;
+    }
+
+    throw packagePathNotExported(subpath, pkgJsonPath);
+  }
+
+  function mapStar(target, star) {
+    if (typeof target === 'string') return target.replaceAll('*', star);
+    if (Array.isArray(target)) return target.map((t) => mapStar(t, star));
+    if (target && typeof target === 'object') {
+      const out = {};
+      for (const [k, v] of Object.entries(target)) out[k] = mapStar(v, star);
+      return out;
+    }
+    return target;
+  }
+
+  const packageImportsResolve = (name, parentFilename) => {
+    // Walk up for nearest package.json with "imports"
+    let dir = path.dirname(parentFilename);
+    for (;;) {
+      const pkgPath = path.join(dir, 'package.json');
+      if (tryFile(pkgPath)) {
+        const pkg = readPackageJson(pkgPath);
+        if (pkg?.imports && typeof pkg.imports === 'object') {
+          const entry = pkg.imports[name];
+          if (entry !== undefined) {
+            const hit = matchExportTarget(entry, dir);
+            if (hit) return hit;
+            throw packagePathNotExported(name, pkgPath);
+          }
+        }
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return null;
+  };
+
+  const nodeModulesPaths = (fromDir) => {
+    const paths = [];
+    let dir = fromDir;
+    for (;;) {
+      if (path.basename(dir) !== 'node_modules') {
+        paths.push(path.join(dir, 'node_modules'));
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return paths;
+  };
+
+  const loadNodeModules = (request, fromDir) => {
+    // Scoped packages: @scope/name[/sub]
+    let pkgName;
+    let subpath = '';
+    if (request.startsWith('@')) {
+      const parts = request.split('/');
+      if (parts.length < 2) return null;
+      pkgName = `${parts[0]}/${parts[1]}`;
+      subpath = parts.length > 2 ? `./${parts.slice(2).join('/')}` : '.';
+    } else {
+      const slash = request.indexOf('/');
+      if (slash === -1) {
+        pkgName = request;
+        subpath = '.';
+      } else {
+        pkgName = request.slice(0, slash);
+        subpath = `./${request.slice(slash + 1)}`;
+      }
+    }
+
+    for (const nm of nodeModulesPaths(fromDir)) {
+      const pkgDir = path.join(nm, pkgName);
+      const st = tryStat(pkgDir);
+      if (!st?.isDirectory) continue;
+      const pkgPath = path.join(pkgDir, 'package.json');
+      if (tryFile(pkgPath)) {
+        const pkg = readPackageJson(pkgPath);
+        if (pkg?.exports !== undefined) {
+          return resolveExports(pkg.exports, subpath, pkgPath, pkgDir);
+        }
+      }
+      if (subpath === '.') {
+        const hit = loadAsDirectory(pkgDir);
+        if (hit) return hit;
+      } else {
+        const hit = loadAsFileOrDir(path.resolve(pkgDir, subpath));
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+
+  /**
+   * @param {string} request
+   * @param {string} parentFilename absolute path of the requiring module, or cwd for -e
+   * @param {string[]} [stack]
+   */
+  function resolve(request, parentFilename, stack = []) {
+    if (typeof request !== 'string' || request.length === 0) {
+      throw moduleNotFound(request, stack);
+    }
+
+    if (request.startsWith('node:')) {
+      return { type: 'builtin', id: request.slice('node:'.length) };
+    }
+
+    // Core builtins without node: prefix
+    if (isBuiltinName(request)) {
+      return { type: 'builtin', id: request };
+    }
+
+    const fromDir =
+      parentFilename.endsWith('/') || tryStat(parentFilename)?.isDirectory
+        ? parentFilename
+        : path.dirname(parentFilename);
+
+    if (request.startsWith('#')) {
+      const hit = packageImportsResolve(request, parentFilename);
+      if (hit) return { type: 'file', filename: hit };
+      throw moduleNotFound(request, stack);
+    }
+
+    if (request.startsWith('/') || request.startsWith('./') || request.startsWith('../')) {
+      const abs = path.resolve(fromDir, request);
+      const hit = loadAsFileOrDir(abs);
+      if (hit) return { type: 'file', filename: hit };
+      throw moduleNotFound(request, stack);
+    }
+
+    const nm = loadNodeModules(request, fromDir);
+    if (nm) return { type: 'file', filename: nm };
+
+    throw moduleNotFound(request, stack);
+  }
+
+  return { resolve, tryFile, loadAsDirectory };
+}
+
+const BUILTIN_NAMES = new Set([
+  'assert',
+  'assert/strict',
+  'buffer',
+  'console',
+  'events',
+  'fs',
+  'fs/promises',
+  'module',
+  'os',
+  'path',
+  'path/posix',
+  'path/win32',
+  'process',
+  'querystring',
+  'stream',
+  'string_decoder',
+  'timers',
+  'timers/promises',
+  'url',
+  'util',
+  'util/types',
+]);
+
+function isBuiltinName(name) {
+  return BUILTIN_NAMES.has(name);
+}
+
+export { BUILTIN_NAMES, isBuiltinName };

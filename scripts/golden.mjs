@@ -12,11 +12,43 @@
  *   node scripts/golden.mjs check  [fixture…]
  */
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  statSync,
+} from 'node:fs';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
 import { packageFiles } from '../test/integration/helpers.mjs';
+
+const SKIP_NAMES = new Set([
+  'case.json',
+  'stdout.bin',
+  'stderr.bin',
+  'status.txt',
+]);
+
+/** Fixture files (scripts, node_modules, …) to place under /os in the shim. */
+function fixtureTree(dir) {
+  const out = [];
+  const walk = (current) => {
+    for (const name of readdirSync(current)) {
+      if (SKIP_NAMES.has(name)) continue;
+      const path = join(current, name);
+      if (statSync(path).isDirectory()) walk(path);
+      else {
+        const rel = relative(dir, path).replaceAll('\\', '/');
+        out.push({ path: `/os/${rel}`, data: readFileSync(path) });
+      }
+    }
+  };
+  walk(dir);
+  return out;
+}
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixturesDir = join(root, 'test/golden/fixtures');
@@ -158,10 +190,13 @@ async function main() {
     compare(name, 'host', host, expected);
 
     if (meta.shim) {
-      const files = (meta.files ?? []).map((f) => ({
-        path: f.path,
-        data: readFileSync(join(dir, f.from)),
-      }));
+      const files = [
+        ...fixtureTree(dir),
+        ...(meta.files ?? []).map((f) => ({
+          path: f.path,
+          data: readFileSync(join(dir, f.from)),
+        })),
+      ];
       const shim = await runShim(shimArgv, { files, env: meta.env ?? {} });
       compare(name, 'shim', shim, expected);
     }

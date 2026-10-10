@@ -1,0 +1,5 @@
+{
+  "description": "require from node_modules via package.json main",
+  "argv": ["main.js"],
+  "shim": true
+}

@@ -6,7 +6,7 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 ## Status
 
-**M1 in progress** — skeleton + `process`/`console`/`Buffer`/timers/`-e`/`-p`/`file.js` landed; CJS `require` and fs builtins follow. Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`).
+**M1 in progress** — skeleton, `process`/`console`/`Buffer`/timers/CLI, and CJS `require` (node_modules, `exports`/`imports`) landed; fs and remaining builtins are next. Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`).
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

@@ -1,0 +1,5 @@
+{
+  "description": "nested node_modules resolution",
+  "argv": ["main.js"],
+  "shim": true
+}

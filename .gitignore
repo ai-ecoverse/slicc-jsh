@@ -1,4 +1,7 @@
 node_modules/
+# Golden fixtures need committed fake packages under node_modules/.
+!test/golden/fixtures/**/node_modules/
+!test/golden/fixtures/**/node_modules/**
 coverage/
 dist/
 *.tgz
