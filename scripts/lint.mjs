@@ -37,9 +37,13 @@ if (pkg.license !== 'Apache-2.0') issues.push('package.json: license must be Apa
 {
   const eng = pkg.engines?.['slicc-kernel'] ?? '';
   const m = /^>=(\d+)\.(\d+)\.(\d+)$/.exec(eng);
-  const ok = m && (Number(m[1]) > 1 || (Number(m[1]) === 1 && (Number(m[2]) > 48 || (Number(m[2]) === 48 && Number(m[3]) >= 3))));
+  const ok =
+    m &&
+    (Number(m[1]) > 1 ||
+      (Number(m[1]) === 1 &&
+        (Number(m[2]) > 49 || (Number(m[2]) === 49 && Number(m[3]) >= 1))));
   if (!ok) {
-    issues.push('package.json: engines.slicc-kernel must be >=1.48.3 (Node lockdown #297)');
+    issues.push('package.json: engines.slicc-kernel must be >=1.49.1 (Buffer kept #312)');
   }
 }
 if (!pkg.files?.includes('dist') || pkg.files?.some((f) => f === 'test' || f.startsWith('test/'))) {
