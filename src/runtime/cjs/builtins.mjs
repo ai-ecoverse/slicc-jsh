@@ -68,17 +68,28 @@ function notSupported(id) {
  */
 export function createBuiltins({ ctx, process, Buffer, console, path, handles, timers }) {
   const util = createUtil();
-  const fs = createFs({ ctx, path, process, Buffer, handles });
   const events = createEvents();
-  const assert = createAssert();
-  assert.strict = createAssertStrict();
+  const assert = createAssert({ ctx, process });
+  assert.strict = createAssertStrict({ ctx, process });
   const assertStrict = assert.strict;
   const os = createOs(process.env);
   const url = createUrl();
   const querystring = createQuerystring();
-  const stringDecoder = createStringDecoder();
-  const stream = createStream({ handles, Buffer });
-  const streamPromises = createStreamPromises(stream);
+  let stream;
+  const getStream = () => {
+    if (!stream) stream = createStream({ ctx, process, Buffer, handles });
+    return stream;
+  };
+  const streamPromises = {
+    pipeline(...args) {
+      return createStreamPromises(getStream()).pipeline(...args);
+    },
+    finished(...args) {
+      return createStreamPromises(getStream()).finished(...args);
+    },
+  };
+  const stringDecoder = createStringDecoder({ ctx, process, Buffer });
+  const fs = createFs({ ctx, path, process, Buffer, handles, getStream });
   const timersMod = createTimersModule(timers);
   const timersPromises = createTimersPromises(timers, handles);
 
@@ -106,7 +117,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     url: () => url,
     querystring: () => querystring,
     string_decoder: () => stringDecoder,
-    stream: () => stream,
+    stream: () => getStream(),
     'stream/promises': () => streamPromises,
     timers: () => timersMod,
     'timers/promises': () => timersPromises,

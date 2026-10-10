@@ -299,13 +299,15 @@ export function createCjs({
     return require;
   }
 
-  function runMain(filename, source) {
-    const mod = new Module('.', null);
+  function runMain(filename, source, opts = {}) {
+    const setMain = opts.setMain !== false;
+    const mod = new Module(filename === '[stdin]' || filename === '[eval]' ? filename : '.', null);
     mod.filename = filename;
-    mod.id = '.';
-    mod.path = path.dirname(filename);
+    mod.id = filename === '[stdin]' || filename === '[eval]' ? filename : '.';
+    mod.path = filename.startsWith('[') ? '.' : path.dirname(filename);
     cache[filename] = mod;
-    mainModule = mod;
+    // Node leaves require.main unset for piped [stdin] scripts (typeof → 'undefined').
+    mainModule = setMain ? mod : undefined;
     compile(mod, source, filename);
     mod.loaded = true;
     return mod.exports;

@@ -17,6 +17,7 @@ const ERRNO = {
   EINVAL: -22,
   EIO: -5,
   ENOTEMPTY: -66,
+  EBADF: -9,
 };
 
 const DESCRIPTIONS = {
@@ -29,18 +30,25 @@ const DESCRIPTIONS = {
   EINVAL: 'invalid argument',
   EIO: 'i/o error',
   ENOTEMPTY: 'directory not empty',
+  EBADF: 'bad file descriptor',
 };
 
 function nodeFsError(code, syscall, pathArg, err, dest) {
   const c = typeof code === 'string' ? code : err?.code || 'EIO';
   const desc = DESCRIPTIONS[c] || c;
-  const pathPart =
-    dest !== undefined ? `'${pathArg}' -> '${dest}'` : `'${pathArg}'`;
-  const e = new Error(`${c}: ${desc}, ${syscall} ${pathPart}`);
+  let msg;
+  if (pathArg === undefined || pathArg === null) {
+    msg = `${c}: ${desc}, ${syscall}`;
+  } else if (dest !== undefined) {
+    msg = `${c}: ${desc}, ${syscall} '${pathArg}' -> '${dest}'`;
+  } else {
+    msg = `${c}: ${desc}, ${syscall} '${pathArg}'`;
+  }
+  const e = new Error(msg);
   e.code = c;
   e.errno = ERRNO[c] ?? -1;
   e.syscall = syscall;
-  e.path = pathArg;
+  if (pathArg !== undefined && pathArg !== null) e.path = pathArg;
   if (dest !== undefined) e.dest = dest;
   return e;
 }
@@ -102,7 +110,7 @@ class Dirent {
   }
 }
 
-export function createFs({ ctx, path, process, Buffer, handles }) {
+export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   const abs = (p) => {
     if (typeof p === 'number') return p;
     return path.isAbsolute(p) ? path.normalize(p) : path.resolve(process.cwd(), p);
@@ -112,6 +120,22 @@ export function createFs({ ctx, path, process, Buffer, handles }) {
   const asyncFs = ctx.fs;
   const wrapBuffer = (bytes) => (Buffer ? Buffer.from(bytes) : bytes);
   const track = (p) => (handles ? trackPromise(handles, p) : p);
+
+  /** @type {Map<number, { path: string, flags: string, pos: number, readable: boolean, writable: boolean }>} */
+  const fdTable = new Map();
+  let nextFd = 3;
+
+  function parseFlags(flags) {
+    const f = flags == null ? 'r' : String(flags);
+    const readable = f.includes('r') || f === 'a+' || f === 'w+' || f === 'ax+' || f === 'wx+';
+    const writable =
+      f.includes('w') || f.includes('a') || f === 'r+' || f === 'rs+' || f === 'as+' || f === 'wx' || f === 'ax';
+    const exclusive = f.includes('x');
+    const append = f.includes('a');
+    const truncate = f.includes('w') && !append;
+    const create = writable;
+    return { raw: f, readable: readable || f === 'r+', writable, exclusive, append, truncate, create };
+  }
 
   function readStdinSync(encoding) {
     try {
@@ -329,14 +353,98 @@ export function createFs({ ctx, path, process, Buffer, handles }) {
       if (pathArg === '/dev/stdin' || pathArg === '/dev/fd/0') {
         return 0;
       }
+      const fl = parseFlags(flags);
       const target = abs(p);
-      try {
-        syncFs.stat(target); // Node allows open() on directories; read() fails later.
-        return 3;
-      } catch (err) {
-        if (err?.code && err.syscall) throw err;
-        throw nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
+      const exists = syncFs.exists(target);
+      if (fl.exclusive && exists) throw nodeFsError('EEXIST', 'open', pathArg);
+      if (!exists) {
+        if (!fl.create) throw nodeFsError('ENOENT', 'open', pathArg);
+        try {
+          syncFs.writeFile(target, new Uint8Array(0));
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
+        }
+      } else if (fl.truncate) {
+        try {
+          syncFs.writeFile(target, new Uint8Array(0));
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
+        }
       }
+      let pos = 0;
+      if (fl.append) {
+        try {
+          pos = syncFs.stat(target).size ?? 0;
+        } catch {
+          pos = 0;
+        }
+      }
+      const fd = nextFd++;
+      fdTable.set(fd, {
+        path: target,
+        flags: fl.raw,
+        pos,
+        readable: fl.readable || fl.raw === 'r',
+        writable: fl.writable,
+      });
+      return fd;
+    },
+    readSync(fd, buffer, offset = 0, length, position) {
+      if (fd === 0) {
+        const data = readStdinSync(null);
+        const src = data instanceof Uint8Array ? data : encoder.encode(String(data));
+        const len = Math.min(length ?? buffer.length - offset, src.length);
+        buffer.set(src.subarray(0, len), offset);
+        return len;
+      }
+      const ent = fdTable.get(fd);
+      if (!ent) throw nodeFsError('EBADF', 'read', undefined);
+      try {
+        const bytes = syncFs.readFile(ent.path);
+        const pos = position == null ? ent.pos : position;
+        const len = Math.min(length ?? buffer.length - offset, Math.max(0, bytes.length - pos));
+        buffer.set(bytes.subarray(pos, pos + len), offset);
+        if (position == null) ent.pos = pos + len;
+        return len;
+      } catch (err) {
+        throw nodeFsError(err?.code || 'EIO', 'read', ent.path, err);
+      }
+    },
+    writeSync(fd, data, offset, length, position) {
+      if (fd === 1 || fd === 2) {
+        const bytes = toBytes(data);
+        ctx.sync.write(fd, bytes);
+        return bytes.byteLength;
+      }
+      const ent = fdTable.get(fd);
+      if (!ent) throw nodeFsError('EBADF', 'write', undefined);
+      const bytes = toBytes(
+        typeof data === 'string'
+          ? data
+          : data.subarray?.(offset ?? 0, (offset ?? 0) + (length ?? data.length)) ?? data
+      );
+      try {
+        let cur = new Uint8Array(0);
+        try {
+          cur = syncFs.readFile(ent.path);
+        } catch {
+          cur = new Uint8Array(0);
+        }
+        const pos = position == null ? (ent.flags.includes('a') ? cur.length : ent.pos) : position;
+        const out = new Uint8Array(Math.max(cur.length, pos + bytes.length));
+        out.set(cur, 0);
+        out.set(bytes, pos);
+        syncFs.writeFile(ent.path, out);
+        if (position == null) ent.pos = pos + bytes.length;
+        return bytes.length;
+      } catch (err) {
+        throw nodeFsError(err?.code || 'EIO', 'write', ent.path, err);
+      }
+    },
+    closeSync(fd) {
+      if (fd === 0 || fd === 1 || fd === 2) return;
+      if (!fdTable.has(fd)) throw nodeFsError('EBADF', 'close', undefined);
+      fdTable.delete(fd);
     },
     symlinkSync(target, p) {
       try {
@@ -545,15 +653,122 @@ export function createFs({ ctx, path, process, Buffer, handles }) {
         })()
       );
     },
+    async open(p, flags = 'r', mode) {
+      const fd = syncApi.openSync(p, flags, mode);
+      return createFileHandle(fd);
+    },
   };
+
+  function createFileHandle(fd) {
+    return {
+      fd,
+      async read(buffer, offset, length, position) {
+        const bytesRead = syncApi.readSync(fd, buffer, offset, length, position);
+        return { bytesRead, buffer };
+      },
+      async write(buffer, offset, length, position) {
+        const bytesWritten = syncApi.writeSync(fd, buffer, offset, length, position);
+        return { bytesWritten, buffer };
+      },
+      async close() {
+        syncApi.closeSync(fd);
+      },
+    };
+  }
+
+  function createReadStream(p, options = {}) {
+    const stream = getStream?.();
+    if (!stream) throw new Error('fs.createReadStream: stream not available');
+    const { Readable } = stream;
+    const encoding = typeof options === 'string' ? options : options?.encoding;
+    const highWaterMark = options?.highWaterMark ?? 64 * 1024;
+    let fd = options?.fd;
+    let autoClose = options?.autoClose !== false;
+    let pos = options?.start ?? 0;
+    const end = options?.end;
+    let opened = fd != null;
+
+    const r = new Readable({
+      highWaterMark,
+      read(size) {
+        try {
+          if (!opened) {
+            fd = syncApi.openSync(p, options?.flags ?? 'r');
+            opened = true;
+          }
+          const toRead =
+            end != null ? Math.min(size, end - pos + 1) : size;
+          if (toRead <= 0) {
+            this.push(null);
+            if (autoClose && fd != null) syncApi.closeSync(fd);
+            return;
+          }
+          const buf = Buffer.alloc(toRead);
+          const n = syncApi.readSync(fd, buf, 0, toRead, pos);
+          if (n === 0) {
+            this.push(null);
+            if (autoClose && fd != null) syncApi.closeSync(fd);
+            return;
+          }
+          pos += n;
+          const chunk = buf.subarray(0, n);
+          this.push(encoding ? chunk.toString(encoding) : chunk);
+        } catch (err) {
+          this.destroy(err);
+        }
+      },
+    });
+    r.path = p;
+    r.bytesRead = 0;
+    return r;
+  }
+
+  function createWriteStream(p, options = {}) {
+    const stream = getStream?.();
+    if (!stream) throw new Error('fs.createWriteStream: stream not available');
+    const { Writable } = stream;
+    let fd = options?.fd;
+    let autoClose = options?.autoClose !== false;
+    let opened = fd != null;
+    const flags = options?.flags ?? 'w';
+
+    const w = new Writable({
+      write(chunk, enc, cb) {
+        try {
+          if (!opened) {
+            fd = syncApi.openSync(p, flags);
+            opened = true;
+          }
+          syncApi.writeSync(fd, chunk);
+          cb();
+        } catch (err) {
+          cb(err);
+        }
+      },
+      final(cb) {
+        try {
+          if (autoClose && fd != null) syncApi.closeSync(fd);
+          cb();
+        } catch (err) {
+          cb(err);
+        }
+      },
+    });
+    w.path = p;
+    return w;
+  }
 
   return {
     ...syncApi,
     promises,
     Dirent,
+    createReadStream,
+    createWriteStream,
     readFile: callbackify(syncApi.readFileSync),
     writeFile: callbackify(syncApi.writeFileSync),
     appendFile: callbackify(syncApi.appendFileSync),
+    open: callbackify(syncApi.openSync),
+    close: callbackify(syncApi.closeSync),
     exists: (p, cb) => queueMicrotask(() => cb(syncApi.existsSync(p))),
     stat: callbackify(syncApi.statSync),
     lstat: callbackify(syncApi.lstatSync),

@@ -73,6 +73,11 @@ export async function runNode(ctx) {
       exitStatus = code;
     },
   });
+  process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
+  if (parsed.mode === 'eval') {
+    process._evalCode = parsed.code;
+    lastEvalCode = parsed.code;
+  }
 
   const console = createConsole(writeStdout, writeStderr, util);
 
@@ -232,9 +237,11 @@ export async function runNode(ctx) {
       }
       const source = decoder.decode(merged);
       lastEvalCode = source;
+      process._evalCode = source;
       process.argv[1] = '[stdin]';
       try {
-        cjs.runMain(`${process.cwd()}/[stdin]`, source);
+        // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
+        cjs.runMain('[stdin]', source, { setMain: false });
         nextTick.flushSync();
       } catch (err) {
         if (err instanceof NodeExitError) throw err;

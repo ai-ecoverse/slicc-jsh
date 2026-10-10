@@ -70,11 +70,13 @@ export function parseNodeArgv(argv) {
   }
 
   if (evalCode !== undefined) {
+    const flag = print ? '-p' : '-e';
     return {
       mode: 'eval',
       code: evalCode,
       print,
       processArgv: [argv0, ...userArgs],
+      execArgv: [flag, evalCode],
     };
   }
 
@@ -83,11 +85,13 @@ export function parseNodeArgv(argv) {
       mode: 'file',
       script,
       processArgv: [argv0, script, ...userArgs],
+      execArgv: [],
     };
   }
 
   return {
     mode: 'empty',
     processArgv: [argv0],
+    execArgv: [],
   };
 }

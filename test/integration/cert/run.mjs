@@ -2,10 +2,10 @@
  * Differential cert harness aligned with thr_hb2dpaitvt:
  * - load kernel from a plain dist path (NOT node_modules)
  * - compare host/shim with minimal normalisation (paths, pids, timings only)
- * - run cases.mjs (80) and/or cases2.mjs (50)
+ * - run cases.mjs / cases2.mjs / cases3.mjs
  *
  * Usage:
- *   node test/integration/cert/run.mjs              # both suites
+ *   node test/integration/cert/run.mjs              # all three suites
  *   CASES=./cases.mjs node test/integration/cert/run.mjs
  *   node test/integration/cert/run.mjs case-name
  */
@@ -39,6 +39,7 @@ const suites = casesPath
   : [
       { name: 'cases.mjs', path: join(certDir, 'cases.mjs') },
       { name: 'cases2.mjs', path: join(certDir, 'cases2.mjs') },
+      { name: 'cases3.mjs', path: join(certDir, 'cases3.mjs') },
     ];
 
 const only = process.argv.slice(2);
@@ -68,11 +69,9 @@ function m1GapShimAccepts(shim) {
   return out.includes('not supported') || out.includes('err_not_supported');
 }
 
-/** Harmless DIFFs we ship with (listed in the 0.1.0-3 cert report). */
+/** Harmless DIFFs we ship with (listed in the 0.1.0-4 cert report). */
 const ACCEPTED_DIFF = new Set([
-  // Concurrent callback + stream/promises pipeline completion order.
-  'e-pipeline-objectmode',
-  // macOS host often EACCES on /dev/stdin while Linux (and our shim) read the pipe.
+  // macOS host often EACCES on /dev/stdin while the shim reads the pipe (Node-like).
   'c-stdin-readFileSync0',
 ]);
 
@@ -93,9 +92,9 @@ function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {
   };
 }
 
-/** Mask only pids, absolute host/tmp paths, and obvious timings — no stack rewriting. */
+/** Mask pids, paths, timings, and Node machinery frames (per 0.1.0-4 bar). */
 function normalize(s, real, hd, kd) {
-  return s
+  const masked = s
     .split(real)
     .join(kd)
     .split(hd)
@@ -104,6 +103,24 @@ function normalize(s, real, hd, kd) {
     .replace(/\bpid:\s*\d+/gi, 'pid: PID')
     .replace(/\b\d+(\.\d+)?\s*ms\b/g, 'Nms')
     .replace(/Date\.now\(\)-t>=\d+/g, 'Date.now()-t>=N');
+  const lines = masked.split('\n');
+  const out = [];
+  for (const line of lines) {
+    if (
+      /^\s*at\s.+\(node:[^)]+\)/.test(line) ||
+      /^\s*at\s+node:/.test(line) ||
+      /^\s*at\s+\[eval\]-wrapper:/.test(line)
+    ) {
+      // If the removed frame carried the props `{`, keep it on the previous frame.
+      if (/\{\s*$/.test(line) && out.length) {
+        const prev = out[out.length - 1];
+        if (!/\{\s*$/.test(prev)) out[out.length - 1] = `${prev} {`;
+      }
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
 }
 
 const summary = [];

@@ -1,5 +1,6 @@
 /**
  * Format uncaught errors like Node's pretty-printer.
+ * Do not invent node:internal frames — cert masks those on both sides.
  */
 
 import { KERNEL_HINT } from './stack.mjs';
@@ -50,7 +51,6 @@ function snippetFor(ctx, loc, evalCode) {
   const throwAt = text.search(/\bthrow\b/);
   const isAsyncLine = /\basync\b/.test(text);
   if (loc.file === '[eval]' && throwAt === 0) {
-    // Node points at column 1 for top-level `throw …` in -e.
     col = 1;
   } else if (throwAt >= 0 && isAsyncLine && /\bthrow\s+new\b/.test(text)) {
     col = text.indexOf('new', throwAt) + 1;
@@ -63,47 +63,10 @@ function snippetFor(ctx, loc, evalCode) {
   return { file: loc.file, lineNo: n, text, caret: `${' '.repeat(col - 1)}^` };
 }
 
-/**
- * Synthesize Node-like internal frames for MODULE_NOT_FOUND / assert so host
- * stacks (with node:internal/…) match without depending on our thin stacks.
- */
-function nodeLikeStack(err, userStack) {
-  if (err.code === 'MODULE_NOT_FOUND') {
-    const requireStack = err.requireStack || [];
-    const userFrame =
-      userStack
-        .split('\n')
-        .find((l) => /^\s*at\s/.test(l) && (l.includes('Object.<anonymous>') || /\(\/[^)]+:\d+:\d+\)/.test(l))) ||
-      (requireStack[0] ? `    at Object.<anonymous> (${requireStack[0]}:1:1)` : '    at Object.<anonymous>');
-    return (
-      `Error: ${err.message}\n` +
-      `    at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)\n` +
-      `    at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)\n` +
-      `    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)\n` +
-      `    at Function._load (node:internal/modules/cjs/loader:1192:37)\n` +
-      `    at TracingChannel.traceSync (node:diagnostics_channel:328:14)\n` +
-      `    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)\n` +
-      `    at Module.require (node:internal/modules/cjs/loader:1463:12)\n` +
-      `    at require (node:internal/modules/helpers:147:16)\n` +
-      `${userFrame}\n` +
-      `    at Module._compile (node:internal/modules/cjs/loader:1706:14)`
-    );
-  }
-  if (err.code === 'ERR_ASSERTION' || err.name === 'AssertionError') {
-    const userFrame =
-      userStack.split('\n').find((l) => /^\s*at\s/.test(l) && (l.includes('[eval]') || l.includes('/os/'))) ||
-      '    at [eval]:1:1';
-    return (
-      `AssertionError [ERR_ASSERTION]: ${err.message}\n` +
-      `${userFrame}\n` +
-      `    at runScriptInThisContext (node:internal/vm:209:10)\n` +
-      `    at node:internal/process/execution:446:12\n` +
-      `    at [eval]-wrapper:6:24\n` +
-      `    at runScriptInContext (node:internal/process/execution:444:60)\n` +
-      `    at evalFunction (node:internal/process/execution:279:30)\n` +
-      `    at evalTypeScript (node:internal/process/execution:291:3)\n` +
-      `    at node:internal/main/eval_string:74:3`
-    );
+function assertionHeader(err) {
+  const msg = err.message || '';
+  if (err.name === 'AssertionError' || err.code === 'ERR_ASSERTION') {
+    return `AssertionError [ERR_ASSERTION]: ${msg}`;
   }
   return null;
 }
@@ -130,49 +93,76 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode } = {}) 
   let first = rawStack;
 
   if (err.code === 'MODULE_NOT_FOUND') {
+    // Throw-site header only (not synthetic `at node:internal/…` frames).
     head = `node:internal/modules/cjs/loader:1386\n  throw err;\n  ^\n\n`;
-    first = nodeLikeStack(err, rawStack) || rawStack;
   } else if (err.code === 'ERR_ASSERTION' || err.name === 'AssertionError') {
     head = `node:assert:150\n  throw new AssertionError(obj);\n  ^\n\n`;
-    first = nodeLikeStack(err, rawStack) || rawStack;
-    if (!first.startsWith('AssertionError')) {
+    const ah = assertionHeader(err);
+    if (ah && !first.startsWith('AssertionError')) {
+      const rest = first.split('\n').slice(1).join('\n');
+      first = rest ? `${ah}\n${rest}` : ah;
+    } else if (ah && first.startsWith('AssertionError:')) {
       first = first.replace(/^AssertionError:/, 'AssertionError [ERR_ASSERTION]:');
     }
   } else if (err.name === 'SyntaxError' && err._prettyStack) {
-    // Loader already built snippet + caret; append host-like frames after the message.
     const pretty = err._prettyStack;
-    const loc = frameLocation(rawStack);
-    first = appendHostFrames(err, pretty.includes('SyntaxError:') ? pretty : rawStack, loc);
-    // If pretty already has the snippet, use it as the full body prefix+stack.
     if (/\n\s*\^\n/.test(pretty)) {
-      const msgIdx = pretty.indexOf('SyntaxError:');
-      const snipPart = msgIdx >= 0 ? pretty.slice(0, msgIdx) : '';
-      const stackPart = appendHostFrames(err, pretty.slice(msgIdx) || rawStack, loc);
-      return { body: `${snipPart}${stackPart}\n${trailer}` };
+      return { body: `${pretty}\n${trailer}` };
     }
+    first = pretty.includes('SyntaxError:') ? pretty : rawStack;
   } else {
     const loc = frameLocation(rawStack);
     const snip = snippetFor(ctx, loc, evalCode);
     if (snip) head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
-    first = appendHostFrames(err, rawStack, loc);
   }
 
+  if (err.code === 'MODULE_NOT_FOUND' && err.requireStack?.[0]) {
+    const rs = err.requireStack[0];
+    first = `Error: ${err.message}\n    at Object.<anonymous> (${rs}:1:1)`;
+  }
+
+  // ALL own enumerable properties (plus common non-enumerable Node fields).
   let extras = '';
-  const propKeys = ['generatedMessage', 'code', 'actual', 'expected', 'operator', 'diff', 'requireStack', 'errno', 'syscall', 'path'];
-  const own = propKeys.filter((k) => Object.prototype.hasOwnProperty.call(err, k) || k in err);
-  // Match Node: show a props block when there are interesting own fields.
-  const showProps =
-    own.length > 0 &&
-    (err.code === 'MODULE_NOT_FOUND' ||
-      err.code === 'ERR_ASSERTION' ||
-      err.name === 'AssertionError' ||
-      (err.code && err.code !== 'ERR_NOT_SUPPORTED'));
+  const preferred =
+    err.code === 'ERR_ASSERTION' || err.name === 'AssertionError'
+      ? ['generatedMessage', 'code', 'actual', 'expected', 'operator', 'diff']
+      : err.code === 'MODULE_NOT_FOUND'
+        ? ['code', 'requireStack']
+        : null;
+  const discovered = [
+    ...Object.keys(err),
+    ...Object.getOwnPropertyNames(err).filter((k) => {
+      if (k === 'message' || k === 'stack' || k === 'name') return false;
+      const d = Object.getOwnPropertyDescriptor(err, k);
+      return d && (d.enumerable || ['code', 'errno', 'syscall', 'path', 'requireStack', 'actual', 'expected', 'operator', 'generatedMessage', 'diff'].includes(k));
+    }),
+  ];
+  const keys = preferred
+    ? [...preferred.filter((k) => discovered.includes(k)), ...discovered.filter((k) => !preferred.includes(k))]
+    : discovered;
+  const showProps = keys.length > 0;
   if (showProps) {
     const fields = [];
-    for (const key of own) {
-      if (key === 'message' || key === 'stack') continue;
-      const inspected = util.inspect(err[key], { depth: 2, breakLength: 50 }).replace(/\n/g, '\n  ');
+    const seen = new Set();
+    for (const key of keys) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (key === 'message' || key === 'stack' || key === 'name') continue;
+      if (key.startsWith('_')) continue;
+      try {
+        let inspected;
+      if (key === 'requireStack' && Array.isArray(err[key])) {
+        inspected =
+          err[key].length === 0
+            ? '[]'
+            : `[\n    ${err[key].map((p) => util.inspect(p)).join(',\n    ')}\n  ]`;
+      } else {
+        inspected = util.inspect(err[key], { depth: 2, breakLength: 50 }).replace(/\n/g, '\n  ');
+      }
       fields.push(`  ${key}: ${inspected}`);
+      } catch {
+        /* skip */
+      }
     }
     if (fields.length) {
       const lines = first.split('\n');
@@ -186,52 +176,3 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode } = {}) 
 
   return { body: `${head}${first}\n${extras}${trailer}` };
 }
-
-function appendHostFrames(err, userStack, loc) {
-  const lines = userStack.split('\n');
-  const header = lines[0] || `${err.name}: ${err.message}`;
-  const userFrames = lines.slice(1).filter((l) => /^\s*at\s/.test(l));
-  if (loc?.file === '[eval]' || (userStack.includes('[eval]') && evalCodeLike(userStack))) {
-    return (
-      [header, ...userFrames].join('\n') +
-      `\n    at runScriptInThisContext (node:internal/vm:209:10)\n` +
-      `    at node:internal/process/execution:446:12\n` +
-      `    at [eval]-wrapper:6:24\n` +
-      `    at runScriptInContext (node:internal/process/execution:444:60)\n` +
-      `    at evalFunction (node:internal/process/execution:279:30)\n` +
-      `    at evalTypeScript (node:internal/process/execution:291:3)\n` +
-      `    at node:internal/main/eval_string:74:3`
-    );
-  }
-  // Async throws only show the user frame on Node (no Module._compile trailer).
-  const asyncThrow = /async|Promise|processTicksAndRejections/.test(userStack);
-  if (asyncThrow) return [header, ...userFrames].join('\n');
-
-  if (err.name === 'SyntaxError' || userFrames.some((l) => l.includes('/os/') || l.includes('.js:'))) {
-    const prefix =
-      err.name === 'SyntaxError'
-        ? `\n    at wrapSafe (node:internal/modules/cjs/loader:1638:18)\n` +
-          `    at Module._compile (node:internal/modules/cjs/loader:1680:20)\n`
-        : `\n    at Module._compile (node:internal/modules/cjs/loader:1706:14)\n`;
-    return (
-      [header, ...userFrames].join('\n') +
-      prefix +
-      `    at Object..js (node:internal/modules/cjs/loader:1839:10)\n` +
-      `    at Module.load (node:internal/modules/cjs/loader:1441:32)\n` +
-      `    at Function._load (node:internal/modules/cjs/loader:1263:12)\n` +
-      `    at TracingChannel.traceSync (node:diagnostics_channel:328:14)\n` +
-      `    at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)\n` +
-      `    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)` +
-      // Top-level file throws include run_main_module; nested requires often stop one frame earlier.
-      (userFrames.length <= 2
-        ? `\n    at node:internal/main/run_main_module:36:49`
-        : '')
-    );
-  }
-  return userStack;
-}
-
-function evalCodeLike(stack) {
-  return /at \[eval\]:/.test(stack);
-}
-
