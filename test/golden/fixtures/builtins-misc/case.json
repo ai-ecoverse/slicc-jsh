@@ -1,0 +1,5 @@
+{
+  "description": "events assert url querystring util.format string_decoder os.EOL",
+  "argv": ["main.js"],
+  "shim": true
+}
