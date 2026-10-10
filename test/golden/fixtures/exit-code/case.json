@@ -1,0 +1,5 @@
+{
+  "description": "process.exitCode deferred exit",
+  "argv": ["-e", "process.exitCode=7"],
+  "shim": true
+}

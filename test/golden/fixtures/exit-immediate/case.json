@@ -1,0 +1,5 @@
+{
+  "description": "process.exit(n) immediate",
+  "argv": ["-e", "process.exit(3)"],
+  "shim": true
+}

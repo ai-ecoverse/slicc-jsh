@@ -1,0 +1,8 @@
+{
+  "description": "node file.js with user args (argv slice from 2; path differs)",
+  "argv": ["script.js", "x", "y"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }],
+  "hostArgv": ["script.js", "x", "y"],
+  "shimArgv": ["script.js", "x", "y"]
+}

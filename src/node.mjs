@@ -1,10 +1,9 @@
+import { runNode } from './runtime/run.mjs';
+
 /**
  * `node` command entry for slicc-kernel (abi: "js").
- * PR1 skeleton: exit 0. CLI, process, require, and builtins follow in later PRs.
- *
- * @param {import('@ai-ecoverse/slicc-kernel').JsProgramContext} ctx
+ * @param {object} ctx JsProgramContext from slicc-kernel
  */
 export default async function main(ctx) {
-  void ctx;
-  return 0;
+  return runNode(ctx);
 }

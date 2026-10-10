@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Golden-output harness: run the same argv under host Node 22 and (later) the
- * slicc-jsh shim, comparing stdout/stderr/status byte-for-byte.
+ * Golden-output harness: run the same argv under host Node 22 and (when
+ * case.json has `"shim": true`) under the slicc-jsh shim in slicc-kernel's
+ * Node entry. stdout/stderr/status compared byte-for-byte.
  *
- * PR1: host Node 22 baselines only (record + check). Shim compare lands with
- * CLI/process in PR2. Always invoke Node 22 via `npx -y node@22` so host major
- * (e.g. 24/26 on the Mac) cannot poison goldens.
+ * Always invoke Node 22 via `npx -y node@22.22.0` so host major cannot poison
+ * goldens. Fixtures live under test/golden/fixtures/ and are not published.
  *
  * Usage:
  *   node scripts/golden.mjs record [fixture…]
@@ -15,6 +15,8 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
+import { packageFiles } from '../test/integration/helpers.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixturesDir = join(root, 'test/golden/fixtures');
@@ -40,25 +42,47 @@ function loadCase(name) {
   return { name, dir, meta };
 }
 
-/** Run under exact Node 22.x (not the host's node major). */
 function runNode22(argv, { cwd, timeoutMs = 30_000 } = {}) {
-  const result = spawnSync(
-    'npx',
-    ['-y', 'node@22.22.0', ...argv],
-    {
-      cwd: cwd ?? root,
-      encoding: 'buffer',
-      timeout: timeoutMs,
-      maxBuffer: 4 * 1024 * 1024,
-      env: { ...process.env, npm_config_yes: 'true' },
-    }
-  );
+  const result = spawnSync('npx', ['-y', 'node@22.22.0', ...argv], {
+    cwd: cwd ?? root,
+    encoding: 'buffer',
+    timeout: timeoutMs,
+    maxBuffer: 4 * 1024 * 1024,
+    env: { ...process.env, npm_config_yes: 'true' },
+  });
   if (result.error) throw result.error;
   return {
     status: result.status ?? 1,
     stdout: result.stdout ?? Buffer.alloc(0),
     stderr: result.stderr ?? Buffer.alloc(0),
   };
+}
+
+async function runShim(argv, { files = [], env = {}, timeoutMs = 30_000 } = {}) {
+  const kernel = await createNodeKernel();
+  const base = '/node_modules/@ai-ecoverse/slicc-jsh';
+  try {
+    for (const [rel, data] of packageFiles()) {
+      await kernel.writeFile(`${base}/${rel}`, data);
+    }
+    for (const { path, data } of files) {
+      await kernel.writeFile(path, data);
+    }
+    const work = kernel.run(['node', ...argv], { cwd: '/os', env: { ...env } });
+    const result = await Promise.race([
+      work,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`shim timeout after ${timeoutMs}ms`)), timeoutMs)
+      ),
+    ]);
+    return {
+      status: result.status,
+      stdout: Buffer.from(result.stdout),
+      stderr: Buffer.from(result.stderr),
+    };
+  } finally {
+    kernel.terminate();
+  }
 }
 
 function writeGolden(dir, out) {
@@ -85,53 +109,73 @@ function fail(message) {
   process.exitCode = 1;
 }
 
-let ran = 0;
-for (const name of listFixtures()) {
-  const { dir, meta } = loadCase(name);
-  const cwd = meta.cwd ? join(dir, meta.cwd) : dir;
-  const argv = meta.argv;
-  if (!Array.isArray(argv) || argv.length === 0) {
-    fail(`${name}: case.json argv must be a non-empty array`);
-    continue;
-  }
-
-  if (mode === 'record') {
-    const out = runNode22(argv, { cwd });
-    writeGolden(dir, out);
-    console.log(`recorded ${name}: status=${out.status} out=${out.stdout.length}B err=${out.stderr.length}B`);
-    ran++;
-    continue;
-  }
-
-  // check
-  for (const f of ['stdout.bin', 'stderr.bin', 'status.txt']) {
-    if (!existsSync(join(dir, f))) {
-      fail(`${name}: missing golden ${f} (run golden:record)`);
-      continue;
-    }
-  }
-  const expected = readGolden(dir);
-  const actual = runNode22(argv, { cwd });
+function compare(name, label, actual, expected) {
   if (actual.status !== expected.status) {
-    fail(`${name}: status ${actual.status} !== ${expected.status}`);
+    fail(`${name} [${label}]: status ${actual.status} !== ${expected.status}`);
   }
   if (!same(actual.stdout, expected.stdout)) {
     fail(
-      `${name}: stdout mismatch\n--- expected ---\n${expected.stdout.toString('utf8')}\n--- actual ---\n${actual.stdout.toString('utf8')}`
+      `${name} [${label}]: stdout mismatch\n--- expected ---\n${expected.stdout.toString('utf8')}\n--- actual ---\n${actual.stdout.toString('utf8')}`
     );
   }
   if (!same(actual.stderr, expected.stderr)) {
     fail(
-      `${name}: stderr mismatch\n--- expected ---\n${expected.stderr.toString('utf8')}\n--- actual ---\n${actual.stderr.toString('utf8')}`
+      `${name} [${label}]: stderr mismatch\n--- expected ---\n${expected.stderr.toString('utf8')}\n--- actual ---\n${actual.stderr.toString('utf8')}`
     );
   }
-  if (process.exitCode !== 1) console.log(`ok ${name}`);
-  ran++;
 }
 
-if (ran === 0) {
-  console.error('no fixtures');
-  process.exit(2);
+async function main() {
+  let ran = 0;
+  for (const name of listFixtures()) {
+    const { dir, meta } = loadCase(name);
+    const cwd = meta.cwd ? join(dir, meta.cwd) : dir;
+    const argv = meta.argv;
+    if (!Array.isArray(argv) || argv.length === 0) {
+      fail(`${name}: case.json argv must be a non-empty array`);
+      continue;
+    }
+
+    const hostArgv = meta.hostArgv ?? argv;
+    const shimArgv = meta.shimArgv ?? argv;
+
+    if (mode === 'record') {
+      const out = runNode22(hostArgv, { cwd });
+      writeGolden(dir, out);
+      console.log(`recorded ${name}: status=${out.status} out=${out.stdout.length}B err=${out.stderr.length}B`);
+      ran++;
+      continue;
+    }
+
+    for (const f of ['stdout.bin', 'stderr.bin', 'status.txt']) {
+      if (!existsSync(join(dir, f))) {
+        fail(`${name}: missing golden ${f} (run golden:record)`);
+        continue;
+      }
+    }
+    const expected = readGolden(dir);
+    const host = runNode22(hostArgv, { cwd });
+    compare(name, 'host', host, expected);
+
+    if (meta.shim) {
+      const files = (meta.files ?? []).map((f) => ({
+        path: f.path,
+        data: readFileSync(join(dir, f.from)),
+      }));
+      const shim = await runShim(shimArgv, { files, env: meta.env ?? {} });
+      compare(name, 'shim', shim, expected);
+    }
+
+    if (process.exitCode !== 1) console.log(`ok ${name}`);
+    ran++;
+  }
+
+  if (ran === 0) {
+    console.error('no fixtures');
+    process.exit(2);
+  }
+  if (process.exitCode) process.exit(process.exitCode);
+  console.log(`golden ${mode}: ${ran} fixture(s)`);
 }
-if (process.exitCode) process.exit(process.exitCode);
-console.log(`golden ${mode}: ${ran} fixture(s)`);
+
+await main();

@@ -1,0 +1,5 @@
+{
+  "description": "nextTick before Promise microtask",
+  "argv": ["-e", "process.nextTick(()=>console.log('nt')); console.log('sync'); Promise.resolve().then(()=>console.log('micro'))"],
+  "shim": true
+}
