@@ -44,7 +44,7 @@ jobs:
       actions: read
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.23.3'
       - name: Fetch the certified tarball
@@ -96,7 +96,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # Node 24.21.0 → npm ≥ 11.5.1 for OIDC trusted publishing (not npm 10 on Node 22).
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '24.21.0'
           registry-url: 'https://registry.npmjs.org'
