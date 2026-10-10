@@ -55,7 +55,7 @@
     "golden:record": "node --max-old-space-size=512 scripts/golden.mjs record"
   },
   "devDependencies": {
-    "@ai-ecoverse/slicc-kernel": "1.40.1",
+    "@ai-ecoverse/slicc-kernel": "1.42.1",
     "esbuild": "0.28.2"
   }
 }
