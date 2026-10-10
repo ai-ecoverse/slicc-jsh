@@ -1,0 +1,4 @@
+{
+  "description": "PR1 harness plumbing: Node 22 -e writes a fixed line (host baseline only until shim CLI lands)",
+  "argv": ["-e", "process.stdout.write('slicc-jsh-smoke\\n')"]
+}

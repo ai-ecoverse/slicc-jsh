@@ -1,0 +1,119 @@
+# Publishes @ai-ecoverse/slicc-jsh with npm trusted publishing (OIDC) and
+# provenance, exactly the certified tarball: the `package` artifact of a
+# `ci` run, whose sha256 must be `certified`. Two jobs:
+# - verify (no id-token): fetches that artifact, rebuilds from this commit,
+#   runs the offline tests and refuses unless the fresh tarball holds the same
+#   files; it hands the checked tarball on as an artifact of this run.
+# - publish (id-token): checks the handed-on tarball against `certified` again
+#   and publishes it. It downloads nothing from third parties and runs no build.
+# npm trusts this workflow file by name, so it is not reusable.
+#
+# FIRST VERSION: trusted publishing (OIDC) can only be configured once the
+# package already exists on npm. The coordinator publishes the first certified
+# tarball by hand, then sets up trust on this workflow; every later version
+# goes through this file. Do not expect the first release to succeed via OIDC.
+#
+# The publish job uses Node 24.21.0 so its bundled npm is ≥ 11.5.1 (OIDC
+# trusted publishing). Node 22.x ships npm 10.x, which cannot do OIDC. The
+# verify job stays on Node 22.22.0 to match the package's Node 22 target.
+#
+# M1–M3 pre-releases publish with --tag next (also package.json publishConfig.tag).
+# The coordinator certifies and dispatches this workflow; agents do not publish.
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: id of the `ci` run whose `package` artifact was certified
+        required: true
+        type: string
+      certified:
+        description: sha256 of that certified tarball (ai-ecoverse-slicc-jsh-<version>.tgz)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.22.0'
+      - name: Fetch the certified tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ inputs.run }}
+        run: |
+          set -euo pipefail
+          gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name package --dir "$RUNNER_TEMP/certified"
+          mkdir -p "$RUNNER_TEMP/verified"
+          find "$RUNNER_TEMP/certified" -name '*.tgz' -exec mv {} "$RUNNER_TEMP/verified/certified.tgz" \;
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+      - name: Offline tests
+        timeout-minutes: 5
+        run: |
+          npm run lint
+          npm run test:golden
+          npm run test:integration
+      - name: Pack a fresh build
+        run: |
+          mkdir -p "$RUNNER_TEMP/fresh"
+          npm pack --pack-destination "$RUNNER_TEMP/fresh"
+      - name: Compare with the certified tarball
+        env:
+          CERTIFIED: ${{ inputs.certified }}
+        run: |
+          set -euo pipefail
+          set +e
+          node scripts/assert-certified.mjs "$RUNNER_TEMP/verified/certified.tgz" --certified "$CERTIFIED" \
+            --rebuilt "$(ls "$RUNNER_TEMP"/fresh/*.tgz)"
+          gate=$?
+          set -e
+          if [ "$gate" -ne 0 ] && [ "$gate" -ne 10 ]; then exit "$gate"; fi
+      - uses: actions/upload-artifact@v5
+        with:
+          name: verified
+          path: ${{ runner.temp }}/verified/certified.tgz
+          if-no-files-found: error
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      # Node 24.21.0 → npm ≥ 11.5.1 for OIDC trusted publishing (not npm 10 on Node 22).
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24.21.0'
+          registry-url: 'https://registry.npmjs.org'
+      - uses: actions/download-artifact@v5
+        with:
+          name: verified
+          path: ${{ runner.temp }}/verified
+      - name: Publish the certified tarball
+        env:
+          NODE_AUTH_TOKEN: ""
+          CERTIFIED: ${{ inputs.certified }}
+        run: |
+          set -euo pipefail
+          set +e
+          node scripts/assert-certified.mjs "$RUNNER_TEMP/verified/certified.tgz" --certified "$CERTIFIED"
+          gate=$?
+          set -e
+          if [ "$gate" -eq 10 ]; then exit 0; fi
+          if [ "$gate" -ne 0 ]; then exit "$gate"; fi
+          npm publish "$RUNNER_TEMP/verified/certified.tgz" --access public --provenance --tag next

@@ -1,0 +1,60 @@
+{
+  "name": "@ai-ecoverse/slicc-jsh",
+  "version": "0.1.0-0",
+  "description": "Node.js-compatible runtime for slicc-kernel: the node and jsh commands (abi: js)",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ai-ecoverse/slicc-jsh.git"
+  },
+  "homepage": "https://github.com/ai-ecoverse/slicc-jsh",
+  "bugs": {
+    "url": "https://github.com/ai-ecoverse/slicc-jsh/issues"
+  },
+  "engines": {
+    "node": ">=22",
+    "slicc-kernel": ">=1.40.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "tag": "next"
+  },
+  "files": [
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "dist"
+  ],
+  "slicc": {
+    "commands": {
+      "node": {
+        "abi": "js",
+        "module": "dist/node.mjs",
+        "argv0": "node"
+      },
+      "jsh": {
+        "abi": "js",
+        "module": "dist/jsh.mjs",
+        "argv0": "jsh"
+      }
+    },
+    "binfmt": {
+      ".jsh": "jsh"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build",
+    "prepare": "npm run build",
+    "lint": "node scripts/lint.mjs",
+    "test": "npm run test:golden && npm run test:integration",
+    "test:golden": "node --max-old-space-size=512 scripts/golden.mjs check",
+    "test:integration": "node --max-old-space-size=512 --test --test-timeout=120000 test/integration/*.test.mjs",
+    "golden:record": "node --max-old-space-size=512 scripts/golden.mjs record"
+  },
+  "devDependencies": {
+    "@ai-ecoverse/slicc-kernel": "1.40.1"
+  }
+}
