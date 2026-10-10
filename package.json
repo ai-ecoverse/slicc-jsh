@@ -52,10 +52,12 @@
     "test": "npm run test:golden && npm run test:integration",
     "test:golden": "node --max-old-space-size=512 scripts/golden.mjs check",
     "test:integration": "node --max-old-space-size=512 --test --test-timeout=120000 test/integration/*.test.mjs",
+    "test:cert": "node --max-old-space-size=512 test/integration/cert/run.mjs",
     "golden:record": "node --max-old-space-size=512 scripts/golden.mjs record"
   },
   "devDependencies": {
     "@ai-ecoverse/slicc-kernel": "1.42.1",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "node-inspect-extracted": "3.3.3"
   }
 }

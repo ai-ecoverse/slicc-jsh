@@ -1,4 +1,4 @@
-/** Minimal EventEmitter (from slicc 6 realm, Apache-2.0). */
+/** EventEmitter with Node-ish 'error' semantics and events.once helper. */
 
 export class EventEmitter {
   constructor() {
@@ -35,11 +35,16 @@ export class EventEmitter {
       this.off(event, wrapped);
       fn(...args);
     };
+    wrapped.listener = fn;
     return this.on(event, wrapped);
   }
 
   emit(event, ...args) {
     const list = this._events.get(event);
+    if ((!list || list.length === 0) && event === 'error') {
+      const err = args[0] instanceof Error ? args[0] : new Error('Unhandled error event');
+      throw err;
+    }
     if (!list || list.length === 0) return false;
     for (const fn of [...list]) fn(...args);
     return true;
@@ -56,10 +61,35 @@ export class EventEmitter {
   }
 
   listeners(event) {
-    return [...(this._events.get(event) ?? [])];
+    return [...(this._events.get(event) ?? [])].map((fn) => fn.listener ?? fn);
   }
 }
 
+EventEmitter.defaultMaxListeners = 10;
+
+function once(emitter, event) {
+  return new Promise((resolve, reject) => {
+    const onEvent = (...args) => {
+      cleanup();
+      resolve(args);
+    };
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    const cleanup = () => {
+      emitter.off(event, onEvent);
+      if (event !== 'error') emitter.off('error', onError);
+    };
+    emitter.on(event, onEvent);
+    if (event !== 'error') emitter.on('error', onError);
+  });
+}
+
 export function createEvents() {
-  return Object.assign(EventEmitter, { EventEmitter });
+  return Object.assign(EventEmitter, {
+    EventEmitter,
+    once,
+    defaultMaxListeners: EventEmitter.defaultMaxListeners,
+  });
 }

@@ -8,7 +8,16 @@ const decoder = new TextDecoder();
 /**
  * Synchronous CJS module system over ctx.sync.
  */
-export function createCjs({ ctx, process, Buffer, console, timers }) {
+export function createCjs({
+  ctx,
+  process,
+  Buffer,
+  console,
+  timers,
+  handles,
+  fetch: fetchBinding,
+  WebSocket: webSocketBinding,
+} = {}) {
   const path = createPath(() => process.cwd());
   const fs = ctx.sync.fs;
   const packageCache = new Map();
@@ -27,7 +36,7 @@ export function createCjs({ ctx, process, Buffer, console, timers }) {
   };
 
   const resolver = createResolver({ fs, path, readPackageJson });
-  const builtins = createBuiltins({ ctx, process, Buffer, console, path });
+  const builtins = createBuiltins({ ctx, process, Buffer, console, path, handles, timers });
   const cache = Object.create(null);
 
   function Module(id, parent) {
@@ -57,6 +66,8 @@ export function createCjs({ ctx, process, Buffer, console, timers }) {
     'querystring',
     'stream',
     'string_decoder',
+    'timers',
+    'timers/promises',
     'url',
     'util',
     'util/types',
@@ -96,33 +107,72 @@ export function createCjs({ ctx, process, Buffer, console, timers }) {
     }
   }
 
+  function stripHashbang(source) {
+    if (source.startsWith('#!')) {
+      const nl = source.indexOf('\n');
+      return nl === -1 ? '' : source.slice(nl + 1);
+    }
+    return source;
+  }
+
   function compile(mod, source, filename) {
     const dirname = path.dirname(filename);
     const require = makeRequire(filename, mod);
-    if (filename.endsWith('.mjs')) throw errRequireEsm(filename);
+    if (filename.endsWith('.mjs')) {
+      const err = new Error(
+        `slicc-jsh: ESM modules are not supported yet (planned for M2): ${filename}`
+      );
+      err.code = 'ERR_REQUIRE_ESM';
+      throw err;
+    }
     if (filename.endsWith('.js')) {
       const pkg = findPackageType(dirname);
-      if (pkg?.type === 'module') throw errRequireEsm(filename);
+      if (pkg?.type === 'module') {
+        const err = new Error(
+          `slicc-jsh: ESM modules are not supported yet (planned for M2): ${filename}`
+        );
+        err.code = 'ERR_REQUIRE_ESM';
+        throw err;
+      }
     }
 
-    const wrapper = new Function(
-      'exports',
-      'require',
-      'module',
-      '__filename',
-      '__dirname',
-      'process',
-      'console',
-      'Buffer',
-      'setTimeout',
-      'clearTimeout',
-      'setInterval',
-      'clearInterval',
-      'setImmediate',
-      'clearImmediate',
-      `"use strict";\n${source}\n//# sourceURL=${filename}`
-    );
-    wrapper(
+    const body = stripHashbang(source);
+    // No leading "use strict" line so user line 1 maps to Function body line 1
+    // after the engine's implicit prologue; sourceURL names the file for stacks.
+    let wrapper;
+    try {
+      wrapper = new Function(
+        'exports',
+        'require',
+        'module',
+        '__filename',
+        '__dirname',
+        'process',
+        'console',
+        'Buffer',
+        'setTimeout',
+        'clearTimeout',
+        'setInterval',
+        'clearInterval',
+        'setImmediate',
+        'clearImmediate',
+        'fetch',
+        'WebSocket',
+        `${body}\n//# sourceURL=${filename}`
+      );
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        const first = body.split('\n')[0] ?? '';
+        // Prefer caret under the first `;` / unexpected token when present.
+        let caretAt = first.indexOf(';');
+        if (caretAt < 0) caretAt = Math.max(0, first.length - 1);
+        const caret = `${' '.repeat(caretAt)}^`;
+        err.stack = `${filename}:1\n${first}\n${caret}\n\n${err.name}: ${err.message}`;
+      }
+      throw err;
+    }
+    wrapper.call(
+      mod.exports,
       mod.exports,
       require,
       mod,
@@ -136,7 +186,9 @@ export function createCjs({ ctx, process, Buffer, console, timers }) {
       timers.setInterval,
       timers.clearInterval,
       (fn, ...args) => timers.setTimeout(fn, 0, ...args),
-      timers.clearTimeout
+      timers.clearTimeout,
+      fetchBinding ?? globalThis.fetch,
+      webSocketBinding ?? globalThis.WebSocket
     );
   }
 
@@ -178,8 +230,10 @@ export function createCjs({ ctx, process, Buffer, console, timers }) {
     };
     require.resolve = (request) => {
       const resolved = resolver.resolve(request, parentFilename, [parentFilename]);
-      // Node returns the bare id for builtins (not node:…).
-      if (resolved.type === 'builtin') return resolved.id;
+      if (resolved.type === 'builtin') {
+        // Node keeps a node: prefix when the request used one.
+        return request.startsWith('node:') ? `node:${resolved.id}` : resolved.id;
+      }
       return resolved.filename;
     };
     require.resolve.paths = () => null;
@@ -193,8 +247,10 @@ export function createCjs({ ctx, process, Buffer, console, timers }) {
   }
 
   function runMain(filename, source) {
-    const mod = new Module(filename, null);
+    const mod = new Module('.', null);
     mod.filename = filename;
+    mod.id = '.';
+    mod.path = path.dirname(filename);
     cache[filename] = mod;
     mainModule = mod;
     compile(mod, source, filename);

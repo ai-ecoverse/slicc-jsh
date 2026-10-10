@@ -1,30 +1,57 @@
 /**
- * Minimal stream.Readable / Writable for M1 smoke tests.
- * Full readable-stream lands when more of the API is needed.
+ * stream.Readable / Writable / Transform / PassThrough with basic backpressure.
  */
 import { EventEmitter } from './events.mjs';
+
+function toBuf(chunk, Buffer) {
+  if (typeof chunk === 'string') return Buffer ? Buffer.from(chunk) : new TextEncoder().encode(chunk);
+  return chunk;
+}
 
 class Readable extends EventEmitter {
   constructor(opts = {}) {
     super();
     this.readable = true;
-    this._reading = false;
     this._ended = false;
+    this._closed = false;
     this._buffer = [];
     this._objectMode = !!opts.objectMode;
+    this._Buffer = opts.Buffer;
     if (typeof opts.read === 'function') this._read = opts.read;
   }
 
   _read() {}
 
+  static from(iterable, opts = {}) {
+    const r = new Readable({ ...opts, read() {} });
+    queueMicrotask(async () => {
+      try {
+        for await (const item of iterable) {
+          r.push(typeof item === 'string' || item instanceof Uint8Array ? item : String(item));
+        }
+        r.push(null);
+      } catch (err) {
+        r.emit('error', err);
+      }
+    });
+    return r;
+  }
+
   push(chunk) {
     if (chunk === null) {
       this._ended = true;
       this.readable = false;
-      queueMicrotask(() => this.emit('end'));
+      queueMicrotask(() => {
+        this.emit('end');
+        if (!this._closed) {
+          this._closed = true;
+          this.emit('close');
+        }
+      });
       return false;
     }
-    this._buffer.push(chunk);
+    const data = this._objectMode ? chunk : toBuf(chunk, this._Buffer);
+    this._buffer.push(data);
     queueMicrotask(() => {
       if (this.listenerCount('data')) this._flow();
     });
@@ -47,13 +74,26 @@ class Readable extends EventEmitter {
       const chunk = this._buffer.shift();
       this.emit('data', chunk);
     }
-    if (this._ended) this.emit('end');
   }
 
   pipe(dest) {
-    this.on('data', (chunk) => dest.write(chunk));
+    this.on('data', (chunk) => {
+      const ok = dest.write(chunk);
+      if (ok === false) this.pause?.();
+    });
     this.on('end', () => dest.end?.());
+    if (typeof dest.on === 'function') {
+      dest.on('drain', () => this.resume?.());
+    }
     return dest;
+  }
+
+  pause() {
+    return this;
+  }
+  resume() {
+    queueMicrotask(() => this._flow());
+    return this;
   }
 }
 
@@ -61,70 +101,164 @@ class Writable extends EventEmitter {
   constructor(opts = {}) {
     super();
     this.writable = true;
-    this._chunks = [];
-    if (typeof opts.write === 'function') this._write = opts.write;
+    this.writableLength = 0;
+    this.writableHighWaterMark = opts.highWaterMark ?? 16 * 1024;
+    this._writing = false;
+    this._buf = [];
+    this._finalCb = null;
+    this._Buffer = opts.Buffer;
+    if (typeof opts.write === 'function') this._write = opts.write.bind(this);
   }
 
   _write(chunk, encoding, cb) {
-    this._chunks.push(chunk);
     cb();
   }
 
   write(chunk, encoding, cb) {
     const callback = typeof encoding === 'function' ? encoding : cb;
-    this._write(chunk, typeof encoding === 'string' ? encoding : 'utf8', (err) => {
-      if (err) this.emit('error', err);
-      if (typeof callback === 'function') callback(err);
-    });
-    return true;
+    const enc = typeof encoding === 'string' ? encoding : 'utf8';
+    const data = toBuf(chunk, this._Buffer);
+    this.writableLength += data.length ?? 1;
+    this._buf.push({ data, enc, callback });
+    this._schedule();
+    return this.writableLength < this.writableHighWaterMark;
+  }
+
+  _schedule() {
+    if (this._writing) return;
+    this._writing = true;
+    const step = () => {
+      if (this._buf.length === 0) {
+        this._writing = false;
+        if (this._finalCb) {
+          const done = this._finalCb;
+          this._finalCb = null;
+          this.writable = false;
+          queueMicrotask(() => {
+            this.emit('finish');
+            this.emit('close');
+            done();
+          });
+        } else if (this.writableLength === 0) {
+          this.emit('drain');
+        }
+        return;
+      }
+      const { data, enc, callback } = this._buf.shift();
+      this._write(data, enc, (err) => {
+        this.writableLength = Math.max(0, this.writableLength - (data.length ?? 1));
+        if (err) this.emit('error', err);
+        if (typeof callback === 'function') callback(err);
+        queueMicrotask(step);
+      });
+    };
+    queueMicrotask(step);
   }
 
   end(chunk, encoding, cb) {
     if (chunk !== undefined && typeof chunk !== 'function') this.write(chunk, encoding);
     const callback = typeof chunk === 'function' ? chunk : typeof encoding === 'function' ? encoding : cb;
-    this.writable = false;
-    queueMicrotask(() => {
-      this.emit('finish');
-      if (typeof callback === 'function') callback();
-    });
+    this._finalCb = typeof callback === 'function' ? callback : () => {};
+    this._schedule();
     return this;
   }
 }
 
-function Stream() {}
-Stream.Readable = Readable;
-Stream.Writable = Writable;
-Stream.Stream = Stream;
-Stream.PassThrough = class PassThrough extends Readable {
-  constructor(opts) {
+class Transform extends Writable {
+  constructor(opts = {}) {
     super(opts);
-    this._write = (chunk, enc, cb) => {
-      this.push(chunk);
-      cb();
+    this._readable = new Readable({ objectMode: opts.objectMode, Buffer: opts.Buffer });
+    if (typeof opts.transform === 'function') this._transform = opts.transform.bind(this);
+    // Pipe readable events through
+    this.on = (event, fn) => {
+      if (event === 'data' || event === 'end' || event === 'close') return this._readable.on(event, fn);
+      return Writable.prototype.on.call(this, event, fn);
     };
+    this.once = (event, fn) => {
+      if (event === 'data' || event === 'end' || event === 'close') return this._readable.once(event, fn);
+      return Writable.prototype.once.call(this, event, fn);
+    };
+    this.pipe = (dest) => this._readable.pipe(dest);
   }
-  write(chunk, encoding, cb) {
-    return Writable.prototype.write.call(this, chunk, encoding, cb);
+
+  _transform(chunk, enc, cb) {
+    cb(null, chunk);
   }
+
+  _write(chunk, encoding, cb) {
+    this._transform(chunk, encoding, (err, out) => {
+      if (err) return cb(err);
+      if (out !== undefined && out !== null) this._readable.push(out);
+      cb();
+    });
+  }
+
   end(chunk, encoding, cb) {
-    if (chunk !== undefined && typeof chunk !== 'function') this.write(chunk, encoding);
-    this.push(null);
-    const callback = typeof chunk === 'function' ? chunk : typeof encoding === 'function' ? encoding : cb;
-    if (typeof callback === 'function') queueMicrotask(callback);
-    return this;
+    const ret = super.end(chunk, encoding, () => {
+      this._readable.push(null);
+      if (typeof cb === 'function') cb();
+    });
+    return ret;
   }
-};
-Stream.pipeline = (...args) => {
+}
+
+class PassThrough extends Transform {
+  constructor(opts) {
+    super({
+      ...opts,
+      transform(c, e, cb) {
+        cb(null, c);
+      },
+    });
+  }
+}
+
+function pipeline(...args) {
   const cb = typeof args[args.length - 1] === 'function' ? args.pop() : null;
   try {
     for (let i = 0; i < args.length - 1; i++) args[i].pipe(args[i + 1]);
-    if (cb) queueMicrotask(() => cb());
+    const last = args[args.length - 1];
+    if (last && typeof last.on === 'function') {
+      last.on('finish', () => cb?.(undefined));
+      last.on('error', (err) => cb?.(err));
+    } else if (cb) queueMicrotask(() => cb(undefined));
   } catch (err) {
     if (cb) cb(err);
     else throw err;
   }
-};
+}
 
-export function createStream() {
+export function createStream({ handles, Buffer } = {}) {
+  void handles;
+  class BoundReadable extends Readable {
+    constructor(opts = {}) {
+      super({ ...opts, Buffer });
+    }
+    static from(iterable, opts = {}) {
+      return Readable.from(iterable, { ...opts, Buffer });
+    }
+  }
+  class BoundWritable extends Writable {
+    constructor(opts = {}) {
+      super({ ...opts, Buffer });
+    }
+  }
+  class BoundTransform extends Transform {
+    constructor(opts = {}) {
+      super({ ...opts, Buffer });
+    }
+  }
+  class BoundPassThrough extends PassThrough {
+    constructor(opts = {}) {
+      super({ ...opts, Buffer });
+    }
+  }
+  function Stream() {}
+  Stream.Readable = BoundReadable;
+  Stream.Writable = BoundWritable;
+  Stream.Transform = BoundTransform;
+  Stream.PassThrough = BoundPassThrough;
+  Stream.Stream = Stream;
+  Stream.pipeline = pipeline;
   return Stream;
 }

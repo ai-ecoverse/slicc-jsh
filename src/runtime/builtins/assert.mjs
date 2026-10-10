@@ -1,9 +1,22 @@
 /** Minimal assert / assert/strict for M1 goldens. */
 
+function defaultMessage({ actual, expected, operator }) {
+  if (operator === 'strictEqual' || operator === '==') {
+    return 'Expected values to be strictly equal:';
+  }
+  if (operator === 'deepStrictEqual' || operator === 'deepEqual') {
+    return 'Expected values to be strictly deep-equal:';
+  }
+  if (operator === '==' || !operator) {
+    return 'The expression evaluated to a falsy value:';
+  }
+  return `${String(actual)} ${operator} ${String(expected)}`;
+}
+
 class AssertionError extends Error {
   constructor({ message, actual, expected, operator } = {}) {
     const generated = !message;
-    super(message || `${String(actual)} ${operator || '!='} ${String(expected)}`);
+    super(message || defaultMessage({ actual, expected, operator }));
     this.name = 'AssertionError';
     this.actual = actual;
     this.expected = expected;
@@ -15,7 +28,12 @@ class AssertionError extends Error {
 
 function ok(value, message) {
   if (!value) {
-    throw new AssertionError({ message: message || 'false == true', actual: value, expected: true, operator: '==' });
+    throw new AssertionError({
+      message: message || 'The expression evaluated to a falsy value:',
+      actual: value,
+      expected: true,
+      operator: '==',
+    });
   }
 }
 
@@ -28,7 +46,15 @@ function equal(actual, expected, message) {
 
 function strictEqual(actual, expected, message) {
   if (!Object.is(actual, expected)) {
-    throw new AssertionError({ message, actual, expected, operator: 'strictEqual' });
+    const msg =
+      message ||
+      `Expected values to be strictly equal:\n\n${String(actual)} !== ${String(expected)}\n`;
+    throw new AssertionError({
+      message: message ? `${message}\n\n${String(actual)} !== ${String(expected)}\n` : msg,
+      actual,
+      expected,
+      operator: 'strictEqual',
+    });
   }
 }
 

@@ -1,46 +1,15 @@
-/** Minimal util: inspect, promisify, format, types. */
+/**
+ * util builtin: Node's util.inspect/format via node-inspect-extracted (MIT),
+ * plus promisify / types / isDeepStrictEqual / inherits / deprecate.
+ */
+import {
+  inspect as nodeInspect,
+  format as nodeFormat,
+  formatWithOptions,
+} from 'node-inspect-extracted';
 
 const INSPECT_CUSTOM = Symbol.for('nodejs.util.inspect.custom');
 const PROMISIFY_CUSTOM = Symbol.for('nodejs.util.promisify.custom');
-
-function inspect(value, opts = {}) {
-  const maxDepth = opts.depth === undefined ? 2 : opts.depth;
-  return inspectValue(value, 0, { seen: new Set(), maxDepth, opts });
-}
-
-function inspectValue(val, depth, ctx) {
-  if (val === null) return 'null';
-  const t = typeof val;
-  if (t === 'string') return `'${val.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
-  if (t === 'number') return Object.is(val, -0) ? '-0' : String(val);
-  if (t === 'bigint') return `${val}n`;
-  if (t === 'boolean' || t === 'undefined') return String(val);
-  if (t === 'symbol') return val.toString();
-  if (t === 'function') {
-    const name = val.name;
-    return name ? `[Function: ${name}]` : '[Function (anonymous)]';
-  }
-  if (val instanceof RegExp) return val.toString();
-  if (val instanceof Date) return Number.isNaN(val.getTime()) ? 'Invalid Date' : val.toISOString();
-  if (val instanceof Error) return val.stack || `${val.name}: ${val.message}`;
-  if (ctx.seen.has(val)) return '[Circular]';
-  if (ctx.maxDepth !== null && depth > ctx.maxDepth) {
-    return Array.isArray(val) ? '[Array]' : '[Object]';
-  }
-  ctx.seen.add(val);
-  try {
-    if (Array.isArray(val)) {
-      if (val.length === 0) return '[]';
-      return `[ ${val.map((v) => inspectValue(v, depth + 1, ctx)).join(', ')} ]`;
-    }
-    const keys = Object.keys(val);
-    if (keys.length === 0) return '{}';
-    const items = keys.map((k) => `${k}: ${inspectValue(val[k], depth + 1, ctx)}`);
-    return `{ ${items.join(', ')} }`;
-  } finally {
-    ctx.seen.delete(val);
-  }
-}
 
 function promisify(fn) {
   if (fn?.[PROMISIFY_CUSTOM]) return fn[PROMISIFY_CUSTOM];
@@ -55,31 +24,53 @@ function promisify(fn) {
 }
 promisify.custom = PROMISIFY_CUSTOM;
 
-function format(fmt, ...args) {
-  if (typeof fmt !== 'string') return [fmt, ...args].map((a) => inspect(a)).join(' ');
-  let i = 0;
-  const out = fmt.replace(/%[sdjifoO%]/g, (token) => {
-    if (token === '%%') return '%';
-    if (i >= args.length) return token;
-    const arg = args[i++];
-    switch (token) {
-      case '%s':
-        return String(arg);
-      case '%d':
-      case '%i':
-        return String(Number(arg));
-      case '%j':
-        try {
-          return JSON.stringify(arg);
-        } catch {
-          return '[Circular]';
-        }
-      default:
-        return inspect(arg);
+function isDeepStrictEqual(a, b) {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  if (a instanceof RegExp && b instanceof RegExp) return a.toString() === b.toString();
+  if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
+    if (a.byteLength !== b.byteLength) return false;
+    const aa = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+    const bb = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+    return true;
+  }
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!isDeepStrictEqual(a[i], b[i])) return false;
+    return true;
+  }
+  if (a instanceof Map && b instanceof Map) {
+    if (a.size !== b.size) return false;
+    for (const [k, v] of a) {
+      if (!b.has(k) || !isDeepStrictEqual(v, b.get(k))) return false;
     }
-  });
-  const rest = args.slice(i).map((a) => inspect(a));
-  return rest.length ? `${out} ${rest.join(' ')}` : out;
+    return true;
+  }
+  if (a instanceof Set && b instanceof Set) {
+    if (a.size !== b.size) return false;
+    for (const v of a) {
+      let found = false;
+      for (const w of b) {
+        if (isDeepStrictEqual(v, w)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) return false;
+    }
+    return true;
+  }
+  const ak = Reflect.ownKeys(a);
+  const bk = Reflect.ownKeys(b);
+  if (ak.length !== bk.length) return false;
+  for (const k of ak) {
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (!isDeepStrictEqual(a[k], b[k])) return false;
+  }
+  return true;
 }
 
 const types = {
@@ -96,11 +87,19 @@ const types = {
 };
 
 export function createUtil() {
+  // node-inspect-extracted lags Node 22's Symbol-key brackets: `[Symbol(s)]:`.
+  const inspect = (value, opts) =>
+    nodeInspect(value, opts).replace(/(^|[,{\s])Symbol\(([^)]*)\):/g, '$1[Symbol($2)]:');
+  inspect.custom = INSPECT_CUSTOM;
+  inspect.defaultOptions = nodeInspect.defaultOptions ?? { depth: 2, colors: false };
+
   return {
     inspect,
+    format: nodeFormat,
+    formatWithOptions,
     promisify,
-    format,
     types,
+    isDeepStrictEqual,
     TextEncoder: globalThis.TextEncoder,
     TextDecoder: globalThis.TextDecoder,
     inherits(ctor, superCtor) {
@@ -112,7 +111,6 @@ export function createUtil() {
       return function deprecated(...args) {
         if (!warned) {
           warned = true;
-          // Avoid depending on a global console; callers may still see the warning later.
           void msg;
         }
         return fn.apply(this, args);

@@ -1,5 +1,5 @@
 /**
- * Parse `node` argv the way Node 22 does for -e / -p / script.js.
+ * Parse `node` argv the way Node 22 does for -e / -p / -v / -h / script.js.
  * `argv` is ctx.argv: [argv0, ...args].
  */
 export function parseNodeArgv(argv) {
@@ -17,6 +17,12 @@ export function parseNodeArgv(argv) {
       userArgs.push(...args.slice(i + 1));
       break;
     }
+    if (arg === '-v' || arg === '--version') {
+      return { mode: 'version', processArgv: [argv0] };
+    }
+    if (arg === '-h' || arg === '--help') {
+      return { mode: 'help', processArgv: [argv0] };
+    }
     if (arg === '-e' || arg === '--eval') {
       i += 1;
       if (i >= args.length) {
@@ -24,7 +30,6 @@ export function parseNodeArgv(argv) {
       }
       evalCode = args[i];
       i += 1;
-      // Everything after the eval string is process.argv[1..] (not a script file).
       userArgs.push(...args.slice(i));
       break;
     }
@@ -65,7 +70,6 @@ export function parseNodeArgv(argv) {
   }
 
   if (evalCode !== undefined) {
-    // Node: process.argv is [node, ...args after the eval string], no '-e' or code.
     return {
       mode: 'eval',
       code: evalCode,
@@ -82,7 +86,6 @@ export function parseNodeArgv(argv) {
     };
   }
 
-  // No script: Node starts the REPL. We exit 0 (PR1 behavior preserved for bare `node`).
   return {
     mode: 'empty',
     processArgv: [argv0],

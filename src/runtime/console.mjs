@@ -1,25 +1,4 @@
-/** Node-like console writing through process.stdout / process.stderr sinks. */
-
-function formatArg(value) {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return String(value);
-  if (typeof value === 'bigint') return `${value}n`;
-  if (value instanceof Uint8Array) {
-    // Match Node's Buffer inspect lightly for small buffers in goldens.
-    if (typeof value.toString === 'function' && value.constructor?.name === 'Buffer') {
-      return value.toString();
-    }
-  }
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function formatLine(parts) {
-  return `${parts.map(formatArg).join(' ')}\n`;
-}
+/** Node-like console using util.format / util.inspect. */
 
 function labelOf(label) {
   return label === undefined ? 'default' : String(label);
@@ -29,35 +8,77 @@ function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-export function createConsole(writeStdout, writeStderr) {
+function formatArgs(util, args) {
+  if (args.length === 0) return '';
+  const first = args[0];
+  if (typeof first === 'string' && /%[sdjifoOc%]/.test(first)) {
+    return util.format(...args);
+  }
+  return args.map((a) => (typeof a === 'string' ? a : util.inspect(a, { colors: false }))).join(' ');
+}
+
+function renderTable(tabularData, util) {
+  if (!Array.isArray(tabularData) || tabularData.length === 0) {
+    return util.inspect(tabularData, { depth: 2 });
+  }
+  const keys = [...new Set(tabularData.flatMap((r) => (r && typeof r === 'object' ? Object.keys(r) : [])))];
+  const rows = tabularData.map((r, i) => {
+    const cells = keys.map((k) => String(r?.[k] ?? ''));
+    return [String(i), ...cells];
+  });
+  const headers = ['(index)', ...keys];
+  const widths = headers.map((h, col) =>
+    Math.max(h.length, ...rows.map((r) => (r[col] ?? '').length))
+  );
+  const pad = (s, w) => s + ' '.repeat(Math.max(0, w - s.length));
+  const line = (left, mid, right, fill) =>
+    left + widths.map((w) => fill.repeat(w + 2)).join(mid) + right;
+  const rowLine = (cells) =>
+    `│ ${cells.map((c, i) => pad(c, widths[i])).join(' │ ')} │`;
+  const out = [
+    line('┌', '┬', '┐', '─'),
+    rowLine(headers),
+    line('├', '┼', '┤', '─'),
+    ...rows.map(rowLine),
+    line('└', '┴', '┘', '─'),
+  ];
+  return out.join('\n');
+}
+
+export function createConsole(writeStdout, writeStderr, util) {
   const counts = new Map();
   const times = new Map();
   const group = { depth: 0 };
 
-  const write = (sink, parts) => {
-    const line = formatLine(parts);
+  const write = (sink, args) => {
+    const body = formatArgs(util, args);
+    const line = `${body}\n`;
     sink(group.depth > 0 ? `${'  '.repeat(group.depth)}${line}` : line);
   };
 
-  const log = (...parts) => write(writeStdout, parts);
-  const error = (...parts) => write(writeStderr, parts);
+  const log = (...args) => write(writeStdout, args);
+  const error = (...args) => write(writeStderr, args);
 
   return {
     log,
     info: log,
     debug: log,
     dirxml: log,
-    table: log,
     warn: error,
     error,
-    dir: (obj) => log(obj),
+    dir(obj, options) {
+      writeStdout(`${util.inspect(obj, { customInspect: true, ...options })}\n`);
+    },
+    table(tabularData) {
+      writeStdout(`${renderTable(tabularData, util)}\n`);
+    },
     clear: () => undefined,
-    group: (...parts) => {
-      if (parts.length) log(...parts);
+    group: (...args) => {
+      if (args.length) log(...args);
       group.depth += 1;
     },
-    groupCollapsed: (...parts) => {
-      if (parts.length) log(...parts);
+    groupCollapsed: (...args) => {
+      if (args.length) log(...args);
       group.depth += 1;
     },
     groupEnd: () => {
@@ -66,7 +87,7 @@ export function createConsole(writeStdout, writeStderr) {
     assert: (condition, ...args) => {
       if (condition) return;
       if (args.length === 0) error('Assertion failed');
-      else error(`Assertion failed: ${formatArg(args[0])}`, ...args.slice(1));
+      else error(`Assertion failed: ${formatArgs(util, args)}`);
     },
     time: (label) => {
       const key = labelOf(label);

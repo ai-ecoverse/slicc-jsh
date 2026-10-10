@@ -6,7 +6,9 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 ## Status
 
-**M1 complete** — skeleton, `process`/`console`/`Buffer`/timers/CLI, CJS `require`, and core builtins (`fs`, `events`, `assert`, `util`, `os`, `url`, `querystring`, `string_decoder`, `stream`). First pre-release is `0.1.0-1` on the npm `next` tag. Servers/`net` are M2 (kernel `ctx.net` ≥ 1.43.1). Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`) until then.
+**M1 in progress (0.1.0-2)** — hardening against the 80-case Node 22 cert suite after `0.1.0-1` failed certification (nothing published). Scope: event-loop refs for pending `ctx` promises, real `util.inspect`, `process` as EventEmitter + stdin, error stacks, fs/stream/Buffer semantics, and clear `ERR_NOT_SUPPORTED` for modules deferred past M1.
+
+**Not in M1 (by design):** `child_process` / `net` / `http` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED`. ESM (`.mjs` / `"type":"module"`) is M2. Global `fetch` / `WebSocket` stay undefined until M3 (`ctx.fetch` / `ctx.websocket`). Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`) until servers land.
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

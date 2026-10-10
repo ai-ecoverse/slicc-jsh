@@ -5,6 +5,7 @@ import { createOs } from '../builtins/os.mjs';
 import { createQuerystring } from '../builtins/querystring.mjs';
 import { createStream } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
+import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
 import { createUrl } from '../builtins/url.mjs';
 import { createUtil } from '../builtins/util.mjs';
 
@@ -24,25 +25,60 @@ const BUILTIN_LIST = [
   'querystring',
   'stream',
   'string_decoder',
+  'timers',
+  'timers/promises',
   'url',
   'util',
   'util/types',
 ];
 
+const NOT_YET = [
+  'child_process',
+  'net',
+  'http',
+  'https',
+  'http2',
+  'crypto',
+  'zlib',
+  'readline',
+  'tty',
+  'worker_threads',
+  'dgram',
+  'dns',
+  'tls',
+  'cluster',
+  'vm',
+  'perf_hooks',
+  'async_hooks',
+  'inspector',
+  'trace_events',
+  'v8',
+  'was',
+];
+
+function notSupported(id) {
+  const err = new Error(`slicc-jsh: '${id}' is not supported yet`);
+  err.code = 'ERR_NOT_SUPPORTED';
+  throw err;
+}
+
 /**
  * Builtins available to require() in M1.
  */
-export function createBuiltins({ ctx, process, Buffer, console, path }) {
-  const fs = createFs({ ctx, path, process, Buffer });
+export function createBuiltins({ ctx, process, Buffer, console, path, handles, timers }) {
   const util = createUtil();
+  const fs = createFs({ ctx, path, process, Buffer, handles });
   const events = createEvents();
   const assert = createAssert();
-  const assertStrict = createAssertStrict();
+  assert.strict = createAssertStrict();
+  const assertStrict = assert.strict;
   const os = createOs(process.env);
   const url = createUrl();
   const querystring = createQuerystring();
   const stringDecoder = createStringDecoder();
-  const stream = createStream();
+  const stream = createStream({ handles, Buffer });
+  const timersMod = createTimersModule(timers);
+  const timersPromises = createTimersPromises(timers, handles);
 
   const moduleApi = {
     builtinModules: [...BUILTIN_LIST],
@@ -69,15 +105,21 @@ export function createBuiltins({ ctx, process, Buffer, console, path }) {
     querystring: () => querystring,
     string_decoder: () => stringDecoder,
     stream: () => stream,
+    timers: () => timersMod,
+    'timers/promises': () => timersPromises,
   };
 
   return {
     moduleApi,
+    util,
     has(id) {
-      return Object.prototype.hasOwnProperty.call(implemented, id);
+      const bare = id.startsWith('node:') ? id.slice(5) : id;
+      return Object.prototype.hasOwnProperty.call(implemented, bare) || NOT_YET.includes(bare);
     },
     load(id) {
-      const factory = implemented[id];
+      const bare = id.startsWith('node:') ? id.slice(5) : id;
+      if (NOT_YET.includes(bare)) notSupported(bare);
+      const factory = implemented[bare];
       if (!factory) {
         const err = new Error(`No such built-in module: ${id}`);
         err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';

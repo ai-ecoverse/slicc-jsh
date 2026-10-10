@@ -1,69 +1,155 @@
 /**
  * Node-like fs / fs/promises over ctx.sync (sync) and ctx.fs (promises).
+ * Async ops are tracked as ref'd handles so the event loop stays alive.
  */
+import { trackPromise } from '../async-handles.mjs';
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function errnoError(err, syscall, path) {
-  const code = err?.code || err?.errno || 'EIO';
-  const e = new Error(`${syscall} '${path}': ${code}`);
-  e.code = typeof code === 'string' ? code : 'EIO';
-  e.errno = e.code;
+const ERRNO = {
+  ENOENT: -2,
+  EEXIST: -17,
+  EISDIR: -21,
+  ENOTDIR: -20,
+  EPERM: -1,
+  EACCES: -13,
+  EINVAL: -22,
+  EIO: -5,
+  ENOTEMPTY: -66,
+};
+
+const DESCRIPTIONS = {
+  ENOENT: 'no such file or directory',
+  EEXIST: 'file already exists',
+  EISDIR: 'illegal operation on a directory',
+  ENOTDIR: 'not a directory',
+  EPERM: 'operation not permitted',
+  EACCES: 'permission denied',
+  EINVAL: 'invalid argument',
+  EIO: 'i/o error',
+  ENOTEMPTY: 'directory not empty',
+};
+
+function nodeFsError(code, syscall, pathArg, err) {
+  const c = typeof code === 'string' ? code : err?.code || 'EIO';
+  const desc = DESCRIPTIONS[c] || c;
+  const e = new Error(`${c}: ${desc}, ${syscall} '${pathArg}'`);
+  e.code = c;
+  e.errno = ERRNO[c] ?? -1;
   e.syscall = syscall;
-  e.path = path;
+  e.path = pathArg;
   return e;
 }
 
-function toBytes(data, encoding) {
+function toBytes(data) {
   if (typeof data === 'string') return encoder.encode(data);
   if (data instanceof Uint8Array) return data;
   if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   return encoder.encode(String(data));
 }
 
-function fromBytes(bytes, encoding) {
-  if (encoding === undefined || encoding === null) {
-    // Return Buffer if available on the factory; else Uint8Array
-    return bytes;
-  }
-  return decoder.decode(bytes);
-}
-
 function statView(st) {
+  const mtimeMs = st.mtimeMs ?? (st.mtime ? Number(st.mtime) : 0);
+  const atimeMs = st.atimeMs ?? mtimeMs;
+  const ctimeMs = st.ctimeMs ?? mtimeMs;
   return {
     isFile: () => !!st.isFile,
     isDirectory: () => !!st.isDirectory,
     isSymbolicLink: () => !!st.isSymbolicLink,
-    size: st.size,
+    size: st.size ?? 0,
     mode: st.mode,
-    mtimeMs: st.mtimeMs,
-    atimeMs: st.atimeMs,
-    ctimeMs: st.ctimeMs,
+    mtimeMs,
+    atimeMs,
+    ctimeMs,
+    mtime: new Date(mtimeMs),
+    atime: new Date(atimeMs),
+    ctime: new Date(ctimeMs),
+    birthtime: new Date(ctimeMs),
     ino: st.ino,
     dev: st.dev,
   };
 }
 
-export function createFs({ ctx, path, process, Buffer }) {
-  const abs = (p) => (path.isAbsolute(p) ? path.normalize(p) : path.resolve(process.cwd(), p));
+class Dirent {
+  constructor(name, type) {
+    this.name = name;
+    this._type = type; // 'file' | 'dir' | 'link' | 'unknown'
+  }
+  isFile() {
+    return this._type === 'file';
+  }
+  isDirectory() {
+    return this._type === 'dir';
+  }
+  isSymbolicLink() {
+    return this._type === 'link';
+  }
+  isBlockDevice() {
+    return false;
+  }
+  isCharacterDevice() {
+    return false;
+  }
+  isFIFO() {
+    return false;
+  }
+  isSocket() {
+    return false;
+  }
+}
+
+export function createFs({ ctx, path, process, Buffer, handles }) {
+  const abs = (p) => {
+    if (typeof p === 'number') return p;
+    return path.isAbsolute(p) ? path.normalize(p) : path.resolve(process.cwd(), p);
+  };
 
   const syncFs = ctx.sync.fs;
   const asyncFs = ctx.fs;
-
   const wrapBuffer = (bytes) => (Buffer ? Buffer.from(bytes) : bytes);
+  const track = (p) => (handles ? trackPromise(handles, p) : p);
+
+  function readStdinSync(encoding) {
+    // Best-effort: empty if no sync stdin; async path preferred via process.stdin.
+    try {
+      if (typeof ctx.sync?.read === 'function') {
+        const chunks = [];
+        for (;;) {
+          const c = ctx.sync.read(0);
+          if (!c || c.byteLength === 0) break;
+          chunks.push(c instanceof Uint8Array ? c : new Uint8Array(c));
+        }
+        let total = 0;
+        for (const c of chunks) total += c.length;
+        const out = new Uint8Array(total);
+        let at = 0;
+        for (const c of chunks) {
+          out.set(c, at);
+          at += c.length;
+        }
+        return encoding ? decoder.decode(out) : wrapBuffer(out);
+      }
+    } catch {
+      /* fall through */
+    }
+    return encoding ? '' : wrapBuffer(new Uint8Array(0));
+  }
 
   function mkdirSync(p, options = {}) {
+    const pathArg = p;
     const target = abs(p);
     const recursive = options === true || options?.recursive === true;
     if (!recursive) {
+      if (syncFs.exists(target)) throw nodeFsError('EEXIST', 'mkdir', pathArg);
       try {
         syncFs.mkdir(target);
       } catch (err) {
-        throw errnoError(err, 'mkdir', target);
+        throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
       }
       return;
     }
-    const parts = target.split('/').filter(Boolean);
+    const parts = String(target).split('/').filter(Boolean);
     let cur = '';
     for (const part of parts) {
       cur += `/${part}`;
@@ -72,45 +158,72 @@ export function createFs({ ctx, path, process, Buffer }) {
         syncFs.mkdir(cur);
       } catch (err) {
         if (err?.code === 'EEXIST') continue;
-        throw errnoError(err, 'mkdir', cur);
+        throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
       }
+    }
+  }
+
+  function readdirSync(p, options) {
+    const pathArg = p;
+    const target = abs(p);
+    try {
+      const names = syncFs.readdir(target);
+      if (options?.withFileTypes) {
+        return names.map((name) => {
+          let type = 'unknown';
+          try {
+            const st = syncFs.lstat(path.join(target, name));
+            type = st.isDirectory ? 'dir' : st.isSymbolicLink ? 'link' : st.isFile ? 'file' : 'unknown';
+          } catch {
+            /* ignore */
+          }
+          return new Dirent(name, type);
+        });
+      }
+      return names;
+    } catch (err) {
+      throw nodeFsError(err?.code || 'ENOENT', 'scandir', pathArg, err);
     }
   }
 
   const syncApi = {
     readFileSync(p, options) {
-      const target = abs(p);
       const encoding = typeof options === 'string' ? options : options?.encoding;
+      if (p === 0 || p === '0') return readStdinSync(encoding);
+      const pathArg = p;
+      const target = abs(p);
       try {
         const bytes = syncFs.readFile(target);
         if (encoding) return decoder.decode(bytes);
         return wrapBuffer(bytes);
       } catch (err) {
-        throw errnoError(err, 'open', target);
+        throw nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
       }
     },
     writeFileSync(p, data, options) {
+      const pathArg = p;
       const target = abs(p);
-      const encoding = typeof options === 'string' ? options : options?.encoding;
+      void options;
       try {
-        syncFs.writeFile(target, toBytes(data, encoding));
+        syncFs.writeFile(target, toBytes(data));
       } catch (err) {
-        throw errnoError(err, 'open', target);
+        throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
       }
     },
     appendFileSync(p, data, options) {
+      const pathArg = p;
       const target = abs(p);
-      const encoding = typeof options === 'string' ? options : options?.encoding;
+      void options;
       try {
         let prev = new Uint8Array(0);
         if (syncFs.exists(target)) prev = syncFs.readFile(target);
-        const next = toBytes(data, encoding);
+        const next = toBytes(data);
         const merged = new Uint8Array(prev.length + next.length);
         merged.set(prev);
         merged.set(next, prev.length);
         syncFs.writeFile(target, merged);
       } catch (err) {
-        throw errnoError(err, 'open', target);
+        throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
       }
     },
     existsSync(p) {
@@ -121,31 +234,38 @@ export function createFs({ ctx, path, process, Buffer }) {
       }
     },
     statSync(p) {
-      const target = abs(p);
+      const pathArg = p;
       try {
-        return statView(syncFs.stat(target));
+        return statView(syncFs.stat(abs(p)));
       } catch (err) {
-        throw errnoError(err, 'stat', target);
+        throw nodeFsError(err?.code || 'ENOENT', 'stat', pathArg, err);
       }
     },
     lstatSync(p) {
-      const target = abs(p);
+      const pathArg = p;
       try {
-        return statView(syncFs.lstat(target));
+        return statView(syncFs.lstat(abs(p)));
       } catch (err) {
-        throw errnoError(err, 'lstat', target);
+        throw nodeFsError(err?.code || 'ENOENT', 'lstat', pathArg, err);
       }
     },
-    readdirSync(p) {
-      const target = abs(p);
-      try {
-        return syncFs.readdir(target);
-      } catch (err) {
-        throw errnoError(err, 'scandir', target);
-      }
-    },
+    readdirSync,
     mkdirSync,
+    rmdirSync(p, options = {}) {
+      const pathArg = p;
+      const target = abs(p);
+      try {
+        if (options.recursive) {
+          syncApi.rmSync(p, { recursive: true, force: options.force });
+          return;
+        }
+        syncFs.rm(target);
+      } catch (err) {
+        throw nodeFsError(err?.code || 'ENOENT', 'rmdir', pathArg, err);
+      }
+    },
     rmSync(p, options = {}) {
+      const pathArg = p;
       const target = abs(p);
       try {
         const st = syncFs.lstat(target);
@@ -161,40 +281,36 @@ export function createFs({ ctx, path, process, Buffer }) {
         }
       } catch (err) {
         if (options.force && (err?.code === 'ENOENT' || !syncFs.exists(target))) return;
-        throw errnoError(err, 'rm', target);
+        throw nodeFsError(err?.code || 'ENOENT', 'rm', pathArg, err);
       }
     },
     unlinkSync(p) {
-      const target = abs(p);
+      const pathArg = p;
       try {
-        syncFs.unlink(target);
+        syncFs.unlink(abs(p));
       } catch (err) {
-        throw errnoError(err, 'unlink', target);
+        throw nodeFsError(err?.code || 'ENOENT', 'unlink', pathArg, err);
       }
     },
     renameSync(from, to) {
-      const a = abs(from);
-      const b = abs(to);
       try {
-        syncFs.rename(a, b);
+        syncFs.rename(abs(from), abs(to));
       } catch (err) {
-        throw errnoError(err, 'rename', a);
+        throw nodeFsError(err?.code || 'ENOENT', 'rename', from, err);
       }
     },
     symlinkSync(target, p) {
-      const link = abs(p);
       try {
-        syncFs.symlink(target, link);
+        syncFs.symlink(target, abs(p));
       } catch (err) {
-        throw errnoError(err, 'symlink', link);
+        throw nodeFsError(err?.code || 'EIO', 'symlink', p, err);
       }
     },
     readlinkSync(p) {
-      const target = abs(p);
       try {
-        return syncFs.readlink(target);
+        return syncFs.readlink(abs(p));
       } catch (err) {
-        throw errnoError(err, 'readlink', target);
+        throw nodeFsError(err?.code || 'ENOENT', 'readlink', p, err);
       }
     },
   };
@@ -212,98 +328,190 @@ export function createFs({ ctx, path, process, Buffer }) {
   }
 
   const promises = {
-    async readFile(p, options) {
-      const target = abs(p);
-      const encoding = typeof options === 'string' ? options : options?.encoding;
-      const bytes = await asyncFs.readFile(target);
-      if (encoding) return decoder.decode(bytes);
-      return wrapBuffer(bytes);
-    },
-    async writeFile(p, data, options) {
-      const target = abs(p);
-      const encoding = typeof options === 'string' ? options : options?.encoding;
-      await asyncFs.writeFile(target, toBytes(data, encoding));
-    },
-    async appendFile(p, data, options) {
-      const target = abs(p);
-      let prev = new Uint8Array(0);
-      if (await asyncFs.exists(target)) prev = await asyncFs.readFile(target);
-      const next = toBytes(data, typeof options === 'string' ? options : options?.encoding);
-      const merged = new Uint8Array(prev.length + next.length);
-      merged.set(prev);
-      merged.set(next, prev.length);
-      await asyncFs.writeFile(target, merged);
-    },
-    async stat(p) {
-      return statView(await asyncFs.stat(abs(p)));
-    },
-    async lstat(p) {
-      return statView(await asyncFs.lstat(abs(p)));
-    },
-    async readdir(p) {
-      return asyncFs.readdir(abs(p));
-    },
-    async mkdir(p, options = {}) {
-      const target = abs(p);
-      if (options?.recursive) {
-        const parts = target.split('/').filter(Boolean);
-        let cur = '';
-        for (const part of parts) {
-          cur += `/${part}`;
-          if (await asyncFs.exists(cur)) continue;
+    readFile(p, options) {
+      return track(
+        (async () => {
+          const encoding = typeof options === 'string' ? options : options?.encoding;
           try {
-            await asyncFs.mkdir(cur);
+            const bytes = await asyncFs.readFile(abs(p));
+            if (encoding) return decoder.decode(bytes);
+            return wrapBuffer(bytes);
           } catch (err) {
-            if (err?.code !== 'EEXIST') throw err;
+            throw nodeFsError(err?.code || 'ENOENT', 'open', p, err);
           }
-        }
-        return;
-      }
-      await asyncFs.mkdir(target);
+        })()
+      );
     },
-    async rm(p, options = {}) {
-      const target = abs(p);
-      try {
-        const st = await asyncFs.lstat(target);
-        if (st.isDirectory) {
-          if (options.recursive) {
-            for (const name of await asyncFs.readdir(target)) {
-              await promises.rm(path.join(target, name), { recursive: true, force: options.force });
+    writeFile(p, data, options) {
+      return track(
+        (async () => {
+          void options;
+          try {
+            await asyncFs.writeFile(abs(p), toBytes(data));
+          } catch (err) {
+            throw nodeFsError(err?.code || 'EIO', 'open', p, err);
+          }
+        })()
+      );
+    },
+    appendFile(p, data, options) {
+      return track(
+        (async () => {
+          void options;
+          const target = abs(p);
+          let prev = new Uint8Array(0);
+          if (await asyncFs.exists(target)) prev = await asyncFs.readFile(target);
+          const next = toBytes(data);
+          const merged = new Uint8Array(prev.length + next.length);
+          merged.set(prev);
+          merged.set(next, prev.length);
+          await asyncFs.writeFile(target, merged);
+        })()
+      );
+    },
+    stat(p) {
+      return track(
+        (async () => {
+          try {
+            return statView(await asyncFs.stat(abs(p)));
+          } catch (err) {
+            throw nodeFsError(err?.code || 'ENOENT', 'stat', p, err);
+          }
+        })()
+      );
+    },
+    lstat(p) {
+      return track(
+        (async () => {
+          try {
+            return statView(await asyncFs.lstat(abs(p)));
+          } catch (err) {
+            throw nodeFsError(err?.code || 'ENOENT', 'lstat', p, err);
+          }
+        })()
+      );
+    },
+    readdir(p, options) {
+      return track(
+        (async () => {
+          try {
+            const names = await asyncFs.readdir(abs(p));
+            if (options?.withFileTypes) {
+              const out = [];
+              for (const name of names) {
+                let type = 'unknown';
+                try {
+                  const st = await asyncFs.lstat(path.join(abs(p), name));
+                  type = st.isDirectory ? 'dir' : st.isSymbolicLink ? 'link' : st.isFile ? 'file' : 'unknown';
+                } catch {
+                  /* ignore */
+                }
+                out.push(new Dirent(name, type));
+              }
+              return out;
             }
+            return names;
+          } catch (err) {
+            throw nodeFsError(err?.code || 'ENOENT', 'scandir', p, err);
           }
-          await asyncFs.rm(target);
-        } else {
-          await asyncFs.unlink(target);
-        }
-      } catch (err) {
-        if (options.force && err?.code === 'ENOENT') return;
-        throw err;
-      }
+        })()
+      );
     },
-    async unlink(p) {
-      await asyncFs.unlink(abs(p));
+    mkdir(p, options = {}) {
+      return track(
+        (async () => {
+          const target = abs(p);
+          if (options?.recursive) {
+            const parts = String(target).split('/').filter(Boolean);
+            let cur = '';
+            for (const part of parts) {
+              cur += `/${part}`;
+              if (await asyncFs.exists(cur)) continue;
+              try {
+                await asyncFs.mkdir(cur);
+              } catch (err) {
+                if (err?.code !== 'EEXIST') throw nodeFsError(err?.code || 'EIO', 'mkdir', p, err);
+              }
+            }
+            return;
+          }
+          if (await asyncFs.exists(target)) throw nodeFsError('EEXIST', 'mkdir', p);
+          await asyncFs.mkdir(target);
+        })()
+      );
     },
-    async rename(from, to) {
-      await asyncFs.rename(abs(from), abs(to));
+    rm(p, options = {}) {
+      return track(
+        (async () => {
+          const target = abs(p);
+          try {
+            const st = await asyncFs.lstat(target);
+            if (st.isDirectory) {
+              if (options.recursive) {
+                for (const name of await asyncFs.readdir(target)) {
+                  await promises.rm(path.join(target, name), { recursive: true, force: options.force });
+                }
+              }
+              await asyncFs.rm(target);
+            } else {
+              await asyncFs.unlink(target);
+            }
+          } catch (err) {
+            if (options.force && err?.code === 'ENOENT') return;
+            throw nodeFsError(err?.code || 'ENOENT', 'rm', p, err);
+          }
+        })()
+      );
     },
-    async symlink(target, p) {
-      await asyncFs.symlink(target, abs(p));
+    unlink(p) {
+      return track(
+        (async () => {
+          try {
+            await asyncFs.unlink(abs(p));
+          } catch (err) {
+            throw nodeFsError(err?.code || 'ENOENT', 'unlink', p, err);
+          }
+        })()
+      );
     },
-    async readlink(p) {
-      return asyncFs.readlink(abs(p));
+    rename(from, to) {
+      return track(
+        (async () => {
+          try {
+            await asyncFs.rename(abs(from), abs(to));
+          } catch (err) {
+            throw nodeFsError(err?.code || 'ENOENT', 'rename', from, err);
+          }
+        })()
+      );
     },
-    async access(p) {
-      if (!(await asyncFs.exists(abs(p)))) {
-        const err = new Error(`ENOENT: no such file or directory, access '${p}'`);
-        err.code = 'ENOENT';
-        throw err;
-      }
+    symlink(target, p) {
+      return track(
+        (async () => {
+          await asyncFs.symlink(target, abs(p));
+        })()
+      );
+    },
+    readlink(p) {
+      return track(
+        (async () => {
+          return asyncFs.readlink(abs(p));
+        })()
+      );
+    },
+    access(p) {
+      return track(
+        (async () => {
+          if (!(await asyncFs.exists(abs(p)))) throw nodeFsError('ENOENT', 'access', p);
+        })()
+      );
     },
   };
 
   return {
     ...syncApi,
     promises,
+    Dirent,
     readFile: callbackify(syncApi.readFileSync),
     writeFile: callbackify(syncApi.writeFileSync),
     appendFile: callbackify(syncApi.appendFileSync),
@@ -312,6 +520,7 @@ export function createFs({ ctx, path, process, Buffer }) {
     lstat: callbackify(syncApi.lstatSync),
     readdir: callbackify(syncApi.readdirSync),
     mkdir: callbackify(syncApi.mkdirSync),
+    rmdir: callbackify(syncApi.rmdirSync),
     unlink: callbackify(syncApi.unlinkSync),
     rename: callbackify(syncApi.renameSync),
     constants: {
