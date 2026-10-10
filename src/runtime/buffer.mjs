@@ -1,5 +1,8 @@
 /**
- * Buffer compatible with Node 22 M1 cert cases.
+ * Buffer compatible with Node 22.
+ *
+ * Security (kernel Node-entry / shared allocator): never hand out uninitialized
+ * memory. `allocUnsafe` / `allocUnsafeSlow` zero-fill; `poolSize` is 0 (no pool).
  */
 
 const encoder = new TextEncoder();
@@ -744,8 +747,22 @@ function writeIntBE(buf, value, offset, byteLength) {
   boundsError(byteLength, 6, 'byteLength');
 }
 
+function assertAllocSize(size) {
+  if (typeof size !== 'number' || size < 0 || size > Number.MAX_SAFE_INTEGER || !Number.isFinite(size)) {
+    const e = new RangeError(
+      `The value of "size" is out of range. It must be >= 0 && <= ${Number.MAX_SAFE_INTEGER}. Received ${size}`
+    );
+    e.code = 'ERR_OUT_OF_RANGE';
+    throw e;
+  }
+  return Math.floor(size);
+}
+
 export function createBuffer() {
   class Buffer extends Uint8Array {
+    /** No shared pool — matches kernel Node-entry (process workers share the allocator). */
+    static poolSize = 0;
+
     static from(value, encodingOrOffset, length) {
       if (typeof value === 'string') return Buffer.fromBytes(asUint8(value, encodingOrOffset ?? 'utf8'));
       if (typeof value === 'number') {
@@ -777,21 +794,21 @@ export function createBuffer() {
     }
 
     static alloc(size, fill = 0, encoding = 'utf8') {
-      if (typeof size !== 'number' || size < 0 || size > Number.MAX_SAFE_INTEGER || !Number.isFinite(size)) {
-        const e = new RangeError(
-          `The value of "size" is out of range. It must be >= 0 && <= ${Number.MAX_SAFE_INTEGER}. Received ${size}`
-        );
-        e.code = 'ERR_OUT_OF_RANGE';
-        throw e;
-      }
-      const n = Math.floor(size);
+      const n = assertAllocSize(size);
       const buf = Buffer.fromBytes(new Uint8Array(n));
       if (n === 0) return buf;
       return buf.fill(fill, 0, n, encoding);
     }
 
+    /** Zero-fills (never exposes prior allocator contents). */
     static allocUnsafe(size) {
-      return Buffer.fromBytes(new Uint8Array(size));
+      const n = assertAllocSize(size);
+      return Buffer.fromBytes(new Uint8Array(n));
+    }
+
+    /** Same as allocUnsafe when poolSize is 0. */
+    static allocUnsafeSlow(size) {
+      return Buffer.allocUnsafe(size);
     }
 
     static concat(list, totalLength) {
