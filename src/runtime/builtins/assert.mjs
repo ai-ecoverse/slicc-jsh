@@ -5,7 +5,7 @@ import { inspect as nodeInspect } from 'node-inspect-extracted';
 const inspect = (v) => nodeInspect(v, { compact: false, breakLength: 80, sorted: true });
 
 class AssertionError extends Error {
-  constructor({ message, actual, expected, operator, diff, generatedMessage } = {}) {
+  constructor({ message, actual, expected, operator, diff, generatedMessage, throwSite } = {}) {
     const generated = generatedMessage ?? !message;
     super(message || 'AssertionError');
     this.name = 'AssertionError';
@@ -16,6 +16,13 @@ class AssertionError extends Error {
     this.expected = expected;
     this.operator = operator || '';
     this.diff = diff ?? 'simple';
+    // Node: ok/assert → internal/assert/utils:77; strictEqual etc → node:assert:150
+    Object.defineProperty(this, '_assertThrowSite', {
+      value: throwSite || 'assert',
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
   }
 }
 
@@ -49,27 +56,47 @@ function readSourceFile(ctx, process, file) {
   return null;
 }
 
-function extractOkCallFromLine(text) {
-  const dotOk = text.indexOf('.ok(');
-  if (dotOk === -1) return null;
-  let start = dotOk;
-  while (start > 0 && /[\w$.\])]/.test(text[start - 1])) start--;
-  const open = text.indexOf('(', dotOk);
-  if (open === -1) return null;
+function findClosingParen(text, openIdx) {
   let depth = 0;
-  let end = open;
-  for (; end < text.length; end++) {
-    const ch = text[end];
+  for (let i = openIdx; i < text.length; i++) {
+    const ch = text[i];
     if (ch === '(') depth++;
     else if (ch === ')') {
       depth--;
-      if (depth === 0) {
-        end++;
-        break;
-      }
+      if (depth === 0) return i;
     }
   }
-  return text.slice(start, end).trim();
+  return -1;
+}
+
+function extractAssertCallFromSource(source, line, column) {
+  const lines = source.replace(/^#![^\n]*\n/, '').split('\n');
+  if (line < 1 || line > lines.length) return null;
+  const startLineIdx = line - 1;
+  let text = '';
+  for (let i = startLineIdx; i < lines.length; i++) {
+    text += lines[i];
+    if (i < lines.length - 1) text += '\n';
+    if (text.length > 16_384) break;
+  }
+  const at = Math.max(0, Math.min(column - 1, lines[startLineIdx].length));
+
+  // Node extracts the call text: assert(...), assert.ok(...), or alias.ok(...).
+  const re = /\b(?:assert(?:\.ok)?|[A-Za-z_$][\w$]*\.ok)\s*\(/g;
+  let match = null;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const start = m.index;
+    const openParen = m.index + m[0].length - 1;
+    const close = findClosingParen(text, openParen);
+    if (close === -1) continue;
+    if (start <= at && at <= close) {
+      match = text.slice(start, close + 1);
+      const nl = match.indexOf('\n');
+      if (nl !== -1) match = `${match.slice(0, nl)}\n`;
+    }
+  }
+  return match?.trimEnd() ?? null;
 }
 
 function okExpressionFromStack(ctx, process, value) {
@@ -81,10 +108,7 @@ function okExpressionFromStack(ctx, process, value) {
     if (!loc) continue;
     const source = readSourceFile(ctx, process, loc.file);
     if (source == null) break;
-    const lines = source.replace(/^#![^\n]*\n/, '').split('\n');
-    const text = lines[loc.line - 1];
-    if (text == null) break;
-    const expr = extractOkCallFromLine(text);
+    const expr = extractAssertCallFromSource(source, loc.line, loc.column);
     if (expr) return expr;
     break;
   }
@@ -214,6 +238,24 @@ function formatObjectDiff(actual, expected, indent, lines, wrap = true) {
   if (wrap) lines.push(`${indent}}`);
 }
 
+function comparisonDeepEqualMessage(actual, expected) {
+  const lines = ['Expected values to be strictly deep-equal:', '+ actual - expected', ''];
+  lines.push('  Comparison {');
+  const keys = Object.keys(expected);
+  const diffKeys = keys.filter((k) => !deepEq(actual[k], expected[k], true));
+  const sameKeys = keys.filter((k) => deepEq(actual[k], expected[k], true));
+  for (const k of diffKeys) {
+    lines.push(diffMark('+', '    ', `${k}: ${inspect(actual[k])},`));
+    lines.push(diffMark('-', '    ', `${k}: ${inspect(expected[k])},`));
+  }
+  for (const k of sameKeys) {
+    lines.push(`    ${k}: ${inspect(actual[k])}`);
+  }
+  lines.push('  }');
+  lines.push('');
+  return lines.join('\n');
+}
+
 function deepStrictEqualMessage(actual, expected) {
   const lines = ['Expected values to be strictly deep-equal:', '+ actual - expected', ''];
   if (Array.isArray(actual) && Array.isArray(expected)) {
@@ -257,6 +299,8 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
         actual: value,
         expected: true,
         operator: '==',
+        generatedMessage: !message,
+        throwSite: 'utils',
       });
     }
   }
@@ -274,6 +318,7 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
         actual,
         expected,
         operator: 'strictEqual',
+        generatedMessage: !message,
       });
     }
   }
@@ -352,7 +397,7 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
     }
   }
 
-  function validateThrown(err, error) {
+  function validateThrown(err, error, operator = 'throws') {
     if (error == null) return;
     if (typeof error === 'function') {
       if (error === RegExp) return;
@@ -364,7 +409,8 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
             `Error message:\n\n${err?.message ?? ''}`,
           actual: err,
           expected: error,
-          operator: 'throws',
+          operator,
+          generatedMessage: true,
         });
       }
       return;
@@ -377,19 +423,23 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
             `The input did not match the regular expression ${error}. Input:\n\n${inspect(input)}\n`,
           actual: err,
           expected: error,
-          operator: 'throws',
+          operator,
+          generatedMessage: true,
         });
       }
       return;
     }
     if (typeof error === 'object') {
+      const actual = {};
+      for (const key of Object.keys(error)) actual[key] = err?.[key];
       for (const key of Object.keys(error)) {
-        if (!deepEq(err?.[key], error[key], true)) {
+        if (!deepEq(actual[key], error[key], true)) {
           throw new AssertionError({
-            message: `Expected values to be strictly deep-equal:\n\n${inspect(err?.[key])} !== ${inspect(error[key])}\n`,
-            actual: err?.[key],
-            expected: error[key],
-            operator: 'throws',
+            message: comparisonDeepEqualMessage(actual, error),
+            actual: err,
+            expected: error,
+            operator,
+            generatedMessage: true,
           });
         }
       }
@@ -435,53 +485,73 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
     }
   }
 
-  async function rejects(fn, error, message) {
-    if (typeof fn !== 'function') {
-      throw new TypeError('ERR_INVALID_ARG_TYPE');
-    }
-    let rejected = false;
-    let reason;
-    try {
-      const result = fn();
-      if (result && typeof result.then === 'function') {
-        try {
-          await result;
-        } catch (err) {
-          rejected = true;
-          reason = err;
-          validateThrown(err, error);
-        }
-      } else {
-        reason = result;
+  function isThenable(v) {
+    return v != null && typeof v.then === 'function';
+  }
+
+  async function rejects(block, error, message) {
+    let promise;
+    if (typeof block === 'function') {
+      try {
+        promise = block();
+      } catch (err) {
+        validateThrown(err, error, 'rejects');
+        return err;
       }
-    } catch (err) {
-      rejected = true;
-      reason = err;
-      validateThrown(err, error);
+    } else {
+      promise = block;
     }
-    if (!rejected) {
+    if (!isThenable(promise)) {
       throw new AssertionError({
         message: message || 'Missing expected rejection.',
         operator: 'rejects',
+        generatedMessage: !message,
       });
     }
-    return reason;
+    try {
+      await promise;
+      throw new AssertionError({
+        message: message || 'Missing expected rejection.',
+        operator: 'rejects',
+        generatedMessage: !message,
+      });
+    } catch (err) {
+      if (err instanceof AssertionError && err.operator === 'rejects') throw err;
+      validateThrown(err, error, 'rejects');
+      return err;
+    }
   }
 
-  async function doesNotReject(fn, error, message) {
-    if (typeof fn !== 'function') {
-      throw new TypeError('ERR_INVALID_ARG_TYPE');
+  async function doesNotReject(block, error, message) {
+    let promise;
+    if (typeof block === 'function') {
+      try {
+        promise = block();
+      } catch (err) {
+        if (error != null) validateThrown(err, error);
+        const msgText = err?.message ?? String(err);
+        throw new AssertionError({
+          message: message || `Got unwanted rejection.\nActual message: ${JSON.stringify(msgText)}`,
+          actual: err,
+          operator: 'doesNotReject',
+          generatedMessage: !message,
+        });
+      }
+    } else {
+      promise = block;
     }
+    if (!isThenable(promise)) return;
     try {
-      const result = fn();
-      if (result && typeof result.then === 'function') await result;
+      await promise;
     } catch (err) {
-      if (error != null) validateThrown(err, error);
+      if (error != null) validateThrown(err, error, 'doesNotReject');
       const msgText = err?.message ?? String(err);
       throw new AssertionError({
-        message: message || `Got unwanted rejection.\nActual message: ${JSON.stringify(msgText)}`,
+        message:
+          message || `Got unwanted rejection.\nActual message: ${JSON.stringify(msgText)}`,
         actual: err,
         operator: 'doesNotReject',
+        generatedMessage: !message,
       });
     }
   }

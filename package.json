@@ -1,6 +1,6 @@
 {
   "name": "@ai-ecoverse/slicc-jsh",
-  "version": "0.1.0-4",
+  "version": "0.1.0-5",
   "description": "Node.js-compatible runtime for slicc-kernel: the node and jsh commands (abi: js)",
   "type": "module",
   "license": "Apache-2.0",
@@ -53,6 +53,7 @@
     "test:golden": "node --max-old-space-size=512 scripts/golden.mjs check",
     "test:integration": "node --max-old-space-size=512 --test --test-timeout=120000 test/integration/*.test.mjs",
     "test:cert": "node --max-old-space-size=512 test/integration/cert/run.mjs",
+    "test:node-parallel": "node --max-old-space-size=512 test/node-parallel/run.mjs",
     "golden:record": "node --max-old-space-size=512 scripts/golden.mjs record"
   },
   "devDependencies": {
@@ -60,9 +61,7 @@
     "abort-controller": "3.0.0",
     "esbuild": "0.28.2",
     "node-inspect-extracted": "3.3.3",
-    "process": "0.11.10"
-  },
-  "dependencies": {
+    "process": "0.11.10",
     "readable-stream": "4.8.0",
     "string_decoder": "1.3.0"
   }

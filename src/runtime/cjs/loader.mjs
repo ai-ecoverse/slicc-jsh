@@ -86,6 +86,47 @@ export function createCjs({
     return makeRequire(this.filename)(id);
   };
 
+  /**
+   * Run the compiled wrapper — named like Node's Module._compile so CallSites
+   * can be remapped to node:internal/modules/cjs/loader.
+   */
+  Module.prototype._compile = function _compile(wrapper, filename) {
+    const dirname = path.dirname(filename);
+    const require = makeRequire(filename, this);
+    wrapper.call(
+      this.exports,
+      this.exports,
+      require,
+      this,
+      filename,
+      dirname,
+      process,
+      console,
+      Buffer,
+      timers.setTimeout,
+      timers.clearTimeout,
+      timers.setInterval,
+      timers.clearInterval,
+      (fn, ...args) => timers.setTimeout(fn, 0, ...args),
+      timers.clearTimeout,
+      fetchBinding ?? globalThis.fetch,
+      webSocketBinding ?? globalThis.WebSocket
+    );
+  };
+
+  Module._extensions = {
+    '.js'(module, filename) {
+      const source = decoder.decode(fs.readFile(filename));
+      compile(module, source, filename);
+    },
+    '.cjs'(module, filename) {
+      Module._extensions['.js'](module, filename);
+    },
+    '.json'(module, filename) {
+      module.exports = JSON.parse(decoder.decode(fs.readFile(filename)));
+    },
+  };
+
   builtins.moduleApi.Module = Module;
   builtins.moduleApi.createRequire = Module.createRequire;
   builtins.moduleApi.builtinModules = Module.builtinModules;
@@ -118,7 +159,6 @@ export function createCjs({
 
   function compile(mod, source, filename) {
     const dirname = path.dirname(filename);
-    const require = makeRequire(filename, mod);
     if (filename.endsWith('.mjs')) {
       const err = new Error(
         `slicc-jsh: ESM modules are not supported yet (planned for M2): ${filename}`
@@ -174,25 +214,8 @@ export function createCjs({
       }
       throw err;
     }
-    wrapper.call(
-      mod.exports,
-      mod.exports,
-      require,
-      mod,
-      filename,
-      dirname,
-      process,
-      console,
-      Buffer,
-      timers.setTimeout,
-      timers.clearTimeout,
-      timers.setInterval,
-      timers.clearInterval,
-      (fn, ...args) => timers.setTimeout(fn, 0, ...args),
-      timers.clearTimeout,
-      fetchBinding ?? globalThis.fetch,
-      webSocketBinding ?? globalThis.WebSocket
-    );
+    // Run via Module._compile so CallSites include a remappable loader frame.
+    mod._compile(wrapper, filename);
   }
 
   function warnCircular(prop) {
@@ -251,20 +274,18 @@ export function createCjs({
     cache[filename] = mod;
     if (parent) parent.children.push(mod);
 
-    if (filename.endsWith('.json')) {
-      mod.exports = JSON.parse(decoder.decode(fs.readFile(filename)));
-      mod.loaded = true;
-      return mod.exports;
-    }
     if (filename.endsWith('.node')) {
       const err = new Error(`Cannot load native addon: ${filename}`);
       err.code = 'ERR_DLOPEN_FAILED';
       throw err;
     }
 
-    const source = decoder.decode(fs.readFile(filename));
+    const ext =
+      filename.endsWith('.json') ? '.json' : filename.endsWith('.cjs') ? '.cjs' : '.js';
+    const loader = Module._extensions[ext] || Module._extensions['.js'];
     try {
-      compile(mod, source, filename);
+      // Call as a method so CallSites report Object..js / Module._compile.
+      loader.call(Module._extensions, mod, filename);
     } catch (err) {
       delete cache[filename];
       throw err;
@@ -308,7 +329,13 @@ export function createCjs({
     cache[filename] = mod;
     // Node leaves require.main unset for piped [stdin] scripts (typeof → 'undefined').
     mainModule = setMain ? mod : undefined;
-    compile(mod, source, filename);
+    if (filename.startsWith('[')) {
+      compile(mod, source, filename);
+    } else {
+      // File entry: go through extensions['.js'] so CallSites include Object..js
+      // below Module._compile (Node's Module.load path).
+      Module._extensions['.js'].call(Module._extensions, mod, filename);
+    }
     mod.loaded = true;
     return mod.exports;
   }

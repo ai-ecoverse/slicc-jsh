@@ -1,6 +1,7 @@
 /**
  * stream / stream/promises — lazy-loaded readable-stream v4 (MIT).
  */
+import { trackPromise } from '../async-handles.mjs';
 import { loadVendorCjs } from '../vendor-load.mjs';
 
 const PACKAGE_ROOT = '/node_modules/@ai-ecoverse/slicc-jsh';
@@ -15,7 +16,6 @@ function getStreamApi({ ctx, process, Buffer }) {
     name: 'readable-stream',
     globals: { process, Buffer },
   });
-  // Keep the Stream function export; only drop ESM interop `.default`.
   try {
     delete mod.default;
   } catch {
@@ -25,22 +25,25 @@ function getStreamApi({ ctx, process, Buffer }) {
   return cached;
 }
 
-export function createStream({ ctx, process, Buffer }) {
+export function createStream({ ctx, process, Buffer, handles }) {
+  void handles;
   return getStreamApi({ ctx, process, Buffer });
 }
 
-export function createStreamPromises(stream) {
+export function createStreamPromises(stream, handles) {
   return {
     pipeline(...args) {
-      return new Promise((resolve, reject) => {
+      const p = new Promise((resolve, reject) => {
         const cb = (err) => (err ? reject(err) : resolve());
         stream.pipeline(...args, cb);
       });
+      return handles ? trackPromise(handles, p) : p;
     },
     finished(strm, opts) {
-      return new Promise((resolve, reject) => {
+      const p = new Promise((resolve, reject) => {
         stream.finished(strm, opts ?? {}, (err) => (err ? reject(err) : resolve()));
       });
+      return handles ? trackPromise(handles, p) : p;
     },
   };
 }

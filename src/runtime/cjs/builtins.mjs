@@ -82,10 +82,10 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
   const streamPromises = {
     pipeline(...args) {
-      return createStreamPromises(getStream()).pipeline(...args);
+      return createStreamPromises(getStream(), handles).pipeline(...args);
     },
     finished(...args) {
-      return createStreamPromises(getStream()).finished(...args);
+      return createStreamPromises(getStream(), handles).finished(...args);
     },
   };
   const stringDecoder = createStringDecoder({ ctx, process, Buffer });

@@ -2,10 +2,10 @@
  * Differential cert harness aligned with thr_hb2dpaitvt:
  * - load kernel from a plain dist path (NOT node_modules)
  * - compare host/shim with minimal normalisation (paths, pids, timings only)
- * - run cases.mjs / cases2.mjs / cases3.mjs
+ * - run cases.mjs / cases2.mjs / cases3.mjs / cases4.mjs
  *
  * Usage:
- *   node test/integration/cert/run.mjs              # all three suites
+ *   node test/integration/cert/run.mjs              # all suites
  *   CASES=./cases.mjs node test/integration/cert/run.mjs
  *   node test/integration/cert/run.mjs case-name
  */
@@ -40,6 +40,7 @@ const suites = casesPath
       { name: 'cases.mjs', path: join(certDir, 'cases.mjs') },
       { name: 'cases2.mjs', path: join(certDir, 'cases2.mjs') },
       { name: 'cases3.mjs', path: join(certDir, 'cases3.mjs') },
+      { name: 'cases4.mjs', path: join(certDir, 'cases4.mjs') },
     ];
 
 const only = process.argv.slice(2);

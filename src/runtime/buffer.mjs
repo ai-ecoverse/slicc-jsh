@@ -121,7 +121,11 @@ function bufferOutOfBounds() {
 }
 
 function bufferInvalidArgType(name, expected, value) {
-  const err = new TypeError(`The "${name}" argument must be of type ${expected}. Received ${value === undefined ? 'undefined' : typeof value}`);
+  let received;
+  if (value === undefined) received = 'undefined';
+  else if (typeof value === 'string') received = `type string ('${value}')`;
+  else received = `type ${typeof value}`;
+  const err = new TypeError(`The "${name}" argument must be of type ${expected}. Received ${received}`);
   err.code = 'ERR_INVALID_ARG_TYPE';
   throw err;
 }
@@ -725,22 +729,45 @@ export function createBuffer() {
     static from(value, encodingOrOffset, length) {
       if (typeof value === 'string') return Buffer.fromBytes(asUint8(value, encodingOrOffset ?? 'utf8'));
       if (typeof value === 'number') {
-        throw new TypeError(
+        const e = new TypeError(
           'The first argument must be of type string or an instance of Buffer, ArrayBuffer, or Array or an Array-like Object. Received type number'
         );
+        e.code = 'ERR_INVALID_ARG_TYPE';
+        throw e;
       }
       if (value instanceof ArrayBuffer) {
         const offset = encodingOrOffset ?? 0;
         const len = length ?? value.byteLength - offset;
         return Buffer.fromBytes(new Uint8Array(value, offset, len));
       }
+      if (value instanceof Uint8Array || Array.isArray(value) || ArrayBuffer.isView(value)) {
+        return Buffer.fromBytes(asUint8(value));
+      }
+      if (value != null && typeof value === 'object') {
+        // Array-like with length number is ok; plain {} is not.
+        const len = value.length;
+        if (typeof len === 'number' && len >= 0) return Buffer.fromBytes(asUint8(value));
+        const e = new TypeError(
+          'The first argument must be of type string or an instance of Buffer, ArrayBuffer, or Array or an Array-like Object. Received an instance of Object'
+        );
+        e.code = 'ERR_INVALID_ARG_TYPE';
+        throw e;
+      }
       return Buffer.fromBytes(asUint8(value));
     }
 
     static alloc(size, fill = 0, encoding = 'utf8') {
-      const buf = Buffer.fromBytes(new Uint8Array(size));
-      if (size === 0) return buf;
-      return buf.fill(fill, 0, size, encoding);
+      if (typeof size !== 'number' || size < 0 || size > Number.MAX_SAFE_INTEGER || !Number.isFinite(size)) {
+        const e = new RangeError(
+          `The value of "size" is out of range. It must be >= 0 && <= ${Number.MAX_SAFE_INTEGER}. Received ${size}`
+        );
+        e.code = 'ERR_OUT_OF_RANGE';
+        throw e;
+      }
+      const n = Math.floor(size);
+      const buf = Buffer.fromBytes(new Uint8Array(n));
+      if (n === 0) return buf;
+      return buf.fill(fill, 0, n, encoding);
     }
 
     static allocUnsafe(size) {
@@ -775,6 +802,27 @@ export function createBuffer() {
 
     static isBuffer(value) {
       return value instanceof Buffer;
+    }
+
+    static isEncoding(encoding) {
+      if (typeof encoding !== 'string') return false;
+      switch (encoding.toLowerCase()) {
+        case 'utf8':
+        case 'utf-8':
+        case 'utf16le':
+        case 'utf-16le':
+        case 'ucs2':
+        case 'ucs-2':
+        case 'latin1':
+        case 'binary':
+        case 'base64':
+        case 'base64url':
+        case 'hex':
+        case 'ascii':
+          return true;
+        default:
+          return false;
+      }
     }
 
     static compare(a, b) {
@@ -812,6 +860,38 @@ export function createBuffer() {
       return max;
     }
 
+    write(string, offset = 0, length, encoding = 'utf8') {
+      if (typeof offset === 'string') {
+        encoding = offset;
+        offset = 0;
+        length = undefined;
+      } else if (typeof length === 'string') {
+        encoding = length;
+        length = undefined;
+      }
+      if (typeof offset !== 'number' || !Number.isFinite(offset)) {
+        const e = new TypeError(
+          `The "offset" argument must be of type number. Received type ${typeof offset}${
+            typeof offset === 'string' ? ` ('${offset}')` : ''
+          }`
+        );
+        e.code = 'ERR_INVALID_ARG_TYPE';
+        throw e;
+      }
+      if (offset < 0 || offset > this.length) {
+        const e = new RangeError(
+          `The value of "offset" is out of range. It must be >= 0 && <= ${this.length}. Received ${offset}`
+        );
+        e.code = 'ERR_OUT_OF_RANGE';
+        throw e;
+      }
+      const bytes = asUint8(String(string), encoding);
+      const max = length == null ? this.length - offset : Math.min(length, this.length - offset);
+      const n = Math.min(bytes.length, max);
+      this.set(bytes.subarray(0, n), offset);
+      return n;
+    }
+
     compare(other) {
       return Buffer.compare(this, other);
     }
@@ -833,6 +913,20 @@ export function createBuffer() {
       } else if (typeof end === 'string') {
         encoding = end;
         end = this.length;
+      }
+      if (offset < 0 || offset > this.length) {
+        const e = new RangeError(
+          `The value of "offset" is out of range. It must be >= 0 && <= ${this.length}. Received ${offset}`
+        );
+        e.code = 'ERR_OUT_OF_RANGE';
+        throw e;
+      }
+      if (end < 0 || end > this.length) {
+        const e = new RangeError(
+          `The value of "end" is out of range. It must be >= 0 && <= ${this.length}. Received ${end}`
+        );
+        e.code = 'ERR_OUT_OF_RANGE';
+        throw e;
       }
       let bytes;
       if (typeof value === 'string') bytes = asUint8(value, encoding);

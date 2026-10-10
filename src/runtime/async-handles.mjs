@@ -25,11 +25,23 @@ function afterMicrotasks() {
  */
 export async function drainLoop(handles, nextTick, { onBeforeExit } = {}) {
   for (;;) {
-    for (let i = 0; i < 64; i++) {
+    // Drain microtasks/nextTick generously so floating async IIFEs
+    // (for-await of Readable.from(asyncGen)) can schedule their next timer.
+    let idle = 0;
+    for (let i = 0; i < 256; i++) {
       await afterMicrotasks();
       nextTick.flushSync();
-      if (handles.refCount === 0 && nextTick.depth === 0) break;
-      if (handles.refCount > 0) break;
+      if (handles.refCount > 0) {
+        idle = 0;
+        break;
+      }
+      if (nextTick.depth > 0) {
+        idle = 0;
+        continue;
+      }
+      idle++;
+      // Several fully-idle rounds before treating the queue as empty.
+      if (idle >= 6) break;
     }
     if (handles.refCount > 0) {
       await handles.waitForProgress();
@@ -37,8 +49,15 @@ export async function drainLoop(handles, nextTick, { onBeforeExit } = {}) {
     }
     if (onBeforeExit) {
       onBeforeExit();
-      await afterMicrotasks();
-      nextTick.flushSync();
+      idle = 0;
+      for (let i = 0; i < 64; i++) {
+        await afterMicrotasks();
+        nextTick.flushSync();
+        if (handles.refCount > 0) break;
+        if (nextTick.depth === 0) idle++;
+        else idle = 0;
+        if (idle >= 6) break;
+      }
       if (handles.refCount > 0) continue;
     }
     return;

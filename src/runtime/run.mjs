@@ -1,10 +1,10 @@
-import { drainLoop } from './async-handles.mjs';
+import { drainLoop, trackPromise } from './async-handles.mjs';
 import { createBuffer } from './buffer.mjs';
 import { createUtil } from './builtins/util.mjs';
 import { createCjs } from './cjs/loader.mjs';
 import { parseNodeArgv } from './cli.mjs';
 import { createConsole } from './console.mjs';
-import { formatUncaughtError } from './errors-format.mjs';
+import { formatUncaughtError, formatUnhandledRejection } from './errors-format.mjs';
 import { NodeExitError } from './exit.mjs';
 import { createHandleTable } from './handles.mjs';
 import { createNextTick } from './next-tick.mjs';
@@ -164,7 +164,20 @@ export async function runNode(ctx) {
       process.emit('unhandledRejection', reason, promise ?? Promise.resolve());
       return;
     }
-    fatal(reason instanceof Error ? reason : new Error(String(reason)));
+    const { body } = formatUnhandledRejection(reason, {
+      ctx,
+      util,
+      version: NODE_SHIM_VERSION,
+      evalCode: lastEvalCode,
+    });
+    writeStderr(body);
+    try {
+      ctx.exit?.(1);
+    } catch {
+      /* JsExit */
+    }
+    exitStatus = 1;
+    timers.clearPending();
   };
   const exceptionHandler = (err) => {
     if (process.listenerCount('uncaughtException') > 0) {
@@ -302,6 +315,10 @@ export async function runNode(ctx) {
           fetchStub,
           WebSocketStub
         );
+        // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
+        if (result != null && typeof result.then === 'function') {
+          trackPromise(handles, result);
+        }
         nextTick.flushSync();
         if (parsed.print) writeStdout(`${util.inspect(result, { colors: false })}\n`);
       } catch (err) {

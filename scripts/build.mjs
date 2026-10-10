@@ -5,12 +5,14 @@
  *
  * Also builds lazy vendor CJS bundles (readable-stream, string_decoder) under
  * dist/vendor/ so require('stream') does not pay their cost for `node -e 0`.
+ * NOTICE is regenerated from esbuild metafiles (every bundled package → LICENSE).
  */
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
+import { packagesFromMetafiles, renderNotice } from './generate-notice.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -18,7 +20,7 @@ const require = createRequire(join(root, 'package.json'));
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(join(dist, 'vendor'), { recursive: true });
 
-await esbuild.build({
+const main = await esbuild.build({
   entryPoints: {
     node: join(root, 'src/node.mjs'),
     jsh: join(root, 'src/jsh.mjs'),
@@ -30,10 +32,11 @@ await esbuild.build({
   platform: 'neutral',
   target: ['es2022'],
   logLevel: 'info',
+  metafile: true,
 });
 
 const sdPath = require.resolve('string_decoder/');
-await esbuild.build({
+const stream = await esbuild.build({
   entryPoints: [require.resolve('readable-stream/lib/ours/browser.js')],
   outfile: join(dist, 'vendor/readable-stream.cjs'),
   bundle: true,
@@ -42,6 +45,7 @@ await esbuild.build({
   target: ['es2022'],
   mainFields: ['main', 'module', 'browser'],
   logLevel: 'info',
+  metafile: true,
   alias: {
     events: require.resolve('events/'),
     string_decoder: sdPath,
@@ -54,10 +58,25 @@ await esbuild.build({
         build.onResolve({ filter: /^string_decoder\/$/ }, () => ({ path: sdPath }));
       },
     },
+    {
+      // Node 22 default highWaterMark is 65536; readable-stream still uses 16384.
+      name: 'hwm-node22',
+      setup(build) {
+        build.onLoad({ filter: /streams[/\\]state\.js$/ }, async (args) => {
+          const { readFile } = await import('node:fs/promises');
+          let text = await readFile(args.path, 'utf8');
+          text = text.replace(
+            /defaultHighWaterMarkBytes\s*=\s*16\s*\*\s*1024/,
+            'defaultHighWaterMarkBytes = 64 * 1024'
+          );
+          return { contents: text, loader: 'js' };
+        });
+      },
+    },
   ],
 });
 
-await esbuild.build({
+const decoder = await esbuild.build({
   entryPoints: [sdPath],
   outfile: join(dist, 'vendor/string_decoder.cjs'),
   bundle: true,
@@ -66,6 +85,16 @@ await esbuild.build({
   target: ['es2022'],
   mainFields: ['main', 'module'],
   logLevel: 'info',
+  metafile: true,
 });
+
+writeFileSync(join(dist, 'meta-main.json'), JSON.stringify(main.metafile));
+writeFileSync(join(dist, 'meta-stream.json'), JSON.stringify(stream.metafile));
+writeFileSync(join(dist, 'meta-decoder.json'), JSON.stringify(decoder.metafile));
+
+const pkgRoots = packagesFromMetafiles([main.metafile, stream.metafile, decoder.metafile]);
+const notice = renderNotice(pkgRoots);
+writeFileSync(join(root, 'NOTICE'), notice);
+console.log(`NOTICE: ${pkgRoots.size} bundled package(s)`);
 
 console.log('built dist/node.mjs, dist/jsh.mjs, and dist/vendor/*');
