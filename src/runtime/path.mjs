@@ -90,13 +90,39 @@ function resolve(getCwd, parts) {
   return normalized.length > 0 ? normalized : '.';
 }
 
+function parse(path) {
+  const ret = { root: '', dir: '', base: '', ext: '', name: '' };
+  if (path.length === 0) return ret;
+  const isAbsolute = path.charCodeAt(0) === 47;
+  if (isAbsolute) ret.root = '/';
+  ret.dir = dirname(path);
+  ret.base = basename(path);
+  ret.ext = extname(path);
+  ret.name = ret.ext ? ret.base.slice(0, ret.base.length - ret.ext.length) : ret.base;
+  if (ret.dir === '.' && !isAbsolute) ret.dir = '';
+  return ret;
+}
+
+function format(pathObject) {
+  if (typeof pathObject === 'string') return pathObject;
+  const dir = pathObject.dir || pathObject.root || '';
+  const base =
+    pathObject.base ||
+    `${pathObject.name || ''}${pathObject.ext || ''}`;
+  if (!dir) return base;
+  if (dir === '/') return `/${base}`;
+  return `${dir}/${base}`;
+}
+
 export function createPath(getCwd = () => '/') {
-  return {
+  const api = {
     sep: '/',
     delimiter: ':',
     basename,
     dirname,
     extname,
+    parse,
+    format,
     isAbsolute: (path) => path.length > 0 && path.charCodeAt(0) === 47,
     join,
     normalize,
@@ -112,4 +138,6 @@ export function createPath(getCwd = () => '/') {
       return [...fromParts.slice(i).map(() => '..'), ...toParts.slice(i)].join('/');
     },
   };
+  api.posix = api;
+  return api;
 }

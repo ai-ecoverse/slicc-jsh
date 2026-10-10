@@ -6,7 +6,9 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 ## Status
 
-**M1 complete** — skeleton, `process`/`console`/`Buffer`/timers/CLI, CJS `require`, and core builtins (`fs`, `events`, `assert`, `util`, `os`, `url`, `querystring`, `string_decoder`, `stream`). First pre-release is `0.1.0-1` on the npm `next` tag. Servers/`net` are M2 (kernel `ctx.net` ≥ 1.43.1). Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`) until then.
+**M1 candidate (0.1.0-8)** — Node-entry lockdown ([slicc-kernel#297](https://github.com/ai-ecoverse/slicc-kernel/issues/297)): CJS wrapper is Node's 5-arg form; `process` / `Buffer` / timers are real globals; vendor stream/string_decoder share jsh's Buffer class; StringDecoder accepts TypedArrays; timer stacks keep script URLs. Cert harness: cases 1–4 (hb2), kernel loaded from a plain dist path.
+
+**Not in M1 (by design):** `child_process` / `net` / `http` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED`. ESM (`.mjs` / `"type":"module"` / wrapper-name redeclare) is M2. Under kernel ≥ 1.48.3, `globalThis.fetch` / `WebSocket` stay non-configurable `undefined` (same withhold as `require`); use `ctx.fetch` / `ctx.websocket` until the kernel leaves those slots writable. Requires `slicc-kernel` ≥ 1.49.1 ([#312](https://github.com/ai-ecoverse/slicc-kernel/pull/312): host `Buffer` kept for undici).
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

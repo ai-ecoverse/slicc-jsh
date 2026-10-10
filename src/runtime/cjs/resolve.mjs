@@ -147,6 +147,16 @@ export function createResolver({ fs, path, readPackageJson }) {
             if (hit) return hit;
             throw packagePathNotExported(name, pkgPath);
           }
+          // Pattern imports: "#cfg/*" → "./cfg/*.js"
+          for (const [pattern, target] of Object.entries(pkg.imports)) {
+            if (!pattern.includes('*')) continue;
+            const [pre, post] = pattern.split('*');
+            if (!name.startsWith(pre) || !name.endsWith(post ?? '')) continue;
+            const star = name.slice(pre.length, name.length - (post?.length ?? 0));
+            const mapped = mapStar(target, star);
+            const hit = matchExportTarget(mapped, dir);
+            if (hit) return hit;
+          }
         }
       }
       const parent = path.dirname(dir);
@@ -273,10 +283,29 @@ const BUILTIN_NAMES = new Set([
   'process',
   'querystring',
   'stream',
+  'stream/promises',
   'string_decoder',
+  'timers',
+  'timers/promises',
   'url',
   'util',
   'util/types',
+  // Known but not-yet-supported: resolve as builtin so load() can throw ERR_NOT_SUPPORTED
+  'child_process',
+  'net',
+  'http',
+  'https',
+  'http2',
+  'crypto',
+  'zlib',
+  'readline',
+  'tty',
+  'worker_threads',
+  'dgram',
+  'dns',
+  'tls',
+  'cluster',
+  'vm',
 ]);
 
 function isBuiltinName(name) {
