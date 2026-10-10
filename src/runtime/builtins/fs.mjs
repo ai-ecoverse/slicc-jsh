@@ -201,27 +201,9 @@ export function createFs({ ctx, path, process, Buffer, handles }) {
       const encoding = typeof options === 'string' ? options : options?.encoding;
       if (p === 0 || p === '0') return readStdinSync(encoding);
       const pathArg = p;
-      if (pathArg === '/dev/stdin') {
-        const e = nodeFsError('EACCES', 'open', pathArg);
-        e._fsPretty =
-          `node:fs:560\n  return binding.open(\n                 ^\n\n` +
-          `Error: EACCES: permission denied, open '/dev/stdin'\n` +
-          `    at Object.openSync (node:fs:560:18)\n` +
-          `    at Object.readFileSync (node:fs:444:35)\n` +
-          `    at [eval]:1:81\n` +
-          `    at runScriptInThisContext (node:internal/vm:209:10)\n` +
-          `    at node:internal/process/execution:446:12\n` +
-          `    at [eval]-wrapper:6:24\n` +
-          `    at runScriptInContext (node:internal/process/execution:444:60)\n` +
-          `    at evalFunction (node:internal/process/execution:279:30)\n` +
-          `    at evalTypeScript (node:internal/process/execution:291:3)\n` +
-          `    at node:internal/main/eval_string:74:3 {\n` +
-          `  errno: -13,\n` +
-          `  code: 'EACCES',\n` +
-          `  syscall: 'open',\n` +
-          `  path: '/dev/stdin'\n` +
-          `}\n`;
-        throw e;
+      // Node: /dev/stdin (and /dev/fd/0) read the process stdin stream.
+      if (pathArg === '/dev/stdin' || pathArg === '/dev/fd/0') {
+        return readStdinSync(encoding);
       }
       const target = abs(p);
       try {
@@ -344,8 +326,8 @@ export function createFs({ ctx, path, process, Buffer, handles }) {
     openSync(p, flags = 'r', mode) {
       void mode;
       const pathArg = p;
-      if (pathArg === '/dev/stdin') {
-        throw nodeFsError('EACCES', 'open', pathArg);
+      if (pathArg === '/dev/stdin' || pathArg === '/dev/fd/0') {
+        return 0;
       }
       const target = abs(p);
       try {

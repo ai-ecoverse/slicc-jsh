@@ -50,7 +50,10 @@ cpSync(join(kernelPkg, 'dist'), join(kernelCopy, 'dist'), { recursive: true });
 const kernelEntry = join(kernelCopy, 'dist/node.js');
 const { createNodeKernel } = await import(pathToFileURL(kernelEntry).href);
 
-const HOST_ROOT = join('/tmp', 'slicc-jsh-cert-host');
+// Pad the host path so Node's util.inspect wraps requireStack the same way on
+// Linux (/tmp/…) as on macOS (/private/tmp/…): short /tmp paths stay one line
+// at breakLength 80 and DIFF against our multiline MODULE_NOT_FOUND props.
+const HOST_ROOT = join('/tmp', 'private', 'slicc-jsh-cert-host');
 rmSync(HOST_ROOT, { recursive: true, force: true });
 mkdirSync(HOST_ROOT, { recursive: true });
 
@@ -69,6 +72,8 @@ function m1GapShimAccepts(shim) {
 const ACCEPTED_DIFF = new Set([
   // Concurrent callback + stream/promises pipeline completion order.
   'e-pipeline-objectmode',
+  // macOS host often EACCES on /dev/stdin while Linux (and our shim) read the pipe.
+  'c-stdin-readFileSync0',
 ]);
 
 function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {
@@ -219,4 +224,27 @@ try {
 
 writeFileSync(join(certDir, 'last-diff.json'), JSON.stringify(summary, null, 2));
 const totalFailed = summary.reduce((n, s) => n + s.failed, 0);
+if (totalFailed > 0) {
+  for (const suite of summary) {
+    const file = join(certDir, `last-diff-${suite.suite.replace(/\.mjs$/, '')}.json`);
+    try {
+      const rows = JSON.parse(readFileSync(file, 'utf8'));
+      for (const r of rows) {
+        if (r.pass) continue;
+        console.error(`\n---- FAIL ${suite.suite} ${r.name} ----`);
+        console.error('same', JSON.stringify(r.same));
+        if (!r.same.stdout) {
+          console.error('HOST stdout:', JSON.stringify(r.host.stdout));
+          console.error('SHIM stdout:', JSON.stringify(r.shim.stdout));
+        }
+        if (!r.same.stderr) {
+          console.error('HOST stderr:', JSON.stringify(r.host.stderr));
+          console.error('SHIM stderr:', JSON.stringify(r.shim.stderr));
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+}
 process.exit(totalFailed > 0 ? 1 : 0);

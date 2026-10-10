@@ -116,7 +116,7 @@ function createStdin(ctx, handles, Buffer) {
     fd: 0,
     isTTY: false,
     readable: true,
-    /** Sync snapshot for fs.readFileSync(0); triggers a best-effort sync drain first. */
+    /** Sync drain for fs.readFileSync(0|/dev/stdin); consumes like a real fd read. */
     _readAllSync() {
       if (!collectDone && typeof ctx.sync?.read === 'function') {
         try {
@@ -138,6 +138,8 @@ function createStdin(ctx, handles, Buffer) {
         out.set(c, at);
         at += c.byteLength;
       }
+      // Node: a second readFileSync(0) after draining stdin sees EOF (empty).
+      collected.length = 0;
       return out;
     },
     setEncoding(enc) {
