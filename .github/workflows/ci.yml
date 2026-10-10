@@ -1,0 +1,50 @@
+# Lint, Node 22 golden baselines, and slicc-kernel Node-entry integration.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22.22.0'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Lint
+        run: npm run lint
+      - name: Golden (host Node 22)
+        timeout-minutes: 5
+        run: npm run test:golden
+      - name: Kernel integration (Node entry, memory root)
+        timeout-minutes: 5
+        run: npm run test:integration
+      - name: Pack (files allowlist)
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination "$RUNNER_TEMP"
+          tgz=$(ls "$RUNNER_TEMP"/ai-ecoverse-slicc-jsh-*.tgz)
+          echo "packed $tgz"
+          tar -tzf "$tgz" | tee "$RUNNER_TEMP/listing.txt"
+          if grep -E 'package/test/|package/scripts/' "$RUNNER_TEMP/listing.txt"; then
+            echo "refuse: tarball ships test/ or scripts/" >&2
+            exit 1
+          fi
+          test -n "$(grep 'package/dist/node.mjs' "$RUNNER_TEMP/listing.txt")"
+          test -n "$(grep 'package/dist/jsh.mjs' "$RUNNER_TEMP/listing.txt")"
+          test -n "$(grep 'package/NOTICE' "$RUNNER_TEMP/listing.txt")"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: package
+          path: ${{ runner.temp }}/ai-ecoverse-slicc-jsh-*.tgz
+          if-no-files-found: error

@@ -3,3 +3,5 @@ coverage/
 dist/
 *.tgz
 .DS_Store
+npm-debug.log*
+package-lock.json.bak

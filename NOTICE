@@ -1,0 +1,9 @@
+@ai-ecoverse/slicc-jsh
+Copyright 2026 AI Ecoverse contributors
+
+This product includes software developed for SLICC (https://github.com/ai-ecoverse/slicc),
+ported from the v6 JS realm (packages/webapp/src/kernel/realm/) under the Apache License,
+Version 2.0.
+
+Ported components originate from ai-ecoverse/slicc and remain under Apache-2.0.
+See LICENSE for the full license text.

@@ -1,5 +1,36 @@
 # @ai-ecoverse/slicc-jsh
 
-A Node.js-compatible runtime for slicc-kernel: the `node` and `jsh` commands, built on the kernel's `abi: "js"` programs.
+A Node.js-compatible runtime for [slicc-kernel](https://github.com/ai-ecoverse/slicc-kernel): the `node` and `jsh` commands, built on the kernel's `abi: "js"` programs.
 
-Status: planned, see [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-kernel/issues/68) for the design and milestones.
+Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-kernel/issues/68).
+
+## Status
+
+**M1 in progress** — package skeleton, CJS/`process`/builtins follow in subsequent PRs. Requires `slicc-kernel` ≥ 1.40.1 (`engines.slicc-kernel`).
+
+## Commands
+
+| Command | Module | Notes |
+|---|---|---|
+| `node` | `dist/node.mjs` | Node 22.x-compatible entry |
+| `jsh` | `dist/jsh.mjs` | `.jsh` scripts; binfmt maps `.jsh` → `jsh` |
+
+## Develop
+
+```bash
+npm ci
+npm run build
+npm run lint
+npm run test:golden          # host Node 22 baselines (npx node@22)
+npm run test:integration     # slicc-kernel Node entry, memory root
+```
+
+Golden fixtures live under `test/golden/fixtures/` and are **not** published (`files` allowlists `dist` only). Record baselines with Node 22:
+
+```bash
+npm run golden:record
+```
+
+## Publish
+
+Pre-releases (M1–M3) use the npm `next` tag via `.github/workflows/publish.yml` (`workflow_dispatch` with `run` + `certified` sha). Certification and publish are coordinator-owned; this package does not auto-publish from CI.
