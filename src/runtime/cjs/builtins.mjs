@@ -93,11 +93,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const timersMod = createTimersModule(timers);
   const timersPromises = createTimersPromises(timers, handles);
 
-  const moduleApi = {
-    builtinModules: [...BUILTIN_LIST],
-    createRequire: null,
-    Module: null,
-  };
+  /** Set by createCjs once Module is built — Node exports the constructor itself. */
+  let ModuleExport = null;
 
   const implemented = {
     process: () => process,
@@ -105,7 +102,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     console: () => console,
     path: () => path,
     'path/posix': () => path,
-    module: () => moduleApi,
+    module: () => ModuleExport,
     fs: () => fs,
     'fs/promises': () => fs.promises,
     events: () => events,
@@ -124,7 +121,10 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
 
   return {
-    moduleApi,
+    installModule(Module) {
+      Module.builtinModules = [...BUILTIN_LIST];
+      ModuleExport = Module;
+    },
     util,
     has(id) {
       const bare = id.startsWith('node:') ? id.slice(5) : id;

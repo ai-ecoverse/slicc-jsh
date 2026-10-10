@@ -79,7 +79,10 @@ export const cases = [
   { name: 'globals', argv: ['-e', "console.log(typeof globalThis.global, typeof structuredClone, typeof TextEncoder, typeof URL, typeof AbortController, typeof atob, typeof performance.now(), typeof queueMicrotask, typeof setImmediate, typeof clearImmediate, typeof fetch, typeof WebSocket)"] },
   // --- not in M1
   { name: 'm1-esm-file', argv: ['main.mjs'], files: { 'main.mjs': "import fs from 'fs';\nconsole.log(typeof fs.readFileSync)\n" }, m1gap: true },
+  // Node 22 detects wrapper-name redeclare as ESM; M1 surfaces the ESM gap message.
+  { name: 'm1-esm-wrapper-redeclare', argv: ['main.js'], files: { 'main.js': "const require = 1;\nconsole.log(require)\n" }, m1gap: true },
   { name: 'm1-esm-import-cjs', argv: ['-e', "import('fs').then(m=>console.log(typeof m.readFileSync)).catch(e=>console.log('ERR', e.code, e.message))"], m1gap: true },
+
   { name: 'm1-child_process', argv: ['-e', "try { const cp=require('child_process'); console.log(typeof cp.execSync, cp.execSync('echo hi').toString().trim()) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },
   { name: 'm1-net', argv: ['-e', "try { const net=require('net'); const s=net.createServer(); s.listen(0, ()=>{ console.log('listening'); s.close() }) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },
   { name: 'm1-http', argv: ['-e', "try { require('http').createServer(()=>{}).listen(0,function(){console.log('http up'); this.close()}) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },

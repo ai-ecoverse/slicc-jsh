@@ -75,12 +75,21 @@ export function wrapCallSite(frame) {
   const line = adjustLine(rawLine);
   const col = frame.getColumnNumber?.() ?? parsed?.column ?? 0;
 
-  let fn = frame.getFunctionName?.() || parsed?.name || null;
-  if (fn === 'eval' || fn === 'Object.eval') fn = 'Object.<anonymous>';
-  if (fn === '<anonymous>') fn = 'Object.<anonymous>';
-
   const method = frame.getMethodName?.();
   const typeName = frame.getTypeName?.();
+
+  let fn = frame.getFunctionName?.() || null;
+  if (fn === 'eval' || fn === 'Object.eval') fn = 'Object.<anonymous>';
+  if (fn === '<anonymous>') fn = null;
+
+  // Prefer Type.method when V8 reports a method call (Timeout._onTimeout).
+  // Do not trust parsed.toString names — they may already say Object.<anonymous>.
+  if (method && typeName && typeName !== 'Object') {
+    fn = `${typeName}.${method}`;
+  } else if (!fn) {
+    fn = parsed?.name || null;
+    if (fn === '<anonymous>') fn = null;
+  }
   if (fn && fn !== 'Object.<anonymous>' && typeName === 'Object' && method && fn === method) {
     fn = `Object.${method}`;
   } else if (
@@ -110,6 +119,8 @@ export function wrapCallSite(frame) {
       if (fn === 'Object.<anonymous>') return null;
       if (isToplevel && !ctor) return null;
       if (fn?.startsWith('Object.') && !ctor) return fn.slice(7);
+      // Timeout._onTimeout: CallSite function name stays null; method carries it.
+      if (fn && method && typeName && fn === `${typeName}.${method}`) return null;
       return fn;
     },
     getMethodName: () => method,
@@ -143,11 +154,18 @@ function formatFrame(frame) {
   return `    at ${text}`;
 }
 
+function stackHeader(err) {
+  // Node: empty message → "Error" (no colon); captureStackTrace({}) → "Error".
+  const name = err?.name || 'Error';
+  const msg = err?.message;
+  if (msg === undefined || msg === '') return name;
+  return `${name}: ${msg}`;
+}
+
 function defaultPrepare(err, frames) {
   if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
   const kept = frames.filter((f) => !isKernelFrame(f));
-  const first = `${err.name || 'Error'}: ${err.message}`;
-  return [first, ...kept.map((f) => formatFrame(wrapCallSite(f)))].join('\n');
+  return [stackHeader(err), ...kept.map((f) => formatFrame(wrapCallSite(f)))].join('\n');
 }
 
 /** Install once per runNode — wraps user prepareStackTrace CallSites. */

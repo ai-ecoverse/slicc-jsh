@@ -36,6 +36,13 @@ const main = await esbuild.build({
 });
 
 const sdPath = require.resolve('string_decoder/');
+// One Buffer class: vendor bundles must not ship npm `buffer` / safe-buffer.
+const bufferShim = join(root, 'src/vendor-shims/buffer.cjs');
+const vendorBufferAlias = {
+  buffer: bufferShim,
+  'safe-buffer': bufferShim,
+};
+
 const stream = await esbuild.build({
   entryPoints: [require.resolve('readable-stream/lib/ours/browser.js')],
   outfile: join(dist, 'vendor/readable-stream.cjs'),
@@ -50,6 +57,7 @@ const stream = await esbuild.build({
     events: require.resolve('events/'),
     string_decoder: sdPath,
     'abort-controller': require.resolve('abort-controller'),
+    ...vendorBufferAlias,
   },
   plugins: [
     {
@@ -86,6 +94,7 @@ const decoder = await esbuild.build({
   mainFields: ['main', 'module'],
   logLevel: 'info',
   metafile: true,
+  alias: { ...vendorBufferAlias },
 });
 
 writeFileSync(join(dist, 'meta-main.json'), JSON.stringify(main.metafile));

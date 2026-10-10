@@ -6,9 +6,9 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 ## Status
 
-**M1 candidate (0.1.0-6)** — Node-entry lockdown ([slicc-kernel#297](https://github.com/ai-ecoverse/slicc-kernel/issues/297)): CJS wrapper is Node's 5-arg form; `process` / `Buffer` / timers are real globals; no fabricated `node:internal` frames. Cert harness: cases 1–4 (hb2), kernel loaded from a plain dist path.
+**M1 candidate (0.1.0-7)** — Node-entry lockdown ([slicc-kernel#297](https://github.com/ai-ecoverse/slicc-kernel/issues/297)): CJS wrapper is Node's 5-arg form; `process` / `Buffer` / timers are real globals; vendor stream/string_decoder share jsh's Buffer class. Cert harness: cases 1–4 (hb2), kernel loaded from a plain dist path.
 
-**Not in M1 (by design):** `child_process` / `net` / `http` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED`. ESM (`.mjs` / `"type":"module"`) is M2. Under kernel ≥ 1.48.3, `globalThis.fetch` / `WebSocket` stay non-configurable `undefined` (same withhold as `require`); use `ctx.fetch` / `ctx.websocket` until the kernel leaves those slots writable. Requires `slicc-kernel` ≥ 1.48.3.
+**Not in M1 (by design):** `child_process` / `net` / `http` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED`. ESM (`.mjs` / `"type":"module"` / wrapper-name redeclare) is M2. Under kernel ≥ 1.48.3, `globalThis.fetch` / `WebSocket` stay non-configurable `undefined` (same withhold as `require`); use `ctx.fetch` / `ctx.websocket` until the kernel leaves those slots writable. Requires `slicc-kernel` ≥ 1.48.3 (bump to the #312 release when it ships so host `Buffer` stays for undici).
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

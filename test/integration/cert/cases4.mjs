@@ -44,4 +44,13 @@ export const cases = [
   { name: 'b-compare-equals-type', argv: ['-e', "const b=Buffer.alloc(1); for (const f of [()=>Buffer.compare(b,'abc'), ()=>Buffer.compare('abc',b), ()=>b.equals('abc'), ()=>b.compare('abc')]) { try { f(); console.log('noerr') } catch (e) { console.log(e.code, e.message) } }"] },
   // 0.1.0-6: jsh Buffer must satisfy undici Response/Request body paths (kernel 1.48.3 vacates host Buffer)
   { name: 'g-undici-bodies', argv: ['-e', "(async()=>{ console.log(globalThis.Buffer===Buffer, await new Response('x').text(), await Response.json({a:1}).text(), new TextDecoder().decode(await new Response('hi').arrayBuffer()), await new Request('http://e',{method:'POST',body:'z'}).text()) })()"] },
+  // 0.1.0-7: one Buffer class across stream / string_decoder vendor bundles
+  { name: 'b-stream-chunk-buffer', argv: ['-e', "const {PassThrough}=require('stream'); const pt=new PassThrough(); pt.end(Buffer.from('hi')); pt.on('data',c=>console.log(Buffer.isBuffer(c), c instanceof Buffer, c.equals(Buffer.from('hi')), c.equals(new Uint8Array([0x68,0x69]))))"] },
+  { name: 'b-decoder-lastchar-buffer', argv: ['-e', "const {StringDecoder}=require('string_decoder'); const d=new StringDecoder('utf8'); d.write(Buffer.from([0xe1])); console.log(Buffer.isBuffer(d.lastChar), d.lastChar instanceof Buffer)"] },
+  // SHOULD polish
+  { name: 's-error-stack-header', argv: ['-e', "const e=new Error(); const o={}; Error.captureStackTrace(o); console.log(JSON.stringify(e.stack.split('\\n')[0]), JSON.stringify(o.stack.split('\\n')[0]))"] },
+  { name: 's-string-decoder-encoding', argv: ['-e', "try { new (require('string_decoder').StringDecoder)('nope') } catch (e) { console.log(e.name, e.code, e.message) }"] },
+  { name: 's-module-constructor', argv: ['main.js'], files: { 'main.js': "const m=require('module'); console.log(module.constructor===m, module.constructor===m.Module, typeof m.createRequire)\n" } },
+  { name: 's-arg-type-number', argv: ['-e', "try { Buffer.compare(1, Buffer.alloc(1)) } catch (e) { console.log(e.code, e.message) }; try { process.nextTick(1) } catch (e) { console.log(e.code, e.message) }"] },
+  { name: 's-timeout-onTimeout', argv: ['-e', "setTimeout(function(){ try { throw new Error('t') } catch (e) { console.log(/Timeout\\._onTimeout/.test(e.stack)); process.exit(0) } }, 0)"] },
 ];

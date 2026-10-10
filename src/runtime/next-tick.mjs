@@ -12,7 +12,15 @@ export function createNextTick() {
   return {
     nextTick(fn, ...args) {
       if (typeof fn !== 'function') {
-        const err = new TypeError('callback is not a function');
+        let received = `type ${typeof fn}`;
+        if (typeof fn === 'number' || typeof fn === 'boolean' || typeof fn === 'bigint') {
+          received = `type ${typeof fn} (${fn})`;
+        } else if (typeof fn === 'string') {
+          received = `type string ('${fn}')`;
+        }
+        const err = new TypeError(
+          `The "callback" argument must be of type function. Received ${received}`
+        );
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
       }

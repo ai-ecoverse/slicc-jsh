@@ -24,8 +24,21 @@ export function createStringDecoder({ ctx, process, Buffer } = {}) {
       // Keep a function constructor (not class) so StringDecoder.call(obj) works
       // like Node. Map base64url → base64 (npm 1.3 lacks base64url).
       function StringDecoder(encoding) {
-        const enc = encoding === 'base64url' ? 'base64' : encoding;
-        return Base.call(this, enc);
+        const enc = encoding === undefined || encoding === null ? 'utf8' : encoding;
+        if (typeof enc !== 'string') {
+          const err = new TypeError(
+            `The "encoding" argument must be of type string. Received type ${typeof enc}`
+          );
+          err.code = 'ERR_INVALID_ARG_TYPE';
+          throw err;
+        }
+        const normalized = enc === 'base64url' ? 'base64' : enc;
+        if (!Buffer.isEncoding(normalized)) {
+          const err = new TypeError(`Unknown encoding: ${enc}`);
+          err.code = 'ERR_UNKNOWN_ENCODING';
+          throw err;
+        }
+        return Base.call(this, normalized);
       }
       StringDecoder.prototype = Base.prototype;
       Object.setPrototypeOf(StringDecoder, Base);

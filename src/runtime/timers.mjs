@@ -1,6 +1,10 @@
 /**
  * setTimeout / setInterval with Node's Timeout.ref()/unref() and handle counting.
+ * User callbacks run as Timeout._onTimeout so uncaught stacks match Node.
  */
+
+function Timeout() {}
+
 export function createTimers(handles, { onCallbackError } = {}) {
   const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
   const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
@@ -9,9 +13,9 @@ export function createTimers(handles, { onCallbackError } = {}) {
 
   const byId = new Map();
 
-  const run = (fn, args) => {
+  const runOnTimeout = (handle, args) => {
     try {
-      fn(...args);
+      handle._onTimeout(...args);
     } catch (err) {
       if (onCallbackError) onCallbackError(err);
       else throw err;
@@ -26,38 +30,39 @@ export function createTimers(handles, { onCallbackError } = {}) {
       id: null,
       repeating,
     };
+    const handle = new Timeout();
+    handle._onTimeout = fn;
+    handle.ref = function ref() {
+      if (!state.refed) {
+        state.refed = true;
+        handles.add(state);
+      }
+      return handle;
+    };
+    handle.unref = function unref() {
+      if (state.refed) {
+        state.refed = false;
+        handles.delete(state);
+      }
+      return handle;
+    };
+    handle.hasRef = function hasRef() {
+      return state.refed;
+    };
+    handle[Symbol.toPrimitive] = function toPrimitive() {
+      return state.id;
+    };
+
     const fire = () => {
       if (!state.repeating) {
         byId.delete(state.id);
         handles.delete(state);
       }
-      run(fn, args);
+      runOnTimeout(handle, args);
     };
     state.id = repeating ? nativeSetInterval(fire, delay ?? 0) : nativeSetTimeout(fire, delay ?? 0);
     byId.set(state.id, state);
     handles.add(state);
-    const handle = {
-      ref() {
-        if (!state.refed) {
-          state.refed = true;
-          handles.add(state);
-        }
-        return handle;
-      },
-      unref() {
-        if (state.refed) {
-          state.refed = false;
-          handles.delete(state);
-        }
-        return handle;
-      },
-      hasRef() {
-        return state.refed;
-      },
-      [Symbol.toPrimitive]() {
-        return state.id;
-      },
-    };
     return handle;
   };
 

@@ -110,9 +110,9 @@ export function createCjs({
     },
   };
 
-  builtins.moduleApi.Module = Module;
-  builtins.moduleApi.createRequire = Module.createRequire;
-  builtins.moduleApi.builtinModules = Module.builtinModules;
+  // Node: require('module') === Module constructor; Module.Module === Module.
+  Module.Module = Module;
+  builtins.installModule(Module);
 
   function findPackageType(fromDir) {
     let dir = fromDir;
@@ -175,6 +175,18 @@ export function createCjs({
       );
     } catch (err) {
       if (err instanceof SyntaxError) {
+        // Top-level const/let of a wrapper name is module-syntax detection on
+        // Node 22 (retried as ESM). For M1, surface the same ESM gap message.
+        if (
+          /has already been declared/i.test(err.message || '') &&
+          /\b(exports|require|module|__filename|__dirname)\b/.test(err.message || '')
+        ) {
+          const e = new Error(
+            `slicc-jsh: ESM modules are not supported yet (planned for M2): ${filename}`
+          );
+          e.code = 'ERR_REQUIRE_ESM';
+          throw e;
+        }
         const first = body.split('\n')[0] ?? '';
         let caretAt = first.indexOf(';');
         if (caretAt < 0) caretAt = Math.max(0, first.length - 1);

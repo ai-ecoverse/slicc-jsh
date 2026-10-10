@@ -43,8 +43,11 @@ function throwBufferArgType(name, value) {
   let received;
   if (value === null) received = 'null';
   else if (typeof value === 'string') received = `type string ('${value}')`;
-  else if (typeof value === 'object') received = `an instance of ${value.constructor?.name || 'Object'}`;
-  else received = `type ${typeof value}`;
+  else if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    received = `type ${typeof value} (${value})`;
+  } else if (typeof value === 'object') {
+    received = `an instance of ${value.constructor?.name || 'Object'}`;
+  } else received = `type ${typeof value}`;
   const err = new TypeError(
     `The "${name}" argument must be an instance of Buffer or Uint8Array. Received ${received}`
   );
