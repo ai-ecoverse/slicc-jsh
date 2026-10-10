@@ -1,0 +1,5 @@
+{
+  "description": "stream.Readable push/read",
+  "argv": ["main.js"],
+  "shim": true
+}

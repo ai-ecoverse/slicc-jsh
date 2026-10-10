@@ -1,0 +1,15 @@
+const fs = require('fs');
+const path = require('path');
+const dir = path.join('tmp-fs');
+fs.mkdirSync(dir, { recursive: true });
+const file = path.join(dir, 'a.txt');
+fs.writeFileSync(file, 'hello');
+fs.appendFileSync(file, ' world');
+console.log(fs.readFileSync(file, 'utf8'));
+console.log(fs.existsSync(file));
+console.log(fs.statSync(file).isFile());
+console.log(fs.readdirSync(dir).join(','));
+fs.unlinkSync(file);
+console.log(fs.existsSync(file));
+fs.rmSync(dir, { recursive: true, force: true });
+console.log(fs.existsSync(dir));

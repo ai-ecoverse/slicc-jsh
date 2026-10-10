@@ -1,0 +1,9 @@
+ping 1
+/tmp/x
+file:///tmp/y
+a=1&b=x%20y
+{"a":"1","b":"x y"}
+hi 3
+ab
+"\n"
+function

@@ -27,7 +27,7 @@ export function createCjs({ ctx, process, Buffer, console, timers }) {
   };
 
   const resolver = createResolver({ fs, path, readPackageJson });
-  const builtins = createBuiltins({ process, Buffer, console, path });
+  const builtins = createBuiltins({ ctx, process, Buffer, console, path });
   const cache = Object.create(null);
 
   function Module(id, parent) {
@@ -41,7 +41,26 @@ export function createCjs({ ctx, process, Buffer, console, timers }) {
     this.paths = [];
   }
   Module._cache = cache;
-  Module.builtinModules = ['buffer', 'console', 'module', 'path', 'path/posix', 'process'];
+  Module.builtinModules = [
+    'assert',
+    'assert/strict',
+    'buffer',
+    'console',
+    'events',
+    'fs',
+    'fs/promises',
+    'module',
+    'os',
+    'path',
+    'path/posix',
+    'process',
+    'querystring',
+    'stream',
+    'string_decoder',
+    'url',
+    'util',
+    'util/types',
+  ];
   Module.createRequire = (filename) => {
     const parent =
       typeof filename === 'string'

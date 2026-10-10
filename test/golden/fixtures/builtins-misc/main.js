@@ -1,0 +1,23 @@
+const { EventEmitter } = require('events');
+const assert = require('assert');
+const url = require('url');
+const qs = require('querystring');
+const util = require('util');
+const { StringDecoder } = require('string_decoder');
+const os = require('os');
+
+const ee = new EventEmitter();
+ee.on('ping', (n) => console.log('ping', n));
+ee.emit('ping', 1);
+assert.ok(true);
+assert.equal(1, '1');
+assert.strictEqual(2, 2);
+console.log(url.fileURLToPath('file:///tmp/x'));
+console.log(url.pathToFileURL('/tmp/y').href);
+console.log(qs.stringify({ a: 1, b: 'x y' }));
+console.log(JSON.stringify(qs.parse('a=1&b=x%20y')));
+console.log(util.format('%s %d', 'hi', 3));
+const d = new StringDecoder('utf8');
+console.log(d.write(Buffer.from('ab')) + d.end());
+console.log(JSON.stringify(os.EOL));
+console.log(typeof os.platform);

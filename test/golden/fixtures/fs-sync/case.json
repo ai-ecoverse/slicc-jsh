@@ -1,0 +1,5 @@
+{
+  "description": "fs sync write/read/mkdir/readdir/unlink",
+  "argv": ["main.js"],
+  "shim": true
+}
