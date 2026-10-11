@@ -75,7 +75,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
     #handle;
 
     constructor(options = {}) {
-      super({ allowHalfOpen: options.allowHalfOpen !== false });
+      // Node net.Socket defaults allowHalfOpen to false. HTTP servers opt in
+      // via createServer / Server options so a peer FIN does not end the response.
+      super({ allowHalfOpen: Boolean(options.allowHalfOpen) });
       this.connecting = false;
       this.pending = true;
       this.destroyed = false;
@@ -204,28 +206,18 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       }
     }
 
-    /** Peer FIN / readable EOF — readable-stream Duplex may not emit 'end' while
-     *  the local writable is still open (allowHalfOpen); sockets must. */
-    #signalReadableEnd() {
-      const state = this._readableState;
-      if (state?.endEmitted || this.readableEnded) return;
-      this.push(null);
-      if (state?.endEmitted || this.readableEnded) return;
-      // Defer so we are not inside push()/pumpRead when user 'end' handlers run.
-      queueMicrotask(() => {
-        if (state?.endEmitted || this.readableEnded || this.destroyed) return;
-        this.emit('end');
-      });
-    }
-
     async #pumpRead() {
       try {
         for (;;) {
-          const { value, done } = await this.#reader.read();
+          // Track each read so settlement notifies drainLoop (socket handle alone
+          // stays ref'd and would not wake waitForProgress).
+          const { value, done } = await trackPromise(handles, this.#reader.read());
           if (done) {
-            // Yield so prior push(buf) can flush to 'data' listeners before EOF.
+            // Yield so prior push(buf) nextTicks can run before EOF.
             await Promise.resolve();
-            this.#signalReadableEnd();
+            this.push(null);
+            // Wake drainLoop to flush readable-stream's deferred 'data'/'end'.
+            handles.notify();
             break;
           }
           const buf =
@@ -235,6 +227,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           // Keep pulling from the kernel stream; readable-stream buffers if paused.
           // Waiting on push()===false deadlocks when the only consumer is 'data'.
           this.push(buf);
+          handles.notify();
           await Promise.resolve();
         }
       } catch (err) {
@@ -242,7 +235,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
         // we are not already destroyed so listeners still see 'end'.
         const code = err?.code ?? err?.cause?.code;
         if (!this.destroyed && (code === 'EBADF' || code === 'ECONNRESET' || code === 'EPIPE')) {
-          this.#signalReadableEnd();
+          this.push(null);
+          handles.notify();
         } else if (!this.destroyed) {
           this.destroy(errnoError(err, 'read'));
         }
@@ -420,11 +414,15 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       try {
         for (;;) {
           if (this.#closed) break;
-          const conn = await listener.accept({ signal: this.#acceptAbort.signal });
-          const socket = new Socket();
+          const conn = await trackPromise(
+            handles,
+            listener.accept({ signal: this.#acceptAbort.signal })
+          );
+          const socket = new Socket({ allowHalfOpen: Boolean(this.#options.allowHalfOpen) });
           socket._attach(conn);
           if (this.listenerCount('connection') === 0) socket.resume?.();
           this.emit('connection', socket);
+          handles.notify();
         }
       } catch (err) {
         if (!this.#closed && err?.name !== 'AbortError') {

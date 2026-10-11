@@ -167,17 +167,13 @@ function responseHasNoBody(method, statusCode) {
 export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
   void ctx;
   void process;
-  void handles;
   const stream = getStream();
   const { Readable, Writable } = stream;
 
-  function makeIncomingMessage(socket) {
-    // Empty readable; caller pushes the buffered body after listeners attach
-    // (see handleConnection / ClientRequest). Avoid Readable.from / nextTick:
-    // those can sit unflushed while drainLoop awaits net handles.
+  function makeIncomingMessage(socket, body) {
     const res = new Readable({
       read() {
-        /* body is push()'d by the caller once listeners are registered */
+        /* body is push()'d below; buffered until a consumer reads */
       },
     });
     res.socket = socket;
@@ -193,20 +189,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     res.statusMessage = undefined;
     res.complete = true;
     res.setTimeout = () => res;
+    // Plain Readable push — drainLoop checkpoints nextTick after net I/O wakes.
+    if (body && body.length) res.push(body);
+    res.push(null);
+    handles?.notify?.();
     return res;
-  }
-
-  /** Emit buffered body synchronously. readable-stream's push() defers 'data' to
-   *  process.nextTick, which stays unflushed while drainLoop awaits net handles. */
-  function deliverMessageBody(msg, body) {
-    if (body && body.length) msg.emit('data', body);
-    const state = msg._readableState;
-    if (state) {
-      state.ended = true;
-      state.endEmitted = true;
-      state.reading = false;
-    }
-    msg.emit('end');
   }
 
   class ServerResponse extends Writable {
@@ -382,7 +369,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         body = parsed.bodyPrefix.subarray(0, cl);
       }
       socket.off('data', onData);
-      const req = makeIncomingMessage(socket);
+      const req = makeIncomingMessage(socket, body);
       req.method = parsed.method;
       req.url = parsed.url;
       req.httpVersion = parsed.httpVersion;
@@ -394,8 +381,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       const res = new ServerResponse(req);
       server.emit('request', req, res);
       if (typeof requestListener === 'function') requestListener(req, res);
-      // After user listeners are attached so 'data'/'end' fire in this turn.
-      deliverMessageBody(req, body);
     };
     socket.on('data', onData);
     socket.on('error', (err) => server.emit('clientError', err, socket));
@@ -407,7 +392,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         requestListener = options;
         options = {};
       }
-      super(options);
+      // Peer may FIN after the request while we still write the response.
+      super({ ...options, allowHalfOpen: true });
       this.#requestListener = requestListener;
       this.on('connection', (socket) => {
         handleConnection(socket, this.#requestListener, this);
@@ -492,14 +478,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         } catch {
           /* ignore */
         }
-        const res = makeIncomingMessage(null);
+        const res = makeIncomingMessage(null, body);
         res.statusCode = head.parsed.statusCode;
         res.statusMessage = head.parsed.statusMessage;
         res.httpVersion = head.parsed.httpVersion;
         res.rawHeaders = head.parsed.rawHeaders;
         res.headers = head.headers;
         this.emit('response', res);
-        deliverMessageBody(res, body);
       };
 
       const tryEmit = () => {
@@ -667,10 +652,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     METHODS,
     STATUS_CODES,
     IncomingMessage: function IncomingMessage(socket, body) {
-      const msg = makeIncomingMessage(socket);
-      // https emits 'response' on a microtask after construction; deliver then.
-      queueMicrotask(() => deliverMessageBody(msg, body ?? Buffer.alloc(0)));
-      return msg;
+      return makeIncomingMessage(socket, body ?? Buffer.alloc(0));
     },
     ServerResponse,
     Server,

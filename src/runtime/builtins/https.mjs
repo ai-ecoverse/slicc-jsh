@@ -21,16 +21,6 @@ function isManualRedirectUnsupported(err) {
   return /redirect:\s*manual/i.test(msg);
 }
 
-/** ctx.fetch with redirect:manual, falling back to follow when unsupported. */
-async function fetchHttp(ctx, url, init) {
-  try {
-    return await ctx.fetch(url, { ...init, redirect: 'manual' });
-  } catch (err) {
-    if (!isManualRedirectUnsupported(err)) throw err;
-    return ctx.fetch(url, { ...init, redirect: 'follow' });
-  }
-}
-
 function rejectTlsOptions(options) {
   for (const name of TLS_CLIENT_OPTS) {
     if (options?.[name] != null) {
@@ -56,6 +46,25 @@ function headersToObject(headers) {
 }
 
 export function createHttps({ ctx, Buffer, http, handles }) {
+  // Kernel rejects redirect:'manual' with ENOTSUP before send() when the
+  // transport lacks traits.manualRedirects (browser fetchTransport). Remember
+  // per process so we do not probe twice on every request.
+  let manualRedirects = true;
+
+  /** ctx.fetch with redirect:manual, falling back to follow when unsupported. */
+  async function fetchHttp(url, init) {
+    if (!manualRedirects) {
+      return ctx.fetch(url, { ...init, redirect: 'follow' });
+    }
+    try {
+      return await ctx.fetch(url, { ...init, redirect: 'manual' });
+    } catch (err) {
+      if (!isManualRedirectUnsupported(err)) throw err;
+      manualRedirects = false;
+      return ctx.fetch(url, { ...init, redirect: 'follow' });
+    }
+  }
+
   function createServer() {
     throw notSupported('https.createServer');
   }
@@ -169,7 +178,7 @@ export function createHttps({ ctx, Buffer, http, handles }) {
             : this.#body.length
               ? Buffer.concat(this.#body)
               : undefined;
-        const res = await fetchHttp(ctx, url, {
+        const res = await fetchHttp(url, {
           method,
           headers: this.#headers,
           body,

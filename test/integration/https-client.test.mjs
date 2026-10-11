@@ -100,15 +100,19 @@ describe('https client (ctx.fetch)', () => {
       },
     };
     const https = createHttps({ ctx, Buffer, http: makeHttpStub() });
-    const status = await new Promise((resolve, reject) => {
-      const req = https.get('https://example.test/', (res) => {
-        resolve(res.statusCode);
-        res.resume();
+    const get = () =>
+      new Promise((resolve, reject) => {
+        const req = https.get('https://example.test/', (res) => {
+          resolve(res.statusCode);
+          res.resume();
+        });
+        req.on('error', reject);
       });
-      req.on('error', reject);
-    });
+    assert.equal(await get(), 200);
     assert.deepEqual(seen, ['manual', 'follow']);
-    assert.equal(status, 200);
+    // Remembered per process — second request must not probe manual again.
+    assert.equal(await get(), 200);
+    assert.deepEqual(seen, ['manual', 'follow', 'follow']);
   });
 
   it('destroy()/abort() cancel via AbortSignal', async () => {

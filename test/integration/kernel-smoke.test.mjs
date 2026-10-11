@@ -208,6 +208,80 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
     }
   });
 
+  it('http response body supports pipe, for-await, setEncoding, late listener', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await run([
+        'node',
+        '-e',
+        [
+          "const http=require('http'), {Writable}=require('stream');",
+          "const body='hello-stream';",
+          "const s=http.createServer((req,res)=>res.end(body));",
+          "s.listen(0,async()=>{",
+          "  const {port}=s.address();",
+          "  const url='http://127.0.0.1:'+port+'/';",
+          "  const get=()=>new Promise((resolve,reject)=>{",
+          "    http.get(url,res=>resolve(res)).on('error',reject);",
+          "  });",
+          "  const out=[];",
+          // pipe
+          "  {",
+          "    const res=await get();",
+          "    let d='';",
+          "    const w=new Writable({write(c,_,cb){d+=c;cb();}});",
+          "    await new Promise((resolve,reject)=>{",
+          "      w.on('finish',resolve); w.on('error',reject); res.on('error',reject);",
+          "      res.pipe(w);",
+          "    });",
+          "    out.push('pipe:'+d);",
+          "  }",
+          // for-await
+          "  {",
+          "    const res=await get();",
+          "    let d='';",
+          "    for await (const c of res) d+=c;",
+          "    out.push('async:'+d);",
+          "  }",
+          // setEncoding
+          "  {",
+          "    const res=await get();",
+          "    res.setEncoding('utf8');",
+          "    let d=''; let types=[];",
+          "    await new Promise((resolve,reject)=>{",
+          "      res.on('data',c=>{types.push(typeof c);d+=c;});",
+          "      res.on('end',resolve); res.on('error',reject);",
+          "    });",
+          "    out.push('enc:'+d+':'+(types[0]||''));",
+          "  }",
+          // late listener after await
+          "  {",
+          "    const res=await get();",
+          "    await new Promise(r=>setTimeout(r,10));",
+          "    let d='';",
+          "    await new Promise((resolve,reject)=>{",
+          "      res.setEncoding('utf8');",
+          "      res.on('data',c=>d+=c);",
+          "      res.on('end',resolve); res.on('error',reject);",
+          "    });",
+          "    out.push('late:'+d);",
+          "  }",
+          "  console.log(out.join('|'));",
+          "  s.close();",
+          "  setImmediate(()=>process.exit(0));",
+          "});",
+        ].join(''),
+      ]);
+      assert.equal(r.status, 0);
+      assert.equal(
+        r.stdout,
+        'pipe:hello-stream|async:hello-stream|enc:hello-stream:string|late:hello-stream\n'
+      );
+    } finally {
+      close();
+    }
+  });
+
   it('http server rejects oversized Content-Length with 413', async () => {
     const { run, close } = await withJsh();
     try {
