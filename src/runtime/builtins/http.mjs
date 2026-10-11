@@ -697,8 +697,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
           this.#flushHeadersAndBufferedBody();
         }
       };
-      // Already connected (agent-base may hand off an open socket).
-      if (socket.connecting === false && socket.readable !== false) {
+      // Already connected (agent-base may hand off an open socket or generic Duplex
+      // with no `connecting` property and no future 'connect' event).
+      if (socket.connecting !== true && socket.readable !== false) {
         queueMicrotask(onReady);
       } else {
         socket.on('connect', onReady);
