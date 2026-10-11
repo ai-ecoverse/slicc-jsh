@@ -178,7 +178,7 @@ export function transformEsm(source, filename) {
         replacements.push({
           start: stmt.start,
           end: stmt.end,
-          text: `const ${syn} = (${body.slice(d.start, d.end)});`,
+          text: `const ${syn} = (${expandLiveShorthandSlice(body, d, liveLocals)});`,
         });
         bindExport('default', syn);
       } else {
@@ -187,7 +187,7 @@ export function transformEsm(source, filename) {
         replacements.push({
           start: stmt.start,
           end: stmt.end,
-          text: `var ${syn} = (${body.slice(d.start, d.end)});`,
+          text: `var ${syn} = (${expandLiveShorthandSlice(body, d, liveLocals)});`,
         });
         bindExport('default', syn);
       }
@@ -300,7 +300,12 @@ function isValueReference(node, parent) {
   if (parent.type === 'MemberExpression' && parent.property === node && !parent.computed) {
     return false;
   }
-  if (parent.type === 'Property' && parent.key === node && !parent.computed) return false;
+  // Object/class property key (including shorthand — key and value are the same node).
+  if (parent.type === 'Property' || parent.type === 'MethodDefinition') {
+    if (parent.key === node && !parent.computed) return false;
+    // Shorthand `{ x }` must expand to `{ x: __live["x"] }`, not `{ __live["x"] }`.
+    if (parent.shorthand && parent.value === node) return false;
+  }
   if (parent.type === 'LabeledStatement' && parent.label === node) return false;
   if (parent.type === 'ImportSpecifier' || parent.type === 'ImportDefaultSpecifier') {
     return false;
@@ -318,6 +323,19 @@ function isValueReference(node, parent) {
   ) {
     return false;
   }
+  // Function/catch parameter bindings (not default-value expressions).
+  if (
+    (parent.type === 'FunctionDeclaration' ||
+      parent.type === 'FunctionExpression' ||
+      parent.type === 'ArrowFunctionExpression') &&
+    parent.params.includes(node)
+  ) {
+    return false;
+  }
+  if (parent.type === 'CatchClause' && parent.param === node) return false;
+  if (parent.type === 'AssignmentPattern' && parent.left === node) return false;
+  if (parent.type === 'RestElement' && parent.argument === node) return false;
+  if (parent.type === 'ArrayPattern' && parent.elements.includes(node)) return false;
   if (parent.type === 'AssignmentExpression' && parent.left === node) {
     // Still a reference (assign to import is invalid, but rewrite anyway).
     return true;
@@ -332,6 +350,23 @@ function isValueReference(node, parent) {
 function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
   const visit = (node, parent, shadows) => {
     if (!node || typeof node !== 'object') return;
+    // Expand `{ x }` / `{ x, y }` shorthand when `x` is an imported live binding.
+    // Skip ObjectPattern / destructuring bindings (those shadow the import).
+    if (node.type === 'Property' && node.shorthand && node.key?.type === 'Identifier') {
+      const name = node.key.name;
+      if (
+        liveLocals.has(name) &&
+        !shadows.has(name) &&
+        parent?.type !== 'ObjectPattern'
+      ) {
+        replacements.push({
+          start: node.start,
+          end: node.end,
+          text: `${name}: __live[${JSON.stringify(name)}]`,
+        });
+        return; // do not walk into key/value (same Identifier)
+      }
+    }
     if (node.type === 'Identifier') {
       if (
         liveLocals.has(node.name) &&
@@ -355,10 +390,11 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
       const inner = new Set(shadows);
       if (node.id?.name) inner.add(node.id.name);
       for (const p of node.params) collectBoundNames(p, (n) => inner.add(n));
-      // Visit id/params with outer shadows so we don't rewrite the binding names;
-      // visit body with inner.
-      if (node.id) visit(node.id, node, shadows);
-      for (const p of node.params) visit(p, node, shadows);
+      // Params (and their destructuring bindings) shadow imports — visit with
+      // `inner` so `function (func) {}` is not rewritten to `__live["func"]`.
+      // Default-value expressions still rewrite free refs not in `inner`.
+      if (node.id) visit(node.id, node, inner);
+      for (const p of node.params) visit(p, node, inner);
       visit(node.body, node, inner);
       return;
     }
@@ -390,7 +426,7 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
     if (node.type === 'CatchClause') {
       const inner = new Set(shadows);
       if (node.param) collectBoundNames(node.param, (n) => inner.add(n));
-      if (node.param) visit(node.param, node, shadows);
+      if (node.param) visit(node.param, node, inner);
       visit(node.body, node, inner);
       return;
     }
@@ -427,16 +463,114 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
       stmt.type === 'ExportNamedDeclaration' ||
       stmt.type === 'ExportDefaultDeclaration'
     ) {
-      // Still walk export declaration bodies (e.g. export function / export default expr).
+      // Walk export declaration bodies that remain in the source (strip "export " only).
+      // Expression-form `export default { x }` is fully replaced in pass 1 — do not
+      // rewrite its AST positions (would collide with the replacement text).
       if (stmt.type === 'ExportNamedDeclaration' && stmt.declaration) {
         visit(stmt.declaration, stmt, topShadows);
-      } else if (stmt.type === 'ExportDefaultDeclaration') {
+      } else if (
+        stmt.type === 'ExportDefaultDeclaration' &&
+        (stmt.declaration.type === 'FunctionDeclaration' ||
+          stmt.declaration.type === 'ClassDeclaration') &&
+        stmt.declaration.id
+      ) {
         visit(stmt.declaration, stmt, topShadows);
       }
       continue;
     }
     visit(stmt, ast, topShadows);
   }
+}
+
+/**
+ * Rewrite live bindings inside an AST node for replacement text (export default expr).
+ * Expands `{ x }` → `{ x: __live["x"] }` and free refs → `__live["x"]`.
+ */
+function expandLiveShorthandSlice(source, node, liveLocals) {
+  // `export default lodash` — whole declaration is one Identifier (no parent).
+  if (node.type === 'Identifier' && liveLocals.has(node.name)) {
+    return `__live[${JSON.stringify(node.name)}]`;
+  }
+  const reps = [];
+  const visit = (n, parent, shadows) => {
+    if (!n || typeof n !== 'object') return;
+    if (n.type === 'Property' && n.shorthand && n.key?.type === 'Identifier') {
+      const name = n.key.name;
+      if (
+        liveLocals.has(name) &&
+        !shadows.has(name) &&
+        parent?.type !== 'ObjectPattern'
+      ) {
+        reps.push({
+          start: n.start - node.start,
+          end: n.end - node.start,
+          text: `${name}: __live[${JSON.stringify(name)}]`,
+        });
+        return;
+      }
+    }
+    if (n.type === 'Identifier') {
+      if (
+        liveLocals.has(n.name) &&
+        !shadows.has(n.name) &&
+        isValueReference(n, parent)
+      ) {
+        reps.push({
+          start: n.start - node.start,
+          end: n.end - node.start,
+          text: `__live[${JSON.stringify(n.name)}]`,
+        });
+      }
+      return;
+    }
+    if (
+      n.type === 'FunctionDeclaration' ||
+      n.type === 'FunctionExpression' ||
+      n.type === 'ArrowFunctionExpression'
+    ) {
+      const inner = new Set(shadows);
+      if (n.id?.name) inner.add(n.id.name);
+      for (const p of n.params) collectBoundNames(p, (nm) => inner.add(nm));
+      if (n.id) visit(n.id, n, inner);
+      for (const p of n.params) visit(p, n, inner);
+      visit(n.body, n, inner);
+      return;
+    }
+    if (n.type === 'BlockStatement') {
+      const inner = new Set(shadows);
+      for (const stmt of n.body) {
+        if (stmt.type === 'VariableDeclaration') {
+          for (const d of stmt.declarations) collectBoundNames(d.id, (nm) => inner.add(nm));
+        } else if (stmt.type === 'FunctionDeclaration' && stmt.id) {
+          inner.add(stmt.id.name);
+        }
+      }
+      for (const stmt of n.body) visit(stmt, n, inner);
+      return;
+    }
+    if (n.type === 'CatchClause') {
+      const inner = new Set(shadows);
+      if (n.param) collectBoundNames(n.param, (nm) => inner.add(nm));
+      if (n.param) visit(n.param, n, inner);
+      visit(n.body, n, inner);
+      return;
+    }
+    for (const key of Object.keys(n)) {
+      if (key === 'start' || key === 'end' || key === 'loc' || key === 'range') continue;
+      const val = n[key];
+      if (Array.isArray(val)) {
+        for (const child of val) {
+          if (child && typeof child.type === 'string') visit(child, n, shadows);
+        }
+      } else if (val && typeof val.type === 'string') {
+        visit(val, n, shadows);
+      }
+    }
+  };
+  visit(node, null, new Set());
+  const slice = source.slice(node.start, node.end);
+  if (!reps.length) return slice;
+  return applyReplacements(slice, reps);
 }
 
 function collectBoundNames(pattern, onName) {

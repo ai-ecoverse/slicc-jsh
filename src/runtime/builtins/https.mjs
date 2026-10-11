@@ -249,10 +249,15 @@ export function createHttps({ ctx, Buffer, http, handles }) {
     return req;
   }
 
+  // Reuse http.Agent when present; unit stubs may omit it.
+  const Agent =
+    typeof http?.Agent === 'function'
+      ? http.Agent
+      : class Agent extends EventEmitter {};
   return {
     ...http,
-    globalAgent: new (class Agent extends EventEmitter {})(),
-    Agent: class Agent extends EventEmitter {},
+    Agent,
+    globalAgent: new Agent({ protocol: 'https:' }),
     createServer,
     request,
     get,

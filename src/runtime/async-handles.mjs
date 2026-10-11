@@ -5,9 +5,17 @@
 export function trackPromise(handles, promise) {
   const handle = { kind: 'promise' };
   handles.add(handle);
-  return Promise.resolve(promise).finally(() => {
+  const p = Promise.resolve(promise);
+  // Keep the loop alive without creating a second rejecting branch that becomes
+  // an unhandledRejection when callers only need the side effect (or also await
+  // the original). Caught import() evaluation errors must stay caught.
+  p.finally(() => {
     handles.delete(handle);
-  });
+  }).then(
+    () => {},
+    () => {}
+  );
+  return p;
 }
 
 /** Resolve after the current microtask queue has been fully drained. */
@@ -43,11 +51,14 @@ async function checkpoint(nextTick) {
  * tracked promise), checkpoint again so nextTicks queued by that work — e.g.
  * readable-stream's deferred 'data'/'end' — run before we wait or exit.
  */
-export async function drainLoop(handles, nextTick, { onBeforeExit } = {}) {
+export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop } = {}) {
   for (;;) {
     await checkpoint(nextTick);
+    // process.exit() from a timer must unwind even while a server is listening.
+    if (shouldStop?.()) return;
     if (handles.refCount > 0) {
       await handles.waitForProgress();
+      if (shouldStop?.()) return;
       // I/O continuations often run as microtasks during the await above and
       // queue nextTicks; drain those before waiting again.
       await checkpoint(nextTick);
@@ -56,6 +67,7 @@ export async function drainLoop(handles, nextTick, { onBeforeExit } = {}) {
     if (onBeforeExit) {
       onBeforeExit();
       await checkpoint(nextTick);
+      if (shouldStop?.()) return;
       if (handles.refCount > 0) continue;
     }
     return;

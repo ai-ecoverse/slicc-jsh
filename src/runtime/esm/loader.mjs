@@ -297,7 +297,15 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
 
   async function importModule(specifier, parentFilename = `${process.cwd()}/`) {
-    const resolved = resolver.resolve(String(specifier), parentFilename, [parentFilename]);
+    let resolved;
+    try {
+      resolved = resolver.resolve(String(specifier), parentFilename, [parentFilename]);
+    } catch (err) {
+      // Node ESM resolve failures use ERR_MODULE_NOT_FOUND; leave evaluation-time
+      // MODULE_NOT_FOUND from nested CJS require() unchanged.
+      if (err && err.code === 'MODULE_NOT_FOUND') err.code = 'ERR_MODULE_NOT_FOUND';
+      throw err;
+    }
     if (resolved.type === 'builtin') {
       return cjsToNamespace(builtins.load(resolved.id));
     }
