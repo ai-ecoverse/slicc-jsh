@@ -55,6 +55,12 @@ function closeEvent(code, reason, wasClean) {
   return asEvent('close', { code, reason, wasClean });
 }
 
+/**
+ * Build an ErrorEvent. Kernel ≥ 1.59.1 rejects with TypeError + cause.code
+ * (ECONNREFUSED, EAI_NONAME, …). Pass that Error through so callers can read
+ * `event.error.cause.code`. Node undici's ErrorEvent.error has no .code/.cause,
+ * so we do not copy cause.code onto error.code.
+ */
 function errorEvent(error) {
   return asEvent('error', {
     error,
@@ -207,9 +213,8 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
           );
           if (trackPromise && handles) trackPromise(handles, closed);
         } catch (err) {
-          // When ctx.websocket rejects (default loopback transport, or a fixed
-          // fetchTransport): error Event, no close, readyState stays CONNECTING —
-          // same as Node 22 undici on ECONNREFUSED.
+          // Kernel ≥ 1.59.1 nodeTransport rejects at once (cause.code set).
+          // Error Event, no close, readyState stays CONNECTING — Node 22 undici.
           if (!this.#closed) this.#emit(errorEvent(err));
         }
       })();
