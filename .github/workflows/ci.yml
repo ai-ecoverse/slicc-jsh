@@ -65,10 +65,13 @@ jobs:
           set -euo pipefail
           npm pack --pack-destination "$RUNNER_TEMP"
           tgz=$(ls "$RUNNER_TEMP"/ai-ecoverse-slicc-jsh-*.tgz)
+          # A plain npm pack must already be stripped (prepack runs
+          # scripts/strip-own-scripts.mjs): that is what semantic-release's
+          # npm publish ships to the registry.
+          node -e "const p=JSON.parse(require('child_process').execFileSync('tar',['-xOzf',process.argv[1],'package/package.json'],{encoding:'utf8'})); if(p.scripts?.prepare||p.scripts?.prepack){console.error('refuse: packed package.json still has prepare/prepack'); process.exit(1)}" "$tgz"
           node scripts/strip-pack-scripts.mjs "$tgz"
           echo "packed $tgz"
           tar -tzf "$tgz" | tee "$RUNNER_TEMP/listing.txt"
-          node -e "const p=JSON.parse(require('child_process').execFileSync('tar',['-xOzf',process.argv[1],'package/package.json'],{encoding:'utf8'})); if(p.scripts?.prepare||p.scripts?.prepack){console.error('refuse: packed package.json still has prepare/prepack'); process.exit(1)}" "$tgz"
           if grep -E 'package/test/|package/scripts/' "$RUNNER_TEMP/listing.txt"; then
             echo "refuse: tarball ships test/ or scripts/" >&2
             exit 1

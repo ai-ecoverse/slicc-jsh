@@ -54,7 +54,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs && node scripts/build-host.mjs",
-    "prepack": "npm run build",
+    "prepack": "npm run build && node scripts/strip-own-scripts.mjs",
     "prepare": "npm run build",
     "lint": "node scripts/lint.mjs",
     "test": "npm run test:golden && npm run test:jsh && npm run test:integration",

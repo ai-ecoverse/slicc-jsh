@@ -72,4 +72,4 @@ Releases are cut by [semantic-release](https://semantic-release.gitbook.io/) on 
 - a `fix:` or `perf:` commit gives a patch release;
 - other types (`chore:`, `docs:`, `ci:`, `test:`, `merge:`, …) release nothing.
 
-It publishes to npm `latest` with trusted publishing (OIDC) and provenance, and creates a GitHub release. `version` in `package.json` stays `0.0.0`; semantic-release sets the real one when it publishes. npm has to trust `release.yml` for this package once: `npm run trust` (fledgling) sets that up, and `npm run trust:dry` shows what it would do.
+It publishes to npm `latest` with trusted publishing (OIDC) and provenance, and creates a GitHub release. The published `package.json` carries no `prepare`/`prepack`: `prepack` builds and then runs `scripts/strip-own-scripts.mjs`, which removes both from the checkout in CI before npm packs (a local `npm pack` keeps them). `version` in `package.json` stays `0.0.0`; semantic-release sets the real one when it publishes. npm has to trust `release.yml` for this package once: `npm run trust` (fledgling) sets that up, and `npm run trust:dry` shows what it would do.
