@@ -51,7 +51,8 @@ jobs:
         timeout-minutes: 5
         run: npm run test:jsh
       - name: Kernel integration (Node entry, memory root)
-        timeout-minutes: 5
+        # wasi-pnpm add -g cases (pnpm-global*.test.mjs) push this past 5m on GHA
+        timeout-minutes: 10
         run: npm run test:integration
       - name: Cert (host Node 22 vs shim; kernel from plain dist)
         timeout-minutes: 10
