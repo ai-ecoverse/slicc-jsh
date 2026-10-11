@@ -1,18 +1,10 @@
-import { JSH_USAGE, JSH_VERSION, parseJshArgv, runJsh } from './jsh/run.mjs';
+import { JSH_PARAMS, JSH_USAGE, JSH_VERSION, parseJshArgv, runJsh } from './jsh/run.mjs';
 import { NodeExitError } from './runtime/exit.mjs';
 import { runNode } from './runtime/run.mjs';
 
-const BOOT = Symbol.for('slicc-jsh.boot');
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
-
-/*
- * The kernel `jsh` rides on the `node` runtime's eval entry, so a `.jsh`
- * script gets exactly the shim `node` scripts get (process, timers and the
- * event loop, CJS require, builtins). The eval code hands those to `boot`,
- * which runs the shared `.jsh` layer.
- */
-const BOOT_CODE = `globalThis[Symbol.for('slicc-jsh.boot')]({ process, console, Buffer, require, setTimeout, clearTimeout, setInterval, clearInterval, setImmediate, clearImmediate })`;
+const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
 async function readAll(stream) {
   if (!stream) return new Uint8Array(0);
@@ -79,93 +71,30 @@ function kernelSpawn(ctx, process) {
   };
 }
 
-/** Make the runtime's bindings globals for the script's lifetime, as Node's are. */
-function installGlobals(g) {
-  for (const name of [
-    'process',
-    'Buffer',
-    'setTimeout',
-    'clearTimeout',
-    'setInterval',
-    'clearInterval',
-    'setImmediate',
-    'clearImmediate',
-  ]) {
-    try {
-      Object.defineProperty(globalThis, name, {
-        value: g[name],
-        writable: true,
-        configurable: true,
-        enumerable: false,
-      });
-    } catch {
-      /* a frozen name keeps the worker's own */
-    }
-  }
-  try {
-    globalThis.global ??= globalThis;
-  } catch {
-    /* ignore */
-  }
-}
-
-async function boot(ctx, g, filename) {
-  // Taken before the first await: the eval entry returns as soon as this
-  // yields, and the runtime ends the program once no handle is left. The
-  // body may also await kernel calls the runtime does not count as handles
-  // yet, so this stays until the body settles.
-  const keepAlive = g.setInterval(() => {}, 1 << 30);
-  try {
-    await bootRun(ctx, g, filename);
-  } finally {
-    g.clearInterval(keepAlive);
-  }
-}
-
-async function bootRun(ctx, g, filename) {
-  const { process, console, require } = g;
-  installGlobals(g);
-  const fetch = typeof ctx.fetch === 'function' ? (input, init) => ctx.fetch(input, init) : undefined;
-  if (fetch) {
-    try {
-      Object.defineProperty(globalThis, 'fetch', {
-        value: fetch,
-        writable: true,
-        configurable: true,
-        enumerable: false,
-      });
-    } catch {
-      /* ignore */
-    }
-  }
-  let stdoutIsTTY = false;
-  try {
-    stdoutIsTTY = !!(await ctx.isatty?.(1));
-  } catch {
-    stdoutIsTTY = false;
-  }
-  const { createRequire } = require('module');
-  const engine = {
-    readSource: (path) => decoder.decode(ctx.sync.fs.readFile(path)),
-    // Indirect eval: the code runs in the worker's global scope, sloppy.
-    compile: (code, path) => (0, eval)(`${code}\n//# sourceURL=${path}`),
-    createRequire: (path) => createRequire(path),
-    selfRequire: createRequire('/node_modules/@ai-ecoverse/slicc-jsh/package.json'),
-    writeStdout: (s) => process.stdout.write(String(s)),
-    writeStderr: (s) => process.stderr.write(String(s)),
-    stdoutIsTTY,
-    spawn: kernelSpawn(ctx, process),
-    shell: ['sh', '-c'],
-    fetch,
-    isExit: (err) => err instanceof NodeExitError,
-    exit: (code) => ctx.exit(code),
+/**
+ * Compile a `.jsh` body as an async function. `new AsyncFunction` adds two
+ * header lines, which the runtime's stack formatting already takes off for
+ * sourceURL frames. `import()` goes to the runtime's ESM loader, relative to
+ * the script.
+ */
+function compiler(rt) {
+  return (body, filename) => {
+    const head = '(async function () {';
+    const { code, changed } = rt.rewriteDynamicImports(`${head}${body}\n})`);
+    const text = changed ? code.slice(head.length, -3) : body;
+    const params = changed ? [...JSH_PARAMS, '__import'] : [...JSH_PARAMS];
+    const fn = new AsyncFunction(...params, `${text}\n//# sourceURL=${filename}`);
+    if (!changed) return fn;
+    const importFrom = (specifier) => rt.importModule(specifier, filename);
+    return (...args) => fn(...args.slice(0, JSH_PARAMS.length), importFrom);
   };
-  await runJsh({ filename, engine, process, console });
 }
 
 /**
  * `jsh` command entry for slicc-kernel (abi: "js"): `jsh <script.jsh> [args]`,
- * also what the `.jsh` binfmt rule and `#!/usr/bin/env jsh` run.
+ * also what the `.jsh` binfmt rule and `#!/usr/bin/env jsh` run. The script
+ * runs on the `node` runtime (process, timers, event loop, CJS and ESM) with
+ * the shared `.jsh` layer.
  * @param {object} ctx JsProgramContext from slicc-kernel
  */
 export default async function main(ctx) {
@@ -188,17 +117,33 @@ export default async function main(ctx) {
   }
   const filename = ctx.resolve(parsed.script);
   const argv0 = ctx.argv[0] ?? 'jsh';
-  globalThis[BOOT] = (g) => {
-    delete globalThis[BOOT];
-    boot(ctx, g, filename).catch(async (err) => {
-      // ctx.exit() unwinds with the kernel's JsExit; the exit already happened.
-      if (err?.name === 'JsExit' || err?.constructor?.name === 'JsExit') return;
-      await ctx.write(2, `${err?.stack ?? err}\n`);
-      ctx.exit(1);
-    });
-  };
   const nodeCtx = Object.create(ctx, {
-    argv: { value: [argv0, '-e', BOOT_CODE, filename, ...parsed.args], enumerable: true },
+    argv: { value: [argv0, filename, ...parsed.args], enumerable: true },
   });
-  return runNode(nodeCtx);
+  return runNode(nodeCtx, {
+    main: async (rt) => {
+      const { process, console } = rt;
+      let stdoutIsTTY = false;
+      try {
+        stdoutIsTTY = !!(await ctx.isatty?.(1));
+      } catch {
+        stdoutIsTTY = false;
+      }
+      const engine = {
+        readSource: (path) => decoder.decode(ctx.sync.fs.readFile(path)),
+        compile: compiler(rt),
+        createRequire: (path) => rt.createRequire(path),
+        selfRequire: rt.createRequire('/node_modules/@ai-ecoverse/slicc-jsh/package.json'),
+        writeStdout: (s) => process.stdout.write(String(s)),
+        writeStderr: (s) => process.stderr.write(String(s)),
+        stdoutIsTTY,
+        spawn: kernelSpawn(ctx, process),
+        shell: ['sh', '-c'],
+        fetch: rt.fetch,
+        isExit: (err) => err instanceof NodeExitError,
+        exit: (code) => process.exit(code),
+      };
+      await runJsh({ filename, engine, process, console });
+    },
+  });
 }

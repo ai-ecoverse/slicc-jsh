@@ -1,7 +1,5 @@
 {
   "description": "stdin is a Node stream; fs.readFileSync(0) reads all of it",
   "args": [],
-  "stdin": "line one\nline two\n",
-  "kernel": false,
-  "kernelReason": "fd 0 in readFileSync lands with the M1 cert chain (#15)"
+  "stdin": "line one\nline two\n"
 }

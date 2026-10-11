@@ -87,7 +87,8 @@ function wrapRequire(baseRequire, requireSliccy, module) {
  * Run one `.jsh` file. `engine` supplies what differs between the kernel and
  * the host:
  *
- * - `readSource(filename) → string`, `compile(code, filename) → function`
+ * - `readSource(filename) → string`
+ * - `compile(body, filename) → async function` taking JSH_PARAMS, sloppy
  * - `createRequire(filename)`, `selfRequire` (or null)
  * - `writeStdout(s)`, `writeStderr(s)` (synchronous), `stdoutIsTTY`
  * - `spawn(argv, { stdin }) → { kill(sig), done }`, `shell` (argv prefix)
@@ -127,7 +128,7 @@ export async function runJsh({ filename, engine, process, console }) {
   const require = wrapRequire(baseRequire, requireSliccy, module);
 
   try {
-    const fn = engine.compile(wrapSource(prepareSource(source)), filename);
+    const fn = engine.compile(prepareSource(source), filename);
     await fn(process, console, require, module, module.exports, engine.fetch, dirname, filename);
     module.loaded = true;
   } catch (err) {

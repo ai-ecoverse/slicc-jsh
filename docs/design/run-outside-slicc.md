@@ -87,14 +87,14 @@ Each engine passes in what differs:
 | | kernel | host |
 |---|---|---|
 | `readSource` | `ctx.sync.fs.readFile` | `fs.readFileSync` |
-| `compile` | indirect `eval` with `//# sourceURL` | `vm.runInThisContext` with `USE_MAIN_CONTEXT_DEFAULT_LOADER` |
+| `compile` | `new AsyncFunction` with `//# sourceURL`; `import()` rewritten to the runtime's ESM loader | `vm.runInThisContext` with `USE_MAIN_CONTEXT_DEFAULT_LOADER` |
 | `createRequire` | the shim's `module.createRequire` | Node's |
 | `selfRequire` (for `sliccy-*` packages) | from `/node_modules/@ai-ecoverse/slicc-jsh` | from slicc-jsh's install location |
 | `spawn` | `ctx.spawn` with pipes | `child_process.spawn` |
 | `shell` for `exec(cmd)` | `sh -c` (the kernel's `sh` is bash) | `bash -c` if bash is on `PATH`, else `sh -c` |
 | `fetch` | `ctx.fetch` | the global `fetch` |
 | `stdoutIsTTY` | `ctx.isatty(1)` | `process.stdout.isTTY` |
-| `exit` | `ctx.exit` | `process.exit` |
+| `exit` | the runtime's `process.exit` | `process.exit` |
 
 ### Wrapper and exit rules (both engines)
 
@@ -113,10 +113,9 @@ Each engine passes in what differs:
 
 **Host.** `vm.runInThisContext` with `importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER` resolves `import('./x.mjs')` and `import('pkg')` against the script, as Node does; a plain `new AsyncFunction` resolves neither. Node 22 prints an `ExperimentalWarning` for that constant. The launcher drops that one warning in `process.emitWarning` and passes every other warning through. The launcher doesn't use a top-level `await`, so a script whose promise never settles ends the way a Node program does when its loop is empty, not with Node's exit code 13.
 
-**Kernel.** `src/jsh.mjs` reuses the `node` runtime's eval entry. It runs `node -e <boot> <script> args…` with `ctx.argv` replaced, and the eval code hands the runtime's `process`, `console`, `Buffer`, `require` and timers to the shared layer. A `.jsh` therefore gets exactly what a `node` script gets. Three details:
-- The boot makes `process`, `Buffer`, the timers and `fetch` (`ctx.fetch`) globals, as Node's are.
-- While the body is pending, the boot holds a ref'd interval, because the M1 runtime doesn't yet count every kernel call as a handle.
-- `ctx.exit` ends the program, which makes the "exit at once" rules hold.
+**Kernel.** `src/jsh.mjs` calls `runNode(ctx, { main })`. The `main` option replaces the script/eval entry. It runs once the runtime is set up, and receives `process`, `console`, `Buffer`, `fetch`, `createRequire`, the ESM loader's `importModule` and `rewriteDynamicImports`. A `.jsh` therefore gets exactly what a `node` script gets: real globals, `fetch` and `WebSocket` over `ctx`, the event loop, CJS and ESM, and Node's exit and uncaught-error handling. `runNode` tracks the body's promise as a handle. Two details:
+- Compiling with `new AsyncFunction` adds two header lines. The runtime's stack formatting already removes those for `sourceURL` frames, so line numbers come out the file's own.
+- `import()` in the body is rewritten to `importModule(specifier, script)`, so it resolves against the script, as on the host.
 
 ### `require` inside a `.jsh`
 
@@ -134,7 +133,7 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
    - `agent`, `usb`, `serial`, `hid` and `computer` say `sliccy:<name> is only available inside SLICC`;
    - other names give v6's message plus `Install @ai-ecoverse/sliccy-<name> to provide it.`
 
-**The `slicc` export condition:** the kernel shim resolves every `require` with the conditions `['slicc', 'require', 'node', 'default']`, and host Node never sets `slicc`. A package, `sliccy-*` or any other, can therefore ship separate code for slicc-kernel.
+**The `slicc` export condition:** the kernel shim resolves every `require` with the conditions `['slicc', 'require', 'node', 'default']` and every `import` with `['slicc', 'import', 'node', 'default']`. Host Node never sets `slicc`. A package, `sliccy-*` or any other, can therefore ship separate code for slicc-kernel.
 
 | module | host `jsh` and kernel `jsh` | v6 |
 |---|---|---|
@@ -187,11 +186,11 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 |---|---|---|---|
 | async body, sloppy, top-level `await`/`return` | yes | yes | yes |
 | static `import` | lowered to CJS, run strict | SyntaxError | SyntaxError (0 scripts use it) |
-| `import()` | lowered | not yet (needs `ctx.loadModule`, kernel item 7) | Node's loader, relative to the script |
+| `import()` | lowered | the runtime's ESM loader, relative to the script | Node's loader, relative to the script |
 | `process.argv[0]` | `'node'` | `'jsh'` | `process.execPath`; use `argv.slice(2)` or `parseFlags()` |
 | `require('fs')` | v6's promise-returning `fs` | Node's (the shim's) | Node's |
 | `fs.*Sync` | snapshot taken at start, flushed at exit | live | live |
-| stdin | buffered; `read()` returns all of it | Node stream; `fs.readFileSync(0)` once the M1 chain lands (#15) | Node stream; `fs.readFileSync(0, 'utf8')` |
+| stdin | buffered; `read()` returns all of it | Node stream; `fs.readFileSync(0, 'utf8')` | Node stream; `fs.readFileSync(0, 'utf8')` |
 | exit | when the promise settles, after a short grace period | when the event loop is empty | when the event loop is empty |
 | `process.exit()` | an exception user code can catch | exits at once | exits at once |
 | uncaught error | stack to stderr, status 1 | same, at once | same, at once |
@@ -215,7 +214,7 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
   - **The host `jsh` on Node 22.22.0 records the baseline**, as `npx node@22` does for `node`. It runs in a temporary copy of the fixture.
   - The kernel `jsh` on the Node entry must match stdout, stderr and status byte for byte.
   - `"stderr": "error-line"` compares only the `…Error: …` line, because stack frames name engine paths.
-  - `"kernel": false` (with `kernelReason`) skips the kernel run. Today that applies to `import()` (kernel item 7), stdin through fd 0 (the M1 chain, #15), and `exec(cmd)`, since the test kernel installs no bash.
+  - `"kernel": false` (with `kernelReason`) skips the kernel run. Today that applies only to `exec(cmd)`, since the test kernel installs no bash.
   - Every row of the script-semantics table has a case.
 - **`test/integration/jsh.test.mjs`:**
   - kernel: `--version`/`--help`/bad option/missing file; a `.jsh` run through binfmt and through `#!/usr/bin/jsh`; the `slicc` condition winning in the kernel;
@@ -230,7 +229,7 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 - **H4:**
   - a CI job over ai-ecoverse/skills: each `.jsh` that uses no `browser` or device module runs with `--help` under both `jsh`s;
   - migrate the 47 scripts that use v6's `fs` and the 5 that rely on whole-buffer stdin.
-- **Kernel follow-ups:** `import()` from the VFS (`ctx.loadModule`), and bash in the test kernel for `exec(cmd)`. Once the M1 chain lands, drop the boot's keep-alive in favour of the runtime's handle counting.
+- **Kernel follow-up:** bash in the test kernel, for `exec(cmd)`.
 
 ## Out of scope
 

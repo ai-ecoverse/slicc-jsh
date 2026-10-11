@@ -8,9 +8,16 @@ import { moduleNotFound, packagePathNotExported } from './errors.mjs';
 // `slicc` first: a package can ship a build for slicc-kernel (for example a
 // `sliccy-<name>` package that differs from its host build); host Node never
 // sets it. See docs/design/run-outside-slicc.md.
-const CONDITIONS = ['slicc', 'require', 'node', 'default'];
+const REQUIRE_CONDITIONS = ['slicc', 'require', 'node', 'default'];
+const DEFAULT_EXTENSIONS = ['.js', '.cjs', '.json'];
 
-export function createResolver({ fs, path, readPackageJson }) {
+export function createResolver({
+  fs,
+  path,
+  readPackageJson,
+  conditions = REQUIRE_CONDITIONS,
+  extensions = DEFAULT_EXTENSIONS,
+} = {}) {
   const tryStat = (p) => {
     try {
       if (!fs.exists(p)) return null;
@@ -27,7 +34,7 @@ export function createResolver({ fs, path, readPackageJson }) {
 
   const tryExtensions = (p) => {
     if (tryFile(p)) return p;
-    for (const ext of ['.js', '.cjs', '.json']) {
+    for (const ext of extensions) {
       const withExt = p + ext;
       if (tryFile(withExt)) return withExt;
     }
@@ -75,7 +82,7 @@ export function createResolver({ fs, path, readPackageJson }) {
       return null;
     }
     if (typeof target === 'object') {
-      for (const key of CONDITIONS) {
+      for (const key of conditions) {
         if (Object.prototype.hasOwnProperty.call(target, key)) {
           const hit = matchExportTarget(target[key], pkgDir);
           if (hit) return hit;
@@ -149,6 +156,16 @@ export function createResolver({ fs, path, readPackageJson }) {
             const hit = matchExportTarget(entry, dir);
             if (hit) return hit;
             throw packagePathNotExported(name, pkgPath);
+          }
+          // Pattern imports: "#cfg/*" → "./cfg/*.js"
+          for (const [pattern, target] of Object.entries(pkg.imports)) {
+            if (!pattern.includes('*')) continue;
+            const [pre, post] = pattern.split('*');
+            if (!name.startsWith(pre) || !name.endsWith(post ?? '')) continue;
+            const star = name.slice(pre.length, name.length - (post?.length ?? 0));
+            const mapped = mapStar(target, star);
+            const hit = matchExportTarget(mapped, dir);
+            if (hit) return hit;
           }
         }
       }
@@ -276,10 +293,29 @@ const BUILTIN_NAMES = new Set([
   'process',
   'querystring',
   'stream',
+  'stream/promises',
   'string_decoder',
+  'timers',
+  'timers/promises',
   'url',
   'util',
   'util/types',
+  // Known but not-yet-supported: resolve as builtin so load() can throw ERR_NOT_SUPPORTED
+  'child_process',
+  'net',
+  'http',
+  'https',
+  'http2',
+  'crypto',
+  'zlib',
+  'readline',
+  'tty',
+  'worker_threads',
+  'dgram',
+  'dns',
+  'tls',
+  'cluster',
+  'vm',
 ]);
 
 function isBuiltinName(name) {

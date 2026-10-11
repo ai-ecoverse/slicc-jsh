@@ -1,0 +1,9 @@
+{
+  "name": "esm-reexports",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Test fixture: published unicorn-magic/default.js + lodash-es/isArray.js with their export * / export { default as } patterns",
+  "license": "MIT",
+  "exports": "./index.js"
+}

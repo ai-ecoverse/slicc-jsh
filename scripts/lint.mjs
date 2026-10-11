@@ -8,7 +8,15 @@ const issues = [];
 
 function walk(dir) {
   for (const name of readdirSync(dir)) {
-    if (name === 'node_modules' || name === 'dist' || name === '.git') continue;
+    // Vendored npm fixtures keep upstream formatting (tabs); skip them.
+    if (
+      name === 'node_modules' ||
+      name === 'dist' ||
+      name === '.git' ||
+      (name === 'fixtures' && relative(root, dir) === 'test')
+    ) {
+      continue;
+    }
     const path = join(dir, name);
     if (statSync(path).isDirectory()) walk(path);
     else if (/\.(mjs|js|json|md|yml|yaml)$/.test(name)) check(path);
@@ -34,8 +42,17 @@ function check(path) {
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 if (pkg.name !== '@ai-ecoverse/slicc-jsh') issues.push('package.json: bad name');
 if (pkg.license !== 'Apache-2.0') issues.push('package.json: license must be Apache-2.0');
-if (pkg.engines?.['slicc-kernel'] !== '>=1.40.1') {
-  issues.push('package.json: engines.slicc-kernel must be >=1.40.1');
+{
+  const eng = pkg.engines?.['slicc-kernel'] ?? '';
+  const m = /^>=(\d+)\.(\d+)\.(\d+)$/.exec(eng);
+  const ok =
+    m &&
+    (Number(m[1]) > 1 ||
+      (Number(m[1]) === 1 &&
+        (Number(m[2]) > 49 || (Number(m[2]) === 49 && Number(m[3]) >= 1))));
+  if (!ok) {
+    issues.push('package.json: engines.slicc-kernel must be >=1.49.1 (Buffer kept #312)');
+  }
 }
 if (!pkg.files?.includes('dist') || pkg.files?.some((f) => f === 'test' || f.startsWith('test/'))) {
   issues.push('package.json: files must allowlist dist and must not ship test/');

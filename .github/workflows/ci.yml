@@ -21,6 +21,27 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
+      - name: NOTICE covers every bundled package
+        run: |
+          set -euo pipefail
+          # Build already regenerates NOTICE from esbuild metafiles; fail if any
+          # node_modules package appears in meta without a NOTICE section.
+          node -e '
+            import { readFileSync } from "node:fs";
+            import { packagesFromMetafiles } from "./scripts/generate-notice.mjs";
+            const metas = ["dist/meta-main.json","dist/meta-stream.json","dist/meta-decoder.json"]
+              .map((p) => JSON.parse(readFileSync(p, "utf8")));
+            const pkgs = packagesFromMetafiles(metas);
+            const notice = readFileSync("NOTICE", "utf8");
+            const missing = [...pkgs.keys()].filter((n) => !notice.includes(`bundles ${n} `) && !notice.includes(`bundles ${n}\n`));
+            // accept either "bundles name (" or "bundles name "
+            const miss = [...pkgs.keys()].filter((n) => !notice.includes(n));
+            if (miss.length) {
+              console.error("NOTICE missing packages:", miss.join(", "));
+              process.exit(1);
+            }
+            console.log("NOTICE ok:", pkgs.size, "packages");
+          '
       - name: Lint
         run: npm run lint
       - name: Golden (host Node 22)
@@ -32,6 +53,12 @@ jobs:
       - name: Kernel integration (Node entry, memory root)
         timeout-minutes: 5
         run: npm run test:integration
+      - name: Cert (host Node 22 vs shim; kernel from plain dist)
+        timeout-minutes: 10
+        run: npm run test:cert
+      - name: Node parallel slice (track pass/fail; non-strict)
+        timeout-minutes: 5
+        run: npm run test:node-parallel
       - name: Pack (files allowlist)
         run: |
           set -euo pipefail

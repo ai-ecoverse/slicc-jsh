@@ -1,39 +1,37 @@
-/** process.nextTick queue (not a keep-alive handle). */
+/**
+ * process.nextTick queue.
+ *
+ * Must NOT schedule via queueMicrotask: Node drains remaining Promise jobs before
+ * nextTicks that were queued from inside a microtask (micro, then tick). Auto-
+ * scheduling ticks as microtasks inverts that. Drain only via flushSync from the
+ * event loop (after script / after a microtask checkpoint / after timers).
+ */
 export function createNextTick() {
   const queue = [];
-  let scheduled = false;
-
-  const drain = () => {
-    scheduled = false;
-    while (queue.length > 0) {
-      const batch = queue.splice(0);
-      for (const job of batch) job();
-    }
-  };
-
-  const schedule = () => {
-    if (scheduled) return;
-    scheduled = true;
-    queueMicrotask(drain);
-  };
 
   return {
     nextTick(fn, ...args) {
       if (typeof fn !== 'function') {
-        const err = new TypeError('callback is not a function');
+        let received = `type ${typeof fn}`;
+        if (typeof fn === 'number' || typeof fn === 'boolean' || typeof fn === 'bigint') {
+          received = `type ${typeof fn} (${fn})`;
+        } else if (typeof fn === 'string') {
+          received = `type string ('${fn}')`;
+        }
+        const err = new TypeError(
+          `The "callback" argument must be of type function. Received ${received}`
+        );
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
       }
       queue.push(() => fn(...args));
-      schedule();
     },
-    /** Run queued ticks synchronously (after user script / timer callbacks). */
+    /** Run queued ticks synchronously. */
     flushSync() {
       while (queue.length > 0) {
         const batch = queue.splice(0);
         for (const job of batch) job();
       }
-      scheduled = false;
     },
     get depth() {
       return queue.length;

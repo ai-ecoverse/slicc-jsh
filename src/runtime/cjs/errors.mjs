@@ -1,5 +1,10 @@
 export function moduleNotFound(request, requireStack = []) {
-  const err = new Error(`Cannot find module '${request}'`);
+  let message = `Cannot find module '${request}'`;
+  if (requireStack?.length) {
+    // No trailing newline: Node's Error.stack places frames immediately after the message.
+    message += `\nRequire stack:\n${requireStack.map((s) => `- ${s}`).join('\n')}`;
+  }
+  const err = new Error(message);
   err.code = 'MODULE_NOT_FOUND';
   err.requireStack = requireStack;
   return err;

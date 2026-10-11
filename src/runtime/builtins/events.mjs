@@ -1,4 +1,4 @@
-/** Minimal EventEmitter (from slicc 6 realm, Apache-2.0). */
+/** EventEmitter with Node-ish 'error' semantics and events.once helper. */
 
 export class EventEmitter {
   constructor() {
@@ -31,17 +31,27 @@ export class EventEmitter {
   }
 
   once(event, fn) {
+    const self = this;
     const wrapped = (...args) => {
-      this.off(event, wrapped);
-      fn(...args);
+      self.off(event, wrapped);
+      fn.call(self, ...args);
     };
+    wrapped.listener = fn;
     return this.on(event, wrapped);
   }
 
   emit(event, ...args) {
     const list = this._events.get(event);
+    if ((!list || list.length === 0) && event === 'error') {
+      const arg = args[0];
+      if (arg instanceof Error) throw arg;
+      const err = new Error(`Unhandled error. (${typeof arg === 'string' ? `'${arg}'` : String(arg)})`);
+      err.code = 'ERR_UNHANDLED_ERROR';
+      err.context = arg;
+      throw err;
+    }
     if (!list || list.length === 0) return false;
-    for (const fn of [...list]) fn(...args);
+    for (const fn of [...list]) fn.call(this, ...args);
     return true;
   }
 
@@ -56,10 +66,35 @@ export class EventEmitter {
   }
 
   listeners(event) {
-    return [...(this._events.get(event) ?? [])];
+    return [...(this._events.get(event) ?? [])].map((fn) => fn.listener ?? fn);
   }
 }
 
+EventEmitter.defaultMaxListeners = 10;
+
+function once(emitter, event) {
+  return new Promise((resolve, reject) => {
+    const onEvent = (...args) => {
+      cleanup();
+      resolve(args);
+    };
+    const onError = (err) => {
+      cleanup();
+      reject(err);
+    };
+    const cleanup = () => {
+      emitter.off(event, onEvent);
+      if (event !== 'error') emitter.off('error', onError);
+    };
+    emitter.on(event, onEvent);
+    if (event !== 'error') emitter.on('error', onError);
+  });
+}
+
 export function createEvents() {
-  return Object.assign(EventEmitter, { EventEmitter });
+  return Object.assign(EventEmitter, {
+    EventEmitter,
+    once,
+    defaultMaxListeners: EventEmitter.defaultMaxListeners,
+  });
 }
