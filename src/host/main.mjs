@@ -1,6 +1,7 @@
 /**
  * Host `jsh`: runs a `.jsh` file on the host's own Node (22+), outside SLICC.
- * Bundled to dist/host/jsh.mjs, the package's `bin`. See
+ * Bundled to dist/host/main.mjs; dist/host/jsh.mjs (the package's `bin`,
+ * src/host/launcher.mjs) imports it on a real host. See
  * docs/design/run-outside-slicc.md.
  */
 import { spawn as spawnChild } from 'node:child_process';

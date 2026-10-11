@@ -1,3 +1,4 @@
+import { installJshHandoff } from '../jsh/kernel.mjs';
 import { drainLoop, trackPromise } from './async-handles.mjs';
 import { createBuffer } from './buffer.mjs';
 import { createUtil } from './builtins/util.mjs';
@@ -73,6 +74,7 @@ export async function runNode(ctx, options = {}) {
   let exitStatus;
   let lastEvalCode;
   let restoreGlobals = () => {};
+  let removeJshHandoff = () => {};
   const removeCtxHooks = [];
   const util = createUtil();
   const printUncaught = (err) => {
@@ -326,17 +328,20 @@ export async function runNode(ctx, options = {}) {
   cjs.setImportModuleHook((specifier, parent) => esm.importModule(specifier, parent));
 
   try {
+    // What `options.main` and the kernel jsh handoff (see jsh/kernel.mjs) run on.
+    const rt = {
+      process,
+      console,
+      Buffer,
+      fetch,
+      createRequire: cjs.createRequire,
+      importModule: (specifier, parent) => esm.importModule(specifier, parent),
+      rewriteDynamicImports,
+    };
+    removeJshHandoff = installJshHandoff(ctx, rt);
     if (typeof options.main === 'function') {
       try {
-        const result = options.main({
-          process,
-          console,
-          Buffer,
-          fetch,
-          createRequire: cjs.createRequire,
-          importModule: (specifier, parent) => esm.importModule(specifier, parent),
-          rewriteDynamicImports,
-        });
+        const result = options.main(rt);
         if (result != null && typeof result.then === 'function') {
           // The tracking promise settles like `result`; its rejection is
           // handled below through `await result`.
@@ -574,6 +579,7 @@ export async function runNode(ctx, options = {}) {
     }
     try {
       restoreGlobals();
+      removeJshHandoff();
     } catch {
       /* ignore */
     }

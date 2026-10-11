@@ -35,7 +35,7 @@ JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `di
 
 ## `jsh` outside SLICC
 
-The package's `bin` is the host `jsh` (`dist/host/jsh.mjs`), which runs `.jsh` scripts on the host's own Node 22+:
+The package's `bin` is the host `jsh` (`dist/host/jsh.mjs`), which runs `.jsh` scripts on the host's own Node 22+. Inside slicc-kernel (a global `pnpm add -g` puts this `bin` on `PATH` ahead of the kernel's `jsh`), it hands off to the kernel jsh instead:
 
 ```bash
 npm i -g @ai-ecoverse/slicc-jsh
