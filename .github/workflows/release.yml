@@ -1,0 +1,29 @@
+# Releases with semantic-release on every push to main, like the sibling
+# repos: a `feat` gives a minor, a `fix`/`perf` a patch (0.x stays 0.x until a
+# breaking change), published to npm with trusted publishing (OIDC) and
+# provenance, plus a GitHub release. npm trusts this workflow by name
+# (`fledgling` in package.json; `npm run trust` sets it up).
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    uses: ai-ecoverse/slicc-shared-web/.github/workflows/node-release.yml@v1.12.1
+    with:
+      node-version: '24.21.0'
+      test: npm test
+    secrets: inherit

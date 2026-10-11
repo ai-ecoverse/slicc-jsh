@@ -63,6 +63,11 @@ npm run golden:record
 npm run jsh:record           # .jsh cases under test/jsh/fixtures/, recorded with the host jsh
 ```
 
-## Publish
+## Release
 
-Publish goes through `.github/workflows/publish.yml` (`workflow_dispatch` with `run` + `certified` sha). Stable versions (no `-` in the version) publish to `latest` and also advance the `next` dist-tag; prereleases publish to `next` only. Certification and publish are coordinator-owned; agents do not publish.
+Releases are cut by [semantic-release](https://semantic-release.gitbook.io/) on every push to `main` (`.github/workflows/release.yml`, the shared `node-release.yml` from slicc-shared-web), as in the sibling repos. It runs `npm run lint` and `npm test` (golden, `.jsh` parity, kernel integration), then derives the version from the commits since the last `v*` tag:
+- a `feat:` commit gives a minor release (0.x stays 0.x until a breaking change);
+- a `fix:` or `perf:` commit gives a patch release;
+- other types (`chore:`, `docs:`, `ci:`, `test:`, `merge:`, …) release nothing.
+
+It publishes to npm `latest` with trusted publishing (OIDC) and provenance, and creates a GitHub release. `version` in `package.json` stays `0.0.0`; semantic-release sets the real one when it publishes. npm has to trust `release.yml` for this package once: `npm run trust` (fledgling) sets that up, and `npm run trust:dry` shows what it would do.
