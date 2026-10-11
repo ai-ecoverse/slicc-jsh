@@ -287,37 +287,55 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
   it('http server rejects oversized Content-Length with 413', async () => {
     const { run, close } = await withJsh();
     try {
-      // Assert on the first response bytes — do not wait for peer FIN (ctx.net gap).
-      const r = await run([
-        'node',
-        '-e',
-        [
-          "const net=require('net'), http=require('http');",
-          "const s=http.createServer(()=>{ console.log('should-not-run'); });",
-          "s.listen(0,()=>{",
-          "  const {port}=s.address();",
-          "  const sock=net.connect({host:'127.0.0.1',port},()=>{",
-          "    sock.write(",
-          "      'POST / HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Length: 999999999\\r\\n\\r\\n'",
-          "    );",
-          "  });",
-          "  sock.on('error',()=>{});",
-          "  let d='';",
-          "  sock.on('data',c=>{",
-          "    d+=c;",
-          "    if(/^HTTP\\/1\\.1 413/.test(d)){",
-          "      console.log('413');",
-          '      try{sock.destroy()}catch{}',
-          '      try{s.close()}catch{}',
-          // process.exit throws NodeExitError — leave the 'data' emit stack.
-          '      setImmediate(()=>process.exit(0));',
-          '    }',
-          '  });',
-          '});',
-        ].join(''),
+      // Fail fast: a half-open 413 used to hang until the 120s test timeout.
+      // Bound the kernel run and require exactly one 'close' on each socket.
+      const r = await Promise.race([
+        run([
+          'node',
+          '-e',
+          [
+            "const net=require('net'), http=require('http');",
+            'let done=false, got413=false, clientCloses=0, serverCloses=0;',
+            'const finish=(line)=>{ if(done)return; done=true; console.log(line); setImmediate(()=>process.exit(0)); };',
+            'const maybe=()=>{ if(got413 && clientCloses===1 && serverCloses===1) finish("ok");',
+            '  else if(clientCloses>1||serverCloses>1) finish("double-close c="+clientCloses+" s="+serverCloses); };',
+            'setTimeout(()=>finish("TIMEOUT c="+clientCloses+" s="+serverCloses+" 413="+got413), 4000).unref?.();',
+            "const s=http.createServer(()=>{ console.log('should-not-run'); });",
+            "s.on('connection',(ss)=>{",
+            '  ss.on("close",()=>{ serverCloses++; console.log("server-close",serverCloses); maybe(); });',
+            '});',
+            "s.listen(0,()=>{",
+            "  const {port}=s.address();",
+            "  const sock=net.connect({host:'127.0.0.1',port},()=>{",
+            "    sock.write(",
+            "      'POST / HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Length: 999999999\\r\\n\\r\\n'",
+            "    );",
+            "  });",
+            "  sock.on('error',()=>{});",
+            "  sock.on('close',()=>{ clientCloses++; console.log('client-close',clientCloses); maybe(); });",
+            "  let d='';",
+            "  sock.on('data',c=>{",
+            "    d+=c;",
+            "    if(/^HTTP\\/1\\.1 413/.test(d)){",
+            "      console.log('413'); got413=true;",
+            '      try{s.close()}catch{}',
+            '      maybe();',
+            '    }',
+            '  });',
+            '});',
+          ].join(''),
+        ]),
+        new Promise((res) =>
+          setTimeout(() => res({ status: 'HOST_TIMEOUT', stdout: '', stderr: '' }), 8000)
+        ),
       ]);
-      assert.equal(r.status, 0);
-      assert.equal(r.stdout, '413\n');
+      assert.notEqual(r.status, 'HOST_TIMEOUT', '413 path hung past 8s host bound');
+      assert.equal(r.status, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /^413$/m);
+      assert.match(r.stdout, /^server-close 1$/m);
+      assert.match(r.stdout, /^client-close 1$/m);
+      assert.match(r.stdout, /^ok$/m);
+      assert.doesNotMatch(r.stdout, /TIMEOUT|double-close|server-close 2|client-close 2/);
     } finally {
       close();
     }

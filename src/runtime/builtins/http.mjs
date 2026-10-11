@@ -324,9 +324,18 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     }
   }
 
-  function rejectPayloadTooLarge(socket) {
-    // Flush 413 via end(), then destroy so the server socket does not sit half-open
-    // holding an event-loop ref waiting for a peer FIN that may never come.
+  function rejectPayloadTooLarge(socket, onData) {
+    // Stop reading; flush 413 via end(); then destroy so the socket does not sit
+    // half-open holding an event-loop ref waiting for a peer FIN.
+    if (onData) socket.off('data', onData);
+    if (socket.destroyed || socket.writableEnded) {
+      try {
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     try {
       socket.end(
         'HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n',
@@ -356,7 +365,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       ]);
       if (buf.length > MAX_HTTP_BODY + 64 * 1024) {
         // Cap head+body growth while still reading the request line/headers.
-        rejectPayloadTooLarge(socket);
+        rejectPayloadTooLarge(socket, onData);
         return;
       }
       const parsed = parseHead(buf, Buffer);
@@ -372,7 +381,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       if (te.includes('chunked')) {
         const decoded = decodeChunked(parsed.bodyPrefix, Buffer);
         if (decoded.tooLarge) {
-          rejectPayloadTooLarge(socket);
+          rejectPayloadTooLarge(socket, onData);
           return;
         }
         if (!decoded.ok) return;
@@ -384,7 +393,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
           return;
         }
         if (cl > MAX_HTTP_BODY) {
-          rejectPayloadTooLarge(socket);
+          rejectPayloadTooLarge(socket, onData);
           return;
         }
         if (parsed.bodyPrefix.length < cl) return;
