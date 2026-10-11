@@ -548,6 +548,13 @@ function expandLiveShorthandSlice(source, node, liveLocals) {
       for (const stmt of n.body) visit(stmt, n, inner);
       return;
     }
+    if (n.type === 'CatchClause') {
+      const inner = new Set(shadows);
+      if (n.param) collectBoundNames(n.param, (nm) => inner.add(nm));
+      if (n.param) visit(n.param, n, inner);
+      visit(n.body, n, inner);
+      return;
+    }
     for (const key of Object.keys(n)) {
       if (key === 'start' || key === 'end' || key === 'loc' || key === 'range') continue;
       const val = n[key];

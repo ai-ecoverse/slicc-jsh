@@ -297,31 +297,33 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
 
   async function importModule(specifier, parentFilename = `${process.cwd()}/`) {
+    let resolved;
     try {
-      const resolved = resolver.resolve(String(specifier), parentFilename, [parentFilename]);
-      if (resolved.type === 'builtin') {
-        return cjsToNamespace(builtins.load(resolved.id));
-      }
-      const filename = resolved.filename;
-      const cached = cache.get(filename);
-      if (cached?.namespace) return cached.namespace;
-      if (cached?.promise) return cached.promise;
-      // Cycle: live exports. Concurrent non-cycle evaluation: wait on promise below.
-      if (cached?.evaluating && evaluatingStack.has(filename)) return cached.exportsObj;
-
-      const promise = loadFileAsync(filename);
-      // Re-read: loadFileAsync may have already set {evaluating, exportsObj} before
-      // suspending; a stale pre-call snapshot would wipe those fields.
-      cache.set(filename, { ...(cache.get(filename) || {}), promise });
-      if (trackPromise && handles) trackPromise(handles, promise);
-      const ns = await promise;
-      cache.set(filename, { namespace: ns });
-      return ns;
+      resolved = resolver.resolve(String(specifier), parentFilename, [parentFilename]);
     } catch (err) {
-      // Node ESM: missing modules use ERR_MODULE_NOT_FOUND (CJS uses MODULE_NOT_FOUND).
+      // Node ESM resolve failures use ERR_MODULE_NOT_FOUND; leave evaluation-time
+      // MODULE_NOT_FOUND from nested CJS require() unchanged.
       if (err && err.code === 'MODULE_NOT_FOUND') err.code = 'ERR_MODULE_NOT_FOUND';
       throw err;
     }
+    if (resolved.type === 'builtin') {
+      return cjsToNamespace(builtins.load(resolved.id));
+    }
+    const filename = resolved.filename;
+    const cached = cache.get(filename);
+    if (cached?.namespace) return cached.namespace;
+    if (cached?.promise) return cached.promise;
+    // Cycle: live exports. Concurrent non-cycle evaluation: wait on promise below.
+    if (cached?.evaluating && evaluatingStack.has(filename)) return cached.exportsObj;
+
+    const promise = loadFileAsync(filename);
+    // Re-read: loadFileAsync may have already set {evaluating, exportsObj} before
+    // suspending; a stale pre-call snapshot would wipe those fields.
+    cache.set(filename, { ...(cache.get(filename) || {}), promise });
+    if (trackPromise && handles) trackPromise(handles, promise);
+    const ns = await promise;
+    cache.set(filename, { namespace: ns });
+    return ns;
   }
 
   function runMain(filename, source) {
