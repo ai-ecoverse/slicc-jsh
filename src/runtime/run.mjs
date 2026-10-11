@@ -401,10 +401,9 @@ export async function runNode(ctx) {
       }
       process.argv[1] = filePath;
       try {
-        const useEsm =
-          filePath.endsWith('.mjs') ||
-          esm.isEsmFilename(filePath, source) ||
-          shouldRunAsEsm(source);
+        // isEsmFilename covers .mjs, "type":"module", and detect-module for
+        // ambiguous .js (not explicit "type":"commonjs").
+        const useEsm = esm.isEsmFilename(filePath, source);
         if (useEsm) {
           const result = esm.runMain(filePath, source);
           if (result != null && typeof result.then === 'function') {

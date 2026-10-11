@@ -175,21 +175,36 @@ export function createCjs({
       );
     } catch (err) {
       if (err instanceof SyntaxError) {
-        // Top-level const/let of a wrapper name → Node retries as ESM.
-        if (
+        // Top-level const/let of a wrapper name → Node retries as ESM when the
+        // package type is not explicitly "commonjs" (type:commonjs keeps the
+        // SyntaxError, with a warning suggesting "type":"module").
+        const wrapperRedeclare =
           /has already been declared/i.test(err.message || '') &&
-          /\b(exports|require|module|__filename|__dirname)\b/.test(err.message || '')
-        ) {
-          if (typeof requireEsmHook === 'function') {
+          /\b(exports|require|module|__filename|__dirname)\b/.test(err.message || '');
+        if (wrapperRedeclare) {
+          const pkgType = findPackageType(dirname)?.type;
+          if (pkgType !== 'commonjs' && typeof requireEsmHook === 'function') {
             mod.exports = requireEsmHook(filename);
             return;
           }
-          const e = new Error(`Must use import to load ES Module: ${filename}`);
-          e.code = 'ERR_REQUIRE_ESM';
-          throw e;
+          if (pkgType !== 'commonjs') {
+            const e = new Error(`Must use import to load ES Module: ${filename}`);
+            e.code = 'ERR_REQUIRE_ESM';
+            throw e;
+          }
+          try {
+            process.stderr.write(
+              `(node:${process.pid}) Warning: Failed to load the ES module: ${filename}. ` +
+                `Make sure to set "type": "module" in the nearest package.json file or use the .mjs extension.\n` +
+                `(Use \`node --trace-warnings ...\` to show where the warning was created)\n`
+            );
+          } catch {
+            /* ignore */
+          }
         }
         const first = body.split('\n')[0] ?? '';
-        let caretAt = first.indexOf(';');
+        const named = /\b(exports|require|module|__filename|__dirname)\b/.exec(first);
+        let caretAt = named ? named.index : first.indexOf(';');
         if (caretAt < 0) caretAt = Math.max(0, first.length - 1);
         const caret = `${' '.repeat(caretAt)}^`;
         const pretty = `${filename}:1\n${first}\n${caret}\n\n${err.name}: ${err.message}`;

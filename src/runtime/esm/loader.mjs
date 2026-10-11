@@ -94,6 +94,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     if (filename.endsWith('.cjs') || filename.endsWith('.json')) return false;
     const pkg = findNearestPackage(path.dirname(filename));
     if (pkg?.type === 'module') return true;
+    // Explicit CommonJS packages never use detect-module / ESM syntax fallback.
+    if (pkg?.type === 'commonjs') return false;
     if (source != null && shouldRunAsEsm(source)) return true;
     return false;
   }
@@ -258,8 +260,25 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     return evaluateEsm(filename, code);
   }
 
+  /**
+   * Force-evaluate as ESM (CJS `require()` of ESM, or CJS wrapper-name
+   * redeclare retry). Must not fall back to cjs.loadFile — the module may
+   * already be in the CJS cache mid-compile.
+   */
   function requireEsm(filename) {
-    return loadFileSync(filename);
+    const cached = cache.get(filename);
+    if (cached?.namespace) return cached.namespace;
+    if (cached?.evaluating) return cached.exportsObj;
+    const source = decoder.decode(fs.readFile(filename));
+    const { hasTopLevelAwait } = transformEsm(source, filename);
+    if (hasTopLevelAwait) {
+      const err = new Error(
+        `Cannot require() ES Module ${filename} because it uses top-level await.`
+      );
+      err.code = 'ERR_REQUIRE_ASYNC_MODULE';
+      throw err;
+    }
+    return evaluateEsm(filename, source);
   }
 
   return {

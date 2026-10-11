@@ -8,7 +8,15 @@ const issues = [];
 
 function walk(dir) {
   for (const name of readdirSync(dir)) {
-    if (name === 'node_modules' || name === 'dist' || name === '.git') continue;
+    // Vendored npm fixtures keep upstream formatting (tabs); skip them.
+    if (
+      name === 'node_modules' ||
+      name === 'dist' ||
+      name === '.git' ||
+      (name === 'fixtures' && relative(root, dir) === 'test')
+    ) {
+      continue;
+    }
     const path = join(dir, name);
     if (statSync(path).isDirectory()) walk(path);
     else if (/\.(mjs|js|json|md|yml|yaml)$/.test(name)) check(path);
