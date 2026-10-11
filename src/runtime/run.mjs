@@ -4,6 +4,8 @@ import { createUtil } from './builtins/util.mjs';
 import { createCjs } from './cjs/loader.mjs';
 import { parseNodeArgv } from './cli.mjs';
 import { createConsole } from './console.mjs';
+import { createEsm } from './esm/loader.mjs';
+import { rewriteDynamicImports, shouldRunAsEsm } from './esm/transform.mjs';
 import { formatUncaughtError, formatUnhandledRejection } from './errors-format.mjs';
 import { NodeExitError } from './exit.mjs';
 import { createHandleTable } from './handles.mjs';
@@ -266,6 +268,19 @@ export async function runNode(ctx) {
     fetch,
     WebSocket,
   });
+  const nodeRequire = cjs.makeRequire(`${process.cwd()}/`);
+  const esm = createEsm({
+    ctx,
+    process,
+    handles,
+    builtins: {
+      load: (id) => nodeRequire(id),
+    },
+    cjs,
+    trackPromise,
+  });
+  // Sync require() of .mjs / "type":"module" — returns the ESM namespace object.
+  cjs.setRequireEsmHook((filename) => esm.requireEsm(filename));
 
   try {
     if (parsed.mode === 'empty') {
@@ -321,22 +336,46 @@ export async function runNode(ctx) {
       }
     } else if (parsed.mode === 'eval') {
       lastEvalCode = parsed.code;
-      const require = cjs.makeRequire(`${process.cwd()}/[eval]`);
-      const exports = {};
-      const module = { exports, id: '[eval]' };
-      // Same 5-arg Node wrapper as CJS files — process/Buffer/console are globals.
-      const body = parsed.print
-        ? `return (${parsed.code}\n)\n//# sourceURL=[eval]`
-        : `${parsed.code}\n//# sourceURL=[eval]`;
-      const fn = new Function('exports', 'require', 'module', '__filename', '__dirname', body);
+      // Node detect-module: CJS unless ESM-only syntax (not mere import()).
+      const asEsm = shouldRunAsEsm(parsed.code);
       try {
-        const result = fn(exports, require, module, '[eval]', process.cwd());
-        // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
-        if (result != null && typeof result.then === 'function') {
-          trackPromise(handles, result);
+        if (asEsm) {
+          const result = esm.runEsmEval(
+            parsed.print ? `console.log(${parsed.code}\n)` : parsed.code,
+            '[eval]'
+          );
+          if (result != null && typeof result.then === 'function') {
+            trackPromise(handles, result);
+            await result;
+          }
+          nextTick.flushSync();
+        } else {
+          const evalParent = `${process.cwd()}/[eval]`;
+          const require = cjs.makeRequire(evalParent);
+          const exports = {};
+          const module = { exports, id: '[eval]' };
+          // Dynamic import() is valid in CJS; rewrite to the kernel loader
+          // (host import() cannot see the in-memory FS).
+          const { code: cjsCode, changed: hasImport } = rewriteDynamicImports(parsed.code);
+          const __import = (spec) => esm.importModule(spec, evalParent);
+          const body = parsed.print
+            ? `return (${cjsCode}\n)\n//# sourceURL=[eval]`
+            : `${cjsCode}\n//# sourceURL=[eval]`;
+          const args = ['exports', 'require', 'module', '__filename', '__dirname'];
+          const values = [exports, require, module, '[eval]', process.cwd()];
+          if (hasImport) {
+            args.push('__import');
+            values.push(__import);
+          }
+          const fn = new Function(...args, body);
+          const result = fn(...values);
+          // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
+          if (result != null && typeof result.then === 'function') {
+            trackPromise(handles, result);
+          }
+          nextTick.flushSync();
+          if (parsed.print) writeStdout(`${util.inspect(result, { colors: false })}\n`);
         }
-        nextTick.flushSync();
-        if (parsed.print) writeStdout(`${util.inspect(result, { colors: false })}\n`);
       } catch (err) {
         if (err instanceof NodeExitError) throw err;
         if (process.listenerCount('uncaughtException') > 0) {
@@ -351,13 +390,6 @@ export async function runNode(ctx) {
         }
       }
     } else if (parsed.mode === 'file') {
-      if (parsed.script.endsWith('.mjs')) {
-        await ctx.write(
-          2,
-          `${ctx.argv[0]}: ESM modules (.mjs / "type":"module") are not supported yet (planned for M2)\n`
-        );
-        return 1;
-      }
       const filePath = ctx.resolve(parsed.script);
       let source;
       try {
@@ -369,7 +401,18 @@ export async function runNode(ctx) {
       }
       process.argv[1] = filePath;
       try {
-        cjs.runMain(filePath, source);
+        // isEsmFilename covers .mjs, "type":"module", and detect-module for
+        // ambiguous .js (not explicit "type":"commonjs").
+        const useEsm = esm.isEsmFilename(filePath, source);
+        if (useEsm) {
+          const result = esm.runMain(filePath, source);
+          if (result != null && typeof result.then === 'function') {
+            trackPromise(handles, result);
+            await result;
+          }
+        } else {
+          cjs.runMain(filePath, source);
+        }
         nextTick.flushSync();
       } catch (err) {
         if (err instanceof NodeExitError) throw err;

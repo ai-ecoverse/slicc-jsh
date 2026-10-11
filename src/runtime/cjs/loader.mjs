@@ -1,6 +1,5 @@
 import { createPath } from '../path.mjs';
 import { createBuiltins } from './builtins.mjs';
-import { errRequireEsm } from './errors.mjs';
 import { createResolver } from './resolve.mjs';
 
 const decoder = new TextDecoder();
@@ -140,24 +139,25 @@ export function createCjs({
     return source;
   }
 
+  /** Set by run.mjs once the ESM loader exists — sync require() of ESM. */
+  let requireEsmHook = null;
+  function setRequireEsmHook(fn) {
+    requireEsmHook = fn;
+  }
+
   function compile(mod, source, filename) {
     const dirname = path.dirname(filename);
-    if (filename.endsWith('.mjs')) {
-      const err = new Error(
-        `slicc-jsh: ESM modules are not supported yet (planned for M2): ${filename}`
-      );
+    const wantsEsm =
+      filename.endsWith('.mjs') ||
+      (filename.endsWith('.js') && findPackageType(dirname)?.type === 'module');
+    if (wantsEsm) {
+      if (typeof requireEsmHook === 'function') {
+        mod.exports = requireEsmHook(filename);
+        return;
+      }
+      const err = new Error(`Must use import to load ES Module: ${filename}`);
       err.code = 'ERR_REQUIRE_ESM';
       throw err;
-    }
-    if (filename.endsWith('.js')) {
-      const pkg = findPackageType(dirname);
-      if (pkg?.type === 'module') {
-        const err = new Error(
-          `slicc-jsh: ESM modules are not supported yet (planned for M2): ${filename}`
-        );
-        err.code = 'ERR_REQUIRE_ESM';
-        throw err;
-      }
     }
 
     const body = stripHashbang(source);
@@ -175,20 +175,36 @@ export function createCjs({
       );
     } catch (err) {
       if (err instanceof SyntaxError) {
-        // Top-level const/let of a wrapper name is module-syntax detection on
-        // Node 22 (retried as ESM). For M1, surface the same ESM gap message.
-        if (
+        // Top-level const/let of a wrapper name → Node retries as ESM when the
+        // package type is not explicitly "commonjs" (type:commonjs keeps the
+        // SyntaxError, with a warning suggesting "type":"module").
+        const wrapperRedeclare =
           /has already been declared/i.test(err.message || '') &&
-          /\b(exports|require|module|__filename|__dirname)\b/.test(err.message || '')
-        ) {
-          const e = new Error(
-            `slicc-jsh: ESM modules are not supported yet (planned for M2): ${filename}`
-          );
-          e.code = 'ERR_REQUIRE_ESM';
-          throw e;
+          /\b(exports|require|module|__filename|__dirname)\b/.test(err.message || '');
+        if (wrapperRedeclare) {
+          const pkgType = findPackageType(dirname)?.type;
+          if (pkgType !== 'commonjs' && typeof requireEsmHook === 'function') {
+            mod.exports = requireEsmHook(filename);
+            return;
+          }
+          if (pkgType !== 'commonjs') {
+            const e = new Error(`Must use import to load ES Module: ${filename}`);
+            e.code = 'ERR_REQUIRE_ESM';
+            throw e;
+          }
+          try {
+            process.stderr.write(
+              `(node:${process.pid}) Warning: Failed to load the ES module: ${filename}. ` +
+                `Make sure to set "type": "module" in the nearest package.json file or use the .mjs extension.\n` +
+                `(Use \`node --trace-warnings ...\` to show where the warning was created)\n`
+            );
+          } catch {
+            /* ignore */
+          }
         }
         const first = body.split('\n')[0] ?? '';
-        let caretAt = first.indexOf(';');
+        const named = /\b(exports|require|module|__filename|__dirname)\b/.exec(first);
+        let caretAt = named ? named.index : first.indexOf(';');
         if (caretAt < 0) caretAt = Math.max(0, first.length - 1);
         const caret = `${' '.repeat(caretAt)}^`;
         const pretty = `${filename}:1\n${first}\n${caret}\n\n${err.name}: ${err.message}`;
@@ -262,8 +278,26 @@ export function createCjs({
       throw err;
     }
 
+    // .mjs always goes through the ESM hook when present.
+    if (filename.endsWith('.mjs') && typeof requireEsmHook === 'function') {
+      try {
+        mod.exports = requireEsmHook(filename);
+        mod.loaded = true;
+        return mod.exports;
+      } catch (err) {
+        delete cache[filename];
+        throw err;
+      }
+    }
+
     const ext =
-      filename.endsWith('.json') ? '.json' : filename.endsWith('.cjs') ? '.cjs' : '.js';
+      filename.endsWith('.json')
+        ? '.json'
+        : filename.endsWith('.cjs')
+          ? '.cjs'
+          : filename.endsWith('.mjs')
+            ? '.js'
+            : '.js';
     const loader = Module._extensions[ext] || Module._extensions['.js'];
     try {
       // Call as a method so CallSites report Object..js / Module._compile.
@@ -327,5 +361,8 @@ export function createCjs({
     createRequire: Module.createRequire,
     runMain,
     makeRequire,
+    loadFile,
+    setRequireEsmHook,
+    findPackageType,
   };
 }
