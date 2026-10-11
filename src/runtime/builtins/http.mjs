@@ -171,8 +171,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
   const stream = getStream();
   const { Readable, Writable } = stream;
 
-  function makeIncomingMessage(socket, body) {
-    const res = Readable.from(body && body.length ? [body] : []);
+  function makeIncomingMessage(socket) {
+    // Empty readable; caller pushes the buffered body after listeners attach
+    // (see handleConnection / ClientRequest). Avoid Readable.from / nextTick:
+    // those can sit unflushed while drainLoop awaits net handles.
+    const res = new Readable({
+      read() {
+        /* body is push()'d by the caller once listeners are registered */
+      },
+    });
     res.socket = socket;
     res.connection = socket;
     res.httpVersion = '1.1';
@@ -187,6 +194,19 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     res.complete = true;
     res.setTimeout = () => res;
     return res;
+  }
+
+  /** Emit buffered body synchronously. readable-stream's push() defers 'data' to
+   *  process.nextTick, which stays unflushed while drainLoop awaits net handles. */
+  function deliverMessageBody(msg, body) {
+    if (body && body.length) msg.emit('data', body);
+    const state = msg._readableState;
+    if (state) {
+      state.ended = true;
+      state.endEmitted = true;
+      state.reading = false;
+    }
+    msg.emit('end');
   }
 
   class ServerResponse extends Writable {
@@ -362,7 +382,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         body = parsed.bodyPrefix.subarray(0, cl);
       }
       socket.off('data', onData);
-      const req = makeIncomingMessage(socket, body);
+      const req = makeIncomingMessage(socket);
       req.method = parsed.method;
       req.url = parsed.url;
       req.httpVersion = parsed.httpVersion;
@@ -374,6 +394,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       const res = new ServerResponse(req);
       server.emit('request', req, res);
       if (typeof requestListener === 'function') requestListener(req, res);
+      // After user listeners are attached so 'data'/'end' fire in this turn.
+      deliverMessageBody(req, body);
     };
     socket.on('data', onData);
     socket.on('error', (err) => server.emit('clientError', err, socket));
@@ -470,13 +492,14 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         } catch {
           /* ignore */
         }
-        const res = makeIncomingMessage(null, body);
+        const res = makeIncomingMessage(null);
         res.statusCode = head.parsed.statusCode;
         res.statusMessage = head.parsed.statusMessage;
         res.httpVersion = head.parsed.httpVersion;
         res.rawHeaders = head.parsed.rawHeaders;
         res.headers = head.headers;
         this.emit('response', res);
+        deliverMessageBody(res, body);
       };
 
       const tryEmit = () => {
@@ -644,7 +667,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     METHODS,
     STATUS_CODES,
     IncomingMessage: function IncomingMessage(socket, body) {
-      return makeIncomingMessage(socket, body ?? Buffer.alloc(0));
+      const msg = makeIncomingMessage(socket);
+      // https emits 'response' on a microtask after construction; deliver then.
+      queueMicrotask(() => deliverMessageBody(msg, body ?? Buffer.alloc(0)));
+      return msg;
     },
     ServerResponse,
     Server,

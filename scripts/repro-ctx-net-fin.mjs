@@ -1,16 +1,12 @@
 /**
- * Minimal repro: ctx.net loopback does not deliver peer FIN to the client reader.
- *
- * Entry: Node (`createNodeKernel` / `@ai-ecoverse/slicc-kernel/node`)
- * Kernel: see package.json engines / installed @ai-ecoverse/slicc-kernel version.
+ * jsh net.mjs close-frame smoke (not a kernel repro — see run-raw-ctx-net-fin.mjs).
  *
  * Server writes a close-framed HTTP response (no Content-Length) then end()s.
- * Client receives the bytes but never sees readable 'end' / reader done within the
- * deadline — so Connection: close body framing cannot complete without guessing.
+ * Client should see 'end' after the body (half-close via writer.close()).
  *
  *   node scripts/repro-ctx-net-fin.mjs
  *
- * Expect: exit 2 and "TIMEOUT … (no end)". Exit 0 means FIN works (bug fixed).
+ * Expect: "END bytes=…". TIMEOUT means jsh net.mjs is still mishandling EOF.
  */
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
 import { readFileSync } from 'node:fs';
@@ -46,8 +42,9 @@ const net = require('net');
 const deadline = ${DEADLINE_MS};
 const srv = net.createServer((sock) => {
   sock.once('data', () => {
-    // No Content-Length / TE — body framed by connection close.
-    sock.end('HTTP/1.1 200 OK\\r\\nConnection: close\\r\\n\\r\\nhello');
+    setImmediate(() => {
+      sock.end('HTTP/1.1 200 OK\\r\\nConnection: close\\r\\n\\r\\nhello');
+    });
   });
 });
 srv.listen(0, () => {
@@ -56,16 +53,19 @@ srv.listen(0, () => {
     c.write('GET / HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\n\\r\\n');
   });
   let n = 0;
+  let ended = false;
   c.on('data', (d) => {
     n += d.length;
   });
   c.on('end', () => {
+    ended = true;
     console.log('END bytes=' + n);
     srv.close();
-    process.exit(0);
+    setImmediate(() => process.exit(0));
   });
   c.on('error', () => {});
   setTimeout(() => {
+    if (ended) return;
     console.log('TIMEOUT bytes=' + n + ' (no end)');
     try { c.destroy(); } catch {}
     try { srv.close(); } catch {}
@@ -83,5 +83,5 @@ console.log(
   })
 );
 kernel.terminate();
-// Exit 0 from this harness means the repro ran; inner TIMEOUT (2) confirms the bug.
-process.exit(result.stdout.includes('TIMEOUT') || result.stdout.includes('END ') ? 0 : 1);
+const ok = result.status === 0 && /^END bytes=/.test(result.stdout);
+process.exit(ok ? 0 : 1);

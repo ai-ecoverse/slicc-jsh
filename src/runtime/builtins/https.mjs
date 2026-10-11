@@ -1,7 +1,9 @@
 /**
- * node:https — createServer awaits kernel TLS; client request/get use ctx.fetch
- * with redirect: 'manual' (Node does not follow redirects on https.request).
+ * node:https — createServer awaits kernel TLS; client request/get use ctx.fetch.
+ * Prefer redirect: 'manual' (Node-like). On transports that reject it (browser
+ * fetchTransport → ENOTSUP), fall back to 'follow' so plain GETs still work.
  */
+import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
@@ -10,6 +12,23 @@ function notSupported(what) {
   const err = new Error(`slicc-jsh: '${what}' is not supported yet (no TLS on ctx.net)`);
   err.code = 'ERR_NOT_SUPPORTED';
   return err;
+}
+
+function isManualRedirectUnsupported(err) {
+  const code = err?.cause?.code ?? err?.code;
+  if (code === 'ENOTSUP') return true;
+  const msg = String(err?.cause?.message ?? err?.message ?? '');
+  return /redirect:\s*manual/i.test(msg);
+}
+
+/** ctx.fetch with redirect:manual, falling back to follow when unsupported. */
+async function fetchHttp(ctx, url, init) {
+  try {
+    return await ctx.fetch(url, { ...init, redirect: 'manual' });
+  } catch (err) {
+    if (!isManualRedirectUnsupported(err)) throw err;
+    return ctx.fetch(url, { ...init, redirect: 'follow' });
+  }
 }
 
 function rejectTlsOptions(options) {
@@ -36,7 +55,7 @@ function headersToObject(headers) {
   return out;
 }
 
-export function createHttps({ ctx, Buffer, http }) {
+export function createHttps({ ctx, Buffer, http, handles }) {
   function createServer() {
     throw notSupported('https.createServer');
   }
@@ -105,9 +124,12 @@ export function createHttps({ ctx, Buffer, http }) {
       if (chunk != null && chunk !== '') this.write(chunk, encoding);
       this.#ended = true;
       if (typeof cb === 'function') this.once('finish', cb);
-      void this.#send().then(() => {
+      // Keep the jsh event loop alive until ctx.fetch settles (libuv-request style).
+      const pending = this.#send().then(() => {
         if (!this.#destroyed) this.emit('finish');
       });
+      if (handles) void trackPromise(handles, pending);
+      else void pending;
       return this;
     }
     abort() {
@@ -147,12 +169,10 @@ export function createHttps({ ctx, Buffer, http }) {
             : this.#body.length
               ? Buffer.concat(this.#body)
               : undefined;
-        // Node's https.request does not follow redirects; kernel Node entry supports manual.
-        const res = await ctx.fetch(url, {
+        const res = await fetchHttp(ctx, url, {
           method,
           headers: this.#headers,
           body,
-          redirect: 'manual',
           signal: this.#abort.signal,
         });
         if (this.#destroyed) return;

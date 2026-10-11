@@ -1,9 +1,5 @@
 /**
- * Probe redirect: 'manual' as seen by jsh (ctx.fetch / https.get).
- *
- * - Node entry: default nodeTransport (manualRedirects: true)
- * - Browser-shaped: fetchTransport({ redirect: 'follow' }) — same traits as the
- *   page default (manualRedirects: false). Real browser entry uses that transport.
+ * Probe https.get redirect behaviour and plain 200 on Node vs browser-shaped transport.
  *
  *   node scripts/probe-https-redirect.mjs
  */
@@ -17,59 +13,28 @@ async function withInstalledJsh(kernel) {
   }
 }
 
-/**
- * In-realm http 302 via fetch(redirect:'manual'), plus https.get against a
- * public 302 (Node transport only — browser-shaped rejects manual before dial).
- */
-const PROBE = `
-const http = require('http');
-const https = require('https');
-(async () => {
-  const out = {};
-  const srv = http.createServer((req, res) => {
-    if (req.url === '/from') {
-      res.writeHead(302, { Location: '/to', 'Content-Length': '0' });
-      res.end();
-      return;
-    }
-    res.writeHead(200);
-    res.end('landed');
-  });
-  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
-  const { port } = srv.address();
-  const url = 'http://127.0.0.1:' + port + '/from';
-  try {
-    const res = await fetch(url, { redirect: 'manual' });
-    out.fetch = {
-      statusCode: res.status,
-      type: res.type,
-      location: res.headers.get('location'),
-    };
-  } catch (e) {
-    out.fetch = {
-      error: String(e && e.message || e),
-      causeCode: e && e.cause && e.cause.code,
-    };
-  }
-  const httpsUrl = 'https://httpbin.org/redirect-to?url=https%3A%2F%2Fexample.com%2F&status_code=302';
-  out.httpsGet = await new Promise((resolve) => {
-    const req = https.get(httpsUrl, (res) => {
-      resolve({ statusCode: res.statusCode, location: res.headers.location || null });
-      res.resume();
-    });
-    req.setTimeout(12000, () => req.destroy(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })));
-    req.on('error', (e) => {
-      resolve({
-        error: String(e && e.message || e),
-        causeCode: e && e.cause && e.cause.code,
-        code: e && e.code,
-      });
-    });
-  });
-  console.log(JSON.stringify(out));
-  srv.close();
-})().catch((e) => { console.error(String(e)); process.exitCode = 1; });
-`;
+// Callback-driven (no top-level async IIFE): jsh's process may exit once the
+// main script returns even if promises are pending.
+const PROBE = [
+  "const https=require('https');",
+  "const out={};",
+  "function get(url,cb){",
+  "  const req=https.get(url,res=>{",
+  "    cb(null,{statusCode:res.statusCode,location:res.headers.location||null});",
+  "    res.resume();",
+  "  });",
+  "  req.setTimeout(20000,()=>req.destroy(Object.assign(new Error('timeout'),{code:'ETIMEDOUT'})));",
+  "  req.on('error',e=>cb(null,{error:String(e&&e.message||e),causeCode:e&&e.cause&&e.cause.code,code:e&&e.code}));",
+  "}",
+  "get('https://example.com/',(e,r)=>{",
+  "  out.get200=r;",
+  "  get('https://httpbin.org/redirect-to?url=https%3A%2F%2Fexample.com%2F&status_code=302',(e2,r2)=>{",
+  "    out.get302=r2;",
+  "    console.log(JSON.stringify(out));",
+  "    setImmediate(()=>process.exit(0));",
+  "  });",
+  "});",
+].join('');
 
 async function runProbe(label, transport) {
   const kernel = await createNodeKernel({ network: { transport } });

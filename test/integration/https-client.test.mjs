@@ -63,7 +63,7 @@ describe('https client (ctx.fetch)', () => {
     assert.equal(seen['content-type'], 'text/plain');
   });
 
-  it('passes redirect: manual', async () => {
+  it('passes redirect: manual when supported', async () => {
     let seen;
     const ctx = {
       fetch: async (_url, init) => {
@@ -84,6 +84,31 @@ describe('https client (ctx.fetch)', () => {
     });
     assert.equal(seen.redirect, 'manual');
     assert.equal(status, 302);
+  });
+
+  it('falls back to redirect: follow on ENOTSUP (browser transport)', async () => {
+    const seen = [];
+    const ctx = {
+      fetch: async (_url, init) => {
+        seen.push(init.redirect);
+        if (init.redirect === 'manual') {
+          const err = new TypeError('fetch failed');
+          err.cause = Object.assign(new Error('redirect: manual'), { code: 'ENOTSUP' });
+          throw err;
+        }
+        return new Response('ok', { status: 200 });
+      },
+    };
+    const https = createHttps({ ctx, Buffer, http: makeHttpStub() });
+    const status = await new Promise((resolve, reject) => {
+      const req = https.get('https://example.test/', (res) => {
+        resolve(res.statusCode);
+        res.resume();
+      });
+      req.on('error', reject);
+    });
+    assert.deepEqual(seen, ['manual', 'follow']);
+    assert.equal(status, 200);
   });
 
   it('destroy()/abort() cancel via AbortSignal', async () => {

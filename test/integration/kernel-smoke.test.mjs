@@ -114,6 +114,36 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
     }
   });
 
+  it('http client keeps connection-close bodies until socket end', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await run([
+        'node',
+        '-e',
+        [
+          "const net=require('net'), http=require('http');",
+          'const srv=net.createServer(sock=>{',
+          "  sock.once('data',()=>{",
+          "    sock.write('HTTP/1.1 200 OK\\r\\nConnection: close\\r\\n\\r\\npart1');",
+          "    setTimeout(()=>{ sock.write('part2'); sock.end(); }, 20);",
+          '  });',
+          '});',
+          'srv.listen(0,()=>{',
+          '  const {port}=srv.address();',
+          "  http.get('http://127.0.0.1:'+port+'/',res=>{",
+          "    let d=''; res.on('data',c=>d+=c);",
+          "    res.on('end',()=>{ console.log(d); srv.close(); setImmediate(()=>process.exit(0)); });",
+          '  });',
+          '});',
+        ].join(''),
+      ]);
+      assert.equal(r.status, 0);
+      assert.equal(r.stdout, 'part1part2\n');
+    } finally {
+      close();
+    }
+  });
+
   it('http client HEAD ignores Content-Length body wait', async () => {
     const { run, close } = await withJsh();
     try {
@@ -155,16 +185,19 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
           "const net=require('net'), http=require('http');",
           "const s=http.createServer((req,res)=>{",
           "  let d=''; req.on('data',c=>d+=c);",
-          "  req.on('end',()=>{ console.log(d); res.end('ok'); s.close(); process.exit(0); });",
+          "  req.on('end',()=>{ console.log(d); res.end('ok'); s.close(); setImmediate(()=>process.exit(0)); });",
           "});",
           "s.listen(0,()=>{",
           "  const {port}=s.address();",
           "  const sock=net.connect({host:'127.0.0.1',port},()=>{",
+          // Drain the response so res.end() can finish before we exit.
+          "    sock.on('data',()=>{});",
           "    sock.end(",
           "      'POST / HTTP/1.1\\r\\nHost: localhost\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n'",
           "      + '5\\r\\nhello\\r\\n0\\r\\n\\r\\n'",
           "    );",
           "  });",
+          "  sock.on('error',()=>{});",
           "});",
         ].join(''),
       ]);

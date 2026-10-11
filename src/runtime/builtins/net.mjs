@@ -204,12 +204,28 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       }
     }
 
+    /** Peer FIN / readable EOF — readable-stream Duplex may not emit 'end' while
+     *  the local writable is still open (allowHalfOpen); sockets must. */
+    #signalReadableEnd() {
+      const state = this._readableState;
+      if (state?.endEmitted || this.readableEnded) return;
+      this.push(null);
+      if (state?.endEmitted || this.readableEnded) return;
+      // Defer so we are not inside push()/pumpRead when user 'end' handlers run.
+      queueMicrotask(() => {
+        if (state?.endEmitted || this.readableEnded || this.destroyed) return;
+        this.emit('end');
+      });
+    }
+
     async #pumpRead() {
       try {
         for (;;) {
           const { value, done } = await this.#reader.read();
           if (done) {
-            this.push(null);
+            // Yield so prior push(buf) can flush to 'data' listeners before EOF.
+            await Promise.resolve();
+            this.#signalReadableEnd();
             break;
           }
           const buf =
@@ -219,9 +235,17 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           // Keep pulling from the kernel stream; readable-stream buffers if paused.
           // Waiting on push()===false deadlocks when the only consumer is 'data'.
           this.push(buf);
+          await Promise.resolve();
         }
       } catch (err) {
-        if (!this.destroyed) this.destroy(errnoError(err, 'read'));
+        // Peer half-close/close can race into EBADF; treat as readable EOF when
+        // we are not already destroyed so listeners still see 'end'.
+        const code = err?.code ?? err?.cause?.code;
+        if (!this.destroyed && (code === 'EBADF' || code === 'ECONNRESET' || code === 'EPIPE')) {
+          this.#signalReadableEnd();
+        } else if (!this.destroyed) {
+          this.destroy(errnoError(err, 'read'));
+        }
       } finally {
         // Readable side finished — if writable is also done, drop the ref.
         if (this._writableState?.ended || this.#ended) this.#dropHandle();
@@ -258,24 +282,22 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
 
     _final(callback) {
       this.#ended = true;
-      // Full close (not only SHUT_WR): kernel loopback delivers EOF to the peer
-      // more reliably when the fd is closed after the last write.
-      const finish = () => {
+      // Half-close the send side only (Node socket.end / SHUT_WR). Raw ctx.net
+      // delivers reader `done` to the peer after writer.close(); also calling
+      // conn.close() here races and often surfaces as EBADF on the peer instead
+      // of a clean EOF (see scripts/run-raw-ctx-net-fin.mjs).
+      if (!this.#writer) {
         this.#dropHandle();
         callback();
-      };
-      const closeConn = () =>
-        Promise.resolve(this.#conn?.close?.())
-          .catch(() => {})
-          .then(finish);
-      if (!this.#writer) {
-        void closeConn();
         return;
       }
       this.#writer
         .close()
         .catch(() => {})
-        .then(closeConn);
+        .finally(() => {
+          this.#dropHandle();
+          callback();
+        });
     }
 
     _destroy(err, callback) {

@@ -107,7 +107,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
   let https;
   const getHttps = () => {
-    if (!https) https = createHttps({ ctx, Buffer, http: getHttp() });
+    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles });
     return https;
   };
 
