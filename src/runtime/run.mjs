@@ -286,6 +286,8 @@ export async function runNode(ctx, options = {}) {
   });
   // Sync require() of .mjs / "type":"module" — returns the ESM namespace object.
   cjs.setRequireEsmHook((filename) => esm.requireEsm(filename));
+  // Dynamic import() inside CommonJS files — resolve relative to the CJS file.
+  cjs.setImportModuleHook((specifier, parent) => esm.importModule(specifier, parent));
 
   try {
     if (typeof options.main === 'function') {
@@ -392,16 +394,20 @@ export async function runNode(ctx, options = {}) {
           const module = { exports, id: '[eval]' };
           // Dynamic import() is valid in CJS; rewrite to the kernel loader
           // (host import() cannot see the in-memory FS).
-          const { code: cjsCode, changed: hasImport } = rewriteDynamicImports(parsed.code);
-          const __import = (spec) => esm.importModule(spec, evalParent);
+          const {
+            code: cjsCode,
+            changed: hasImport,
+            binding: importBinding = '__import',
+          } = rewriteDynamicImports(parsed.code);
+          const dynImport = (spec) => esm.importModule(spec, evalParent);
           const body = parsed.print
             ? `return (${cjsCode}\n)\n//# sourceURL=[eval]`
             : `${cjsCode}\n//# sourceURL=[eval]`;
           const args = ['exports', 'require', 'module', '__filename', '__dirname'];
           const values = [exports, require, module, '[eval]', process.cwd()];
           if (hasImport) {
-            args.push('__import');
-            values.push(__import);
+            args.push(importBinding);
+            values.push(dynImport);
           }
           const fn = new Function(...args, body);
           const result = fn(...values);
@@ -410,7 +416,10 @@ export async function runNode(ctx, options = {}) {
             trackPromise(handles, result);
           }
           nextTick.flushSync();
-          if (parsed.print) writeStdout(`${util.inspect(result, { colors: false })}\n`);
+          // Node -p: console.log semantics (strings unquoted), not util.inspect.
+          if (parsed.print) {
+            console.log(result);
+          }
         }
       } catch (err) {
         if (err instanceof NodeExitError) throw err;

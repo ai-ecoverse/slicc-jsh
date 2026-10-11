@@ -280,5 +280,188 @@ describe('ESM (M3)', () => {
       close();
     }
   });
+
+  it('import() from a CommonJS file resolves relative to that file', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/tla.mjs', 'export const ok = 1;\n');
+      await kernel.writeFile(
+        '/os/dyn.cjs',
+        "import('./tla.mjs').then(m=>console.log('cjsdyn',m.ok),e=>console.log('ERR',e.message));\n"
+      );
+      const r = await run(['node', 'dyn.cjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'cjsdyn 1\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('CJS import() works when the file already declares __import', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/tla.mjs', 'export const ok = 2;\n');
+      await kernel.writeFile(
+        '/os/collide.cjs',
+        [
+          'const __import = 99;',
+          "import('./tla.mjs').then((m) => console.log('ok', m.ok, __import));",
+        ].join('\n')
+      );
+      const r = await run(['node', 'collide.cjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'ok 2 99\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('import { createRequire } from module + import.meta.dirname', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/dep.cjs', 'module.exports = { v: 9 };\n');
+      await kernel.writeFile(
+        '/os/main.mjs',
+        [
+          "import { createRequire, isBuiltin, builtinModules } from 'module';",
+          'const require = createRequire(import.meta.url);',
+          "console.log(typeof createRequire, typeof require('fs').readFileSync, isBuiltin('fs'), Array.isArray(builtinModules));",
+          "console.log(import.meta.dirname, import.meta.filename.endsWith('/os/main.mjs'));",
+          "console.log('rel', require('./dep.cjs').v);",
+        ].join('\n')
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'function function true true\n/os true\nrel 9\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('createRequire decodes percent-encoded file URL paths', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/a b/dep.cjs', 'module.exports = { v: 4 };\n');
+      await kernel.writeFile(
+        '/os/a b/main.mjs',
+        [
+          "import { createRequire } from 'module';",
+          'const require = createRequire(import.meta.url);',
+          "console.log(require('./dep.cjs').v);",
+        ].join('\n')
+      );
+      const r = await run(['node', 'a b/main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '4\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('import() loads an entry whose static dependency uses top-level await', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile(
+        '/os/dep-tla.mjs',
+        'export const n = await Promise.resolve(3);\n'
+      );
+      await kernel.writeFile(
+        '/os/entry.mjs',
+        "import { n } from './dep-tla.mjs';\nexport const twice = n * 2;\n"
+      );
+      await kernel.writeFile(
+        '/os/main.mjs',
+        "import('./entry.mjs').then((m) => console.log('graph', m.twice));\n"
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'graph 6\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('import() of a TLA module with a named-export cycle', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      // A is async-evaluated (TLA); preload of B must see A's export bindings already
+      // instantiated or B's `import { a }` named-export check fails.
+      await kernel.writeFile(
+        '/os/a.mjs',
+        [
+          "import { b } from './b.mjs';",
+          "export function a() { return 'a'; }",
+          'export const n = await Promise.resolve(1);',
+          'export function ab() { return a() + b() + String(n); }',
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/b.mjs',
+        [
+          "import { a } from './a.mjs';",
+          "export function b() { return 'b' + a(); }",
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/main.mjs',
+        "import('./a.mjs').then((m) => console.log(m.ab()));\n"
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'aba1\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('import() cycle with const export uses live bindings (no link-time TDZ)', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile(
+        '/os/a.mjs',
+        [
+          "import { use } from './b.mjs';",
+          'export const a = await Promise.resolve(7);',
+          'export const out = use();',
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/b.mjs',
+        [
+          "import { a } from './a.mjs';",
+          'export function use() { return a; }',
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/main.mjs',
+        "import('./a.mjs').then((m) => console.log('const-cycle', m.out));\n"
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'const-cycle 7\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('createRequire works when the path contains #', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/a#b/dep.cjs', 'module.exports = { v: 5 };\n');
+      await kernel.writeFile(
+        '/os/a#b/main.mjs',
+        [
+          "import { createRequire } from 'module';",
+          'const require = createRequire(import.meta.url);',
+          "console.log(require('./dep.cjs').v);",
+        ].join('\n')
+      );
+      const r = await run(['node', 'a#b/main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '5\n');
+    } finally {
+      close();
+    }
+  });
 });
 

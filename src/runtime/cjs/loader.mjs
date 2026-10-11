@@ -1,6 +1,7 @@
+import { rewriteDynamicImports } from '../esm/transform.mjs';
 import { createPath } from '../path.mjs';
 import { createBuiltins } from './builtins.mjs';
-import { createResolver } from './resolve.mjs';
+import { createResolver, isBuiltinName } from './resolve.mjs';
 
 const decoder = new TextDecoder();
 
@@ -57,7 +58,10 @@ export function createCjs({
     'events',
     'fs',
     'fs/promises',
+    'http',
+    'https',
     'module',
+    'net',
     'os',
     'path',
     'path/posix',
@@ -72,13 +76,34 @@ export function createCjs({
     'util',
     'util/types',
   ];
+  Module.isBuiltin = (id) => {
+    if (typeof id !== 'string') return false;
+    const bare = id.startsWith('node:') ? id.slice(5) : id;
+    return isBuiltinName(bare);
+  };
   Module.createRequire = (filename) => {
-    const parent =
-      typeof filename === 'string'
-        ? filename
-        : filename?.href
-          ? filename.pathname
-          : `${process.cwd()}/`;
+    let parent;
+    if (typeof filename === 'string') {
+      // Node accepts file URL strings (import.meta.url), not only URL objects.
+      if (filename.startsWith('file:')) {
+        try {
+          // Decode percent-escapes (spaces, Unicode, etc.) like fileURLToPath.
+          parent = decodeURIComponent(new URL(filename).pathname);
+        } catch {
+          parent = filename;
+        }
+      } else {
+        parent = filename;
+      }
+    } else if (filename?.href) {
+      try {
+        parent = decodeURIComponent(filename.pathname);
+      } catch {
+        parent = filename.pathname;
+      }
+    } else {
+      parent = `${process.cwd()}/`;
+    }
     return makeRequire(parent);
   };
   Module.prototype.require = function require(id) {
@@ -144,6 +169,11 @@ export function createCjs({
   function setRequireEsmHook(fn) {
     requireEsmHook = fn;
   }
+  /** Dynamic import() from CJS — parent is the requiring file's path. */
+  let importModuleHook = null;
+  function setImportModuleHook(fn) {
+    importModuleHook = fn;
+  }
 
   function compile(mod, source, filename) {
     const dirname = path.dirname(filename);
@@ -160,19 +190,38 @@ export function createCjs({
       throw err;
     }
 
-    const body = stripHashbang(source);
-    // Exact Node CJS wrapper arity — only these five parameters.
-    // process/Buffer/console/timers/fetch come from globalThis.
+    const stripped = stripHashbang(source);
+    // Route import() through the ESM loader with this file as referrer (not data:).
+    const {
+      code: body,
+      changed: hasImport,
+      binding: importBinding = '__import',
+    } = rewriteDynamicImports(stripped);
+    // Exact Node CJS wrapper arity — five parameters, plus a collision-free
+    // dynamic-import binding when needed. process/Buffer/console/timers/fetch
+    // come from globalThis.
     let wrapper;
     try {
-      wrapper = new Function(
-        'exports',
-        'require',
-        'module',
-        '__filename',
-        '__dirname',
-        `${body}\n//# sourceURL=${filename}`
-      );
+      if (hasImport) {
+        wrapper = new Function(
+          'exports',
+          'require',
+          'module',
+          '__filename',
+          '__dirname',
+          importBinding,
+          `${body}\n//# sourceURL=${filename}`
+        );
+      } else {
+        wrapper = new Function(
+          'exports',
+          'require',
+          'module',
+          '__filename',
+          '__dirname',
+          `${body}\n//# sourceURL=${filename}`
+        );
+      }
     } catch (err) {
       if (err instanceof SyntaxError) {
         // Top-level const/let of a wrapper name → Node retries as ESM when the
@@ -212,6 +261,19 @@ export function createCjs({
         err.stack = pretty;
       }
       throw err;
+    }
+    if (hasImport) {
+      const __import = (spec) => {
+        if (typeof importModuleHook !== 'function') {
+          return Promise.reject(
+            new Error('slicc-jsh: dynamic import() is not available in this context')
+          );
+        }
+        return importModuleHook(String(spec), filename);
+      };
+      const require = makeRequire(filename, mod);
+      wrapper.call(mod.exports, mod.exports, require, mod, filename, dirname, __import);
+      return;
     }
     mod._compile(wrapper, filename);
   }
@@ -363,6 +425,7 @@ export function createCjs({
     makeRequire,
     loadFile,
     setRequireEsmHook,
+    setImportModuleHook,
     findPackageType,
   };
 }

@@ -80,9 +80,11 @@ function kernelSpawn(ctx, process) {
 function compiler(rt) {
   return (body, filename) => {
     const head = '(async function () {';
-    const { code, changed } = rt.rewriteDynamicImports(`${head}${body}\n})`);
+    const { code, changed, binding = '__import' } = rt.rewriteDynamicImports(
+      `${head}${body}\n})`
+    );
     const text = changed ? code.slice(head.length, -3) : body;
-    const params = changed ? [...JSH_PARAMS, '__import'] : [...JSH_PARAMS];
+    const params = changed ? [...JSH_PARAMS, binding] : [...JSH_PARAMS];
     const fn = new AsyncFunction(...params, `${text}\n//# sourceURL=${filename}`);
     if (!changed) return fn;
     const importFrom = (specifier) => rt.importModule(specifier, filename);
