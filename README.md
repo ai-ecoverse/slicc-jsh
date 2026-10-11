@@ -8,9 +8,9 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 **M1 shipped (0.1.0-8)** — Node-entry lockdown ([slicc-kernel#297](https://github.com/ai-ecoverse/slicc-kernel/issues/297)): CJS wrapper is Node's 5-arg form; `process` / `Buffer` / timers are real globals; vendor stream/string_decoder share jsh's Buffer class; StringDecoder accepts TypedArrays; timer stacks keep script URLs. Certified on hb2.
 
-**M2 (in progress):** `globalThis.fetch` / `WebSocket` install into writable slots from kernel ≥ 1.53.0 (`OPEN_SLOTS`, backed by `ctx.fetch` / `ctx.websocket`). Next: `net` / `http` / `https` on `ctx.net`, then ESM. jsh `Buffer.allocUnsafe` / `allocUnsafeSlow` zero-fill and `poolSize` is `0` (same guarantee as the upcoming kernel Node-entry fix). Requires `slicc-kernel` ≥ 1.53.0.
+**M2 (in progress):** `globalThis.fetch` / `WebSocket` from kernel ≥ 1.53.0 `OPEN_SLOTS` (`ctx.fetch` / `ctx.websocket`). `net` / `http` on `ctx.net` (loopback TCP); `https.createServer` waits on TLS, `https.request`/`get` use `ctx.fetch`. Next: ESM. jsh `Buffer.allocUnsafe` / `allocUnsafeSlow` zero-fill and `poolSize` is `0`. Requires `slicc-kernel` ≥ 1.53.0. Publish of the next version waits on the kernel release that carries the Node-entry Buffer fix (#324).
 
-**Still later:** `child_process` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` throw `ERR_NOT_SUPPORTED` until their milestone.
+**Still later:** `child_process` / `crypto` / `zlib` / `readline` / `tty` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

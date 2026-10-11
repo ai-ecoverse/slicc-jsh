@@ -84,8 +84,8 @@ export const cases = [
   { name: 'm1-esm-import-cjs', argv: ['-e', "import('fs').then(m=>console.log(typeof m.readFileSync)).catch(e=>console.log('ERR', e.code, e.message))"], m1gap: true },
 
   { name: 'm1-child_process', argv: ['-e', "try { const cp=require('child_process'); console.log(typeof cp.execSync, cp.execSync('echo hi').toString().trim()) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },
-  { name: 'm1-net', argv: ['-e', "try { const net=require('net'); const s=net.createServer(); s.listen(0, ()=>{ console.log('listening'); s.close() }) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },
-  { name: 'm1-http', argv: ['-e', "try { require('http').createServer(()=>{}).listen(0,function(){console.log('http up'); this.close()}) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },
+  { name: 'm1-net', argv: ['-e', "try { const net=require('net'); const s=net.createServer(); s.listen(0, ()=>{ console.log('listening'); s.close() }) } catch (e) { console.log('ERR', e.code, e.message) }"] },
+  { name: 'm1-http', argv: ['-e', "try { require('http').createServer(()=>{}).listen(0,function(){console.log('http up'); this.close()}) } catch (e) { console.log('ERR', e.code, e.message) }"] },
   // fetch is installed; refuse may still DIFF vs Node's exact TypeError text → keep gap until http/net.
   { name: 'm1-fetch', argv: ['-e', "(async()=>{ try { const r = await fetch('http://127.0.0.1:9/'); console.log(r.status) } catch (e) { console.log('ERR', e.name, e.message) } })()"], m1gap: true },
   { name: 'm1-crypto', argv: ['-e', "try { console.log(require('crypto').createHash('sha256').update('x').digest('hex').slice(0,8)) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },

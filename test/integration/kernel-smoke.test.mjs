@@ -82,6 +82,38 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
     }
   });
 
+  it('listens with net.createServer and closes', async () => {
+    const { run, close } = await withJsh();
+    try {
+      assert.deepEqual(
+        await run([
+          'node',
+          '-e',
+          "const net=require('net'); const s=net.createServer(); s.listen(0, ()=>{ console.log('listening'); s.close() })",
+        ]),
+        { status: 0, stdout: 'listening\n', stderr: '' }
+      );
+    } finally {
+      close();
+    }
+  });
+
+  it('serves http and round-trips get', async () => {
+    const { run, close } = await withJsh();
+    try {
+      assert.deepEqual(
+        await run([
+          'node',
+          '-e',
+          "const http=require('http'); const s=http.createServer((req,res)=>{res.end('ok')}); s.listen(0,()=>{ const {port}=s.address(); http.get('http://127.0.0.1:'+port+'/',res=>{ let d=''; res.on('data',c=>d+=c); res.on('end',()=>{ console.log(d); s.close() }) }) })",
+        ]),
+        { status: 0, stdout: 'ok\n', stderr: '' }
+      );
+    } finally {
+      close();
+    }
+  });
+
   it('resolves CJS require over node_modules on the memory root', async () => {
     const { kernel, run, close } = await withJsh();
     try {
