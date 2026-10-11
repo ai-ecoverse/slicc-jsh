@@ -1,4 +1,5 @@
 import { createAssert, createAssertStrict } from '../builtins/assert.mjs';
+import { createChildProcess } from '../builtins/child-process.mjs';
 import { createEvents } from '../builtins/events.mjs';
 import { createFs } from '../builtins/fs.mjs';
 import { createHttp } from '../builtins/http.mjs';
@@ -16,6 +17,7 @@ const BUILTIN_LIST = [
   'assert',
   'assert/strict',
   'buffer',
+  'child_process',
   'console',
   'events',
   'fs',
@@ -40,7 +42,6 @@ const BUILTIN_LIST = [
 ];
 
 const NOT_YET = [
-  'child_process',
   'http2',
   'crypto',
   'zlib',
@@ -110,6 +111,13 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles });
     return https;
   };
+  let childProcess;
+  const getChildProcess = () => {
+    if (!childProcess) {
+      childProcess = createChildProcess({ ctx, process, Buffer, handles, getStream });
+    }
+    return childProcess;
+  };
 
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
@@ -139,6 +147,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     net: () => getNet(),
     http: () => getHttp(),
     https: () => getHttps(),
+    child_process: () => getChildProcess(),
   };
 
   return {

@@ -441,6 +441,21 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         throw nodeFsError(err?.code || 'ENOENT', 'lstat', pathArg, err);
       }
     },
+    /**
+     * Resolve to a canonical absolute path. Symlink walk is not implemented;
+     * when the path exists we return the normalized absolute form (enough for
+     * pnpm's cmd shims, which only need dirname(realpathSync(argv[1]))).
+     */
+    realpathSync(p) {
+      const pathArg = p;
+      const target = abs(p);
+      try {
+        syncFs.stat(target);
+        return target;
+      } catch (err) {
+        throw nodeFsError(err?.code || 'ENOENT', 'realpath', pathArg, err);
+      }
+    },
     readdirSync,
     mkdirSync,
     rmdirSync(p, options = {}) {
@@ -1102,6 +1117,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     access: callbackify(syncApi.accessSync),
     stat: callbackify(syncApi.statSync),
     lstat: callbackify(syncApi.lstatSync),
+    realpath: callbackify(syncApi.realpathSync),
     readdir: callbackify(syncApi.readdirSync),
     mkdir: callbackify(syncApi.mkdirSync),
     rmdir: callbackify(syncApi.rmdirSync),

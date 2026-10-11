@@ -1,0 +1,185 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { withJsh } from './helpers.mjs';
+
+/** Run a node -e script that exercises child_process; return {status,stdout,stderr}. */
+async function cp(run, source) {
+  return run(['node', '-e', source], { cwd: '/os' });
+}
+
+describe('child_process (ctx.spawn)', () => {
+  it('spawn: pipe stdio, exit code, spawn/exit/close events', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await cp(
+        run,
+        `
+const { spawn } = require('child_process');
+const c = spawn('node', ['-e', 'process.stdout.write("hi\\\\n"); process.exit(7)'], { stdio: ['ignore','pipe','pipe'] });
+let out = '';
+c.stdout.on('data', (d) => { out += d; });
+const ev = [];
+c.on('spawn', () => ev.push('spawn:' + typeof c.pid));
+c.on('exit', (code, sig) => ev.push('exit:' + code + ':' + sig));
+c.on('close', (code, sig) => {
+  ev.push('close:' + code + ':' + sig);
+  console.log(JSON.stringify({ out, ev, pid: c.pid }));
+});
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      const j = JSON.parse(r.stdout.trim());
+      assert.equal(j.out, 'hi\n');
+      assert.match(j.ev[0], /^spawn:number$/);
+      assert.ok(j.ev.includes('exit:7:null'));
+      assert.ok(j.ev.includes('close:7:null'));
+      assert.equal(typeof j.pid, 'number');
+    } finally {
+      close();
+    }
+  });
+
+  it('spawn: ENOENT emits error then close(-2), no exit', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await cp(
+        run,
+        `
+const { spawn } = require('child_process');
+const c = spawn('no-such-cmd-xyz-abc', []);
+const ev = [];
+c.on('spawn', () => ev.push('spawn'));
+c.on('exit', () => ev.push('exit'));
+c.on('error', (e) => ev.push('error:' + e.code));
+c.on('close', (code, sig) => {
+  ev.push('close:' + code + ':' + sig);
+  console.log(JSON.stringify(ev));
+});
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      assert.deepEqual(JSON.parse(r.stdout.trim()), ['error:ENOENT', 'close:-2:null']);
+    } finally {
+      close();
+    }
+  });
+
+  it('spawn: SIGTERM kill → exit(null, SIGTERM)', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await cp(
+        run,
+        `
+const { spawn } = require('child_process');
+const c = spawn('node', ['-e', 'setTimeout(()=>{}, 1e9)'], { stdio: 'ignore' });
+c.on('spawn', () => setTimeout(() => c.kill('SIGTERM'), 50));
+c.on('exit', (code, sig) => {
+  console.log(JSON.stringify({ code, sig, killed: c.killed }));
+});
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      assert.deepEqual(JSON.parse(r.stdout.trim()), { code: null, sig: 'SIGTERM', killed: true });
+    } finally {
+      close();
+    }
+  });
+
+  it('execFile: collects stdout and maps non-zero exit', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await cp(
+        run,
+        `
+const { execFile } = require('child_process');
+execFile('node', ['-e', 'console.log("x"); process.exit(3)'], { encoding: 'utf8' }, (err, stdout, stderr) => {
+  console.log(JSON.stringify({
+    errCode: err && err.code,
+    stdout,
+    hasStderr: typeof stderr === 'string',
+  }));
+});
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      const j = JSON.parse(r.stdout.trim());
+      assert.equal(j.errCode, 3);
+      assert.equal(j.stdout, 'x\n');
+      assert.equal(j.hasStderr, true);
+    } finally {
+      close();
+    }
+  });
+
+  it('exec: is sh -c via spawn (ENOENT without a shell is fine)', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await cp(
+        run,
+        `
+const { exec } = require('child_process');
+exec('true', { encoding: 'utf8' }, (err, stdout) => {
+  console.log(JSON.stringify({
+    code: err && err.code,
+    path: err && err.path,
+    stdout: stdout == null ? null : String(stdout),
+  }));
+});
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      const j = JSON.parse(r.stdout.trim());
+      // Memory root has no sh → ENOENT on path 'sh'; with a shell, success.
+      if (j.code != null) {
+        assert.equal(j.path, 'sh');
+        assert.equal(j.code, 'ENOENT');
+      }
+    } finally {
+      close();
+    }
+  });
+
+  it('sync forms and fork stay ERR_NOT_SUPPORTED', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await cp(
+        run,
+        `
+const cp = require('child_process');
+const out = [];
+for (const name of ['spawnSync', 'execSync', 'execFileSync', 'fork']) {
+  try { cp[name]('x'); out.push(name + ':ok'); }
+  catch (e) { out.push(name + ':' + e.code); }
+}
+console.log(out.join(' '));
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(
+        r.stdout.trim(),
+        'spawnSync:ERR_NOT_SUPPORTED execSync:ERR_NOT_SUPPORTED execFileSync:ERR_NOT_SUPPORTED fork:ERR_NOT_SUPPORTED'
+      );
+    } finally {
+      close();
+    }
+  });
+
+  it('stdio inherit: pnpm-shim shape (spawn node script, exit code)', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/cli.mjs', 'console.log("cli", process.argv.slice(2).join(",")); process.exit(0);\n');
+      const r = await cp(
+        run,
+        `
+const { spawn } = require('child_process');
+const c = spawn('node', ['/os/cli.mjs', 'a', 'b'], { stdio: 'inherit' });
+c.on('exit', (code) => { process.exitCode = code ?? 1; });
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'cli a,b\n');
+    } finally {
+      close();
+    }
+  });
+});

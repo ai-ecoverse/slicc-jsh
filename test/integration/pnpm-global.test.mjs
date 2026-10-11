@@ -89,9 +89,7 @@ describe('pnpm add -g @ai-ecoverse/slicc-jsh in the kernel', () => {
     assert.deepEqual(await run(['node', cli, '--version']), { status: 0, stdout: `${version}\n`, stderr: '' });
   });
 
-  it('runs jsh through pnpm\'s global bin shim (the PATH entry)', {
-    skip: 'the shim spawns node through child_process (slicc-jsh#58 un-skips this)',
-  }, async () => {
+  it('runs jsh through pnpm\'s global bin shim (the PATH entry)', async () => {
     assert.deepEqual(await run([`${globalBin}/jsh`, 'x.jsh', 'a', 'b']), { status: 0, stdout: EXPECTED, stderr: '' });
   });
 });
