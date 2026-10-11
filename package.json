@@ -70,7 +70,7 @@
     "trust:dry": "npx fledgling sync --dry-run -y --skip-publish"
   },
   "devDependencies": {
-    "@ai-ecoverse/slicc-kernel": "1.59.1",
+    "@ai-ecoverse/slicc-kernel": "1.61.0",
     "@ai-ecoverse/wasi-pnpm": "12.9.1-8",
     "abort-controller": "3.0.0",
     "acorn": "8.19.0",
