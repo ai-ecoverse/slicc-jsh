@@ -189,6 +189,7 @@ function normalise(text, { caseRoots, port }) {
   if (node22) out = out.split(node22).join('$NODE');
   out = out.split(`127.0.0.1:${port}`).join('$HTTP').split(`host.slicc.internal:${port}`).join('$HTTP');
   out = out.split(root.replace(/\/$/, '')).join('$REPO');
+  out = out.replace(/\(node:\d+\)/g, '(node:PID)').replace(/data:text\/javascript;base64,[A-Za-z0-9+/=]+/g, 'data:text/javascript;base64,…');
   // Keep stack frames in the case's own files; engine-internal frames (and
   // their line numbers, which move with every build) collapse to one line.
   const lines = [];

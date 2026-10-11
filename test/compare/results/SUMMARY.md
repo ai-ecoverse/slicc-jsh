@@ -11,7 +11,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 |---|---|---|---|---|---|---|
 | [buffer](buffer) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [child-process-async](child-process-async) | builtins | = | ≠ | = | seven≠node | 0 / timeout / 0 / 0 |
-| [child-process-floating](child-process-floating) | builtins | = | ≠ | = | seven≠node | 0 / 0 / 0 / 0 |
+| [child-process-floating](child-process-floating) | builtins | = | = | = | same | 0 / 0 / 0 / 0 |
 | [child-process-sync](child-process-sync) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [console-format](console-format) | console | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [console-methods](console-methods) | console | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
@@ -82,7 +82,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [process-stdout-istty](process-stdout-istty) | process | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [process-stdout-write-cb](process-stdout-write-cb) | process | ≠ | = | = | six≠node | timeout / 0 / 0 / 0 |
 | [require-absolute](require-absolute) | require | ≠ | = | = | six≠node | 1 / 0 / 0 / 0 |
-| [require-builtins](require-builtins) | require | ≠ | ≠ | ≠ | all differ | 0 / 0 / 0 / 0 |
+| [require-builtins](require-builtins) | require | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [require-esm](require-esm) | require | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [require-missing](require-missing) | require | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [require-native](require-native) | require | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |

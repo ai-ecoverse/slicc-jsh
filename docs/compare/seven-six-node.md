@@ -17,7 +17,7 @@ Status: **measurement only** (phase 1). Nothing in slicc-jsh is changed yet; thi
 | | version | how it ran |
 |---|---|---|
 | six | SLICC 6.247.17, `ai-ecoverse/slicc@e44ee9d2c` (origin/main, 2026-10-11) | the real v6 shell and realm, headless under slicc's own vitest setup (see below) |
-| seven | slicc-jsh `main@5d4302e` (#58 child_process included), slicc-kernel 1.59.1 | the kernel `jsh` on slicc-kernel's Node entry, with `@ai-ecoverse/wasm-bash@5.3.0-17` and `wasm-coreutils@9.12.0-5` installed |
+| seven | slicc-jsh `main@06e7bb5` (child_process from #58 and #62 included), slicc-kernel 1.59.1 | the kernel `jsh` on slicc-kernel's Node entry, with `@ai-ecoverse/wasm-bash@5.3.0-17` and `wasm-coreutils@9.12.0-5` installed |
 | jsh | same build | the host `jsh` (`dist/host/jsh.mjs`) on Node 22.22.0: the `.jsh` wrapper on real Node, the reference for `.jsh` semantics |
 | node | Node 22.22.0 | each case as a plain program (ESM, or CJS where the body needs it): the tie-breaker for the Node API |
 
@@ -173,7 +173,7 @@ The case name is given for every row below.
 
 | behavior | six | seven | node | verdict | corpus | case |
 |---|---|---|---|---|---|---|
-| `child_process.exec/spawn/execFile` (async) | works | works when the body doesn't await it; **hangs when it does** (nextTick); `exec`'s callback gets a Buffer, not a string | works | seven≠node | 2 | child-process-async, child-process-floating |
+| `child_process.exec/spawn/execFile` (async) | works | works when the body doesn't await it; **hangs when it does** (nextTick) | works | seven≠node | 2 | child-process-async, child-process-floating |
 | `execSync`, `execFileSync`, `spawnSync` | unknown *(harness: needs the SW sync bridge)* | `not supported yet` | works | seven≠node | 2 | child-process-sync, process-env-to-child |
 | `crypto` | md5/sha1/sha256 only; no `createHmac`, `pbkdf2Sync`, `timingSafeEqual`, `getHashes` | `'crypto' is not supported yet` | full | seven≠node | 2 (plus 5 using the global `crypto`, which works everywhere) | crypto, globals-crypto |
 | `zlib` | sync and callback (pako); no brotli, no streams | `'zlib' is not supported yet` | full | seven≠node | 3 | zlib |

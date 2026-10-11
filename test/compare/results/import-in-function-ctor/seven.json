@@ -1,5 +1,5 @@
 {
   "status": 0,
-  "stdout": "builtin: THROW Error ERR_ACCESS_DENIED: slicc-kernel: a JS program cannot import node:path\nrelative: THROW TypeError ERR_UNSUPPORTED_RESOLVE_REQUEST: Failed to resolve module specifier \"./lib.mjs\" from \"data:text/javascript;base64,dmFyIF9fY3JlYXRlID0gT2JqZWN0LmNyZWF0ZTsKdmFyIF9fZGVmUHJvcCA9IE9iamVjdC5kZWZpbmVQcm9wZXJ0eTsKdmFyIF9fZ2V0T3duUHJvcERlc2MgPSBPYmplY3QuZ2V0T3duUHJvcGVydHlEZXNjcmlw…[823971 chars]\nabsolute: THROW TypeError ERR_UNSUPPORTED_RESOLVE_REQUEST: Failed to resolve module specifier \"$CASE/lib.mjs\" from \"data:text/javascript;base64,dmFyIF9fY3JlYXRlID0gT2JqZWN0LmNyZWF0ZTsKdmFyIF9fZGVmUHJvcCA9IE9iamVjdC5kZWZpbmVQcm9wZXJ0eTsKdmFyIF9fZ2V0T3duUHJvcERlc2MgPSBPYmplY3QuZ2V0T3duUHJvcGVydHlEZXNj…[823975 chars]\n",
+  "stdout": "builtin: THROW Error ERR_ACCESS_DENIED: slicc-kernel: a JS program cannot import node:path\nrelative: THROW TypeError ERR_UNSUPPORTED_RESOLVE_REQUEST: Failed to resolve module specifier \"./lib.mjs\" from \"data:text/javascript;base64,…\": Invalid relative URL or base scheme is not hierarchical.\nabsolute: THROW TypeError ERR_UNSUPPORTED_RESOLVE_REQUEST: Failed to resolve module specifier \"$CASE/lib.mjs\" from \"data:text/javascript;base64,…\": Invalid relative URL or base scheme is not hierarchical.\n",
   "stderr": ""
 }

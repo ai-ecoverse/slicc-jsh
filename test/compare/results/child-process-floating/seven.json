@@ -1,5 +1,5 @@
 {
   "status": 0,
-  "stdout": "err null stdout object true \"floating\\n\"\n",
+  "stdout": "err null stdout string false \"floating\\n\"\n",
   "stderr": ""
 }
