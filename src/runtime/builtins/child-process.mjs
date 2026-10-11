@@ -379,13 +379,13 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
           if (code === 'ENOENT') {
             child.exitCode = -2;
             child._markClosing();
-            // After error handlers (which may call execFile) and their nested
-            // nextTick spawn starts — matches Node's close-after-error ordering.
+            // After error handlers (which may call execFile → async spawn) so
+            // their 'error' logs before this 'close' (Node order on ENOENT).
             setTimeout(() => {
               safeEmit(child, 'close', -2, null);
               child._release();
               handles.notify?.();
-            }, 0);
+            }, 20);
           } else {
             finish(child, 1, null);
           }
