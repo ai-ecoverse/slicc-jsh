@@ -280,14 +280,29 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
 
     _destroy(err, callback) {
       this.destroyed = true;
-      this.#dropHandle();
-      const closeConn = this.#conn?.close?.();
-      void Promise.resolve(closeConn)
-        .catch(() => {})
-        .finally(() => {
-          callback(err);
-          this.emit('close', Boolean(err));
-        });
+      const finish = () => {
+        this.#dropHandle();
+        callback(err);
+        this.emit('close', Boolean(err));
+      };
+      void (async () => {
+        try {
+          await this.#writer?.close?.();
+        } catch {
+          /* ignore */
+        }
+        try {
+          await this.#reader?.cancel?.();
+        } catch {
+          /* ignore */
+        }
+        try {
+          await this.#conn?.close?.();
+        } catch {
+          /* ignore */
+        }
+        finish();
+      })();
     }
 
     end(data, encoding, callback) {

@@ -131,9 +131,13 @@ function parseHead(buf, Buffer) {
   return { kind: 'error', message: 'Parse Error' };
 }
 
-function decodeChunked(body, Buffer) {
+/** Max buffered HTTP body (request or response). Over → 413 / error. */
+export const MAX_HTTP_BODY = 64 * 1024 * 1024;
+
+function decodeChunked(body, Buffer, maxBytes = MAX_HTTP_BODY) {
   const parts = [];
   let state = body;
+  let total = 0;
   for (;;) {
     const i = indexOfBytes(state, new Uint8Array([13, 10]));
     if (i === -1) break;
@@ -144,10 +148,20 @@ function decodeChunked(body, Buffer) {
     if (size === 0) {
       return { ok: true, body: Buffer.concat(parts) };
     }
+    total += size;
+    if (total > maxBytes) return { ok: false, tooLarge: true };
     parts.push(Buffer.from(state.subarray(i + 2, i + 2 + size)));
     state = state.subarray(need);
   }
   return { ok: false };
+}
+
+/** HEAD / 1xx / 204 / 304 never carry a response body (RFC 9110). */
+function responseHasNoBody(method, statusCode) {
+  if (String(method || 'GET').toUpperCase() === 'HEAD') return true;
+  if (statusCode === 204 || statusCode === 304) return true;
+  if (statusCode >= 100 && statusCode < 200) return true;
+  return false;
 }
 
 export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
@@ -289,10 +303,33 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     }
   }
 
+  function rejectPayloadTooLarge(socket) {
+    try {
+      socket.write(
+        'HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'
+      );
+    } catch {
+      /* ignore */
+    }
+    try {
+      socket.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+
   function handleConnection(socket, requestListener, server) {
     let buf = Buffer.alloc(0);
     const onData = (chunk) => {
-      buf = Buffer.concat([buf, chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk)]);
+      buf = Buffer.concat([
+        buf,
+        chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk),
+      ]);
+      if (buf.length > MAX_HTTP_BODY + 64 * 1024) {
+        // Cap head+body growth while still reading the request line/headers.
+        rejectPayloadTooLarge(socket);
+        return;
+      }
       const parsed = parseHead(buf, Buffer);
       if (!parsed || parsed.kind === 'error') {
         if (parsed?.kind === 'error') socket.destroy();
@@ -300,10 +337,31 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       }
       if (parsed.kind !== 'request') return;
       const headers = headerObj(parsed.rawHeaders);
-      const cl = Number(headers['content-length'] ?? 0);
-      if (parsed.bodyPrefix.length < cl) return;
+      const te = String(headers['transfer-encoding'] || '').toLowerCase();
+      let body;
+      // RFC 9112: if Transfer-Encoding is present, it frames the body (ignore CL).
+      if (te.includes('chunked')) {
+        const decoded = decodeChunked(parsed.bodyPrefix, Buffer);
+        if (decoded.tooLarge) {
+          rejectPayloadTooLarge(socket);
+          return;
+        }
+        if (!decoded.ok) return;
+        body = decoded.body;
+      } else {
+        const cl = headers['content-length'] != null ? Number(headers['content-length']) : 0;
+        if (!Number.isFinite(cl) || cl < 0) {
+          socket.destroy();
+          return;
+        }
+        if (cl > MAX_HTTP_BODY) {
+          rejectPayloadTooLarge(socket);
+          return;
+        }
+        if (parsed.bodyPrefix.length < cl) return;
+        body = parsed.bodyPrefix.subarray(0, cl);
+      }
       socket.off('data', onData);
-      const body = parsed.bodyPrefix.subarray(0, cl);
       const req = makeIncomingMessage(socket, body);
       req.method = parsed.method;
       req.url = parsed.url;
@@ -377,11 +435,56 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
 
     #connect() {
       const opts = this.#opts;
+      const method = (opts.method ?? 'GET').toUpperCase();
       const host = opts.hostname ?? opts.host ?? '127.0.0.1';
       const port = Number(opts.port ?? (opts.protocol === 'https:' ? 443 : 80));
       const socket = net.connect({ host, port });
       this.#socket = socket;
+      let headBuf = Buffer.alloc(0);
+      let head = null; // { parsed, headers, te, cl }
+      let bodyBuf = Buffer.alloc(0);
+      let socketEnded = false;
+      let emitted = false;
+      /** @type {ReturnType<typeof setTimeout> | null} */
+      let closeIdle = null;
+      // ctx.net loopback often never surfaces peer EOF to the client reader; after
+      // the last body byte, idle-finalize Connection: close / no-CL responses.
+      const CLOSE_IDLE_MS = 50;
+
+      const clearCloseIdle = () => {
+        if (closeIdle) {
+          clearTimeout(closeIdle);
+          closeIdle = null;
+        }
+      };
+
+      const isCloseFramed = () => {
+        if (!head) return false;
+        const { te, cl } = head;
+        return !te.includes('chunked') && cl == null;
+      };
+
+      const markEnded = () => {
+        socketEnded = true;
+        clearCloseIdle();
+        tryEmit();
+      };
+
+      const armCloseIdle = () => {
+        if (!isCloseFramed() || emitted || socketEnded) return;
+        clearCloseIdle();
+        closeIdle = setTimeout(() => {
+          closeIdle = null;
+          markEnded();
+        }, CLOSE_IDLE_MS);
+      };
+
       socket.on('error', (err) => {
+        if (isCloseFramed() && !emitted) {
+          markEnded();
+          return;
+        }
+        if (emitted) return;
         if (this.listenerCount('error')) this.emit('error', err);
         else socket.destroy();
       });
@@ -389,34 +492,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         this.emit('socket', socket);
         this.#flush();
       });
-      let buf = Buffer.alloc(0);
-      socket.on('data', (chunk) => {
-        buf = Buffer.concat([
-          buf,
-          chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk),
-        ]);
-        const parsed = parseHead(buf, Buffer);
-        if (!parsed) return;
-        if (parsed.kind !== 'response') {
-          this.emit('error', new Error(parsed.message ?? 'Parse Error'));
-          socket.destroy();
-          return;
-        }
-        const headers = headerObj(parsed.rawHeaders);
-        const te = String(headers['transfer-encoding'] || '').toLowerCase();
-        const cl = headers['content-length'] != null ? Number(headers['content-length']) : null;
-        let body = parsed.bodyPrefix;
-        if (te.includes('chunked')) {
-          const decoded = decodeChunked(body, Buffer);
-          if (!decoded.ok) return;
-          body = decoded.body;
-        } else if (cl != null && body.length < cl) {
-          return;
-        } else if (cl != null) {
-          body = body.subarray(0, cl);
-        }
+
+      const emitResponse = (body) => {
+        if (emitted) return;
+        emitted = true;
+        clearCloseIdle();
         socket.removeAllListeners('data');
-        // Drop the TCP handle immediately — body is already buffered on `res`.
+        socket.removeAllListeners('end');
+        socket.removeAllListeners('close');
+        // Drop the TCP handle; ignore late read errors from the kernel pump.
+        socket.removeAllListeners('error');
+        socket.on('error', () => {});
         try {
           socket.unref?.();
           socket.destroy();
@@ -424,13 +510,88 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
           /* ignore */
         }
         const res = makeIncomingMessage(null, body);
-        res.statusCode = parsed.statusCode;
-        res.statusMessage = parsed.statusMessage;
-        res.httpVersion = parsed.httpVersion;
-        res.rawHeaders = parsed.rawHeaders;
-        res.headers = headers;
+        res.statusCode = head.parsed.statusCode;
+        res.statusMessage = head.parsed.statusMessage;
+        res.httpVersion = head.parsed.httpVersion;
+        res.rawHeaders = head.parsed.rawHeaders;
+        res.headers = head.headers;
         this.emit('response', res);
+      };
+
+      const tryEmit = () => {
+        if (!head || emitted) return;
+        const { te, cl, parsed } = head;
+        if (responseHasNoBody(method, parsed.statusCode)) {
+          emitResponse(Buffer.alloc(0));
+          return;
+        }
+        if (te.includes('chunked')) {
+          const decoded = decodeChunked(bodyBuf, Buffer);
+          if (decoded.tooLarge) {
+            this.emit('error', Object.assign(new Error('Payload Too Large'), { code: 'ERR_OUT_OF_RANGE' }));
+            socket.destroy();
+            return;
+          }
+          if (!decoded.ok) return;
+          emitResponse(decoded.body);
+          return;
+        }
+        if (cl != null) {
+          if (bodyBuf.length < cl) return;
+          emitResponse(bodyBuf.subarray(0, cl));
+          return;
+        }
+        // No Content-Length and not chunked: body framed by connection close.
+        if (!socketEnded) return;
+        emitResponse(bodyBuf);
+      };
+
+      socket.on('data', (chunk) => {
+        const bytes = chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk);
+        if (!head) {
+          headBuf = Buffer.concat([headBuf, bytes]);
+          const parsed = parseHead(headBuf, Buffer);
+          if (!parsed) return;
+          if (parsed.kind !== 'response') {
+            this.emit('error', new Error(parsed.message ?? 'Parse Error'));
+            socket.destroy();
+            return;
+          }
+          const headers = headerObj(parsed.rawHeaders);
+          const te = String(headers['transfer-encoding'] || '').toLowerCase();
+          const cl =
+            headers['content-length'] != null ? Number(headers['content-length']) : null;
+          if (cl != null && (!Number.isFinite(cl) || cl < 0)) {
+            this.emit('error', new Error('Invalid Content-Length'));
+            socket.destroy();
+            return;
+          }
+          if (cl != null && cl > MAX_HTTP_BODY) {
+            this.emit(
+              'error',
+              Object.assign(new Error('Payload Too Large'), { code: 'ERR_OUT_OF_RANGE' })
+            );
+            socket.destroy();
+            return;
+          }
+          head = { parsed, headers, te, cl };
+          bodyBuf = parsed.bodyPrefix;
+        } else {
+          bodyBuf = Buffer.concat([bodyBuf, bytes]);
+          if (bodyBuf.length > MAX_HTTP_BODY) {
+            this.emit(
+              'error',
+              Object.assign(new Error('Payload Too Large'), { code: 'ERR_OUT_OF_RANGE' })
+            );
+            socket.destroy();
+            return;
+          }
+        }
+        tryEmit();
+        armCloseIdle();
       });
+      socket.on('end', markEnded);
+      socket.on('close', markEnded);
     }
 
     #flush() {
@@ -519,8 +680,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
   return {
     METHODS,
     STATUS_CODES,
-    IncomingMessage: function IncomingMessage(socket) {
-      return makeIncomingMessage(socket, Buffer.alloc(0));
+    IncomingMessage: function IncomingMessage(socket, body) {
+      return makeIncomingMessage(socket, body ?? Buffer.alloc(0));
     },
     ServerResponse,
     Server,

@@ -1,12 +1,39 @@
 /**
- * node:https — createServer awaits kernel TLS; client request/get use ctx.fetch.
+ * node:https — createServer awaits kernel TLS; client request/get use ctx.fetch
+ * with redirect: 'manual' (Node does not follow redirects on https.request).
  */
 import { EventEmitter } from './events.mjs';
+
+const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
 
 function notSupported(what) {
   const err = new Error(`slicc-jsh: '${what}' is not supported yet (no TLS on ctx.net)`);
   err.code = 'ERR_NOT_SUPPORTED';
   return err;
+}
+
+function rejectTlsOptions(options) {
+  for (const name of TLS_CLIENT_OPTS) {
+    if (options?.[name] != null) {
+      throw notSupported(`https.request option '${name}'`);
+    }
+  }
+}
+
+function headersToObject(headers) {
+  const out = Object.create(null);
+  if (!headers) return out;
+  if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      out[String(key).toLowerCase()] = String(value);
+    });
+    return out;
+  }
+  for (const [k, v] of Object.entries(headers)) {
+    if (v == null) continue;
+    out[String(k).toLowerCase()] = Array.isArray(v) ? v.map(String).join(', ') : String(v);
+  }
+  return out;
 }
 
 export function createHttps({ ctx, Buffer, http }) {
@@ -16,30 +43,45 @@ export function createHttps({ ctx, Buffer, http }) {
 
   class ClientRequest extends EventEmitter {
     #ended = false;
+    #sent = false;
     #body = [];
     #opts;
-    #callback;
+    #headers = Object.create(null);
+    #abort = new AbortController();
+    #timeout = null;
+    #destroyed = false;
 
     constructor(options, callback) {
       super();
+      rejectTlsOptions(options);
       this.#opts = options;
-      this.#callback = callback;
+      this.#headers = headersToObject(options?.headers);
       if (callback) this.once('response', callback);
-      queueMicrotask(() => {
-        if (this.#ended) void this.#send();
-      });
     }
 
-    setHeader() {
+    setHeader(name, value) {
+      this.#headers[String(name).toLowerCase()] = Array.isArray(value)
+        ? value.map(String).join(', ')
+        : String(value);
       return this;
     }
-    getHeader() {
-      return undefined;
+    getHeader(name) {
+      return this.#headers[String(name).toLowerCase()];
     }
-    removeHeader() {
+    removeHeader(name) {
+      delete this.#headers[String(name).toLowerCase()];
       return this;
     }
-    setTimeout() {
+    setTimeout(ms, cb) {
+      if (this.#timeout) clearTimeout(this.#timeout);
+      if (ms > 0) {
+        this.#timeout = setTimeout(() => {
+          this.#timeout = null;
+          this.emit('timeout');
+          if (typeof cb === 'function') cb();
+        }, ms);
+        this.#timeout.unref?.();
+      }
       return this;
     }
     write(chunk, encoding, cb) {
@@ -63,17 +105,34 @@ export function createHttps({ ctx, Buffer, http }) {
       if (chunk != null && chunk !== '') this.write(chunk, encoding);
       this.#ended = true;
       if (typeof cb === 'function') this.once('finish', cb);
-      void this.#send().then(() => this.emit('finish'));
+      void this.#send().then(() => {
+        if (!this.#destroyed) this.emit('finish');
+      });
       return this;
     }
     abort() {
-      this.emit('abort');
+      this.destroy();
     }
     destroy(err) {
+      if (this.#destroyed) return this;
+      this.#destroyed = true;
+      if (this.#timeout) {
+        clearTimeout(this.#timeout);
+        this.#timeout = null;
+      }
+      try {
+        this.#abort.abort(err ?? new Error('aborted'));
+      } catch {
+        /* ignore */
+      }
       if (err) this.emit('error', err);
+      this.emit('close');
+      return this;
     }
 
     async #send() {
+      if (this.#sent || this.#destroyed) return;
+      this.#sent = true;
       try {
         if (typeof ctx.fetch !== 'function') throw notSupported('https.request');
         const opts = this.#opts;
@@ -88,29 +147,36 @@ export function createHttps({ ctx, Buffer, http }) {
             : this.#body.length
               ? Buffer.concat(this.#body)
               : undefined;
+        // Node's https.request does not follow redirects; kernel Node entry supports manual.
         const res = await ctx.fetch(url, {
           method,
-          headers: opts.headers,
+          headers: this.#headers,
           body,
+          redirect: 'manual',
+          signal: this.#abort.signal,
         });
-        const incoming = new http.IncomingMessage(null);
+        if (this.#destroyed) return;
+        const ab = method === 'HEAD' ? new ArrayBuffer(0) : await res.arrayBuffer();
+        if (this.#destroyed) return;
+        const buf = Buffer.from(ab);
+        const incoming = http.IncomingMessage(null, buf);
         incoming.statusCode = res.status;
         incoming.statusMessage = res.statusText;
         incoming.headers = Object.create(null);
         incoming.rawHeaders = [];
         res.headers.forEach((value, key) => {
-          incoming.headers[key] = value;
+          incoming.headers[String(key).toLowerCase()] = value;
           incoming.rawHeaders.push(key, value);
         });
-        const ab = await res.arrayBuffer();
-        const buf = Buffer.from(ab);
         queueMicrotask(() => {
+          if (this.#destroyed) return;
           this.emit('response', incoming);
-          if (buf.length) incoming.push(buf);
-          incoming.complete = true;
-          incoming.push(null);
         });
       } catch (err) {
+        if (this.#destroyed || this.#abort.signal.aborted) {
+          if (!this.#destroyed) this.destroy();
+          return;
+        }
         this.emit('error', err);
       }
     }

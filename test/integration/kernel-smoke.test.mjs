@@ -114,6 +114,130 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
     }
   });
 
+  it('http client keeps connection-close bodies until socket end', async () => {
+    const { run, close } = await withJsh();
+    try {
+      // Raw server: no Content-Length / TE; body framed by close (two writes).
+      const r = await run([
+        'node',
+        '-e',
+        [
+          "const net=require('net'), http=require('http');",
+          "const srv=net.createServer(sock=>{",
+          "  sock.once('data',()=>{",
+          "    sock.write('HTTP/1.1 200 OK\\r\\nConnection: close\\r\\n\\r\\npart1');",
+          // destroy(): loopback EOF from end() is unreliable on ctx.net
+          "    setTimeout(()=>{ sock.write('part2'); sock.destroy(); }, 20);",
+          "  });",
+          "});",
+          "srv.listen(0,()=>{",
+          "  const {port}=srv.address();",
+          "  http.get('http://127.0.0.1:'+port+'/',res=>{",
+          "    let d=''; res.on('data',c=>d+=c);",
+          "    res.on('end',()=>{ console.log(d); srv.close(); process.exit(0); });",
+          "  });",
+          "});",
+        ].join(''),
+      ]);
+      assert.equal(r.status, 0);
+      assert.equal(r.stdout, 'part1part2\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('http client HEAD ignores Content-Length body wait', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await run([
+        'node',
+        '-e',
+        [
+          "const net=require('net'), http=require('http');",
+          "const srv=net.createServer(sock=>{",
+          "  sock.once('data',()=>{",
+          "    sock.end('HTTP/1.1 200 OK\\r\\nContent-Length: 1234\\r\\nConnection: close\\r\\n\\r\\n');",
+          "  });",
+          "});",
+          "srv.listen(0,()=>{",
+          "  const {port}=srv.address();",
+          "  const req=http.request({host:'127.0.0.1',port,path:'/',method:'HEAD'},res=>{",
+          "    let n=0; res.on('data',c=>n+=c.length);",
+          "    res.on('end',()=>{ console.log(res.statusCode,n); srv.close(); process.exit(0); });",
+          "  });",
+          "  req.on('error',()=>{});",
+          "  req.end();",
+          "});",
+        ].join(''),
+      ]);
+      assert.equal(r.status, 0);
+      assert.equal(r.stdout, '200 0\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('http server decodes chunked request bodies', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await run([
+        'node',
+        '-e',
+        [
+          "const net=require('net'), http=require('http');",
+          "const s=http.createServer((req,res)=>{",
+          "  let d=''; req.on('data',c=>d+=c);",
+          "  req.on('end',()=>{ console.log(d); res.end('ok'); s.close(); process.exit(0); });",
+          "});",
+          "s.listen(0,()=>{",
+          "  const {port}=s.address();",
+          "  const sock=net.connect({host:'127.0.0.1',port},()=>{",
+          "    sock.end(",
+          "      'POST / HTTP/1.1\\r\\nHost: localhost\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n'",
+          "      + '5\\r\\nhello\\r\\n0\\r\\n\\r\\n'",
+          "    );",
+          "  });",
+          "});",
+        ].join(''),
+      ]);
+      assert.equal(r.status, 0);
+      assert.equal(r.stdout, 'hello\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('http server rejects oversized Content-Length with 413', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await run([
+        'node',
+        '-e',
+        [
+          "const net=require('net'), http=require('http');",
+          "const s=http.createServer(()=>{ console.log('should-not-run'); });",
+          "s.listen(0,()=>{",
+          "  const {port}=s.address();",
+          "  const sock=net.connect({host:'127.0.0.1',port},()=>{",
+          "    sock.write(",
+          "      'POST / HTTP/1.1\\r\\nHost: localhost\\r\\nContent-Length: 999999999\\r\\n\\r\\n'",
+          "    );",
+          "  });",
+          "  let d='';",
+          "  sock.on('data',c=>d+=c);",
+          "  const done=()=>{ console.log(/^HTTP\\/1\\.1 413/.test(d)?'413':'bad'); s.close(); process.exit(0); };",
+          "  sock.on('end',done);",
+          "  sock.on('close',done);",
+          "});",
+        ].join(''),
+      ]);
+      assert.equal(r.status, 0);
+      assert.equal(r.stdout, '413\n');
+    } finally {
+      close();
+    }
+  });
+
   it('resolves CJS require over node_modules on the memory root', async () => {
     const { kernel, run, close } = await withJsh();
     try {
