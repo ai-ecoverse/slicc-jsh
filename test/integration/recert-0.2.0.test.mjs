@@ -307,11 +307,21 @@ setTimeout(() => { console.log('timeout'); process.exit(3); }, 5000);
     }
   });
 
-  it('WebSocket ctx.websocket rejection → error Event, no close (default transport)', async () => {
-    // Default loopback transport rejects refused connects; nodeTransport currently
-    // hangs (kernel fetchTransport ignores the socket error event — see README).
-    const { kernel, run, close } = await withJsh({ nodeTransport: false });
+  it('WebSocket refused → error Event, no close (nodeTransport, kernel ≥ 1.59.1)', async () => {
+    // slicc-kernel#366: nodeTransport rejects at once with err.cause.code.
+    // vhnh fx m2g/ws.js, ws2.js, ws3.js, wsrefused.js — SAME with Node 22.
+    const { kernel, run, close } = await withJsh({ nodeTransport: true });
     try {
+      await kernel.writeFile(
+        '/os/ws.js',
+        `const w = new WebSocket('ws://127.0.0.1:9/');
+setTimeout(() => console.log('alive after ws error, readyState', w.readyState), 300);
+`
+      );
+      const ws = await run(['node', 'ws.js'], { cwd: '/os' });
+      assert.equal(ws.status, 0, ws.stderr);
+      assert.match(ws.stdout, /alive after ws error, readyState 0/);
+
       await kernel.writeFile(
         '/os/ws2.js',
         `const w = new WebSocket('ws://127.0.0.1:9/');
@@ -322,7 +332,6 @@ w.onclose = (e) => console.log('close event', e.code, e.wasClean);
       const r = await run(['node', 'ws2.js'], { cwd: '/os' });
       assert.equal(r.status, 0, r.stderr);
       assert.match(r.stdout, /error event error true/);
-      // Node undici: error without close (readyState stays CONNECTING).
       assert.doesNotMatch(r.stdout, /close event/);
       assert.doesNotMatch(r.stderr, /event argument must be an instance of Event/);
 
@@ -340,14 +349,23 @@ setTimeout(() => console.log('after 1.5 s:', ev.join(',') || 'no events', 'ready
       assert.match(ws3.stdout, /after 1\.5 s: error:true readyState 0/);
 
       await kernel.writeFile(
-        '/os/ws-bare.js',
-        `new WebSocket('ws://127.0.0.1:9/');
-setTimeout(() => console.log('survived'), 200);
+        '/os/wsrefused.js',
+        `const t0 = Date.now(); const ev = [];
+const w = new WebSocket('ws://127.0.0.1:9/');
+w.onerror = (e) => {
+  const c = e.error && e.error.cause;
+  ev.push('error@' + (Date.now() - t0 < 1000 ? '<1s' : '>1s') + ':' + (e instanceof Event) + ':' + e.type);
+  console.log('cause', c && c.code);
+};
+w.onclose = (e) => ev.push('close:' + e.code + ':' + e.wasClean);
+for (const ms of [500, 3000]) setTimeout(() => console.log('after ' + ms + ' ms: ' + (ev.join(',') || 'no events') + ' readyState ' + w.readyState), ms);
 `
       );
-      const bare = await run(['node', 'ws-bare.js'], { cwd: '/os' });
-      assert.equal(bare.status, 0, bare.stderr);
-      assert.match(bare.stdout, /survived/);
+      const refused = await run(['node', 'wsrefused.js'], { cwd: '/os' });
+      assert.equal(refused.status, 0, refused.stderr);
+      assert.match(refused.stdout, /cause ECONNREFUSED/);
+      assert.match(refused.stdout, /after 500 ms: error@<1s:true:error readyState 0/);
+      assert.doesNotMatch(refused.stdout, /close:/);
     } finally {
       close();
     }
