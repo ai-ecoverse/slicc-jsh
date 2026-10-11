@@ -608,6 +608,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         socketEnded = true;
         tryEmit();
       });
+      // Fallback: some transports deliver close without a prior readable 'end'.
+      // Connection: close / no-CL bodies are framed by peer shutdown either way.
+      socket.on('close', () => {
+        if (socketEnded) return;
+        socketEnded = true;
+        tryEmit();
+      });
     }
 
     #writeHead() {
