@@ -132,7 +132,7 @@ export async function runNode(ctx, options = {}) {
 
   const console = createConsole(writeStdout, writeStderr, util);
   const fetch = createFetch(ctx);
-  const WebSocket = createWebSocket(ctx);
+  const WebSocket = createWebSocket(ctx, { handles, trackPromise });
 
   const timers = createTimers(handles, {
     onCallbackError: (err) => {
