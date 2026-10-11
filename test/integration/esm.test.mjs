@@ -300,6 +300,7 @@ describe('ESM (M3)', () => {
   it('import { createRequire } from module + import.meta.dirname', async () => {
     const { kernel, run, close } = await withJsh();
     try {
+      await kernel.writeFile('/os/dep.cjs', 'module.exports = { v: 9 };\n');
       await kernel.writeFile(
         '/os/main.mjs',
         [
@@ -307,11 +308,35 @@ describe('ESM (M3)', () => {
           'const require = createRequire(import.meta.url);',
           "console.log(typeof createRequire, typeof require('fs').readFileSync, isBuiltin('fs'), Array.isArray(builtinModules));",
           "console.log(import.meta.dirname, import.meta.filename.endsWith('/os/main.mjs'));",
+          "console.log('rel', require('./dep.cjs').v);",
         ].join('\n')
       );
       const r = await run(['node', 'main.mjs']);
       assert.equal(r.status, 0, r.stderr);
-      assert.equal(r.stdout, 'function function true true\n/os true\n');
+      assert.equal(r.stdout, 'function function true true\n/os true\nrel 9\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('import() loads an entry whose static dependency uses top-level await', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile(
+        '/os/dep-tla.mjs',
+        'export const n = await Promise.resolve(3);\n'
+      );
+      await kernel.writeFile(
+        '/os/entry.mjs',
+        "import { n } from './dep-tla.mjs';\nexport const twice = n * 2;\n"
+      );
+      await kernel.writeFile(
+        '/os/main.mjs',
+        "import('./entry.mjs').then((m) => console.log('graph', m.twice));\n"
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'graph 6\n');
     } finally {
       close();
     }

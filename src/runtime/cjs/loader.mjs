@@ -82,12 +82,23 @@ export function createCjs({
     return isBuiltinName(bare);
   };
   Module.createRequire = (filename) => {
-    const parent =
-      typeof filename === 'string'
-        ? filename
-        : filename?.href
-          ? filename.pathname
-          : `${process.cwd()}/`;
+    let parent;
+    if (typeof filename === 'string') {
+      // Node accepts file URL strings (import.meta.url), not only URL objects.
+      if (filename.startsWith('file:')) {
+        try {
+          parent = new URL(filename).pathname;
+        } catch {
+          parent = filename;
+        }
+      } else {
+        parent = filename;
+      }
+    } else if (filename?.href) {
+      parent = filename.pathname;
+    } else {
+      parent = `${process.cwd()}/`;
+    }
     return makeRequire(parent);
   };
   Module.prototype.require = function require(id) {

@@ -182,11 +182,23 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   async function evaluateEsmAsync(filename, source) {
     const cached = cache.get(filename);
     if (cached?.namespace) return cached.namespace;
+    // Cycle: return the live exports object while linking (Node ESM semantics).
+    if (cached?.evaluating) return cached.exportsObj;
 
-    const { code } = transformEsm(source, filename);
+    const { code, staticSpecs } = transformEsm(source, filename);
     const exportsObj = Object.create(null);
     const entry = { evaluating: true, exportsObj };
     cache.set(filename, entry);
+
+    // Preload static imports asynchronously so TLA in the dependency graph works
+    // under import() (transform still emits __importSync; cache hits after this).
+    for (const spec of staticSpecs) {
+      const resolved = resolver.resolve(spec, filename, [filename]);
+      if (resolved.type === 'builtin') continue;
+      const dep = cache.get(resolved.filename);
+      if (dep?.namespace || dep?.evaluating) continue;
+      await importModule(spec, filename);
+    }
 
     const __meta = makeImportMeta(filename);
     const __importSync = (spec) => resolveAndLoadSync(spec, filename);
@@ -246,9 +258,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       cache.set(filename, { namespace: ns });
       return ns;
     }
-    const { hasTopLevelAwait } = transformEsm(source, filename);
-    if (hasTopLevelAwait) return evaluateEsmAsync(filename, source);
-    return evaluateEsm(filename, source);
+    // Always async-evaluate on the import() path so static deps with TLA link.
+    return evaluateEsmAsync(filename, source);
   }
 
   async function importModule(specifier, parentFilename = `${process.cwd()}/`) {
