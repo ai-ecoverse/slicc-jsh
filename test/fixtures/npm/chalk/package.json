@@ -48,7 +48,7 @@
 		"text"
 	],
 	"devDependencies": {
-		"@types/node": "^16.11.10",
+		"@types/node": "^26.0.0",
 		"ava": "^8.0.0",
 		"c8": "^7.10.0",
 		"color-convert": "^2.0.1",
