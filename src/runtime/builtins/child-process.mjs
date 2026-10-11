@@ -32,6 +32,10 @@ function notSupported(name) {
   throw err;
 }
 
+function isExitError(err) {
+  return err?.name === 'NodeExitError';
+}
+
 function normalizeArgs(file, args, options, callback) {
   if (typeof args === 'function') {
     return { args: [], options: {}, callback: args };
@@ -75,11 +79,18 @@ function signalName(sig) {
   return null;
 }
 
+/** Decode encoding for exec/execFile callbacks (Node default: utf8). */
+function decodeOutput(buf, encoding) {
+  if (encoding === 'buffer' || encoding === null) return buf;
+  const enc = encoding === undefined ? 'utf8' : encoding;
+  return buf.toString(enc);
+}
+
 function spawnError(command, args, code, message) {
   const err = new Error(message ?? `spawn ${command} ${code}`);
   err.code = code;
   err.errno = code === 'ENOENT' ? -2 : undefined;
-  err.syscall = 'spawn';
+  err.syscall = `spawn ${command}`;
   err.path = command;
   err.spawnargs = args;
   return err;
@@ -105,18 +116,27 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
       this.#kernel = null;
       this.#handle = null;
       this.#closing = false;
+      this.#exited = false;
     }
 
     #kernel;
     #handle;
     #closing;
+    #exited;
 
     kill(signal = 'SIGTERM') {
+      // Node: after the child has exited, kill() returns false and does not throw.
+      if (this.#exited || this.#closing || !this.#kernel) return false;
       const name = signalName(signal) ?? 'SIGTERM';
       this.killed = true;
-      if (!this.#kernel) return false;
       try {
         const ret = this.#kernel.kill(name);
+        // Kernel kill is async; swallow post-exit ESRCH races (Node returns false).
+        if (ret != null && typeof ret.then === 'function') {
+          ret.catch(() => {
+            /* ignore */
+          });
+        }
         return ret !== false;
       } catch {
         return false;
@@ -152,6 +172,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     /** @internal */
     _markClosing() {
       this.#closing = true;
+      this.#exited = true;
     }
 
     get _closing() {
@@ -247,19 +268,50 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     child._stdioPumps = Promise.all(pumps);
   }
 
+  function safeEmit(child, event, ...args) {
+    try {
+      child.emit(event, ...args);
+    } catch (err) {
+      // process.exit() in a ChildProcess handler throws NodeExitError — treat as
+      // a clean exit (already recorded). Do not print or turn into rc 1.
+      if (isExitError(err)) return err;
+      throw err;
+    }
+    return null;
+  }
+
   function finish(child, code, signal) {
     if (child._closing) return;
     child._markClosing();
     child.exitCode = code;
     child.signalCode = signal;
-    child.emit('exit', code, signal);
+    const exitErr = safeEmit(child, 'exit', code, signal);
+    if (exitErr) {
+      child._release();
+      handles.notify?.();
+      return;
+    }
     const after = child._stdioPumps ?? Promise.resolve();
     trackPromise(handles, after);
     after.finally(() => {
-      child.emit('close', code, signal);
+      const closeErr = safeEmit(child, 'close', code, signal);
       child._release();
       handles.notify?.();
+      if (closeErr) return;
     });
+  }
+
+  function decodeWait(status) {
+    const sigNum = status?.signal;
+    if (sigNum != null && sigNum !== 0) {
+      return { code: null, signal: SIGNAL_NAMES[sigNum] ?? String(sigNum) };
+    }
+    const code = typeof status?.status === 'number' ? status.status : 0;
+    // Kernel may report 128+n without a signal field (WIFSIGNALED).
+    if (code > 128 && code < 128 + 32 && SIGNAL_NAMES[code - 128]) {
+      return { code: null, signal: SIGNAL_NAMES[code - 128] };
+    }
+    return { code, signal: null };
   }
 
   function startSpawn(child, file, args, options, stdio) {
@@ -283,22 +335,18 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
       (kernelChild) => {
         child._bindKernel(kernelChild);
         connectStdio(child, kernelChild);
-        child.emit('spawn');
+        const spawnErr = safeEmit(child, 'spawn');
+        if (spawnErr) return;
         const waitP = kernelChild.wait();
         trackPromise(handles, waitP);
         waitP.then(
           (status) => {
-            const sigNum = status?.signal;
-            if (sigNum != null && sigNum !== 0) {
-              const name = SIGNAL_NAMES[sigNum] ?? String(sigNum);
-              finish(child, null, name);
-            } else {
-              const code = typeof status?.status === 'number' ? status.status : 0;
-              finish(child, code, null);
-            }
+            const { code, signal } = decodeWait(status);
+            finish(child, code, signal);
           },
           (err) => {
-            child.emit('error', err);
+            if (isExitError(err)) return;
+            safeEmit(child, 'error', err);
             finish(child, 1, null);
           }
         );
@@ -322,15 +370,25 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
           /* ignore */
         }
         process.nextTick(() => {
-          child.emit('error', error);
+          const emitErr = safeEmit(child, 'error', error);
+          if (emitErr) {
+            child._release();
+            handles.notify?.();
+            return;
+          }
           if (code === 'ENOENT') {
             child.exitCode = -2;
-            child.emit('close', -2, null);
+            child._markClosing();
+            // After error handlers (which may call execFile) and their nested
+            // nextTick spawn starts — matches Node's close-after-error ordering.
+            setTimeout(() => {
+              safeEmit(child, 'close', -2, null);
+              child._release();
+              handles.notify?.();
+            }, 0);
           } else {
             finish(child, 1, null);
           }
-          child._release();
-          handles.notify?.();
         });
       }
     );
@@ -370,56 +428,105 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     if (!norm.callback) return child;
 
     const maxBuffer = opts.maxBuffer ?? 1024 * 1024;
+    const encoding = opts.encoding;
+    const killSignal = signalName(opts.killSignal) ?? 'SIGTERM';
     let stdout = Buffer.alloc(0);
     let stderr = Buffer.alloc(0);
     let exited = false;
+    let timedOut = false;
+    let timer;
+
+    const clearTimer = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    };
 
     const done = (err) => {
       if (exited) return;
       exited = true;
-      const enc = opts.encoding;
-      const out = enc ? stdout.toString(enc) : stdout;
-      const errOut = enc ? stderr.toString(enc) : stderr;
+      clearTimer();
+      const out = decodeOutput(stdout, encoding);
+      const errOut = decodeOutput(stderr, encoding);
+      if (err) {
+        err.stdout = out;
+        err.stderr = errOut;
+      }
       norm.callback(err, out, errOut);
+    };
+
+    if (opts.timeout != null && opts.timeout > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        child.kill(killSignal);
+      }, Number(opts.timeout));
+      timer.unref?.();
+    }
+
+    const append = (kind, chunk) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      if (kind === 'stdout') {
+        stdout = Buffer.concat([stdout, buf]);
+        if (stdout.length > maxBuffer) {
+          // Node keeps exactly maxBuffer bytes in the callback argument.
+          stdout = stdout.subarray(0, maxBuffer);
+          child.kill();
+          const err = new Error('stdout maxBuffer length exceeded');
+          err.code = 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+          done(err);
+          return false;
+        }
+      } else {
+        stderr = Buffer.concat([stderr, buf]);
+        if (stderr.length > maxBuffer) {
+          stderr = stderr.subarray(0, maxBuffer);
+          child.kill();
+          const err = new Error('stderr maxBuffer length exceeded');
+          err.code = 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+          done(err);
+          return false;
+        }
+      }
+      return true;
     };
 
     if (child.stdout) {
       child.stdout.on('data', (chunk) => {
-        stdout = Buffer.concat([stdout, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)]);
-        if (stdout.length > maxBuffer) {
-          child.kill();
-          const err = new Error('stdout maxBuffer exceeded');
-          err.code = 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
-          done(err);
-        }
+        append('stdout', chunk);
       });
     }
     if (child.stderr) {
       child.stderr.on('data', (chunk) => {
-        stderr = Buffer.concat([stderr, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)]);
-        if (stderr.length > maxBuffer) {
-          child.kill();
-          const err = new Error('stderr maxBuffer exceeded');
-          err.code = 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
-          done(err);
-        }
+        append('stderr', chunk);
       });
     }
 
     child.on('error', (err) => done(err));
     child.on('close', (code, signal) => {
       if (exited) return;
+      const cmd =
+        opts._execCmd != null
+          ? String(opts._execCmd)
+          : `${file} ${norm.args.join(' ')}`.trim();
+      if (timedOut) {
+        const err = new Error(`Command failed: ${cmd}`);
+        err.code = null;
+        err.killed = true;
+        err.signal = killSignal;
+        err.cmd = cmd;
+        done(err);
+        return;
+      }
       if (code === 0 && !signal) {
         done(null);
         return;
       }
-      const err = new Error(`Command failed: ${file} ${norm.args.join(' ')}`);
+      const err = new Error(`Command failed: ${cmd}`);
       err.code = code;
       err.killed = child.killed;
       err.signal = signal;
-      err.cmd = `${file} ${norm.args.join(' ')}`.trim();
-      err.stdout = opts.encoding ? stdout.toString(opts.encoding) : stdout;
-      err.stderr = opts.encoding ? stderr.toString(opts.encoding) : stderr;
+      err.cmd = cmd;
       done(err);
     });
     return child;
@@ -434,7 +541,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     }
     opts = opts && typeof opts === 'object' ? opts : {};
     const shell = typeof opts.shell === 'string' ? opts.shell : 'sh';
-    return execFile(shell, ['-c', String(command)], { ...opts, shell: false }, cb);
+    const cmd = String(command);
+    // Node's exec sets err.cmd to the original command, not `sh -c …`.
+    return execFile(shell, ['-c', cmd], { ...opts, shell: false, _execCmd: cmd }, cb);
   }
 
   return {

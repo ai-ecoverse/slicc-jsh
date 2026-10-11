@@ -4,6 +4,9 @@ import { assignProcessExitCode, NodeExitError, numericExitCode } from './exit.mj
 /** Node version reported by the shim (M1 target). */
 export const NODE_SHIM_VERSION = '22.22.0';
 
+const SIGNAL_EXIT_CODES = { SIGTERM: 143, SIGINT: 130, SIGHUP: 129, SIGKILL: 137 };
+const SIGNAL_BY_NUMBER = { 1: 'SIGHUP', 2: 'SIGINT', 9: 'SIGKILL', 15: 'SIGTERM' };
+
 function toBytes(value) {
   if (typeof value === 'string') return value;
   if (value instanceof Uint8Array) return value;
@@ -210,6 +213,83 @@ function createStdin(ctx, handles, Buffer) {
   };
 }
 
+/**
+ * Kernel credentials for this process. Prefer /proc/self/status (or
+ * /proc/<pid>/status); fall back to /etc/passwd + /etc/group for USER.
+ */
+function readProcessCreds(ctx) {
+  const fromProc = (text) => {
+    let uid = 0;
+    let euid = 0;
+    let gid = 0;
+    let egid = 0;
+    let groups = [0];
+    for (const line of text.split('\n')) {
+      if (line.startsWith('Uid:')) {
+        const parts = line.slice(4).trim().split(/\s+/).map(Number);
+        uid = parts[0] ?? 0;
+        euid = parts[1] ?? uid;
+      } else if (line.startsWith('Gid:')) {
+        const parts = line.slice(4).trim().split(/\s+/).map(Number);
+        gid = parts[0] ?? 0;
+        egid = parts[1] ?? gid;
+      } else if (line.startsWith('Groups:')) {
+        const parts = line
+          .slice(7)
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .map(Number);
+        if (parts.length) groups = parts;
+      }
+    }
+    return { uid, euid, gid, egid, groups };
+  };
+
+  const tryRead = (path) => {
+    try {
+      const bytes = ctx.sync?.fs?.readFile?.(path);
+      if (!bytes) return null;
+      return typeof bytes === 'string' ? bytes : new TextDecoder().decode(bytes);
+    } catch {
+      return null;
+    }
+  };
+
+  for (const path of [`/proc/self/status`, `/proc/${ctx.pid}/status`]) {
+    const text = tryRead(path);
+    if (text) return fromProc(text);
+  }
+
+  const name = ctx.env?.USER || ctx.env?.LOGNAME || 'root';
+  const passwd = tryRead('/etc/passwd');
+  if (passwd) {
+    for (const line of passwd.split('\n')) {
+      if (!line || line.startsWith('#')) continue;
+      const [user, , uidStr, gidStr] = line.split(':');
+      if (user !== name) continue;
+      const uid = Number(uidStr) || 0;
+      const gid = Number(gidStr) || 0;
+      const groups = [gid];
+      const group = tryRead('/etc/group');
+      if (group) {
+        for (const gline of group.split('\n')) {
+          if (!gline || gline.startsWith('#')) continue;
+          const [gname, , ggid, members] = gline.split(':');
+          const g = Number(ggid);
+          if (!Number.isFinite(g)) continue;
+          if (gname === name || (members && members.split(',').includes(name))) {
+            if (!groups.includes(g)) groups.push(g);
+          }
+        }
+      }
+      return { uid, euid: uid, gid, egid: gid, groups };
+    }
+  }
+
+  return { uid: 0, euid: 0, gid: 0, egid: 0, groups: [0] };
+}
+
 class Process extends EventEmitter {
   constructor({ ctx, argv, nextTick, onExit, handles, Buffer }) {
     super();
@@ -339,46 +419,62 @@ class Process extends EventEmitter {
     return this._cwd;
   }
 
-  /** Root (0) until credential plumbing is exposed on process. */
+  /** Real kernel credentials (from /proc or /etc/passwd for USER). */
+  _creds() {
+    if (this._credCache) return this._credCache;
+    this._credCache = readProcessCreds(this._ctx);
+    return this._credCache;
+  }
+
   getuid() {
-    return 0;
+    return this._creds().uid;
   }
 
   geteuid() {
-    return 0;
+    return this._creds().euid;
   }
 
   getgid() {
-    return 0;
+    return this._creds().gid;
   }
 
   getegid() {
-    return 0;
+    return this._creds().egid;
   }
 
   getgroups() {
-    return [0];
+    return this._creds().groups.slice();
   }
 
   /**
-   * Minimal process.kill: only this process (pid === this.pid). Used by pnpm
-   * cmd shims to re-raise a child's terminating signal. Unknown pids → ESRCH.
+   * Minimal process.kill: this process, plus signal 0 as a liveness check.
+   * Unknown / dead pids → ESRCH (Node).
    */
   kill(pid, signal = 'SIGTERM') {
     const target = Number(pid);
-    if (target !== this.pid) {
+    const esrch = () => {
       const err = new Error(`kill ESRCH`);
       err.code = 'ESRCH';
       err.errno = -3;
       err.syscall = 'kill';
       throw err;
+    };
+    // signal 0: existence check only — return true, send nothing.
+    if (signal === 0 || signal === '0') {
+      if (target !== this.pid) esrch();
+      return true;
     }
-    const name =
-      typeof signal === 'string' ? (signal.startsWith('SIG') ? signal : `SIG${signal}`) : 'SIGTERM';
-    // Terminating signals end the process; others are ignored for now.
-    if (name === 'SIGTERM' || name === 'SIGINT' || name === 'SIGHUP' || name === 'SIGKILL') {
-      const codes = { SIGTERM: 143, SIGINT: 130, SIGHUP: 129, SIGKILL: 137 };
-      this.exit(codes[name] ?? 1);
+    if (target !== this.pid) esrch();
+    let name;
+    if (typeof signal === 'string') {
+      name = signal.startsWith('SIG') ? signal : `SIG${signal}`;
+    } else if (typeof signal === 'number') {
+      name = SIGNAL_BY_NUMBER[signal] ?? 'SIGTERM';
+    } else {
+      name = 'SIGTERM';
+    }
+    if (SIGNAL_EXIT_CODES[name] != null) {
+      this.exit(SIGNAL_EXIT_CODES[name]);
     }
     return true;
   }
