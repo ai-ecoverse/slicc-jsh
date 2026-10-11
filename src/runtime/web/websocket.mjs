@@ -153,15 +153,11 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
     }
 
     #open(url, protocols) {
-      // Track the open promise so drainLoop stays alive until error/close fire
-      // (Node-entry refused connects reject quickly; without a handle the process
-      // exits before the catch runs — m2g/ws2.js).
+      // Track the open promise so drainLoop stays alive until error fires
+      // (without a handle the process can exit before the catch runs — m2g/ws2.js).
       const open = (async () => {
         try {
-          const socket = await ctx.websocket(
-            url,
-            protocols != null ? { protocols } : undefined
-          );
+          const socket = await this.#dial(url, protocols);
           if (this.#closed) {
             socket.close();
             return;
@@ -183,12 +179,60 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
           );
           if (trackPromise && handles) trackPromise(handles, closed);
         } catch (err) {
-          this.dispatchEvent(errorEvent(err));
-          this.#finishClose(1006, '', false);
+          // Match Node's undici WebSocket on ECONNREFUSED: error event, no close,
+          // readyState stays CONNECTING. (Browsers fire close/1006; cert compares
+          // to Node 22.)
+          if (!this.#closed) this.dispatchEvent(errorEvent(err));
         }
       })();
       if (trackPromise && handles) trackPromise(handles, open);
       else void open;
+    }
+
+    /**
+     * Open via ctx.websocket. On loopback, TCP-probe first: nodeTransport's
+     * fetchTransport WebSocket ignores the error event and hangs on refuse.
+     */
+    async #dial(url, protocols) {
+      const ac = new AbortController();
+      const opts = { signal: ac.signal };
+      if (protocols != null) opts.protocols = protocols;
+
+      let host;
+      let port;
+      try {
+        const u = new URL(url);
+        host = u.hostname;
+        port = u.port ? Number(u.port) : u.protocol === 'wss:' ? 443 : 80;
+      } catch {
+        host = null;
+      }
+
+      const loopback =
+        host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0';
+      if (loopback && typeof ctx.net?.connect === 'function') {
+        try {
+          const conn = await ctx.net.connect({
+            host: host === 'localhost' || host === '0.0.0.0' ? '127.0.0.1' : host,
+            port,
+            signal: ac.signal,
+          });
+          try {
+            conn.close();
+          } catch {
+            /* ignore */
+          }
+        } catch (err) {
+          try {
+            ac.abort();
+          } catch {
+            /* ignore */
+          }
+          throw err;
+        }
+      }
+
+      return ctx.websocket(url, opts);
     }
 
     async #readLoop(socket) {

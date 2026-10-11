@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
+import { createNodeKernel, nodeTransport } from '@ai-ecoverse/slicc-kernel/node';
 
 const root = join(fileURLToPath(new URL('../..', import.meta.url)));
 
@@ -30,7 +30,9 @@ export function packageFiles() {
  * (no OPFS). Returns { kernel, run, close }.
  */
 export async function withJsh() {
-  const kernel = await createNodeKernel();
+  // Match the cert harness: nodeTransport's WebSocket path is what refused
+  // connects exercise (the default loopback transport rejects much earlier).
+  const kernel = await createNodeKernel({ network: { transport: nodeTransport() } });
   const base = '/node_modules/@ai-ecoverse/slicc-jsh';
   for (const [rel, data] of packageFiles()) {
     await kernel.writeFile(`${base}/${rel}`, data);
