@@ -1,0 +1,8 @@
+{
+  "area": "sliccy",
+  "description": "require('sliccy:browser') with no browser: what loads, and a call",
+  "corpus": [
+    "sliccy:browser"
+  ],
+  "node": false
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "loaded cookie,ensureTab,eval,evalAsync,fetch,findTab,localStorage,openWindow,setWindowBounds,websocket,windowBounds\nfindTab error browser is not available in this runtime\n",
+  "stderr": ""
+}

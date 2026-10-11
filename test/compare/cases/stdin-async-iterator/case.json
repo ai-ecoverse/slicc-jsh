@@ -1,0 +1,8 @@
+{
+  "area": "process.stdin",
+  "description": "for await (const chunk of process.stdin)",
+  "stdin": "line one\nline two é\n",
+  "corpus": [
+    "stdin"
+  ]
+}

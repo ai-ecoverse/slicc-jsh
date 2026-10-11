@@ -1,0 +1,8 @@
+{
+  "area": "process.stdin",
+  "description": "process.stdin.on('data'/'end') with setEncoding('utf8')",
+  "stdin": "line one\nline two é\n",
+  "corpus": [
+    "stdin.on"
+  ]
+}

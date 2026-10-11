@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "strict: ReferenceError\nfunction\n",
+  "stderr": ""
+}

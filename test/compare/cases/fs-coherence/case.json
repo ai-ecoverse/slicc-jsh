@@ -1,0 +1,9 @@
+{
+  "area": "fs",
+  "description": "a write through one API is seen by the others (sync ↔ promise ↔ a shell command)",
+  "corpus": [
+    "fs.sync",
+    "fs-v6-promise"
+  ],
+  "node": false
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "writeFileSync: undefined\nappendFileSync: undefined\nreadFileSync utf8: \"one\\ntwo\\n\"\nreadFileSync buffer: true\nmkdirSync recursive: \"x\"\nmkdirSync existing: THROW Error EEXIST: EEXIST: file already exists, mkdir 'x'\nreaddirSync sorted?: [\"a.txt\",\"b.txt\",\"sub\"]\nreaddirSync withFileTypes: [\"a.txt:f\",\"b.txt:f\",\"sub:d\"]\nreaddirSync recursive: [\"a.txt\",\"b.txt\",\"sub\",\"sub/c.txt\"]\nrenameSync: false\ncopyFileSync: \"one\\ntwo\\n\"\nunlinkSync: false\nrmSync recursive: false\nrealpathSync: \"$CASE/data.txt\"\nmkdtempSync: \"string\"\n",
+  "stderr": ""
+}

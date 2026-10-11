@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "randomUUID: true\ngetRandomValues: 4\ndigest: \"ba7816bf8f01cfea\"\nhmac: \"9c196e32dc0175f8\"\n",
+  "stderr": ""
+}

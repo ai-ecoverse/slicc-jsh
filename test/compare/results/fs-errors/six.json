@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "readFileSync missing {\"name\":\"Error\",\"code\":\"ENOENT\",\"message\":\"ENOENT: no such file or directory, '$CASE/missing.txt'\",\"instanceofError\":true}\nreadFileSync dir {\"name\":\"Error\",\"code\":\"ENOENT\",\"message\":\"ENOENT: no such file or directory, '$CASE/dir'\",\"instanceofError\":true}\nreaddirSync file {\"name\":\"Error\",\"code\":\"ENOENT\",\"message\":\"ENOENT: no such file or directory, '$CASE/data.txt'\",\"instanceofError\":true}\nmkdirSync exists no error\nrmdirSync non-empty {\"name\":\"Error\",\"code\":\"ENOTEMPTY\",\"message\":\"ENOTEMPTY: directory not empty, '$CASE/dir'\",\"instanceofError\":true}\nunlinkSync missing {\"name\":\"Error\",\"code\":\"ENOENT\",\"message\":\"ENOENT: sync-fs, unlink '$CASE/missing.txt'\",\"instanceofError\":true}\ndir/a.txt still there true\n",
+  "stderr": ""
+}

@@ -1,0 +1,7 @@
+{
+  "area": "fs",
+  "description": "`await fs.exists(p)` (v6, 16 corpus scripts) vs Node's callback-only fs.exists and existsSync",
+  "corpus": [
+    "fs.exists"
+  ]
+}

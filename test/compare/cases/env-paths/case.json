@@ -1,0 +1,9 @@
+{
+  "area": "environment",
+  "description": "the paths scripts hard-code: /workspace, /shared, /tmp, HOME, os.tmpdir() writable",
+  "corpus": [
+    "/workspace",
+    "/shared",
+    "/tmp"
+  ]
+}

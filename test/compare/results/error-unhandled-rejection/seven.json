@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "$CASE/main.jsh:1\nPromise.reject(new Error('unhandled'));\n               ^\n\nError: unhandled\n    at Object.<anonymous> ($CASE/main.jsh:1:16)\n\nNode.js v22.22.0\n"
+}

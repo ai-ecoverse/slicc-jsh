@@ -1,0 +1,5 @@
+{
+  "area": "exit",
+  "description": "`throw { message, code }` (a plain object)",
+  "corpus": []
+}

@@ -1,0 +1,8 @@
+{
+  "area": "require",
+  "description": "require('./x.js'), './x.cjs', './x.jsh', './x.json', './dir' (index.js), a cycle, and the cache",
+  "corpus": [
+    "require-relative",
+    "require-relative-jsh"
+  ]
+}

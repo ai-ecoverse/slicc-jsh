@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: Cannot find module '$CASE/bundle.cjs'\n    at <internal>\n"
+}

@@ -1,0 +1,8 @@
+{
+  "area": "wrapper",
+  "description": "a top-level `return` ends the body early; its value is ignored",
+  "corpus": [
+    "top-level-return"
+  ],
+  "node": "cjs"
+}

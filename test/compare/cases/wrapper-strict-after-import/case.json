@@ -1,0 +1,7 @@
+{
+  "area": "wrapper",
+  "description": "does `import()` in the body switch the body to strict mode (v6: yes)",
+  "corpus": [
+    "dynamic-import"
+  ]
+}

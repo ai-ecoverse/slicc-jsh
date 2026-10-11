@@ -1,0 +1,7 @@
+{
+  "area": "globals",
+  "description": "fetch: JSON, text, status, headers, redirect, POST body, bytes, and a refused connection",
+  "corpus": [
+    "fetch"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "area": "builtins",
+  "description": "Buffer encodings, concat, read/write ints, slice/subarray, instanceof, require('buffer')",
+  "corpus": [
+    "Buffer",
+    "buffer-module"
+  ]
+}

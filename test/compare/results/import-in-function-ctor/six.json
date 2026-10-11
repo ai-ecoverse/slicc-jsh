@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "builtin: \"function\"\nrelative: THROW Error ERR_MODULE_NOT_FOUND: Cannot find module '/Users/trieloff/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_ffcsbb78p4-1/slicc-six/node_modules/just-bash/dist/bundle/chunks/lib.mjs' imported from /Users/trieloff/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_ffcsbb78p4-1/slicc-six/node_modules/just-bash/dist/bundle/chunks/chunk-ZBUZKIPX.js\nabsolute: THROW Error ERR_MODULE_NOT_FOUND: Cannot find module '$CASE/lib.mjs' imported from /Users/trieloff/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_ffcsbb78p4-1/slicc-six/node_modules/just-bash/dist/bundle/chunks/chunk-ZBUZKIPX.js\n",
+  "stderr": ""
+}

@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "util.inspect, format, promisify, types, parseArgs, styleText, isDeepStrictEqual, TextDecoder",
+  "corpus": [
+    "util"
+  ]
+}

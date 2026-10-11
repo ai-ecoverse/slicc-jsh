@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: with props\n    at $CASE/main.jsh:1:103\n    at <internal>\n"
+}

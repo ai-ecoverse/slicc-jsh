@@ -1,0 +1,5 @@
+{
+  "status": 143,
+  "stdout": "on SIGINT: \"registered\"\nkill self SIGTERM: THROW NodeExitError 143: Process exited with code 143\n",
+  "stderr": ""
+}

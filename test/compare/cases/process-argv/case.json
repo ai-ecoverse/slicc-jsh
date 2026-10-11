@@ -1,0 +1,16 @@
+{
+  "area": "process",
+  "description": "process.argv[0], [1] and the rest",
+  "args": [
+    "a b",
+    "--flag",
+    "-x",
+    "--",
+    "last"
+  ],
+  "corpus": [
+    "argv[0]",
+    "argv[1]",
+    "argv.slice(2)"
+  ]
+}

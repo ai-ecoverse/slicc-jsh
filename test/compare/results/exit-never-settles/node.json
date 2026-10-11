@@ -1,0 +1,5 @@
+{
+  "status": 13,
+  "stdout": "before\n",
+  "stderr": "Warning: Detected unsettled top-level await at file://$CASE/main.plain.mjs:2\nawait new Promise(() => {});\n^\n\n\n\n"
+}

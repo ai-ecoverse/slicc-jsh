@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "readFileSync(0): \"line one\\nline two é\\n\"\nreadFileSync(/dev/stdin) after: \"\"\n",
+  "stderr": ""
+}

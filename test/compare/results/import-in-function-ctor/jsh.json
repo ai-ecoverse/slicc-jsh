@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "builtin: \"function\"\nrelative: \"lib.mjs\"\nabsolute: \"lib.mjs\"\n",
+  "stderr": ""
+}

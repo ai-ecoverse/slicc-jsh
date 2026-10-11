@@ -1,0 +1,7 @@
+{
+  "area": "fs",
+  "description": "file descriptors: openSync/readSync/writeSync/closeSync on a file, and fs.writeSync(1|2)",
+  "corpus": [
+    "fs.sync"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "platform matches process: true\nEOL: \"\\n\"\ntmpdir: \"string\"\nhomedir === HOME: true\nhostname: \"string\"\ncpus: true\ntype: \"string\"\nuserInfo: THROW TypeError: os.userInfo is not a function\narch: \"string\"\ntotalmem: \"number\"\nnetworkInterfaces: THROW TypeError: os.networkInterfaces is not a function\nconstants.signals.SIGINT: undefined\navailableParallelism: \"undefined\"\n",
+  "stderr": ""
+}

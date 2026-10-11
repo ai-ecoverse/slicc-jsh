@@ -1,0 +1,8 @@
+{
+  "area": "process.stdin",
+  "description": "'data' chunks without setEncoding: Buffer (Node) or string",
+  "stdin": "line one\nline two é\n",
+  "corpus": [
+    "stdin.on"
+  ]
+}

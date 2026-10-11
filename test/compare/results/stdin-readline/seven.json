@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: slicc-jsh: 'readline' is not supported yet\n    at Object.<anonymous> ($CASE/main.jsh:1:18)\n"
+}

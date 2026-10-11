@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "gzip round trip: \"hello zlib\"\ndeflateSync bytes: \"eJxLTEoGAAJNASc=\"\ninflateSync: \"inflate me\"\ndeflateRawSync: \"raw\"\ngunzipSync returns Buffer: true\nbrotli: THROW TypeError: zlib.brotliCompressSync is not a function\ngzip callback: [null,\"cb\"]\ncreateGunzip stream: THROW TypeError: zlib.createGunzip is not a function\nconstants: \"number\"\n",
+  "stderr": ""
+}

@@ -1,0 +1,7 @@
+{
+  "area": "exit",
+  "description": "process.exitCode = 4 then the body ends; process.exit() with no argument uses it",
+  "corpus": [
+    "process.exitCode"
+  ]
+}

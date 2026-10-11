@@ -1,0 +1,8 @@
+{
+  "area": "wrapper",
+  "description": "`import cli from 'sliccy:cli'`",
+  "corpus": [
+    "static-import"
+  ],
+  "node": false
+}

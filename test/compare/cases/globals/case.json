@@ -1,0 +1,15 @@
+{
+  "area": "globals",
+  "description": "which globals exist: web APIs, Node globals, SLICC markers",
+  "corpus": [
+    "fetch",
+    "WebSocket",
+    "Buffer",
+    "SLICC_VERSION",
+    "TextEncoder/Decoder",
+    "atob/btoa",
+    "URL",
+    "AbortController",
+    "FormData/Blob"
+  ]
+}

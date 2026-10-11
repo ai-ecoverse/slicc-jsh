@@ -1,0 +1,13 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+const path = require('path');
+show('join', () => path.join('a', '../b', 'c/'));
+show('resolve relative = cwd + x', () => path.resolve('x') === process.cwd() + '/x');
+show('resolve abs', () => path.resolve('/a', 'b', '../c'));
+show('relative', () => path.relative('/a/b/c', '/a/d'));
+show('parse', () => path.parse('/home/u/file.tar.gz'));
+show('format', () => path.format({ dir: '/x', name: 'n', ext: '.e' }));
+show('posix === path', () => path.posix === path);
+show('win32.join', () => path.win32 && path.win32.join('a', 'b'));
+show('sep, delimiter', () => [path.sep, path.delimiter]);
+show('toNamespacedPath', () => typeof path.toNamespacedPath);
+show('matchesGlob', () => typeof path.matchesGlob);

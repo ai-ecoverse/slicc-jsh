@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "await fs.stat(dir).isDirectory: [\"boolean\",\"boolean\",true]\nstatSync(dir).isDirectory(): true\nstatSync(file).isFile(): true\nstatSync size: 11\nstatSync mtime is Date: false\nstatSync mtimeMs: \"undefined\"\nstatSync mode: \"undefined\"\nstatSync isSymbolicLink: \"function\"\nlstatSync: true\nstatSync missing: THROW Error ENOENT: ENOENT: no such file or directory, '$CASE/missing'\nstatSync missing throwIfNoEntry: THROW Error ENOENT: ENOENT: no such file or directory, '$CASE/missing'\nstat callback: \"scheduled\"\nstat cb null true\n",
+  "stderr": ""
+}

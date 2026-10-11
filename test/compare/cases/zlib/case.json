@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "gzipSync/gunzipSync, deflate/inflate, brotli, the callback API and a stream",
+  "corpus": [
+    "zlib"
+  ]
+}

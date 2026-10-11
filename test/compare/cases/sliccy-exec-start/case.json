@@ -1,0 +1,8 @@
+{
+  "area": "sliccy",
+  "description": "exec.start(): handle shape, stdin.write() buffering, done, kill() of a running command",
+  "corpus": [
+    "exec.start"
+  ],
+  "node": false
+}

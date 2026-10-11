@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "{\"positional\":[\"sub\"],\"flags\":{\"name\":\"val\",\"count\":\"3\",\"v\":true,\"no-color\":\"pos2\",\"a\":true,\"b\":true,\"c\":true,\"empty\":\"\"},\"subcommand\":\"sub\",\"passthrough\":[\"--after\"]}\n{\"positional\":[\"sub\"],\"flags\":{\"name\":\"val\",\"count\":\"3\",\"v\":true,\"no-color\":\"pos2\",\"a\":true,\"b\":true,\"c\":true,\"empty\":\"\"},\"subcommand\":\"sub\",\"passthrough\":[\"--after\"]}\n",
+  "stderr": ""
+}

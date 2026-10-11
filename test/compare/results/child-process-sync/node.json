@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "execSync string: \"hi\\n\"\nexecSync buffer: true\nexecFileSync: \"a b c\\n\"\nspawnSync: [3,\"out\\n\",\"err\\n\"]\nexecSync failing: [4,\"object\"]\nexecSync input: \"piped in\"\nspawnSync missing: [null,\"ENOENT\"]\n",
+  "stderr": ""
+}

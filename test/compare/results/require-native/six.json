@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "sharp Error | require('sharp'): 'sharp' is a Node native module (C++ bindings) — it cannot run in the browser sandbox. Use the built-in 'convert' shell command for image work.\nbetter-sqlite3 Error | require('better-sqlite3'): 'better-sqlite3' is a Node native module (C++ bindings) — it cannot run in the browser sandbox. Use the built-in 'sqlite3' shell command (sql.js WASM).\npuppeteer Error | require('puppeteer'): 'puppeteer' is a Node native module (C++ bindings) — it cannot run in the browser sandbox. Use the built-in browser-automation shell commands.\nusb Error | require('usb'): 'usb' is a Node native module (C++ bindings) — it cannot run in the browser sandbox.\n",
+  "stderr": ""
+}

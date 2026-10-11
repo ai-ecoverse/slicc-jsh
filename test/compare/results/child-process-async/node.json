@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "exec cb: [null,\"cb\\n\",\"\"]\npromisify(exec): \"promised\\n\"\nspawn: [2,\"spawned\\n\"]\nexecFile: [null,\"ef\\n\"]\nexec failing: [5,\"Error\"]\nspawn stdin: [0,\"to cat\"]\n",
+  "stderr": ""
+}

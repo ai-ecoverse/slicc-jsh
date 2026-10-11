@@ -1,0 +1,8 @@
+{
+  "area": "process.stdin",
+  "description": "fs.readFileSync(0, 'utf8') and fs.readFileSync('/dev/stdin', 'utf8')",
+  "stdin": "line one\nline two é\n",
+  "corpus": [
+    "stdin-fd0"
+  ]
+}

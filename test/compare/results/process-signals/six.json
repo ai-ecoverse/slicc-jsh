@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "on SIGINT: THROW TypeError: process.on is not a function\nkill self SIGTERM: THROW TypeError: process.once is not a function\n",
+  "stderr": ""
+}

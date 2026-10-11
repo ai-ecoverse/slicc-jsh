@@ -1,0 +1,5 @@
+{
+  "area": "require",
+  "description": "require('sharp') / 'better-sqlite3' / 'puppeteer' when not installed (v6 refuses native packages by name)",
+  "corpus": []
+}

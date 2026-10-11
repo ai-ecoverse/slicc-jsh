@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "/workspace exists: true\n/shared exists: false\n/tmp exists: false\nHOME exists: false\ntmpdir writable: true\n",
+  "stderr": ""
+}

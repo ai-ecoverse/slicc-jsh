@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "end \"line one\\nline two é\\n\" true\n",
+  "stderr": ""
+}

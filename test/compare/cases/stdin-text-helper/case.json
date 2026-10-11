@@ -1,0 +1,8 @@
+{
+  "area": "process.stdin",
+  "description": "the portable idiom: collect process.stdin into a string with a Promise",
+  "stdin": "line one\nline two é\n",
+  "corpus": [
+    "stdin"
+  ]
+}

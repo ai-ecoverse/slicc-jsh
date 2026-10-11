@@ -1,0 +1,8 @@
+{
+  "area": "process.stdin",
+  "description": "`await process.stdin.read()` (bb.jsh, wrangler.jsh shape)",
+  "stdin": "line one\nline two é\n",
+  "corpus": [
+    "stdin.read"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "EventEmitter: once, prependListener, error without listener, events.once, setMaxListeners",
+  "corpus": [
+    "events"
+  ]
+}

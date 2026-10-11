@@ -1,0 +1,7 @@
+{
+  "area": "exit",
+  "description": "a 2.5 s timer still pending when the body returns (past v6's grace period?)",
+  "corpus": [
+    "setTimeout"
+  ]
+}

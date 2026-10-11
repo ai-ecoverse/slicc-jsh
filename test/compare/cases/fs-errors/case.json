@@ -1,0 +1,7 @@
+{
+  "area": "fs",
+  "description": "the Error a failing fs call throws: code, errno, syscall, path, message",
+  "corpus": [
+    "fs"
+  ]
+}

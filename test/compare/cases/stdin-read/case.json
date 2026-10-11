@@ -1,0 +1,8 @@
+{
+  "area": "process.stdin",
+  "description": "process.stdin.read() called synchronously at start with piped input (5 corpus scripts rely on v6's whole buffer)",
+  "stdin": "line one\nline two é\n",
+  "corpus": [
+    "stdin.read"
+  ]
+}

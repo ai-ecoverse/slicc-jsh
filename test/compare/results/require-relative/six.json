@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "./lib.js: \"lib.js\"\n./lib (no ext): \"lib.js\"\n./x.cjs: \"x.cjs\"\n./elevenlib.jsh: \"hello jsh from a .jsh library\"\n./data.json: {\"json\":true}\n./dir: \"dir/index.js\"\ncycle: {\"a\":\"a\",\"b\":\"b\",\"bSawA\":\"a\"}\ncached: true\nlib __filename: \"$CASE/lib.js\"\nlib sees require.main: \"no main\"\n",
+  "stderr": ""
+}

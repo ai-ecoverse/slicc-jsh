@@ -1,0 +1,8 @@
+{
+  "area": "fs",
+  "description": "v6 style `await fs.readFile(p)` (no callback) with and without an encoding",
+  "corpus": [
+    "fs-v6-promise",
+    "fs.readFile-await"
+  ]
+}

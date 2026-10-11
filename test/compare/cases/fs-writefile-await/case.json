@@ -1,0 +1,8 @@
+{
+  "area": "fs",
+  "description": "v6 style `await fs.writeFile(p, s)`, `await fs.mkdir`, `await fs.readdir`, `await fs.rm` with no callback",
+  "corpus": [
+    "fs-v6-promise",
+    "fs.writeFile-await"
+  ]
+}

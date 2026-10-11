@@ -1,0 +1,11 @@
+{
+  "area": "sliccy",
+  "description": "cli.die(new Error(…), { exitCode, prefix })",
+  "corpus": [
+    "cli.die"
+  ],
+  "env": {
+    "NO_COLOR": "1"
+  },
+  "node": false
+}

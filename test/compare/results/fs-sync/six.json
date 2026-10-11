@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "writeFileSync: undefined\nappendFileSync: undefined\nreadFileSync utf8: \"one\\ntwo\\n\"\nreadFileSync buffer: true\nmkdirSync recursive: undefined\nmkdirSync existing: undefined\nreaddirSync sorted?: [\"sub\",\"b.txt\",\"a.txt\"]\nreaddirSync withFileTypes: THROW TypeError: d.isDirectory is not a function\nreaddirSync recursive: [\"a.txt\",\"b.txt\",\"sub\"]\nrenameSync: false\ncopyFileSync: \"one\\ntwo\\n\"\nunlinkSync: false\nrmSync recursive: false\nrealpathSync: \"$CASE/data.txt\"\nmkdtempSync: \"string\"\n",
+  "stderr": ""
+}

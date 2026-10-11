@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "SyntaxError: Unexpected token ';'\n    at <internal>\n"
+}

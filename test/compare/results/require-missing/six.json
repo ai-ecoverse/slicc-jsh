@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "code undefined\nmessage Cannot find module 'left-pad-not-installed' (run: ipk install left-pad-not-installed)\nrequireStack false\nrelative code undefined\nrelative message Cannot find module './missing-file'\n",
+  "stderr": ""
+}

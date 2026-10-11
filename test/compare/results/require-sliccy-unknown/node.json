@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "nope error Cannot find module 'sliccy:nope'\n(empty) error Cannot find module 'sliccy:'\nagent error Cannot find module 'sliccy:agent'\nusb error Cannot find module 'sliccy:usb'\nserial error Cannot find module 'sliccy:serial'\nhid error Cannot find module 'sliccy:hid'\ncomputer error Cannot find module 'sliccy:computer'\nbrowser error Cannot find module 'sliccy:browser'\n",
+  "stderr": ""
+}

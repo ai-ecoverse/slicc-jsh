@@ -1,0 +1,9 @@
+{
+  "area": "process",
+  "description": "platform, arch, version(s), pid, hrtime, nextTick, memoryUsage, uptime, umask, on/emit, title, release",
+  "corpus": [
+    "process.platform",
+    "process.versions",
+    "process.on"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "plain: \"plain-pkg index\"\nexports require condition: \"cond-pkg slicc condition\"\nsubpath: \"cond-pkg/feature\"\nscoped: \"@scope/thing\"\nnested dep: \"nested dep-pkg\"\n",
+  "stderr": ""
+}

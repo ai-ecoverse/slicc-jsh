@@ -1,0 +1,7 @@
+{
+  "area": "process",
+  "description": "process.stdout/stderr/stdin.isTTY and columns with all three on pipes (v6 says isTTY = !NO_COLOR)",
+  "corpus": [
+    "isTTY"
+  ]
+}

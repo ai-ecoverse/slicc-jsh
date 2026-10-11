@@ -1,0 +1,8 @@
+{
+  "area": "exit",
+  "description": "process.exit(0) inside an async function whose caller catches everything (cli.die / main().catch shape)",
+  "corpus": [
+    "process.exit",
+    "main().catch"
+  ]
+}

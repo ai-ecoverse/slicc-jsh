@@ -1,0 +1,7 @@
+{
+  "area": "fs",
+  "description": "Node callback style: fs.readFile(p, 'utf8', cb), fs.writeFile(p, s, cb), fs.readdir(p, cb)",
+  "corpus": [
+    "fs.callback"
+  ]
+}

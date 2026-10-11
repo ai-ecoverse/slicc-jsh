@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "FOO: \"bar\"\nEMPTY: \"\"\nmissing: undefined\nassign number: [42,\"number\"]\ndelete: false\nhas HOME: \"string\"\nhas PATH: \"string\"\nhas PWD: \"string\"\nhas USER: \"string\"\nkeys are strings: false\n",
+  "stderr": ""
+}

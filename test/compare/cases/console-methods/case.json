@@ -1,0 +1,8 @@
+{
+  "area": "console",
+  "description": "console.info/warn/debug/table/dir/group/count/time/assert/trace: which stream and shape",
+  "corpus": [
+    "console.table",
+    "console.error"
+  ]
+}

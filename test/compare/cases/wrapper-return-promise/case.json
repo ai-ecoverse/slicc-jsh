@@ -1,0 +1,9 @@
+{
+  "area": "wrapper",
+  "description": "`return main()` with an async main (pandoc/vpod shape): the body waits for it",
+  "corpus": [
+    "top-level-return",
+    "async-main"
+  ],
+  "node": "cjs"
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "path: \"function\"\nevents: \"function\"\nsliccy:cli builtin: THROW Error MODULE_NOT_FOUND: Cannot find module 'sliccy:cli'\npath/ (trailing slash): \"node_modules/path\"\n",
+  "stderr": ""
+}

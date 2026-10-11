@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "fileURLToPath: \"/a/b c.txt\"\npathToFileURL: \"file:///a/b%20c.txt\"\nURL global === url.URL: true\nurl.parse: [\"h.com\",\"8080\",\"/p/a\",\"1\",\"u:p\"]\nurl.format: \"https://h.com/x?a=1\"\nURLSearchParams: \"a=1&b=x+y\"\nURL.canParse: \"function\"\nurl.resolve: \"http://a.com/d\"\n",
+  "stderr": ""
+}

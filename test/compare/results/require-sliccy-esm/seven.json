@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: Cannot find module 'sliccy:exec'\nRequire stack:\n- $CASE/main.jsh\n    at Object.<anonymous> ($CASE/main.jsh:1:17)\n"
+}

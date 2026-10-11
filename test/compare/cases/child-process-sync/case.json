@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "execSync, execFileSync, spawnSync: output types, status, a failing command",
+  "corpus": [
+    "child_process"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "base64: \"aGVsbG8=\"\nbase64url: \"-_8\"\nhex: [Buffer 2]\nlatin1: 1\nutf8 length: 5\nconcat: \"ab\"\nreadUInt32BE: 256\nwriteInt16LE: [254,255]\ninstanceof Uint8Array: true\nsubarray shares memory: \"zbc\"\nrequire(buffer).Buffer === Buffer: true\nconstants.MAX_LENGTH: THROW TypeError: Cannot read properties of undefined (reading 'MAX_LENGTH')\nBlob from buffer: \"undefined\"\ntoJSON: {\"type\":\"Buffer\",\"data\":[97,98]}\nequals: true\ninspect: \"<Buffer 68 69>\"\natob/btoa: [\"aGk=\",\"hi\"]\n",
+  "stderr": ""
+}

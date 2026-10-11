@@ -1,0 +1,13 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+show('assert.deepStrictEqual', () => { require('assert').deepStrictEqual({ a: 1 }, { a: 2 }); return 'no throw'; });
+show('assert.rejects', () => typeof require('assert').rejects);
+show('string_decoder', () => { const { StringDecoder } = require('string_decoder'); const d = new StringDecoder('utf8'); return d.write(Buffer.from([0xc3])) + d.write(Buffer.from([0xa9])); });
+show('querystring', () => require('querystring').stringify({ a: [1, 2], b: 'x y' }));
+await showA('timers/promises', async () => { await require('timers/promises').setTimeout(5); return 'slept'; });
+show('perf_hooks', () => typeof require('perf_hooks').performance.now());
+show('module.createRequire', () => typeof require('module').createRequire(__filename)('path').join);
+show('module.builtinModules', () => Array.isArray(require('module').builtinModules));
+show('worker_threads.isMainThread', () => require('worker_threads').isMainThread);
+show('vm.runInNewContext', () => require('vm').runInNewContext('a + 1', { a: 1 }));
+show('async_hooks.AsyncLocalStorage', () => typeof require('async_hooks').AsyncLocalStorage);
+show('dns.lookup', () => typeof require('dns').lookup);

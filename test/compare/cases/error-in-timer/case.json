@@ -1,0 +1,7 @@
+{
+  "area": "exit",
+  "description": "an Error thrown from a timer after the body returned",
+  "corpus": [
+    "setTimeout"
+  ]
+}

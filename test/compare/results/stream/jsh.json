@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "Readable.from + for await: [\"a\",\"b\"]\npipeline (stream/promises): [\"X\",\"Y\"]\npipeline callback: \"undefined\"\nReadable is EventEmitter: true\nreadable.read() paused mode: \"p\"\nstream/web: \"function\"\nReadable.toWeb: \"function\"\n",
+  "stderr": ""
+}

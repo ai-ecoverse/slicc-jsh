@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "import http URL: THROW Error ERR_MODULE_NOT_FOUND: Cannot find module 'http://$HTTP/mod.mjs'\n",
+  "stderr": ""
+}

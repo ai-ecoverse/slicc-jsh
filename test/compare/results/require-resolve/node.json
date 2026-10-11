@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "resolve fs: \"fs\"\nresolve node:fs: \"node:fs\"\nresolve sliccy:cli: THROW Error MODULE_NOT_FOUND: Cannot find module 'sliccy:cli'\nresolve ./lib.js: \"$CASE/lib.js\"\nresolve pkg: \"$CASE/node_modules/pkg/lib/entry.js\"\nresolve missing: THROW Error MODULE_NOT_FOUND: Cannot find module 'nope-not-installed'\nrequire.cache: \"object\"\nmodule.paths[0]: undefined\nmodule.require: \"undefined\"\n",
+  "stderr": ""
+}

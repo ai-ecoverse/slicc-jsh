@@ -1,0 +1,7 @@
+{
+  "area": "globals",
+  "description": "process.nextTick runs (after the microtasks the body queued), timer handle shape (unref/ref/hasRef, toPrimitive), extra setTimeout arguments",
+  "corpus": [
+    "setTimeout"
+  ]
+}

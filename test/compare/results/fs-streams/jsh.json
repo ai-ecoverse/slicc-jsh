@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "createWriteStream: \"stream written\"\ncreateReadStream: \"hello data\\n\"\npipe: \"hello data\\n\"\n",
+  "stderr": ""
+}

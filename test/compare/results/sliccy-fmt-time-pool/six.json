@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "fmt keys col,date,table,trunc\n\"abcd…\"\n\"ab   \"\na    bb\nccc  d\n2024-01-02T03:04:05.000Z\ntime keys ago,future,gmailDate,parseDuration,range\n7200000 1500 10\n2024-03-09T12:00:00.000Z 2024/03/03\npool function [30,11,22]\n",
+  "stderr": ""
+}

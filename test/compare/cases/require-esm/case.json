@@ -1,0 +1,5 @@
+{
+  "area": "require",
+  "description": "require() of an ES module file and of a \"type\": \"module\" package (Node 22: require(esm))",
+  "corpus": []
+}

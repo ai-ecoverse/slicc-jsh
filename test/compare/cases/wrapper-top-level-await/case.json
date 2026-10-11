@@ -1,0 +1,7 @@
+{
+  "area": "wrapper",
+  "description": "top-level `await` in the body",
+  "corpus": [
+    "top-level-await"
+  ]
+}

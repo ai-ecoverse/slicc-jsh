@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "platform: \"string\"\narch: \"string\"\nversion: true\nversions.node: \"string\"\nversions.jsh: \"string\"\nversions.v8: \"undefined\"\nrelease.name: undefined\npid: \"number\"\nppid: \"undefined\"\nexecPath: \"string\"\ntitle: \"string\"\nhrtime: true\nhrtime.bigint: \"bigint\"\nnextTick: \"function\"\nmemoryUsage: \"number\"\nuptime: \"number\"\numask: \"number\"\ncpuUsage: \"function\"\non: \"function\"\nemit: \"function\"\nkill: \"function\"\nemitWarning: \"undefined\"\ngetuid: \"function\"\nconfig: \"object\"\nfeatures: \"object\"\nstdin.fd: 0\ntoString: \"[object Object]\"\n",
+  "stderr": ""
+}

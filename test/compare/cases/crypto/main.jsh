@@ -1,0 +1,14 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+const crypto = require('crypto');
+for (const alg of ['md5', 'sha1', 'sha256', 'sha512']) show(`createHash ${alg}`, () => crypto.createHash(alg).update('abc').digest('hex'));
+show('createHash base64', () => crypto.createHash('sha256').update(Buffer.from('abc')).digest('base64'));
+show('createHash digest()', () => Buffer.isBuffer(crypto.createHash('sha256').update('abc').digest()));
+show('createHmac sha256', () => crypto.createHmac('sha256', 'key').update('abc').digest('hex'));
+show('randomBytes', () => { const b = crypto.randomBytes(8); return [Buffer.isBuffer(b), b.length, typeof b.toString('hex')]; });
+show('randomUUID', () => /^[0-9a-f-]{36}$/.test(crypto.randomUUID()));
+show('timingSafeEqual', () => crypto.timingSafeEqual(Buffer.from('a'), Buffer.from('a')));
+show('pbkdf2Sync', () => crypto.pbkdf2Sync('pw', 'salt', 1, 16, 'sha256').toString('hex'));
+show('createCipheriv', () => typeof crypto.createCipheriv);
+show('webcrypto.subtle', () => typeof crypto.webcrypto.subtle.digest);
+await showA('subtle.digest', async () => Buffer.from(await crypto.webcrypto.subtle.digest('SHA-256', new TextEncoder().encode('abc'))).toString('hex'));
+show('getHashes includes sha256', () => crypto.getHashes().includes('sha256'));

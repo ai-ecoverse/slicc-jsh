@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "sharp MODULE_NOT_FOUND | Cannot find module 'sharp'\nbetter-sqlite3 MODULE_NOT_FOUND | Cannot find module 'better-sqlite3'\npuppeteer MODULE_NOT_FOUND | Cannot find module 'puppeteer'\nusb MODULE_NOT_FOUND | Cannot find module 'usb'\n",
+  "stderr": ""
+}

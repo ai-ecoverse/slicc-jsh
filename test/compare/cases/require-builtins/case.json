@@ -1,0 +1,5 @@
+{
+  "area": "require",
+  "description": "every Node builtin by name: does require() give a module, and is node:x the same object",
+  "corpus": []
+}

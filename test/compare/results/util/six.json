@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "inspect object: \"{ a: 1, b: 'two', c: [ 1, 2, { d: null } ], e: undefined }\"\ninspect nested depth: \"{ a: { b: { c: [Object] } } }\"\ninspect Map: \"Map(1) { 'k' => 1 }\"\ninspect class: \"Foo { x: 1 }\"\nformat: \"a=42 {\\\"j\\\":1} [ 1 ]\"\nformat extra args: \"a b 1 { c: 2 }\"\npromisify: \"function\"\ntypes.isPromise: undefined\nparseArgs: {\"x\":\"1\",\"y\":true}\nstyleText: \"undefined\"\nisDeepStrictEqual: THROW TypeError: util.isDeepStrictEqual is not a function\ndeprecate: \"function\"\nTextDecoder: \"undefined\"\ninherits: \"function\"\ncallbackify: \"undefined\"\n",
+  "stderr": ""
+}

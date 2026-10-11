@@ -1,0 +1,8 @@
+{
+  "area": "sliccy",
+  "description": "`await import('sliccy:exec')` and `import('sliccy:cli')`",
+  "corpus": [
+    "dynamic-import"
+  ],
+  "node": false
+}

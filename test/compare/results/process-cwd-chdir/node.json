@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "cwd: \"$CASE\"\ncwd === __dirname: true\nchdir sub: \"$CASE/sub\"\nreadFileSync relative after chdir: \"inner\"\nrequire relative after chdir: \"top.js (relative to the script)\"\nchdir missing: THROW Error ENOENT: ENOENT: no such file or directory, chdir '$CASE/sub' -> 'nope'\n",
+  "stderr": ""
+}

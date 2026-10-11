@@ -1,0 +1,7 @@
+{
+  "area": "wrapper",
+  "description": "`import('pkg')` from the script's node_modules (ESM and CJS packages)",
+  "corpus": [
+    "dynamic-import"
+  ]
+}

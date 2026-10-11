@@ -1,0 +1,7 @@
+{
+  "area": "require",
+  "description": "require() of an absolute path (corpus loads /shared/cache bundles this way)",
+  "corpus": [
+    "require-absolute"
+  ]
+}

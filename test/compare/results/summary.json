@@ -1,0 +1,2312 @@
+{
+  "meta": {
+    "node": "22.22.0",
+    "jsh": "0.0.0",
+    "kernel": "1.59.1",
+    "kernelPackages": [
+      "@ai-ecoverse/wasm-bash@5.3.0-17",
+      "@ai-ecoverse/wasm-coreutils@9.12.0-5"
+    ],
+    "six": "6.247.17 (e44ee9d2c)"
+  },
+  "rows": [
+    {
+      "name": "buffer",
+      "area": "builtins",
+      "description": "Buffer encodings, concat, read/write ints, slice/subarray, instanceof, require('buffer')",
+      "corpus": [
+        "Buffer",
+        "buffer-module"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "child-process-async",
+      "area": "builtins",
+      "description": "exec with a callback, util.promisify(exec), spawn with events, execFile",
+      "corpus": [
+        "child_process"
+      ],
+      "status": {
+        "six": 0,
+        "seven": "timeout",
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "≠",
+      "node": "=",
+      "auto": "seven≠node"
+    },
+    {
+      "name": "child-process-floating",
+      "area": "builtins",
+      "description": "child_process.exec with a callback, not awaited by the body: the type of stdout",
+      "corpus": [
+        "child_process"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "≠",
+      "node": "=",
+      "auto": "seven≠node"
+    },
+    {
+      "name": "child-process-sync",
+      "area": "builtins",
+      "description": "execSync, execFileSync, spawnSync: output types, status, a failing command",
+      "corpus": [
+        "child_process"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "console-format",
+      "area": "console",
+      "description": "console.log formatting of non-strings: objects, arrays, Errors, Map, %s/%d/%o, undefined, nested",
+      "corpus": [
+        "console.log",
+        "console.error(err)"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "console-methods",
+      "area": "console",
+      "description": "console.info/warn/debug/table/dir/group/count/time/assert/trace: which stream and shape",
+      "corpus": [
+        "console.table",
+        "console.error"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "crypto",
+      "area": "builtins",
+      "description": "createHash (md5/sha1/sha256/sha512), createHmac, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync, webcrypto",
+      "corpus": [
+        "crypto",
+        "crypto.subtle/randomUUID"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "env-paths",
+      "area": "environment",
+      "description": "the paths scripts hard-code: /workspace, /shared, /tmp, HOME, os.tmpdir() writable",
+      "corpus": [
+        "/workspace",
+        "/shared",
+        "/tmp"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "error-cause",
+      "area": "exit",
+      "description": "an uncaught Error with a cause",
+      "corpus": [],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "≠",
+      "auto": "same"
+    },
+    {
+      "name": "error-in-main-catch",
+      "area": "exit",
+      "description": "the corpus pattern main().catch(e => { console.error(e.message); process.exit(1) })",
+      "corpus": [
+        "main().catch",
+        "process.exit"
+      ],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "=",
+      "seven": "≠",
+      "node": "=",
+      "auto": "seven≠node"
+    },
+    {
+      "name": "error-in-timer",
+      "area": "exit",
+      "description": "an Error thrown from a timer after the body returned",
+      "corpus": [
+        "setTimeout"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "error-line-numbers",
+      "area": "exit",
+      "description": "stack frames name the script and its own line numbers",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "≠",
+      "auto": "six≠node"
+    },
+    {
+      "name": "error-rejection-late-handled",
+      "area": "exit",
+      "description": "a rejection handled one macrotask later",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "error-throw-object",
+      "area": "exit",
+      "description": "`throw { message, code }` (a plain object)",
+      "corpus": [],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "≠",
+      "auto": "same"
+    },
+    {
+      "name": "error-throw-string",
+      "area": "exit",
+      "description": "`throw 'a string'` and the stderr it gives",
+      "corpus": [],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "≠",
+      "auto": "same"
+    },
+    {
+      "name": "error-uncaught",
+      "area": "exit",
+      "description": "an uncaught Error thrown by the body: stderr shape and status",
+      "corpus": [],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "≠",
+      "auto": "same"
+    },
+    {
+      "name": "error-uncaught-props",
+      "area": "exit",
+      "description": "an uncaught Error with a code and extra properties",
+      "corpus": [],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "≠",
+      "auto": "same"
+    },
+    {
+      "name": "error-unhandled-rejection",
+      "area": "exit",
+      "description": "a rejected promise nobody handles, while the body continues",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "events",
+      "area": "builtins",
+      "description": "EventEmitter: once, prependListener, error without listener, events.once, setMaxListeners",
+      "corpus": [
+        "events"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "exec-env-inherit",
+      "area": "sliccy",
+      "description": "does a command run by exec() see the script's environment (caller's env and process.env changes)",
+      "corpus": [
+        "sliccy:exec",
+        "process.env"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "–",
+      "auto": "six≠node"
+    },
+    {
+      "name": "exit-floating-main-exec",
+      "area": "exit",
+      "description": "`main().catch(…)` where main awaits sliccy:exec (sleep 0.3): the program must wait for it",
+      "corpus": [
+        "floating-main",
+        "sliccy:exec"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "=",
+      "seven": "≠",
+      "node": "–",
+      "auto": "seven≠node"
+    },
+    {
+      "name": "exit-floating-main-fetch",
+      "area": "exit",
+      "description": "`main().catch(…)` where main awaits a slow fetch: the program must wait for it (11 corpus scripts use the floating-main shape)",
+      "corpus": [
+        "floating-main",
+        "fetch"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "≠",
+      "node": "=",
+      "auto": "seven≠node"
+    },
+    {
+      "name": "exit-interval-cleared",
+      "area": "exit",
+      "description": "a setInterval cleared after 3 ticks; and an unref'd interval that must not keep the program alive",
+      "corpus": [
+        "setInterval"
+      ],
+      "status": {
+        "six": "timeout",
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "exit-long-timer",
+      "area": "exit",
+      "description": "a 2.5 s timer still pending when the body returns (past v6's grace period?)",
+      "corpus": [
+        "setTimeout"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "exit-never-settles",
+      "area": "exit",
+      "description": "the body awaits a promise that never settles and nothing else is pending",
+      "corpus": [],
+      "status": {
+        "six": "timeout",
+        "seven": "timeout",
+        "jsh": 0,
+        "node": 13
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "exit-pending-fetch",
+      "area": "exit",
+      "description": "a fetch still in flight when the body returns (not awaited)",
+      "corpus": [
+        "fetch"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "≠",
+      "node": "=",
+      "auto": "seven≠node"
+    },
+    {
+      "name": "exit-pending-timer",
+      "area": "exit",
+      "description": "a 300 ms timer still pending when the body returns",
+      "corpus": [
+        "setTimeout"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "fetch",
+      "area": "globals",
+      "description": "fetch: JSON, text, status, headers, redirect, POST body, bytes, and a refused connection",
+      "corpus": [
+        "fetch"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "fs-binary",
+      "area": "fs",
+      "description": "non-UTF-8 bytes through readFileSync/writeFileSync and fs.promises (no latin1/UTF-8 mangling)",
+      "corpus": [
+        "Buffer"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "fs-callbacks",
+      "area": "fs",
+      "description": "Node callback style: fs.readFile(p, 'utf8', cb), fs.writeFile(p, s, cb), fs.readdir(p, cb)",
+      "corpus": [
+        "fs.callback"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "fs-coherence",
+      "area": "fs",
+      "description": "a write through one API is seen by the others (sync ↔ promise ↔ a shell command)",
+      "corpus": [
+        "fs.sync",
+        "fs-v6-promise"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "–",
+      "auto": "six≠node"
+    },
+    {
+      "name": "fs-errors",
+      "area": "fs",
+      "description": "the Error a failing fs call throws: code, errno, syscall, path, message",
+      "corpus": [
+        "fs"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "fs-exists",
+      "area": "fs",
+      "description": "`await fs.exists(p)` (v6, 16 corpus scripts) vs Node's callback-only fs.exists and existsSync",
+      "corpus": [
+        "fs.exists"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "fs-fd",
+      "area": "fs",
+      "description": "file descriptors: openSync/readSync/writeSync/closeSync on a file, and fs.writeSync(1|2)",
+      "corpus": [
+        "fs.sync"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "fs-promises",
+      "area": "fs",
+      "description": "fs.promises and require('fs/promises'): identity and the portable promise API",
+      "corpus": [
+        "fs.promises"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "fs-readfile-await",
+      "area": "fs",
+      "description": "v6 style `await fs.readFile(p)` (no callback) with and without an encoding",
+      "corpus": [
+        "fs-v6-promise",
+        "fs.readFile-await"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "fs-stat",
+      "area": "fs",
+      "description": "stat results: isDirectory as a property (v6) or a method (Node), size, mtime, mode",
+      "corpus": [
+        "fs.stat-prop"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "fs-streams",
+      "area": "fs",
+      "description": "fs.createReadStream / createWriteStream and piping",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": "timeout",
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "fs-surface",
+      "area": "fs",
+      "description": "which Node fs functions exist (typeof for a fixed list of Node 22 names)",
+      "corpus": [
+        "fs"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "fs-sync",
+      "area": "fs",
+      "description": "the sync calls the corpus uses: write/read/append/mkdir/readdir/rename/unlink/rm/copyFile",
+      "corpus": [
+        "fs.sync"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "fs-v6-extras",
+      "area": "fs",
+      "description": "v6-only fs calls: readFileBinary, writeFileBinary, readDir, fetchToFile",
+      "corpus": [
+        "fs.readFileBinary",
+        "fs.readDir",
+        "fs.fetchToFile"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "fs-writefile-await",
+      "area": "fs",
+      "description": "v6 style `await fs.writeFile(p, s)`, `await fs.mkdir`, `await fs.readdir`, `await fs.rm` with no callback",
+      "corpus": [
+        "fs-v6-promise",
+        "fs.writeFile-await"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "globals",
+      "area": "globals",
+      "description": "which globals exist: web APIs, Node globals, SLICC markers",
+      "corpus": [
+        "fetch",
+        "WebSocket",
+        "Buffer",
+        "SLICC_VERSION",
+        "TextEncoder/Decoder",
+        "atob/btoa",
+        "URL",
+        "AbortController",
+        "FormData/Blob"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "globals-crypto",
+      "area": "globals",
+      "description": "global crypto: randomUUID, getRandomValues, subtle.digest/HMAC",
+      "corpus": [
+        "crypto.subtle/randomUUID"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "http-module",
+      "area": "builtins",
+      "description": "require('http'): createServer + listen on 127.0.0.1 and http.get to it; https.request shape",
+      "corpus": [
+        "http-module"
+      ],
+      "status": {
+        "six": 1,
+        "seven": "timeout",
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "import-builtin",
+      "area": "wrapper",
+      "description": "`import('node:fs')`, `import('fs')`, `import('path')`: what the namespace has",
+      "corpus": [
+        "dynamic-import"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "import-in-function-ctor",
+      "area": "wrapper",
+      "description": "`new Function('u', 'return import(u)')` (vpod's ESM loader) on a relative path and a builtin",
+      "corpus": [
+        "import-in-function-ctor"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "import-package",
+      "area": "wrapper",
+      "description": "`import('pkg')` from the script's node_modules (ESM and CJS packages)",
+      "corpus": [
+        "dynamic-import"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "import-relative",
+      "area": "wrapper",
+      "description": "`await import('./lib.mjs')` and `import('./lib.cjs')` resolve against the script",
+      "corpus": [
+        "dynamic-import"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "six=seven≠node"
+    },
+    {
+      "name": "import-url",
+      "area": "wrapper",
+      "description": "`import('http(s)://…')` (pdf, pptx2pdf import from esm.sh)",
+      "corpus": [
+        "import-url"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "misc-builtins",
+      "area": "builtins",
+      "description": "assert, string_decoder, querystring, timers/promises, perf_hooks, module.createRequire, worker_threads, vm",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "net",
+      "area": "builtins",
+      "description": "require('net'): a server and a client on 127.0.0.1",
+      "corpus": [
+        "http-module"
+      ],
+      "status": {
+        "six": 1,
+        "seven": "timeout",
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "os",
+      "area": "builtins",
+      "description": "os.platform, EOL, tmpdir, homedir, hostname, cpus, type, userInfo, arch",
+      "corpus": [
+        "os"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "path",
+      "area": "builtins",
+      "description": "path.join/resolve (against cwd)/relative/parse/format, posix and win32",
+      "corpus": [
+        "path"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "process-argv",
+      "area": "process",
+      "description": "process.argv[0], [1] and the rest",
+      "corpus": [
+        "argv[0]",
+        "argv[1]",
+        "argv.slice(2)"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "process-cwd-chdir",
+      "area": "process",
+      "description": "process.cwd(), process.chdir() and relative fs/require after chdir",
+      "corpus": [
+        "process.cwd",
+        "process.chdir"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "process-env",
+      "area": "process",
+      "description": "process.env from the caller, assignment, coercion, delete; common variables",
+      "corpus": [
+        "process.env"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "six=seven≠node"
+    },
+    {
+      "name": "process-env-to-child",
+      "area": "process",
+      "description": "process.env.X = 1 then a child_process sees X (string coercion)",
+      "corpus": [
+        "process.env",
+        "child_process"
+      ],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "process-exit-catchable",
+      "area": "exit",
+      "description": "process.exit(3) inside try/catch/finally: does user code see it",
+      "corpus": [
+        "process.exit"
+      ],
+      "status": {
+        "six": 3,
+        "seven": 3,
+        "jsh": 3,
+        "node": 3
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "six=seven≠node"
+    },
+    {
+      "name": "process-exit-code",
+      "area": "exit",
+      "description": "process.exitCode = 4 then the body ends; process.exit() with no argument uses it",
+      "corpus": [
+        "process.exitCode"
+      ],
+      "status": {
+        "six": 4,
+        "seven": 4,
+        "jsh": 4,
+        "node": 4
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "process-exit-event",
+      "area": "exit",
+      "description": "process.on('exit') and 'beforeExit' handlers, with the exit code",
+      "corpus": [
+        "process.on"
+      ],
+      "status": {
+        "six": 1,
+        "seven": 2,
+        "jsh": 2,
+        "node": 2
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "process-exit-flush",
+      "area": "exit",
+      "description": "200 KB written to stdout, then process.exit(0): nothing is lost",
+      "corpus": [
+        "process.exit",
+        "stdout.write"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "process-exit-in-async-catch",
+      "area": "exit",
+      "description": "process.exit(0) inside an async function whose caller catches everything (cli.die / main().catch shape)",
+      "corpus": [
+        "process.exit",
+        "main().catch"
+      ],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "process-exit-in-catch-all",
+      "area": "exit",
+      "description": "the common shape `try { … process.exit(2) … } catch (e) { console.error('failed:', e.message); process.exit(1) }`",
+      "corpus": [
+        "process.exit"
+      ],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 2,
+        "node": 2
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "six=seven≠node"
+    },
+    {
+      "name": "process-exit-in-timer",
+      "area": "exit",
+      "description": "process.exit(5) from a timer after the body returned",
+      "corpus": [
+        "process.exit",
+        "setTimeout"
+      ],
+      "status": {
+        "six": 5,
+        "seven": 5,
+        "jsh": 5,
+        "node": 5
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "process-exit-noarg",
+      "area": "exit",
+      "description": "process.exit() with no argument after process.exitCode = 6",
+      "corpus": [
+        "process.exit"
+      ],
+      "status": {
+        "six": 6,
+        "seven": 6,
+        "jsh": 6,
+        "node": 6
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "process-parse-flags",
+      "area": "process",
+      "description": "process.argv.parseFlags() on a mix of flag styles",
+      "corpus": [
+        "parseFlags"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 1
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "≠",
+      "auto": "same"
+    },
+    {
+      "name": "process-props",
+      "area": "process",
+      "description": "platform, arch, version(s), pid, hrtime, nextTick, memoryUsage, uptime, umask, on/emit, title, release",
+      "corpus": [
+        "process.platform",
+        "process.versions",
+        "process.on"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "process-signals",
+      "area": "process",
+      "description": "process.on('SIGINT'/'SIGTERM') registration and process.kill(process.pid, 'SIGTERM') with a handler",
+      "corpus": [
+        "process.on"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 143,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "process-stdout",
+      "area": "process",
+      "description": "process.stdout/stderr shape: write() return and callback, isTTY, columns, fd, end()",
+      "corpus": [
+        "stdout.write",
+        "stderr.write",
+        "isTTY"
+      ],
+      "status": {
+        "six": "timeout",
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "process-stdout-istty",
+      "area": "process",
+      "description": "process.stdout/stderr/stdin.isTTY and columns with all three on pipes (v6 says isTTY = !NO_COLOR)",
+      "corpus": [
+        "isTTY"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "process-stdout-write-cb",
+      "area": "process",
+      "description": "process.stdout.write(chunk, callback): is the callback called",
+      "corpus": [
+        "stdout.write"
+      ],
+      "status": {
+        "six": "timeout",
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "require-absolute",
+      "area": "require",
+      "description": "require() of an absolute path (corpus loads /shared/cache bundles this way)",
+      "corpus": [
+        "require-absolute"
+      ],
+      "status": {
+        "six": 1,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "require-builtins",
+      "area": "require",
+      "description": "every Node builtin by name: does require() give a module, and is node:x the same object",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "require-esm",
+      "area": "require",
+      "description": "require() of an ES module file and of a \"type\": \"module\" package (Node 22: require(esm))",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "require-missing",
+      "area": "require",
+      "description": "require of a package that isn't installed: message and code (v6 adds an ipk hint)",
+      "corpus": [
+        "require-package"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "require-native",
+      "area": "require",
+      "description": "require('sharp') / 'better-sqlite3' / 'puppeteer' when not installed (v6 refuses native packages by name)",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "require-node-modules",
+      "area": "require",
+      "description": "a package in the script's node_modules: main, exports conditions, nested deps, a scoped package",
+      "corpus": [
+        "require-package"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "≠",
+      "node": "=",
+      "auto": "seven≠node"
+    },
+    {
+      "name": "require-playwright",
+      "area": "require",
+      "description": "require('playwright') when no playwright is installed (v6 serves a CDP shim)",
+      "corpus": [
+        "playwright"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "require-relative",
+      "area": "require",
+      "description": "require('./x.js'), './x.cjs', './x.jsh', './x.json', './dir' (index.js), a cycle, and the cache",
+      "corpus": [
+        "require-relative",
+        "require-relative-jsh"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "require-resolve",
+      "area": "require",
+      "description": "require.resolve for a builtin, sliccy:, relative and a package; require.cache; module.paths",
+      "corpus": [
+        "require-relative"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "≠",
+      "auto": "six≠node"
+    },
+    {
+      "name": "require-shadow-builtin",
+      "area": "require",
+      "description": "node_modules/path and node_modules/events exist: builtins win; node_modules/sliccy-cli does not shadow sliccy:cli",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "≠",
+      "auto": "same"
+    },
+    {
+      "name": "require-sliccy-esm",
+      "area": "sliccy",
+      "description": "`await import('sliccy:exec')` and `import('sliccy:cli')`",
+      "corpus": [
+        "dynamic-import"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 1,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "–",
+      "auto": "all differ"
+    },
+    {
+      "name": "require-sliccy-unknown",
+      "area": "sliccy",
+      "description": "require('sliccy:nope'), require('sliccy:') and the SLICC-only names",
+      "corpus": [
+        "sliccy:agent",
+        "sliccy:usb",
+        "sliccy:computer"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "≠",
+      "auto": "six≠node"
+    },
+    {
+      "name": "sliccy-browser",
+      "area": "sliccy",
+      "description": "require('sliccy:browser') with no browser: what loads, and a call",
+      "corpus": [
+        "sliccy:browser"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "–",
+      "auto": "six≠node"
+    },
+    {
+      "name": "sliccy-cli",
+      "area": "sliccy",
+      "description": "sliccy:cli out/warn/help/die: streams, prefixes, exit codes (die inside try/catch)",
+      "corpus": [
+        "sliccy:cli",
+        "cli.die",
+        "cli.help"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 3,
+        "jsh": 3,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "–",
+      "auto": "all differ"
+    },
+    {
+      "name": "sliccy-cli-die-object",
+      "area": "sliccy",
+      "description": "cli.die(new Error(…), { exitCode, prefix })",
+      "corpus": [
+        "cli.die"
+      ],
+      "status": {
+        "six": 4,
+        "seven": 4,
+        "jsh": 4,
+        "node": null
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "–",
+      "auto": "same"
+    },
+    {
+      "name": "sliccy-cli-help",
+      "area": "sliccy",
+      "description": "cli.help(text) prints to stdout and exits 0",
+      "corpus": [
+        "cli.help"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "–",
+      "auto": "same"
+    },
+    {
+      "name": "sliccy-cli-help-in-main-catch",
+      "area": "exit",
+      "description": "the corpus shape `await main().catch((e) => cli.die(e.message))` when main() calls cli.help() (metaculus, elevenlabs, …)",
+      "corpus": [
+        "main().catch",
+        "cli.help",
+        "cli.die"
+      ],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "–",
+      "auto": "six=seven≠node"
+    },
+    {
+      "name": "sliccy-color-force",
+      "area": "sliccy",
+      "description": "sliccy:color with FORCE_COLOR=1 on a pipe",
+      "corpus": [
+        "sliccy:color"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "–",
+      "auto": "six=seven≠node"
+    },
+    {
+      "name": "sliccy-color-no-color",
+      "area": "sliccy",
+      "description": "sliccy:color with NO_COLOR=1",
+      "corpus": [
+        "sliccy:color"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "–",
+      "auto": "same"
+    },
+    {
+      "name": "sliccy-color-pipe",
+      "area": "sliccy",
+      "description": "sliccy:color with stdout a pipe and no NO_COLOR/FORCE_COLOR (decision 4: off off a TTY; v6: on)",
+      "corpus": [
+        "sliccy:color"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "–",
+      "auto": "six≠node"
+    },
+    {
+      "name": "sliccy-exec",
+      "area": "sliccy",
+      "description": "sliccy:exec: exec(cmd) result shape, stderr, exit codes, pipes/redirects, exec.spawn quoting, a missing command",
+      "corpus": [
+        "sliccy:exec",
+        "exec.spawn"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "–",
+      "auto": "six≠node"
+    },
+    {
+      "name": "sliccy-exec-start",
+      "area": "sliccy",
+      "description": "exec.start(): handle shape, stdin.write() buffering, done, kill() of a running command",
+      "corpus": [
+        "exec.start"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "–",
+      "auto": "six≠node"
+    },
+    {
+      "name": "sliccy-fmt-time-pool",
+      "area": "sliccy",
+      "description": "sliccy:fmt (trunc/col/table/date), sliccy:time (parseDuration/ago/gmailDate), sliccy:pool",
+      "corpus": [
+        "sliccy:fmt",
+        "sliccy:time",
+        "sliccy:pool"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "–",
+      "auto": "same"
+    },
+    {
+      "name": "sliccy-http",
+      "area": "sliccy",
+      "description": "sliccy:http client: baseUrl + get/post JSON, headers, a 404, a text response",
+      "corpus": [
+        "sliccy:http"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "–",
+      "auto": "six≠node"
+    },
+    {
+      "name": "sliccy-skill",
+      "area": "sliccy",
+      "description": "sliccy:skill dir/refs/assets for scripts/<x>.jsh, config() read/write, token() without oauth-token",
+      "corpus": [
+        "sliccy:skill",
+        "skill.config",
+        "skill.token"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "–",
+      "auto": "six≠node"
+    },
+    {
+      "name": "stdin-async-iterator",
+      "area": "process.stdin",
+      "description": "for await (const chunk of process.stdin)",
+      "corpus": [
+        "stdin"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "stdin-events",
+      "area": "process.stdin",
+      "description": "process.stdin.on('data'/'end') with setEncoding('utf8')",
+      "corpus": [
+        "stdin.on"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "stdin-events-buffer",
+      "area": "process.stdin",
+      "description": "'data' chunks without setEncoding: Buffer (Node) or string",
+      "corpus": [
+        "stdin.on"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "stdin-fd0",
+      "area": "process.stdin",
+      "description": "fs.readFileSync(0, 'utf8') and fs.readFileSync('/dev/stdin', 'utf8')",
+      "corpus": [
+        "stdin-fd0"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "stdin-read",
+      "area": "process.stdin",
+      "description": "process.stdin.read() called synchronously at start with piped input (5 corpus scripts rely on v6's whole buffer)",
+      "corpus": [
+        "stdin.read"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "stdin-read-await",
+      "area": "process.stdin",
+      "description": "`await process.stdin.read()` (bb.jsh, wrangler.jsh shape)",
+      "corpus": [
+        "stdin.read"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "stdin-read-empty",
+      "area": "process.stdin",
+      "description": "process.stdin.read() with nothing piped",
+      "corpus": [
+        "stdin.read"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "stdin-readline",
+      "area": "process.stdin",
+      "description": "readline.createInterface({ input: process.stdin }) line events and for-await",
+      "corpus": [
+        "readline"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "≠",
+      "node": "=",
+      "auto": "seven≠node"
+    },
+    {
+      "name": "stdin-text-helper",
+      "area": "process.stdin",
+      "description": "the portable idiom: collect process.stdin into a string with a Promise",
+      "corpus": [
+        "stdin"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "stdout-isatty-color",
+      "area": "process",
+      "description": "console.log of a boolean/number when FORCE_COLOR=1 (Node colours inspect output)",
+      "corpus": [
+        "console.log"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "stream",
+      "area": "builtins",
+      "description": "Readable.from, Transform, pipeline (stream/promises), PassThrough, Writable, backpressure basics",
+      "corpus": [
+        "stream"
+      ],
+      "status": {
+        "six": 0,
+        "seven": "timeout",
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "timers",
+      "area": "globals",
+      "description": "process.nextTick runs (after the microtasks the body queued), timer handle shape (unref/ref/hasRef, toPrimitive), extra setTimeout arguments",
+      "corpus": [
+        "setTimeout"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "timers-immediate",
+      "area": "globals",
+      "description": "setImmediate/clearImmediate and setImmediate before a 10 ms timer",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "tty",
+      "area": "builtins",
+      "description": "require('tty').isatty(0/1/2) under pipes",
+      "corpus": [
+        "tty",
+        "isTTY"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "≠",
+      "node": "=",
+      "auto": "seven≠node"
+    },
+    {
+      "name": "url",
+      "area": "builtins",
+      "description": "URL, URLSearchParams, fileURLToPath, pathToFileURL, legacy url.parse/format",
+      "corpus": [
+        "url",
+        "URL"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "util",
+      "area": "builtins",
+      "description": "util.inspect, format, promisify, types, parseArgs, styleText, isDeepStrictEqual, TextDecoder",
+      "corpus": [
+        "util"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    },
+    {
+      "name": "websocket",
+      "area": "globals",
+      "description": "the global WebSocket against an echo server",
+      "corpus": [
+        "WebSocket"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "wrapper-bom",
+      "area": "wrapper",
+      "description": "a UTF-8 BOM before the code",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "wrapper-floating-main",
+      "area": "exit",
+      "description": "`main().catch(…)` without await: output after the body returns still appears",
+      "corpus": [
+        "floating-main"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "wrapper-params",
+      "area": "wrapper",
+      "description": "the wrapper's parameters, __filename/__dirname, module/exports, require.main, this",
+      "corpus": [
+        "__dirname",
+        "module.exports"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "≠",
+      "auto": "six≠node"
+    },
+    {
+      "name": "wrapper-return-promise",
+      "area": "wrapper",
+      "description": "`return main()` with an async main (pandoc/vpod shape): the body waits for it",
+      "corpus": [
+        "top-level-return",
+        "async-main"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "wrapper-shebang",
+      "area": "wrapper",
+      "description": "a `#!/usr/bin/env jsh` line is ignored and line numbers stay the file's own",
+      "corpus": [
+        "shebang"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "wrapper-sloppy",
+      "area": "wrapper",
+      "description": "the body runs sloppy: implicit globals, `with`, octal literals, arguments.callee",
+      "corpus": [],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "=",
+      "auto": "six≠node"
+    },
+    {
+      "name": "wrapper-static-import",
+      "area": "wrapper",
+      "description": "a static `import` declaration (v6 lowers the entry to CJS)",
+      "corpus": [
+        "static-import"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 1,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "wrapper-static-import-sliccy",
+      "area": "wrapper",
+      "description": "`import cli from 'sliccy:cli'`",
+      "corpus": [
+        "static-import"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 1,
+        "node": null
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "–",
+      "auto": "all differ"
+    },
+    {
+      "name": "wrapper-strict-after-import",
+      "area": "wrapper",
+      "description": "does `import()` in the body switch the body to strict mode (v6: yes)",
+      "corpus": [
+        "dynamic-import"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "=",
+      "node": "≠",
+      "auto": "six≠node"
+    },
+    {
+      "name": "wrapper-syntax-error",
+      "area": "exit",
+      "description": "a syntax error in the script: message and status",
+      "corpus": [],
+      "status": {
+        "six": 1,
+        "seven": 1,
+        "jsh": 1,
+        "node": 1
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "≠",
+      "auto": "all differ"
+    },
+    {
+      "name": "wrapper-top-level-await",
+      "area": "wrapper",
+      "description": "top-level `await` in the body",
+      "corpus": [
+        "top-level-await"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "wrapper-top-level-return",
+      "area": "wrapper",
+      "description": "a top-level `return` ends the body early; its value is ignored",
+      "corpus": [
+        "top-level-return"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 0,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "=",
+      "seven": "=",
+      "node": "=",
+      "auto": "same"
+    },
+    {
+      "name": "zlib",
+      "area": "builtins",
+      "description": "gzipSync/gunzipSync, deflate/inflate, brotli, the callback API and a stream",
+      "corpus": [
+        "zlib"
+      ],
+      "status": {
+        "six": 0,
+        "seven": 1,
+        "jsh": 0,
+        "node": 0
+      },
+      "six": "≠",
+      "seven": "≠",
+      "node": "=",
+      "auto": "all differ"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "promises write → readFileSync: \"from promises\"\nwriteFileSync → promises read: \"from sync\"\nwriteFileSync → exec cat: \"seen by cat\"\nexec write → readFileSync: \"from-shell\\n\"\nexec write → existsSync: true\n",
+  "stderr": ""
+}

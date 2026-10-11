@@ -1,0 +1,7 @@
+{
+  "area": "fs",
+  "description": "fs.promises and require('fs/promises'): identity and the portable promise API",
+  "corpus": [
+    "fs.promises"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "status": 3,
+  "stdout": "keys die,help,out,warn\nout string\n{\n  \"a\": 1,\n  \"b\": [\n    2\n  ]\n}\ndie was catchable NodeExitError\nafter die (must not print)\n",
+  "stderr": "Warning: careful\nNote: custom\nError: fatal problem\n"
+}

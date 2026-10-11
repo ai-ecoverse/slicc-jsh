@@ -1,0 +1,6 @@
+{
+  "area": "wrapper",
+  "description": "the body runs sloppy: implicit globals, `with`, octal literals, arguments.callee",
+  "corpus": [],
+  "node": "cjs"
+}

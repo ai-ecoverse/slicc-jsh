@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "present: fetch Request Response Headers FormData Blob File WebSocket Buffer setTimeout setInterval setImmediate clearImmediate queueMicrotask structuredClone TextEncoder TextDecoder URL URLSearchParams AbortController AbortSignal EventTarget Event CustomEvent MessageChannel BroadcastChannel crypto performance navigator atob btoa ReadableStream WritableStream TransformStream CompressionStream DecompressionStream WebAssembly global process\nabsent: EventSource require module window document self localStorage Worker XMLHttpRequest importScripts SLICC_VERSION Deno Bun\nglobal === globalThis true\nversions.jsh undefined\nSLICC_VERSION undefined\n",
+  "stderr": ""
+}

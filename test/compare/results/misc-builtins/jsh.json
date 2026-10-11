@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "assert.deepStrictEqual: THROW AssertionError ERR_ASSERTION: Expected values to be strictly deep-equal:\nassert.rejects: \"function\"\nstring_decoder: \"é\"\nquerystring: \"a=1&a=2&b=x%20y\"\ntimers/promises: \"slept\"\nperf_hooks: \"number\"\nmodule.createRequire: \"function\"\nmodule.builtinModules: true\nworker_threads.isMainThread: true\nvm.runInNewContext: 2\nasync_hooks.AsyncLocalStorage: \"function\"\ndns.lookup: \"function\"\n",
+  "stderr": ""
+}

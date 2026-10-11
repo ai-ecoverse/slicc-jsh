@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: slicc-jsh: child_process.execSync is not supported yet\n    at Object.<anonymous> ($CASE/main.jsh:2:70)\n"
+}

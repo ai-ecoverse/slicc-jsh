@@ -1,0 +1,8 @@
+{
+  "area": "process",
+  "description": "process.env.X = 1 then a child_process sees X (string coercion)",
+  "corpus": [
+    "process.env",
+    "child_process"
+  ]
+}

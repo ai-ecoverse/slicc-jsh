@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "os.platform, EOL, tmpdir, homedir, hostname, cpus, type, userInfo, arch",
+  "corpus": [
+    "os"
+  ]
+}

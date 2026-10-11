@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "gzip round trip: \"hello zlib\"\ndeflateSync bytes: \"eJxLTEoGAAJNASc=\"\ninflateSync: \"inflate me\"\ndeflateRawSync: \"raw\"\ngunzipSync returns Buffer: true\nbrotli: \"brotli\"\ngzip callback: [null,\"cb\"]\ncreateGunzip stream: \"streamed\"\nconstants: \"number\"\n",
+  "stderr": ""
+}

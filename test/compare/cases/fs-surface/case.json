@@ -1,0 +1,7 @@
+{
+  "area": "fs",
+  "description": "which Node fs functions exist (typeof for a fixed list of Node 22 names)",
+  "corpus": [
+    "fs"
+  ]
+}

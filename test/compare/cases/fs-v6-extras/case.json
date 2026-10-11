@@ -1,0 +1,9 @@
+{
+  "area": "fs",
+  "description": "v6-only fs calls: readFileBinary, writeFileBinary, readDir, fetchToFile",
+  "corpus": [
+    "fs.readFileBinary",
+    "fs.readDir",
+    "fs.fetchToFile"
+  ]
+}

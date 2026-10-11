@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "enabled true\n\"\\u001b[31mred\\u001b[0m\\u001b[1mbold\\u001b[0m\\u001b[2mdim\\u001b[0m\"\nkeys bold,cyan,dim,enabled,gray,green,red,yellow\n",
+  "stderr": ""
+}

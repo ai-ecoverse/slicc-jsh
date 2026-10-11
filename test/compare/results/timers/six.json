@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "nextTick throws: process.nextTick is not a function microtask timeout\nhandle object function function function function\nsetTimeout args xy\n",
+  "stderr": ""
+}

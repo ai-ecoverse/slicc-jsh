@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "await fs.readFile(p): THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received undefined\nawait fs.readFile(p, 'utf8'): THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received type string ('utf8')\nawait fs.readFile(p, { encoding: 'utf8' }): THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received an instance of Object\nawait fs.readFile(missing): THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received undefined\n",
+  "stderr": ""
+}

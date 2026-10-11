@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "esm-pkg default hello from esm-pkg\ncjs-pkg cjs-pkg\n",
+  "stderr": ""
+}

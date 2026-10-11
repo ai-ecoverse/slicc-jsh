@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\njust a string\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+}

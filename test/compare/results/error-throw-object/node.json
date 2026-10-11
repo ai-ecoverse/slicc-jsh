@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n{ message: 'plain object', code: 42 }\n\nNode.js v22.22.0\n"
+}

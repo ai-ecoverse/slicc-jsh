@@ -1,0 +1,11 @@
+{
+  "area": "sliccy",
+  "description": "sliccy:color with NO_COLOR=1",
+  "env": {
+    "NO_COLOR": "1"
+  },
+  "corpus": [
+    "sliccy:color"
+  ],
+  "node": false
+}

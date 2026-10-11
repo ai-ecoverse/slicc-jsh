@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "b.txt function\ntypeof __filename string\n",
+  "stderr": ""
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "chunk type Buffer\n\"line one\\nline two é\\n\"\n",
+  "stderr": ""
+}

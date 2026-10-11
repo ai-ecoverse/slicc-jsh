@@ -1,0 +1,10 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+const fs = require('fs');
+show('readFileSync bytes', () => [...fs.readFileSync('bytes.bin')]);
+show('writeFileSync Buffer', () => { fs.writeFileSync('o.bin', Buffer.from([0, 128, 255, 10])); return [...fs.readFileSync('o.bin')]; });
+show('writeFileSync Uint8Array', () => { fs.writeFileSync('u.bin', new Uint8Array([200, 201])); return [...fs.readFileSync('u.bin')]; });
+await showA('promises readFile bytes', async () => [...(await fs.promises.readFile('bytes.bin'))]);
+show('utf8 text', () => fs.readFileSync('utf8.txt', 'utf8'));
+show('latin1 encoding', () => fs.readFileSync('bytes.bin', 'latin1'));
+show('base64 encoding', () => fs.readFileSync('bytes.bin', 'base64'));
+show('hex write', () => { fs.writeFileSync('h.bin', 'ff00', 'hex'); return [...fs.readFileSync('h.bin')]; });

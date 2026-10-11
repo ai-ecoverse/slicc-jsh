@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "file://$CASE/main.plain.mjs:1\nimport { createRequire as __cr } from 'node:module'; import { fileURLToPath as __fu } from 'node:url'; const require = __cr(import.meta.url), __filename = __fu(import.meta.url), __dirname = __filename.slice(0, __filename.lastIndexOf('/')), module = { exports: {} }, exports = module.exports;Promise.reject(new Error('unhandled'));\n                                                                                                                                                                                                                                                                                                                  ^\n\nError: unhandled\n    at file://$CASE/main.plain.mjs:1:307\n    at <internal>\n\nNode.js v22.22.0\n"
+}

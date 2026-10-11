@@ -1,0 +1,13 @@
+const fmt = require('sliccy:fmt');
+const time = require('sliccy:time');
+const pool = require('sliccy:pool');
+console.log('fmt keys', Object.keys(fmt).sort().join(','));
+console.log(JSON.stringify(fmt.trunc('abcdefghij', 5)));
+console.log(JSON.stringify(fmt.col('ab', 5)));
+console.log(fmt.table([['a', 'bb'], ['ccc', 'd']]));
+console.log(fmt.date('2024-01-02T03:04:05Z', 'iso'));
+console.log('time keys', Object.keys(time).sort().join(','));
+console.log(time.parseDuration('2h'), time.parseDuration('1.5s'), time.parseDuration(10));
+const from = new Date('2024-03-10T12:00:00Z');
+console.log(time.ago('1d', from).toISOString(), time.gmailDate('7d', from));
+console.log('pool', typeof pool, JSON.stringify(await pool(2, [3, 1, 2], async (x, i) => { await new Promise((r) => setTimeout(r, x * 5)); return x * 10 + i; })));

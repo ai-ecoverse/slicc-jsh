@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "path.join/resolve (against cwd)/relative/parse/format, posix and win32",
+  "corpus": [
+    "path"
+  ]
+}

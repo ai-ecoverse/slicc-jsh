@@ -1,0 +1,10 @@
+{
+  "area": "sliccy",
+  "description": "sliccy:fmt (trunc/col/table/date), sliccy:time (parseDuration/ago/gmailDate), sliccy:pool",
+  "corpus": [
+    "sliccy:fmt",
+    "sliccy:time",
+    "sliccy:pool"
+  ],
+  "node": false
+}

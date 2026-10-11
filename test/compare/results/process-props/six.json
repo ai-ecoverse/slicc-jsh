@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "platform: \"string\"\narch: \"string\"\nversion: true\nversions.node: \"string\"\nversions.jsh: \"undefined\"\nversions.v8: \"undefined\"\nrelease.name: undefined\npid: \"undefined\"\nppid: \"undefined\"\nexecPath: \"undefined\"\ntitle: \"undefined\"\nhrtime: THROW TypeError: process.hrtime is not a function\nhrtime.bigint: THROW TypeError: Cannot read properties of undefined (reading 'bigint')\nnextTick: \"undefined\"\nmemoryUsage: THROW TypeError: process.memoryUsage is not a function\nuptime: THROW TypeError: process.uptime is not a function\numask: THROW TypeError: process.umask is not a function\ncpuUsage: \"undefined\"\non: \"undefined\"\nemit: \"undefined\"\nkill: \"undefined\"\nemitWarning: \"undefined\"\ngetuid: \"undefined\"\nconfig: \"undefined\"\nfeatures: \"undefined\"\nstdin.fd: 0\ntoString: \"[object Object]\"\n",
+  "stderr": ""
+}

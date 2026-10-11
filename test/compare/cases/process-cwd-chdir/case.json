@@ -1,0 +1,8 @@
+{
+  "area": "process",
+  "description": "process.cwd(), process.chdir() and relative fs/require after chdir",
+  "corpus": [
+    "process.cwd",
+    "process.chdir"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "area": "exit",
+  "description": "process.on('exit') and 'beforeExit' handlers, with the exit code",
+  "corpus": [
+    "process.on"
+  ]
+}

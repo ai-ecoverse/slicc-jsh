@@ -1,0 +1,7 @@
+{
+  "area": "require",
+  "description": "require of a package that isn't installed: message and code (v6 adds an ipk hint)",
+  "corpus": [
+    "require-package"
+  ]
+}

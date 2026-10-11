@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "keys HttpError,client\nclient keys delete,get,patch,post,put\nget json {\"ok\":true,\"n\":1}\npost {\"method\":\"POST\",\"path\":\"/echo\",\"contentType\":\"application/json\",\"auth\":null,\"custom\":\"c1\",\"body\":\"{\\\"a\\\":1}\"}\n404 HttpError 404 HTTP 404 Not Found http://$HTTP/missing: {\"error\":\"nope\"}\ntext \"hello é\\n\"\n",
+  "stderr": ""
+}

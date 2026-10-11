@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: slicc-jsh: 'tty' is not supported yet\n    at Object.<anonymous> ($CASE/main.jsh:2:13)\n"
+}

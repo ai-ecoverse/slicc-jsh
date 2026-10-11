@@ -1,0 +1,11 @@
+{
+  "area": "sliccy",
+  "description": "sliccy:skill dir/refs/assets for scripts/<x>.jsh, config() read/write, token() without oauth-token",
+  "entry": "scripts/main.jsh",
+  "corpus": [
+    "sliccy:skill",
+    "skill.config",
+    "skill.token"
+  ],
+  "node": false
+}

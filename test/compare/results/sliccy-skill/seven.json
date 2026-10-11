@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "keys assets,config,dir,refs,token\ndir $CASE/scripts\nrefs $CASE/scripts/references\nassets $CASE/scripts/assets\nconfig {\"existing\":1}\nconfig write {\"existing\":1,\"added\":true}\nconfig file { \"existing\": 1, \"added\": true } \ntoken error skill.token('compare-provider'): oauth-token: command not found\n",
+  "stderr": ""
+}
