@@ -126,4 +126,127 @@ describe('ESM (M3)', () => {
       close();
     }
   });
+
+  it('prettier-style multi-line imports and export default function', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile(
+        '/os/node_modules/pretty-lib/package.json',
+        JSON.stringify({ name: 'pretty-lib', type: 'module', main: 'index.js' })
+      );
+      await kernel.writeFile(
+        '/os/node_modules/pretty-lib/index.js',
+        [
+          'export function alpha() {',
+          "  return 'A';",
+          '}',
+          'export function beta() {',
+          "  return 'B';",
+          '}',
+          'export default function greet(',
+          '  name,',
+          ') {',
+          "  return 'hi ' + name;",
+          '}',
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/app.mjs',
+        [
+          'import greet, {',
+          '  alpha,',
+          '  beta,',
+          "} from 'pretty-lib';",
+          // brace in string must not confuse the transform
+          "const note = 'keep { import(x) literal';",
+          'console.log(greet("z"), alpha(), beta(), note.includes("import("));',
+        ].join('\n')
+      );
+      const r = await run(['node', 'app.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'hi z A B true\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('supports $ identifiers in import/export', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile(
+        '/os/node_modules/jquery-ish/package.json',
+        JSON.stringify({ name: 'jquery-ish', type: 'module', exports: './$.mjs' })
+      );
+      await kernel.writeFile(
+        '/os/node_modules/jquery-ish/$.mjs',
+        'export default function $(sel) { return sel; }\nexport const $x = 3;\n'
+      );
+      await kernel.writeFile(
+        '/os/main.mjs',
+        "import $, { $x } from 'jquery-ish';\nconsole.log($('ok'), $x);\n"
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'ok 3\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('live bindings across an import cycle', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      // Function exports are instantiated before the body runs, so B can call A.a
+      // while A is still evaluating its import of B.
+      await kernel.writeFile(
+        '/os/a.mjs',
+        [
+          "import { b } from './b.mjs';",
+          "export function a() { return 'a'; }",
+          'export function ab() { return a() + b(); }',
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/b.mjs',
+        [
+          "import { a } from './a.mjs';",
+          "export function b() { return 'b' + a(); }",
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/main.mjs',
+        "import { ab } from './a.mjs';\nconsole.log(ab());\n"
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'aba\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('hoists imports before later body statements', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/dep.mjs', 'export const flag = "hoisted";\n');
+      await kernel.writeFile(
+        '/os/main.mjs',
+        [
+          // Side effect before the import line — import must still run first.
+          'const order = [];',
+          'order.push("body");',
+          "import { flag } from './dep.mjs';",
+          'order.push(flag);',
+          'console.log(order.join(","));',
+        ].join('\n')
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      // Import binding is available; body still runs in source order after hoist load.
+      assert.equal(r.stdout, 'body,hoisted\n');
+    } finally {
+      close();
+    }
+  });
 });
+

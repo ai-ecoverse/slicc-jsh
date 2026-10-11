@@ -1,25 +1,9 @@
 /**
- * Lightweight ESM → executable body transform for slicc-jsh.
- * Static imports become __importSync(spec) calls; dynamic import() → __import().
- * Exports are assigned onto __exports. import.meta → __meta.
+ * ESM → executable body via acorn AST (not regex).
+ * Imports are hoisted; export live-binding getters are registered before the
+ * body (and before import evaluation) so cycles see the bindings.
  */
-
-function unquote(s) {
-  return s.slice(1, -1);
-}
-
-function parseNamedList(list) {
-  return list
-    .split(',')
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map((p) => {
-      const m = /^(\w+)(?:\s+as\s+(\w+))?$/.exec(p);
-      if (!m) return null;
-      return { name: m[1], as: m[2] || m[1] };
-    })
-    .filter(Boolean);
-}
+import * as acorn from 'acorn';
 
 function stripHashbang(source) {
   if (source.startsWith('#!')) {
@@ -29,8 +13,41 @@ function stripHashbang(source) {
   return source;
 }
 
-function rewriteInline(line) {
-  return line.replace(/\bimport\.meta\b/g, '__meta').replace(/\bimport\s*\(/g, '__import(');
+function applyReplacements(source, replacements) {
+  const sorted = [...replacements].sort((a, b) => b.start - a.start);
+  let out = source;
+  for (const { start, end, text } of sorted) {
+    out = out.slice(0, start) + text + out.slice(end);
+  }
+  return out;
+}
+
+function isFunctionLike(node) {
+  return (
+    node &&
+    (node.type === 'FunctionDeclaration' ||
+      node.type === 'FunctionExpression' ||
+      node.type === 'ArrowFunctionExpression' ||
+      node.type === 'ClassDeclaration' ||
+      node.type === 'ClassExpression')
+  );
+}
+
+/** Walk AST; skip descending into nested functions for TLA detection when skipNested. */
+function walk(node, visitor, parent = null) {
+  if (!node || typeof node !== 'object') return;
+  visitor(node, parent);
+  for (const key of Object.keys(node)) {
+    if (key === 'start' || key === 'end' || key === 'loc' || key === 'range') continue;
+    const val = node[key];
+    if (Array.isArray(val)) {
+      for (const child of val) {
+        if (child && typeof child.type === 'string') walk(child, visitor, node);
+      }
+    } else if (val && typeof val.type === 'string') {
+      walk(val, visitor, node);
+    }
+  }
 }
 
 /**
@@ -38,176 +55,272 @@ function rewriteInline(line) {
  */
 export function transformEsm(source, filename) {
   const body = stripHashbang(source);
-  const lines = body.split('\n');
-  const out = [];
-  const staticSpecs = [];
-  let hasTopLevelAwait = false;
-  let depth = 0;
-  let nsId = 0;
-
-  const noteSpec = (spec) => {
-    if (!staticSpecs.includes(spec)) staticSpecs.push(spec);
-  };
-
-  const freshNs = () => `__ns${nsId++}`;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const isImportExport = trimmed.startsWith('import ') || trimmed.startsWith('export ');
-
-    if (depth > 0 || !isImportExport) {
-      for (const ch of line) {
-        if (ch === '{') depth++;
-        else if (ch === '}') depth = Math.max(0, depth - 1);
-      }
-      if (depth === 0 && /(^|[^\w.$])await\s/.test(line)) hasTopLevelAwait = true;
-      out.push(rewriteInline(line));
-      continue;
-    }
-
-    let m;
-
-    if ((m = /^import\s+('[^']+'|"[^"]+")\s*;?$/.exec(trimmed))) {
-      const spec = unquote(m[1]);
-      noteSpec(spec);
-      out.push(`void __importSync(${JSON.stringify(spec)});`);
-      continue;
-    }
-
-    if (
-      (m = /^import\s+(\w+)\s*,\s*\*\s*as\s+(\w+)\s+from\s+('[^']+'|"[^"]+")\s*;?$/.exec(trimmed))
-    ) {
-      const spec = unquote(m[3]);
-      const ns = freshNs();
-      noteSpec(spec);
-      out.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
-      out.push(`const ${m[1]} = ${ns}.default;`);
-      out.push(`const ${m[2]} = ${ns};`);
-      continue;
-    }
-
-    if (
-      (m = /^import\s+(\w+)\s*,\s*\{([^}]+)\}\s+from\s+('[^']+'|"[^"]+")\s*;?$/.exec(trimmed))
-    ) {
-      const spec = unquote(m[3]);
-      const ns = freshNs();
-      noteSpec(spec);
-      out.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
-      out.push(`const ${m[1]} = ${ns}.default;`);
-      for (const { name, as } of parseNamedList(m[2])) {
-        out.push(`const ${as} = ${ns}[${JSON.stringify(name)}];`);
-      }
-      continue;
-    }
-
-    if ((m = /^import\s+\*\s*as\s+(\w+)\s+from\s+('[^']+'|"[^"]+")\s*;?$/.exec(trimmed))) {
-      const spec = unquote(m[2]);
-      noteSpec(spec);
-      out.push(`const ${m[1]} = __importSync(${JSON.stringify(spec)});`);
-      continue;
-    }
-
-    if ((m = /^import\s+\{([^}]+)\}\s+from\s+('[^']+'|"[^"]+")\s*;?$/.exec(trimmed))) {
-      const spec = unquote(m[2]);
-      const ns = freshNs();
-      noteSpec(spec);
-      out.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
-      for (const { name, as } of parseNamedList(m[1])) {
-        out.push(`const ${as} = ${ns}[${JSON.stringify(name)}];`);
-      }
-      continue;
-    }
-
-    if ((m = /^import\s+(\w+)\s+from\s+('[^']+'|"[^"]+")\s*;?$/.exec(trimmed))) {
-      const spec = unquote(m[2]);
-      noteSpec(spec);
-      out.push(`const ${m[1]} = __importSync(${JSON.stringify(spec)}).default;`);
-      continue;
-    }
-
-    if ((m = /^export\s+\*\s+as\s+(\w+)\s+from\s+('[^']+'|"[^"]+")\s*;?$/.exec(trimmed))) {
-      const spec = unquote(m[2]);
-      noteSpec(spec);
-      out.push(
-        `Object.defineProperty(__exports, ${JSON.stringify(m[1])}, { enumerable: true, configurable: true, get: () => __importSync(${JSON.stringify(spec)}) });`
-      );
-      continue;
-    }
-
-    if ((m = /^export\s+\*\s+from\s+('[^']+'|"[^"]+")\s*;?$/.exec(trimmed))) {
-      const spec = unquote(m[1]);
-      const ns = freshNs();
-      noteSpec(spec);
-      out.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
-      out.push(
-        `for (const __k of Object.keys(${ns})) { if (__k !== 'default') Object.defineProperty(__exports, __k, { enumerable: true, configurable: true, get: () => ${ns}[__k] }); }`
-      );
-      continue;
-    }
-
-    if ((m = /^export\s+\{([^}]+)\}\s+from\s+('[^']+'|"[^"]+")\s*;?$/.exec(trimmed))) {
-      const spec = unquote(m[2]);
-      const ns = freshNs();
-      noteSpec(spec);
-      out.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
-      for (const { name, as } of parseNamedList(m[1])) {
-        out.push(
-          `Object.defineProperty(__exports, ${JSON.stringify(as)}, { enumerable: true, configurable: true, get: () => ${ns}[${JSON.stringify(name)}] });`
-        );
-      }
-      continue;
-    }
-
-    if ((m = /^export\s+\{([^}]+)\}\s*;?$/.exec(trimmed))) {
-      for (const { name, as } of parseNamedList(m[1])) {
-        out.push(
-          `Object.defineProperty(__exports, ${JSON.stringify(as)}, { enumerable: true, configurable: true, get: () => ${name} });`
-        );
-      }
-      continue;
-    }
-
-    if ((m = /^export\s+default\s+/.exec(trimmed))) {
-      const rest = trimmed.slice(m[0].length).replace(/;?\s*$/, '');
-      out.push(`__exports.default = (${rest});`);
-      continue;
-    }
-
-    if ((m = /^export\s+(async\s+)?(function\*?|class)\s+(\w+)/.exec(trimmed))) {
-      const name = m[3];
-      out.push(trimmed.slice('export '.length));
-      out.push(
-        `Object.defineProperty(__exports, ${JSON.stringify(name)}, { enumerable: true, configurable: true, get: () => ${name} });`
-      );
-      continue;
-    }
-    if ((m = /^export\s+(const|let|var)\s+/.exec(trimmed))) {
-      const rest = trimmed.slice(m[0].length);
-      out.push(`${m[1]} ${rest}`);
-      for (const part of rest.split(',')) {
-        const id = /^\s*(\w+)/.exec(part)?.[1];
-        if (!id) continue;
-        out.push(
-          `Object.defineProperty(__exports, ${JSON.stringify(id)}, { enumerable: true, configurable: true, get: () => ${id} });`
-        );
-      }
-      continue;
-    }
-
-    out.push(rewriteInline(line));
+  let ast;
+  try {
+    ast = acorn.parse(body, {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      allowAwaitOutsideFunction: true,
+    });
+  } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err));
+    e.message = `${filename}: ${e.message}`;
+    throw e;
   }
 
-  return {
-    code: `${out.join('\n')}\n//# sourceURL=${filename}\n`,
-    staticSpecs,
-    hasTopLevelAwait,
+  const staticSpecs = [];
+  const noteSpec = (spec) => {
+    if (typeof spec === 'string' && !staticSpecs.includes(spec)) staticSpecs.push(spec);
   };
+
+  /** @type {{ start: number, end: number, text: string }[]} */
+  const replacements = [];
+  const hoistImports = []; // code lines, evaluated after export getters are installed
+  const exportSetup = []; // defineProperty getters — run BEFORE imports
+  const exportNames = new Set();
+
+  let nsId = 0;
+  const freshNs = () => `__ns${nsId++}`;
+
+  const bindExport = (exportName, localExpr) => {
+    if (exportNames.has(exportName)) return;
+    exportNames.add(exportName);
+    exportSetup.push(
+      `Object.defineProperty(__exports, ${JSON.stringify(exportName)}, { enumerable: true, configurable: true, get: () => (${localExpr}) });`
+    );
+  };
+
+  // --- Pass 1: top-level import / export declarations ---
+  for (const stmt of ast.body) {
+    if (stmt.type === 'ImportDeclaration') {
+      const spec = stmt.source.value;
+      noteSpec(spec);
+      const ns = freshNs();
+      hoistImports.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
+      for (const s of stmt.specifiers) {
+        if (s.type === 'ImportDefaultSpecifier') {
+          hoistImports.push(`const ${s.local.name} = ${ns}.default;`);
+        } else if (s.type === 'ImportNamespaceSpecifier') {
+          hoistImports.push(`const ${s.local.name} = ${ns};`);
+        } else if (s.type === 'ImportSpecifier') {
+          const imported =
+            s.imported.type === 'Identifier' ? s.imported.name : s.imported.value;
+          hoistImports.push(
+            `const ${s.local.name} = ${ns}[${JSON.stringify(imported)}];`
+          );
+        }
+      }
+      replacements.push({ start: stmt.start, end: stmt.end, text: '' });
+      continue;
+    }
+
+    if (stmt.type === 'ExportAllDeclaration') {
+      const spec = stmt.source.value;
+      noteSpec(spec);
+      const ns = freshNs();
+      // Load during import phase (after getters for *local* exports exist).
+      hoistImports.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
+      if (stmt.exported) {
+        // export * as ns from 'x'
+        const name = stmt.exported.name;
+        bindExport(name, ns);
+      } else {
+        // export * from 'x' — star exports linked after load
+        hoistImports.push(
+          `for (const __k of Object.keys(${ns})) { if (__k !== 'default' && !Object.prototype.hasOwnProperty.call(__exports, __k)) Object.defineProperty(__exports, __k, { enumerable: true, configurable: true, get: () => ${ns}[__k] }); }`
+        );
+      }
+      replacements.push({ start: stmt.start, end: stmt.end, text: '' });
+      continue;
+    }
+
+    if (stmt.type === 'ExportDefaultDeclaration') {
+      const d = stmt.declaration;
+      if (
+        (d.type === 'FunctionDeclaration' || d.type === 'ClassDeclaration') &&
+        d.id
+      ) {
+        // export default function name() {} → keep declaration; only default is exported.
+        replacements.push({ start: stmt.start, end: d.start, text: '' });
+        bindExport('default', d.id.name);
+      } else if (d.type === 'FunctionDeclaration' || d.type === 'ClassDeclaration') {
+        // anonymous default — expression form (handles async function / class).
+        const syn = `__default_${exportSetup.length}`;
+        replacements.push({
+          start: stmt.start,
+          end: stmt.end,
+          text: `const ${syn} = (${body.slice(d.start, d.end)});`,
+        });
+        bindExport('default', syn);
+      } else {
+        // export default expr;
+        const syn = `__default_${exportSetup.length}`;
+        replacements.push({
+          start: stmt.start,
+          end: stmt.end,
+          text: `var ${syn} = (${body.slice(d.start, d.end)});`,
+        });
+        bindExport('default', syn);
+      }
+      continue;
+    }
+
+    if (stmt.type === 'ExportNamedDeclaration') {
+      if (stmt.source) {
+        // export { a, b as c } from 'x'
+        const spec = stmt.source.value;
+        noteSpec(spec);
+        const ns = freshNs();
+        hoistImports.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
+        for (const s of stmt.specifiers) {
+          const exported =
+            s.exported.type === 'Identifier' ? s.exported.name : s.exported.value;
+          const local =
+            s.local.type === 'Identifier' ? s.local.name : s.local.value;
+          bindExport(exported, `${ns}[${JSON.stringify(local)}]`);
+        }
+        replacements.push({ start: stmt.start, end: stmt.end, text: '' });
+        continue;
+      }
+
+      if (stmt.declaration) {
+        const d = stmt.declaration;
+        // Strip leading "export "
+        replacements.push({ start: stmt.start, end: d.start, text: '' });
+        if (d.type === 'FunctionDeclaration' || d.type === 'ClassDeclaration') {
+          if (d.id) bindExport(d.id.name, d.id.name);
+        } else if (d.type === 'VariableDeclaration') {
+          for (const decl of d.declarations) {
+            collectBoundNames(decl.id, (name) => bindExport(name, name));
+          }
+        }
+        continue;
+      }
+
+      // export { a, b as c }
+      for (const s of stmt.specifiers) {
+        const exported =
+          s.exported.type === 'Identifier' ? s.exported.name : s.exported.value;
+        const local = s.local.type === 'Identifier' ? s.local.name : s.local.value;
+        bindExport(exported, local);
+      }
+      replacements.push({ start: stmt.start, end: stmt.end, text: '' });
+    }
+  }
+
+  // --- Pass 2: rewrite import.meta and import() anywhere (AST-accurate) ---
+  walk(ast, (node) => {
+    if (
+      node.type === 'MetaProperty' &&
+      node.meta.type === 'Identifier' &&
+      node.meta.name === 'import' &&
+      node.property.name === 'meta'
+    ) {
+      replacements.push({ start: node.start, end: node.end, text: '__meta' });
+      return;
+    }
+    if (node.type === 'ImportExpression') {
+      // import(expr) → __import(expr)
+      replacements.push({
+        start: node.start,
+        end: node.source.start,
+        text: '__import(',
+      });
+    }
+  });
+
+  // Top-level await
+  let hasTopLevelAwait = false;
+  const checkTla = (node, parent) => {
+    if (node.type !== 'AwaitExpression') return;
+    let p = parent;
+    // Walk up via a second pass — simpler: scan program body statements only
+  };
+  void checkTla;
+  for (const stmt of ast.body) {
+    walkTopLevelAwait(stmt, (found) => {
+      if (found) hasTopLevelAwait = true;
+    });
+  }
+
+  let code = applyReplacements(body, replacements);
+  // Drop leftover empty lines from removed imports (cosmetic)
+  code = code.replace(/\n{3,}/g, '\n\n');
+
+  const preamble = [...exportSetup, ...hoistImports].join('\n');
+  const out = `${preamble ? preamble + '\n' : ''}${code}\n//# sourceURL=${filename}\n`;
+  return { code: out, staticSpecs, hasTopLevelAwait };
 }
 
-/** True if source looks like an ES module (static import/export). */
+function collectBoundNames(pattern, onName) {
+  if (!pattern) return;
+  if (pattern.type === 'Identifier') {
+    onName(pattern.name);
+    return;
+  }
+  if (pattern.type === 'ObjectPattern') {
+    for (const prop of pattern.properties) {
+      if (prop.type === 'RestElement') collectBoundNames(prop.argument, onName);
+      else collectBoundNames(prop.value, onName);
+    }
+    return;
+  }
+  if (pattern.type === 'ArrayPattern') {
+    for (const el of pattern.elements) {
+      if (el) collectBoundNames(el, onName);
+    }
+    return;
+  }
+  if (pattern.type === 'AssignmentPattern') {
+    collectBoundNames(pattern.left, onName);
+  }
+}
+
+function walkTopLevelAwait(node, report) {
+  if (!node || typeof node !== 'object') return;
+  if (isFunctionLike(node) && node.type !== 'Program') {
+    // Don't look inside functions/classes for TLA
+    return;
+  }
+  if (node.type === 'AwaitExpression') {
+    report(true);
+    return;
+  }
+  for (const key of Object.keys(node)) {
+    if (key === 'start' || key === 'end' || key === 'loc') continue;
+    const val = node[key];
+    if (Array.isArray(val)) {
+      for (const child of val) {
+        if (child && typeof child.type === 'string') walkTopLevelAwait(child, report);
+      }
+    } else if (val && typeof val.type === 'string') {
+      // Enter class/function bodies? No — skip function-like children entirely
+      if (isFunctionLike(val)) continue;
+      walkTopLevelAwait(val, report);
+    }
+  }
+}
+
+/** True if source parses as a module with import/export, or looks like one. */
 export function sourceLooksLikeEsm(source) {
-  const stripped = stripHashbang(source)
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
-  return /^\s*(?:import\s|export\s)/m.test(stripped);
+  const body = stripHashbang(source);
+  try {
+    const ast = acorn.parse(body, {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      allowAwaitOutsideFunction: true,
+    });
+    return ast.body.some(
+      (s) =>
+        s.type === 'ImportDeclaration' ||
+        s.type === 'ExportNamedDeclaration' ||
+        s.type === 'ExportDefaultDeclaration' ||
+        s.type === 'ExportAllDeclaration'
+    );
+  } catch {
+    // Fallback for incomplete snippets in -e detection
+    return /^\s*(?:import\s|export\s)/m.test(
+      body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+    );
+  }
 }
