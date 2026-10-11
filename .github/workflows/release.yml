@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   release:
-    uses: ai-ecoverse/slicc-shared-web/.github/workflows/node-release.yml@v1.12.2
+    uses: ai-ecoverse/slicc-shared-web/.github/workflows/node-release.yml@v1.12.3
     with:
       node-version: '24.21.0'
       test: npm test
