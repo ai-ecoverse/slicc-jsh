@@ -77,7 +77,12 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
     constructor(options = {}) {
       // Node net.Socket defaults allowHalfOpen to false. HTTP servers opt in
       // via createServer / Server options so a peer FIN does not end the response.
-      super({ allowHalfOpen: Boolean(options.allowHalfOpen) });
+      // autoDestroy: destroy (and emit one 'close') once both sides finish.
+      super({
+        allowHalfOpen: Boolean(options.allowHalfOpen),
+        autoDestroy: true,
+        emitClose: true,
+      });
       this.connecting = false;
       this.pending = true;
       this.destroyed = false;
@@ -86,6 +91,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
         err.code = 'ERR_NOT_SUPPORTED';
         throw err;
       }
+      // Node always passes a boolean hadError to 'close'; readable-stream may omit it.
+      const origEmit = this.emit.bind(this);
+      this.emit = (event, ...args) => {
+        if (event === 'close' && (args.length === 0 || args[0] === undefined)) {
+          return origEmit('close', false);
+        }
+        return origEmit(event, ...args);
+      };
     }
 
     get remoteAddress() {
@@ -206,6 +219,28 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       }
     }
 
+    /**
+     * When both directions are done, keep the ref for a couple of turns so the
+     * peer can observe our SHUT_WR (raw ctx.net delivers EOF from writer.close
+     * alone — do not conn.close() here; that races the peer's read).
+     */
+    #maybeFinishConn() {
+      if (this.destroyed || this.#finishConnStarted) return;
+      const writableDone = this._writableState?.ended === true || this.#ended;
+      if (!this.#readableEof || !writableDone) return;
+      this.#finishConnStarted = true;
+      const p = new Promise((r) => setTimeout(r, 0))
+        .then(() => new Promise((r) => setTimeout(r, 0)))
+        .finally(() => {
+          this.#dropHandle();
+          handles.notify();
+        });
+      void trackPromise(handles, p);
+    }
+
+    #finishConnStarted = false;
+    #readableEof = false;
+
     async #pumpRead() {
       try {
         for (;;) {
@@ -213,9 +248,20 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           // stays ref'd and would not wake waitForProgress).
           const { value, done } = await trackPromise(handles, this.#reader.read());
           if (done) {
+            this.#readableEof = true;
             // Yield so prior push(buf) nextTicks can run before EOF.
             await Promise.resolve();
             this.push(null);
+            // allowHalfOpen false: Duplex auto-ends the writable side after EOF.
+            // Call end() ourselves if the stream deferred it (keeps peer FIN flowing).
+            // Defer auto-end so this read turn settles before SHUT_WR (avoids
+            // racing writer.close with the kernel's EOF delivery).
+            const writableEnded = this.writableEnded === true || this._writableState?.ended;
+            if (!this.allowHalfOpen && !writableEnded && !this.#ended) {
+              queueMicrotask(() => {
+                if (!this.destroyed && !this.#ended) this.end();
+              });
+            }
             // Wake drainLoop to flush readable-stream's deferred 'data'/'end'.
             handles.notify();
             break;
@@ -235,14 +281,20 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
         // we are not already destroyed so listeners still see 'end'.
         const code = err?.code ?? err?.cause?.code;
         if (!this.destroyed && (code === 'EBADF' || code === 'ECONNRESET' || code === 'EPIPE')) {
+          this.#readableEof = true;
           this.push(null);
+          const writableEnded = this.writableEnded === true || this._writableState?.ended;
+          if (!this.allowHalfOpen && !writableEnded && !this.#ended) {
+            queueMicrotask(() => {
+              if (!this.destroyed && !this.#ended) this.end();
+            });
+          }
           handles.notify();
         } else if (!this.destroyed) {
           this.destroy(errnoError(err, 'read'));
         }
       } finally {
-        // Readable side finished — if writable is also done, drop the ref.
-        if (this._writableState?.ended || this.#ended) this.#dropHandle();
+        this.#maybeFinishConn();
       }
     }
 
@@ -281,7 +333,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       // conn.close() here races and often surfaces as EBADF on the peer instead
       // of a clean EOF (see scripts/run-raw-ctx-net-fin.mjs).
       if (!this.#writer) {
-        this.#dropHandle();
+        this.#maybeFinishConn();
         callback();
         return;
       }
@@ -289,39 +341,38 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
         .close()
         .catch(() => {})
         .finally(() => {
-          this.#dropHandle();
+          this.#maybeFinishConn();
           callback();
         });
     }
 
     _destroy(err, callback) {
       this.destroyed = true;
-      // Match Node: destroy does not flush. Prefer abort over writer.close(), which
-      // can hang forever waiting for a dead/stalled peer.
-      const finish = () => {
-        this.#dropHandle();
-        callback(err);
-        this.emit('close', Boolean(err));
-      };
-      void (async () => {
+      const halfClosedCleanly = this.#finishConnStarted;
+      this.#finishConnStarted = true;
+      this.#dropHandle();
+      // Match Node: destroy does not flush. Never await kernel close here —
+      // conn.close() can deadlock with a peer blocked in read (fin.js).
+      // Duplex emits a single 'close' after this callback (do not emit here).
+      const reader = this.#reader;
+      const writer = this.#writer;
+      const conn = this.#conn;
+      this.#reader = undefined;
+      this.#writer = undefined;
+      this.#conn = undefined;
+      // After a clean half-close, do not abort/cancel — that RSTs the peer and
+      // they never see 'end' (fin.js server side). Only force-close on errors.
+      if (!halfClosedCleanly) {
+        void reader?.cancel?.().catch(() => {});
         try {
-          await this.#reader?.cancel?.();
+          if (typeof writer?.abort === 'function') void writer.abort().catch(() => {});
+          else void writer?.close?.().catch(() => {});
         } catch {
           /* ignore */
         }
-        try {
-          if (typeof this.#writer?.abort === 'function') await this.#writer.abort();
-          else await this.#writer?.close?.();
-        } catch {
-          /* ignore */
-        }
-        try {
-          await this.#conn?.close?.();
-        } catch {
-          /* ignore */
-        }
-        finish();
-      })();
+        void conn?.close?.().catch(() => {});
+      }
+      callback(err);
     }
 
     end(data, encoding, callback) {
@@ -420,7 +471,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           );
           const socket = new Socket({ allowHalfOpen: Boolean(this.#options.allowHalfOpen) });
           socket._attach(conn);
-          if (this.listenerCount('connection') === 0) socket.resume?.();
+          // Node net.Socket starts flowing (not paused) on accept.
+          socket.resume?.();
           this.emit('connection', socket);
           handles.notify();
         }

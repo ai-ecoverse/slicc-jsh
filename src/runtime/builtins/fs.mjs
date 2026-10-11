@@ -412,6 +412,19 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         return false;
       }
     },
+    accessSync(p, mode = 0) {
+      const pathArg = p;
+      const target = abs(p);
+      try {
+        if (!syncFs.exists(target)) throw nodeFsError('ENOENT', 'access', pathArg);
+        // Mode bits: F_OK=0, R_OK=4, W_OK=2, X_OK=1. Kernel fs has no mode
+        // checks beyond existence; treat any non-zero mode like F_OK.
+        void mode;
+      } catch (err) {
+        if (err?.code) throw err;
+        throw nodeFsError(err?.code || 'ENOENT', 'access', pathArg, err);
+      }
+    },
     statSync(p) {
       const pathArg = p;
       try {
@@ -1086,6 +1099,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       requireCallback(cb);
       queueMicrotask(() => cb(syncApi.existsSync(p)));
     },
+    access: callbackify(syncApi.accessSync),
     stat: callbackify(syncApi.statSync),
     lstat: callbackify(syncApi.lstatSync),
     readdir: callbackify(syncApi.readdirSync),

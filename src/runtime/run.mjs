@@ -286,6 +286,8 @@ export async function runNode(ctx, options = {}) {
   });
   // Sync require() of .mjs / "type":"module" — returns the ESM namespace object.
   cjs.setRequireEsmHook((filename) => esm.requireEsm(filename));
+  // Dynamic import() inside CommonJS files — resolve relative to the CJS file.
+  cjs.setImportModuleHook((specifier, parent) => esm.importModule(specifier, parent));
 
   try {
     if (typeof options.main === 'function') {
@@ -410,7 +412,10 @@ export async function runNode(ctx, options = {}) {
             trackPromise(handles, result);
           }
           nextTick.flushSync();
-          if (parsed.print) writeStdout(`${util.inspect(result, { colors: false })}\n`);
+          // Node -p: console.log semantics (strings unquoted), not util.inspect.
+          if (parsed.print) {
+            console.log(result);
+          }
         }
       } catch (err) {
         if (err instanceof NodeExitError) throw err;

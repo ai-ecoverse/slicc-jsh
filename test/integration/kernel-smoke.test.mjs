@@ -344,4 +344,132 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
       close();
     }
   });
+
+  it('http client buffers body writes across timers (no CL and with CL)', async () => {
+    const { run, close } = await withJsh();
+    try {
+      for (const [label, headers] of [
+        ['nolen', '{}'],
+        ['cl', "{'content-length':9}"],
+      ]) {
+        const r = await run([
+          'node',
+          '-e',
+          [
+            "const http=require('http');",
+            "const srv=http.createServer((req,res)=>{",
+            "  let n=0,s=''; req.on('data',c=>{n+=c.length;s+=c});",
+            "  req.on('end',()=>res.end('cl='+req.headers['content-length']+' got='+n+' tail='+s.slice(-3)));",
+            '});',
+            "srv.listen(0,'127.0.0.1',()=>{",
+            `  const q=http.request({host:'127.0.0.1',port:srv.address().port,method:'POST',path:'/',headers:${headers}},res=>{`,
+            "    let b=''; res.on('data',c=>b+=c); res.on('end',()=>{ console.log('" +
+              label +
+              "',b); srv.close(); });",
+            '  });',
+            "  q.write('aaa');",
+            "  setTimeout(()=>{ q.write('bbb'); setTimeout(()=>q.end('ccc'),10); },10);",
+            '});',
+          ].join(''),
+        ]);
+        assert.equal(r.status, 0, r.stderr + r.stdout);
+        assert.match(r.stdout, new RegExp(`${label} cl=9 got=9 tail=ccc`));
+      }
+    } finally {
+      close();
+    }
+  });
+
+  it('net FIN: single close each side after peer end', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await run([
+        'node',
+        '-e',
+        [
+          "const net=require('net');",
+          "const srv=net.createServer(s=>{",
+          "  const ev=[];",
+          "  s.on('end',()=>ev.push('end'));",
+          "  s.on('close',h=>ev.push('close:'+h));",
+          "  s.write('hello'); s.end();",
+          "  setTimeout(()=>{ console.log('server',ev.join(',')); srv.close(); },50);",
+          '});',
+          "srv.listen(0,'127.0.0.1',()=>{",
+          '  const c=net.connect(srv.address().port,"127.0.0.1");',
+          "  const ev=[]; let data='';",
+          "  c.on('data',d=>data+=d);",
+          "  c.on('end',()=>ev.push('end'));",
+          "  c.on('close',h=>ev.push('close:'+h));",
+          "  c.on('close',()=>console.log('client',ev.join(','),'data',data));",
+          '});',
+          "const hs=require('http').createServer();",
+          "console.log('allowHalfOpen',hs.allowHalfOpen);",
+        ].join(''),
+      ]);
+      assert.equal(r.status, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /allowHalfOpen true/);
+      assert.match(r.stdout, /client end,close:false data hello/);
+      assert.match(r.stdout, /server end,close:false/);
+      // Exactly one close per side (no double-close).
+      assert.equal((r.stdout.match(/client end,close:false/g) || []).length, 1);
+      assert.equal((r.stdout.match(/server end,close:false/g) || []).length, 1);
+    } finally {
+      close();
+    }
+  });
+
+  it('http.Agent.destroy and reusedSocket=false', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await run([
+        'node',
+        '-e',
+        [
+          "const http=require('http');",
+          'let conns=0;',
+          "const srv=http.createServer((req,res)=>res.end('ok'));",
+          "srv.on('connection',()=>conns++);",
+          "srv.listen(0,'127.0.0.1',async()=>{",
+          '  const agent=new http.Agent({keepAlive:true,maxSockets:1});',
+          '  const port=srv.address().port;',
+          "  await new Promise((r,j)=>http.get({host:'127.0.0.1',port,path:'/',agent},res=>{",
+          "    console.log('reused',res.req.reusedSocket); res.resume(); res.on('end',r);",
+          '  }).on("error",j));',
+          '  agent.destroy();',
+          "  console.log('destroyed',typeof agent.destroy,'conns',conns);",
+          '  srv.close();',
+          '});',
+        ].join(''),
+      ]);
+      assert.equal(r.status, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /reused false/);
+      assert.match(r.stdout, /destroyed function/);
+    } finally {
+      close();
+    }
+  });
+
+  it('fs.access / accessSync and -p prints strings unquoted', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/f.txt', 'x');
+      const a = await run([
+        'node',
+        '-e',
+        [
+          "const fs=require('fs');",
+          "fs.accessSync('/os/f.txt');",
+          "fs.access('/os/f.txt',fs.constants.F_OK,err=>console.log('access',err&&err.code,fs.constants.R_OK));",
+        ].join(''),
+      ]);
+      assert.equal(a.status, 0, a.stderr);
+      assert.match(a.stdout, /access null 4/);
+      const p = await run(['node', '-p', "'abc'"]);
+      assert.equal(p.status, 0, p.stderr);
+      assert.equal(p.stdout, 'abc\n');
+    } finally {
+      close();
+    }
+  });
 });

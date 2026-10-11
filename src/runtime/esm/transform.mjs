@@ -105,6 +105,13 @@ export function transformEsm(source, filename) {
         } else if (s.type === 'ImportSpecifier') {
           const imported =
             s.imported.type === 'Identifier' ? s.imported.name : s.imported.value;
+          // Node: missing named export from CJS (or ESM) is a SyntaxError at link.
+          hoistImports.push(
+            `if (!Object.prototype.hasOwnProperty.call(${ns}, ${JSON.stringify(imported)})) {` +
+              ` throw new SyntaxError(${JSON.stringify(
+                `Named export '${imported}' not found. The requested module '${spec}' is a CommonJS module, which may not support all module.exports as named exports.\nCommonJS modules can always be imported via the default export, for example using:\n\nimport pkg from '${spec}';\nconst { ${imported} } = pkg;\n`
+              )}); }`
+          );
           hoistImports.push(
             `const ${s.local.name} = ${ns}[${JSON.stringify(imported)}];`
           );

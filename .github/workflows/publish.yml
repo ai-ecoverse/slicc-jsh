@@ -73,6 +73,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/fresh"
           npm pack --pack-destination "$RUNNER_TEMP/fresh"
+          node scripts/strip-pack-scripts.mjs "$(ls "$RUNNER_TEMP"/fresh/*.tgz)"
       - name: Compare with the certified tarball
         env:
           CERTIFIED: ${{ inputs.certified }}

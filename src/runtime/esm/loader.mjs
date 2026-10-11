@@ -23,7 +23,12 @@ function cjsToNamespace(exports) {
     return ns;
   }
   const ns = { default: exports };
-  if (exports && typeof exports === 'object' && !Array.isArray(exports)) {
+  // Functions (e.g. module.Module) are callable objects with named exports.
+  if (
+    exports != null &&
+    (typeof exports === 'object' || typeof exports === 'function') &&
+    !Array.isArray(exports)
+  ) {
     for (const key of Reflect.ownKeys(exports)) {
       if (key === 'default') continue;
       try {
@@ -103,7 +108,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
   function makeImportMeta(filename) {
     const url = filename.startsWith('[') ? filename : pathToFileURL(filename);
-    return {
+    const meta = {
       url,
       resolve(specifier) {
         const resolved = resolver.resolve(String(specifier), filename, [filename]);
@@ -111,6 +116,12 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
         return pathToFileURL(resolved.filename);
       },
     };
+    // Node 22+: import.meta.dirname / import.meta.filename for file modules.
+    if (!filename.startsWith('[')) {
+      meta.filename = filename;
+      meta.dirname = path.dirname(filename);
+    }
+    return meta;
   }
 
   function resolveAndLoadSync(specifier, parentFilename) {
@@ -142,7 +153,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const __meta = makeImportMeta(filename);
     const __importSync = (spec) => resolveAndLoadSync(spec, filename);
     const __import = (spec) => {
-      const p = Promise.resolve().then(() => resolveAndLoadSync(String(spec), filename));
+      // Dynamic import must support TLA modules (async evaluation).
+      const p = importModule(String(spec), filename);
       if (trackPromise && handles) return trackPromise(handles, p);
       return p;
     };
@@ -179,7 +191,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const __meta = makeImportMeta(filename);
     const __importSync = (spec) => resolveAndLoadSync(spec, filename);
     const __import = (spec) => {
-      const p = Promise.resolve().then(() => resolveAndLoadSync(String(spec), filename));
+      const p = importModule(String(spec), filename);
       if (trackPromise && handles) return trackPromise(handles, p);
       return p;
     };
@@ -218,6 +230,27 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     return evaluateEsm(filename, source);
   }
 
+  async function loadFileAsync(filename) {
+    if (filename.endsWith('.json')) {
+      const data = JSON.parse(decoder.decode(fs.readFile(filename)));
+      return cjsToNamespace(data);
+    }
+    const cached = cache.get(filename);
+    if (cached?.namespace) return cached.namespace;
+    if (cached?.evaluating) return cached.exportsObj;
+
+    const source = decoder.decode(fs.readFile(filename));
+    if (!isEsmFilename(filename, source)) {
+      const exports = cjs.loadFile(filename);
+      const ns = cjsToNamespace(exports);
+      cache.set(filename, { namespace: ns });
+      return ns;
+    }
+    const { hasTopLevelAwait } = transformEsm(source, filename);
+    if (hasTopLevelAwait) return evaluateEsmAsync(filename, source);
+    return evaluateEsm(filename, source);
+  }
+
   async function importModule(specifier, parentFilename = `${process.cwd()}/`) {
     const resolved = resolver.resolve(String(specifier), parentFilename, [parentFilename]);
     if (resolved.type === 'builtin') {
@@ -228,7 +261,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     if (cached?.namespace) return cached.namespace;
     if (cached?.promise) return cached.promise;
 
-    const promise = Promise.resolve().then(() => loadFileSync(filename));
+    const promise = loadFileAsync(filename);
     cache.set(filename, { ...(cached || {}), promise });
     if (trackPromise && handles) trackPromise(handles, promise);
     const ns = await promise;

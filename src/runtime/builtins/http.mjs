@@ -254,9 +254,23 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
 
     _final(callback) {
       try {
-        const body = Buffer.concat(this.#chunks);
-        if (!this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
-          this.setHeader('Content-Length', String(body.length));
+        const method = this.req?.method;
+        const noBody = responseHasNoBody(method, this.statusCode);
+        const wouldBeBody = Buffer.concat(this.#chunks);
+        const body = noBody ? Buffer.alloc(0) : wouldBeBody;
+        // Node: HEAD still announces Content-Length of the would-be body.
+        // 204/304 omit Content-Length entirely.
+        const omitLength = this.statusCode === 204 || this.statusCode === 304;
+        if (
+          !omitLength &&
+          !this.hasHeader('content-length') &&
+          !this.hasHeader('transfer-encoding')
+        ) {
+          this.setHeader('Content-Length', String(wouldBeBody.length));
+        }
+        if (omitLength) {
+          this.removeHeader('content-length');
+          this.removeHeader('Content-Length');
         }
         if (!this.hasHeader('connection')) this.setHeader('Connection', 'close');
         if (this.sendDate && !this.hasHeader('date')) {
@@ -275,7 +289,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         this.#headersSent = true;
         this.headersSent = true;
         let payload;
-        if (this.#chunked) {
+        if (this.#chunked && !noBody) {
           const parts = [Buffer.from(head)];
           if (body.length) {
             parts.push(Buffer.from(`${body.length.toString(16)}\r\n`), body, Buffer.from('\r\n'));
@@ -387,6 +401,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
   }
 
   class Server extends net.Server {
+    // Node: http.Server sockets default allowHalfOpen true (readable property).
+    allowHalfOpen = true;
+
     constructor(options, requestListener) {
       if (typeof options === 'function') {
         requestListener = options;
@@ -413,10 +430,14 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     #ended = false;
     #chunks = [];
     #socket;
+    #connected = false;
+    /** When content-length is known up front, stream body bytes as written. */
+    #streaming = false;
 
     constructor(options, callback) {
       super();
       this.#opts = options;
+      this.reusedSocket = false;
       for (const [k, v] of Object.entries(options.headers ?? {})) {
         this.#headers[String(k).toLowerCase()] = String(v);
       }
@@ -460,8 +481,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         else socket.destroy();
       });
       socket.on('connect', () => {
+        this.#connected = true;
         this.emit('socket', socket);
-        this.#flush();
+        // With Content-Length: send headers + any buffered body and stream the rest.
+        // Without: wait for end() and send one framed request (buffer until end).
+        if (this.#headers['content-length'] != null || this.#ended) {
+          this.#flushHeadersAndBufferedBody();
+        }
       });
 
       const emitResponse = (body) => {
@@ -484,6 +510,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         res.httpVersion = head.parsed.httpVersion;
         res.rawHeaders = head.parsed.rawHeaders;
         res.headers = head.headers;
+        res.req = this;
         this.emit('response', res);
       };
 
@@ -565,9 +592,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       });
     }
 
-    #flush() {
-      if (this.#headersSent || !this.#socket) return;
-      this.#headersSent = true;
+    #writeHead() {
       const opts = this.#opts;
       const method = (opts.method ?? 'GET').toUpperCase();
       const path = opts.path ?? '/';
@@ -577,14 +602,23 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         this.#headers.host = port === 80 || port === 443 ? host : `${host}:${port}`;
       }
       if (!this.#headers.connection) this.#headers.connection = 'close';
-      const body = Buffer.concat(this.#chunks);
-      if (!this.#headers['content-length'] && this.#ended) {
-        this.#headers['content-length'] = String(body.length);
-      }
       let head = `${method} ${path} HTTP/1.1\r\n`;
       for (const [k, v] of Object.entries(this.#headers)) head += `${k}: ${v}\r\n`;
       head += '\r\n';
-      this.#socket.write(Buffer.concat([Buffer.from(head), body]));
+      return Buffer.from(head);
+    }
+
+    #flushHeadersAndBufferedBody() {
+      if (this.#headersSent || !this.#socket) return;
+      this.#headersSent = true;
+      const body = Buffer.concat(this.#chunks);
+      this.#chunks = [];
+      if (this.#headers['content-length'] != null) {
+        this.#streaming = true;
+      } else if (this.#ended) {
+        this.#headers['content-length'] = String(body.length);
+      }
+      this.#socket.write(Buffer.concat([this.#writeHead(), body]));
     }
 
     _write(chunk, encoding, callback) {
@@ -594,13 +628,33 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
           : chunk instanceof Uint8Array
             ? Buffer.from(chunk)
             : Buffer.from(chunk);
+      if (this.#headersSent && this.#streaming) {
+        this.#socket.write(buf, callback);
+        return;
+      }
       this.#chunks.push(buf);
+      // Content-Length known and socket up: start streaming now.
+      if (
+        !this.#headersSent &&
+        this.#connected &&
+        this.#headers['content-length'] != null
+      ) {
+        this.#flushHeadersAndBufferedBody();
+      }
       callback();
     }
 
     _final(callback) {
       this.#ended = true;
-      this.#flush();
+      if (!this.#headersSent) {
+        // No Content-Length: buffer until end, then send with computed CL.
+        if (this.#connected) this.#flushHeadersAndBufferedBody();
+        // else: connect handler will flush once the socket is up
+      } else if (this.#chunks.length && this.#streaming) {
+        this.#socket.write(Buffer.concat(this.#chunks), callback);
+        this.#chunks = [];
+        return;
+      }
       callback();
     }
 
@@ -648,6 +702,27 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     return req;
   }
 
+  class Agent extends EventEmitter {
+    constructor(options = {}) {
+      super();
+      this.options = options ?? {};
+      this.keepAlive = Boolean(options.keepAlive);
+      this.maxSockets = options.maxSockets ?? Infinity;
+      this.maxFreeSockets = options.maxFreeSockets ?? 256;
+      this.protocol = options.protocol;
+    }
+    /** Idle keep-alive sockets are not pooled yet — no-op close. */
+    destroy() {
+      /* no idle sockets to close (connections are not reused) */
+    }
+    getName(options = {}) {
+      const host = options.host ?? options.hostname ?? 'localhost';
+      const port = options.port ?? '';
+      const local = options.localAddress ? `:${options.localAddress}` : '';
+      return `${host}:${port}${local}`;
+    }
+  }
+
   return {
     METHODS,
     STATUS_CODES,
@@ -657,8 +732,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     ServerResponse,
     Server,
     ClientRequest,
-    Agent: class Agent extends EventEmitter {},
-    globalAgent: new (class Agent extends EventEmitter {})(),
+    Agent,
+    globalAgent: new Agent(),
     createServer,
     request,
     get,

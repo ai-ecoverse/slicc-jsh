@@ -280,5 +280,41 @@ describe('ESM (M3)', () => {
       close();
     }
   });
+
+  it('import() from a CommonJS file resolves relative to that file', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/tla.mjs', 'export const ok = 1;\n');
+      await kernel.writeFile(
+        '/os/dyn.cjs',
+        "import('./tla.mjs').then(m=>console.log('cjsdyn',m.ok),e=>console.log('ERR',e.message));\n"
+      );
+      const r = await run(['node', 'dyn.cjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'cjsdyn 1\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('import { createRequire } from module + import.meta.dirname', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile(
+        '/os/main.mjs',
+        [
+          "import { createRequire, isBuiltin, builtinModules } from 'module';",
+          'const require = createRequire(import.meta.url);',
+          "console.log(typeof createRequire, typeof require('fs').readFileSync, isBuiltin('fs'), Array.isArray(builtinModules));",
+          "console.log(import.meta.dirname, import.meta.filename.endsWith('/os/main.mjs'));",
+        ].join('\n')
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'function function true true\n/os true\n');
+    } finally {
+      close();
+    }
+  });
 });
 
