@@ -51,7 +51,14 @@ function walk(node, visitor, parent = null) {
 }
 
 /**
- * @returns {{ code: string, staticSpecs: string[], hasTopLevelAwait: boolean }}
+ * @returns {{
+ *   code: string,
+ *   bodyCode: string,
+ *   staticSpecs: string[],
+ *   hasTopLevelAwait: boolean,
+ *   exportSetup: string[],
+ *   hoistImports: string[],
+ * }}
  */
 export function transformEsm(source, filename) {
   const body = stripHashbang(source);
@@ -256,7 +263,14 @@ export function transformEsm(source, filename) {
 
   const preamble = [...exportSetup, ...hoistImports].join('\n');
   const out = `${preamble ? preamble + '\n' : ''}${code}\n//# sourceURL=${filename}\n`;
-  return { code: out, staticSpecs, hasTopLevelAwait };
+  return {
+    code: out,
+    bodyCode: code,
+    staticSpecs,
+    hasTopLevelAwait,
+    exportSetup,
+    hoistImports,
+  };
 }
 
 function collectBoundNames(pattern, onName) {

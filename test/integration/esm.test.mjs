@@ -341,5 +341,38 @@ describe('ESM (M3)', () => {
       close();
     }
   });
+
+  it('import() of a TLA module with a named-export cycle', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      // A is async-evaluated (TLA); preload of B must see A's export bindings already
+      // instantiated or B's `import { a }` named-export check fails.
+      await kernel.writeFile(
+        '/os/a.mjs',
+        [
+          "import { b } from './b.mjs';",
+          "export function a() { return 'a'; }",
+          'export const n = await Promise.resolve(1);',
+          'export function ab() { return a() + b() + String(n); }',
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/b.mjs',
+        [
+          "import { a } from './a.mjs';",
+          "export function b() { return 'b' + a(); }",
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/main.mjs',
+        "import('./a.mjs').then((m) => console.log(m.ab()));\n"
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'aba1\n');
+    } finally {
+      close();
+    }
+  });
 });
 

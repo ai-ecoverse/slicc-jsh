@@ -185,20 +185,13 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     // Cycle: return the live exports object while linking (Node ESM semantics).
     if (cached?.evaluating) return cached.exportsObj;
 
-    const { code, staticSpecs } = transformEsm(source, filename);
+    const { bodyCode, staticSpecs, exportSetup, hoistImports } = transformEsm(
+      source,
+      filename
+    );
     const exportsObj = Object.create(null);
     const entry = { evaluating: true, exportsObj };
     cache.set(filename, entry);
-
-    // Preload static imports asynchronously so TLA in the dependency graph works
-    // under import() (transform still emits __importSync; cache hits after this).
-    for (const spec of staticSpecs) {
-      const resolved = resolver.resolve(spec, filename, [filename]);
-      if (resolved.type === 'builtin') continue;
-      const dep = cache.get(resolved.filename);
-      if (dep?.namespace || dep?.evaluating) continue;
-      await importModule(spec, filename);
-    }
 
     const __meta = makeImportMeta(filename);
     const __importSync = (spec) => resolveAndLoadSync(spec, filename);
@@ -207,16 +200,35 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       if (trackPromise && handles) return trackPromise(handles, p);
       return p;
     };
+    // After export bindings exist in this scope (and function decls are hoisted),
+    // preload static deps so TLA graphs and cycles link under import().
+    const __preload = async () => {
+      for (const spec of staticSpecs) {
+        const resolved = resolver.resolve(spec, filename, [filename]);
+        if (resolved.type === 'builtin') continue;
+        const dep = cache.get(resolved.filename);
+        if (dep?.namespace || dep?.evaluating) continue;
+        await importModule(spec, filename);
+      }
+    };
 
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const parts = [
+      ...exportSetup,
+      'await __preload();',
+      ...hoistImports,
+      bodyCode,
+      `//# sourceURL=${filename}`,
+    ];
     const fn = new AsyncFunction(
       '__meta',
       '__importSync',
       '__import',
       '__exports',
-      `"use strict";\n${code}`
+      '__preload',
+      `"use strict";\n${parts.join('\n')}`
     );
-    await fn(__meta, __importSync, __import, exportsObj);
+    await fn(__meta, __importSync, __import, exportsObj, __preload);
     const ns = finalizeNamespace(exportsObj);
     entry.namespace = ns;
     entry.evaluating = false;
@@ -271,9 +283,12 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const cached = cache.get(filename);
     if (cached?.namespace) return cached.namespace;
     if (cached?.promise) return cached.promise;
+    if (cached?.evaluating) return cached.exportsObj;
 
     const promise = loadFileAsync(filename);
-    cache.set(filename, { ...(cached || {}), promise });
+    // Re-read: loadFileAsync may have already set {evaluating, exportsObj} before
+    // suspending; a stale pre-call snapshot would wipe those fields.
+    cache.set(filename, { ...(cache.get(filename) || {}), promise });
     if (trackPromise && handles) trackPromise(handles, promise);
     const ns = await promise;
     cache.set(filename, { namespace: ns });
