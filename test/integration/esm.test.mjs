@@ -413,5 +413,55 @@ describe('ESM (M3)', () => {
       close();
     }
   });
+
+  it('import() cycle with const export uses live bindings (no link-time TDZ)', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile(
+        '/os/a.mjs',
+        [
+          "import { use } from './b.mjs';",
+          'export const a = await Promise.resolve(7);',
+          'export const out = use();',
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/b.mjs',
+        [
+          "import { a } from './a.mjs';",
+          'export function use() { return a; }',
+        ].join('\n')
+      );
+      await kernel.writeFile(
+        '/os/main.mjs',
+        "import('./a.mjs').then((m) => console.log('const-cycle', m.out));\n"
+      );
+      const r = await run(['node', 'main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'const-cycle 7\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('createRequire works when the path contains #', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/a#b/dep.cjs', 'module.exports = { v: 5 };\n');
+      await kernel.writeFile(
+        '/os/a#b/main.mjs',
+        [
+          "import { createRequire } from 'module';",
+          'const require = createRequire(import.meta.url);',
+          "console.log(require('./dep.cjs').v);",
+        ].join('\n')
+      );
+      const r = await run(['node', 'a#b/main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '5\n');
+    } finally {
+      close();
+    }
+  });
 });
 

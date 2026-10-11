@@ -23,20 +23,19 @@ try {
   execFileSync('tar', ['-xzf', tgz, '-C', dir], { stdio: 'inherit' });
   const pkgDir = join(dir, 'package');
   const pkgPath = join(pkgDir, 'package.json');
-  // Capture before rewrite: writing package.json bumps the directory mtime, and
-  // a fresh `tar -czf … package` would otherwise embed "now" for package/.
-  const prevFile = statSync(pkgPath);
-  const prevDir = statSync(pkgDir);
+  // package.json keeps its archived header mtime on extract. The package/
+  // directory does not: creating children during extract bumps it to "now".
+  // Stamp both from the file's archived mtime so independently stripped packs
+  // share the same uncompressed tar content hash (assert-certified --rebuilt).
+  const archived = statSync(pkgPath);
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
   if (pkg.scripts) {
     delete pkg.scripts.prepare;
     delete pkg.scripts.prepack;
   }
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
-  // npm-normalized archive timestamps must survive the rewrite (assert-certified
-  // compares uncompressed tar SHA-256 between the certified and rebuilt packs).
-  utimesSync(pkgPath, prevFile.atime, prevFile.mtime);
-  utimesSync(pkgDir, prevDir.atime, prevDir.mtime);
+  utimesSync(pkgPath, archived.atime, archived.mtime);
+  utimesSync(pkgDir, archived.atime, archived.mtime);
   execFileSync('tar', ['-czf', tgz, '-C', dir, 'package'], { stdio: 'inherit' });
   console.log(`stripped prepare/prepack from ${tgz}`);
 } finally {

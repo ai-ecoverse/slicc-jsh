@@ -13,7 +13,12 @@ const IMPORT_CONDITIONS = ['slicc', 'import', 'node', 'default'];
 function pathToFileURL(filename) {
   if (filename.startsWith('file:')) return filename;
   const p = filename.startsWith('/') ? filename : `/${filename}`;
-  return `file://${p}`;
+  // Encode path segments so `#`, `?`, spaces, etc. are not URL syntax.
+  const encoded = p
+    .split('/')
+    .map((seg) => encodeURIComponent(seg))
+    .join('/');
+  return `file://${encoded}`;
 }
 
 function cjsToNamespace(exports) {
@@ -79,6 +84,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
   /** @type {Map<string, { namespace?: object, exportsObj?: object, evaluating?: boolean, promise?: Promise<object> }>} */
   const cache = new Map();
+  /** Filenames currently on the async evaluation stack (cycle detection). */
+  const evaluatingStack = new Set();
 
   function findNearestPackage(fromDir) {
     let dir = fromDir;
@@ -183,6 +190,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const cached = cache.get(filename);
     if (cached?.namespace) return cached.namespace;
     // Cycle: return the live exports object while linking (Node ESM semantics).
+    if (cached?.evaluating && evaluatingStack.has(filename)) return cached.exportsObj;
+    if (cached?.evaluating && cached.promise) return cached.promise;
     if (cached?.evaluating) return cached.exportsObj;
 
     const { bodyCode, staticSpecs, exportSetup, hoistImports } = transformEsm(
@@ -192,47 +201,59 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const exportsObj = Object.create(null);
     const entry = { evaluating: true, exportsObj };
     cache.set(filename, entry);
+    evaluatingStack.add(filename);
 
-    const __meta = makeImportMeta(filename);
-    const __importSync = (spec) => resolveAndLoadSync(spec, filename);
-    const __import = (spec) => {
-      const p = importModule(String(spec), filename);
-      if (trackPromise && handles) return trackPromise(handles, p);
-      return p;
-    };
-    // After export bindings exist in this scope (and function decls are hoisted),
-    // preload static deps so TLA graphs and cycles link under import().
-    const __preload = async () => {
-      for (const spec of staticSpecs) {
-        const resolved = resolver.resolve(spec, filename, [filename]);
-        if (resolved.type === 'builtin') continue;
-        const dep = cache.get(resolved.filename);
-        if (dep?.namespace || dep?.evaluating) continue;
-        await importModule(spec, filename);
-      }
-    };
+    try {
+      const __meta = makeImportMeta(filename);
+      const __importSync = (spec) => resolveAndLoadSync(spec, filename);
+      const __import = (spec) => {
+        const p = importModule(String(spec), filename);
+        if (trackPromise && handles) return trackPromise(handles, p);
+        return p;
+      };
+      // After export bindings exist in this scope (and function decls are hoisted),
+      // preload static deps so TLA graphs and cycles link under import().
+      const __preload = async () => {
+        for (const spec of staticSpecs) {
+          const resolved = resolver.resolve(spec, filename, [filename]);
+          if (resolved.type === 'builtin') continue;
+          const dep = cache.get(resolved.filename);
+          if (dep?.namespace) continue;
+          // Cycle partner already on our stack — link via live exportsObj later.
+          if (dep?.evaluating && evaluatingStack.has(resolved.filename)) continue;
+          // Shared in-flight TLA module from another import() graph — wait for it.
+          if (dep?.promise) {
+            await dep.promise;
+            continue;
+          }
+          await importModule(spec, filename);
+        }
+      };
 
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-    const parts = [
-      ...exportSetup,
-      'await __preload();',
-      ...hoistImports,
-      bodyCode,
-      `//# sourceURL=${filename}`,
-    ];
-    const fn = new AsyncFunction(
-      '__meta',
-      '__importSync',
-      '__import',
-      '__exports',
-      '__preload',
-      `"use strict";\n${parts.join('\n')}`
-    );
-    await fn(__meta, __importSync, __import, exportsObj, __preload);
-    const ns = finalizeNamespace(exportsObj);
-    entry.namespace = ns;
-    entry.evaluating = false;
-    return ns;
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+      const parts = [
+        ...exportSetup,
+        'await __preload();',
+        ...hoistImports,
+        bodyCode,
+        `//# sourceURL=${filename}`,
+      ];
+      const fn = new AsyncFunction(
+        '__meta',
+        '__importSync',
+        '__import',
+        '__exports',
+        '__preload',
+        `"use strict";\n${parts.join('\n')}`
+      );
+      await fn(__meta, __importSync, __import, exportsObj, __preload);
+      const ns = finalizeNamespace(exportsObj);
+      entry.namespace = ns;
+      entry.evaluating = false;
+      return ns;
+    } finally {
+      evaluatingStack.delete(filename);
+    }
   }
 
   function loadFileSync(filename) {
@@ -261,7 +282,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     }
     const cached = cache.get(filename);
     if (cached?.namespace) return cached.namespace;
-    if (cached?.evaluating) return cached.exportsObj;
+    if (cached?.evaluating && evaluatingStack.has(filename)) return cached.exportsObj;
+    if (cached?.promise) return cached.promise;
 
     const source = decoder.decode(fs.readFile(filename));
     if (!isEsmFilename(filename, source)) {
@@ -283,7 +305,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const cached = cache.get(filename);
     if (cached?.namespace) return cached.namespace;
     if (cached?.promise) return cached.promise;
-    if (cached?.evaluating) return cached.exportsObj;
+    // Cycle: live exports. Concurrent non-cycle evaluation: wait on promise below.
+    if (cached?.evaluating && evaluatingStack.has(filename)) return cached.exportsObj;
 
     const promise = loadFileAsync(filename);
     // Re-read: loadFileAsync may have already set {evaluating, exportsObj} before

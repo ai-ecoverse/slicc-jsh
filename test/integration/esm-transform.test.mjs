@@ -55,8 +55,9 @@ console.log(a, c);
     const { code, staticSpecs } = transformEsm(src, '/os/main.mjs');
     assert.deepEqual(staticSpecs, ['./mod.mjs']);
     assert.match(code, /__importSync\("\.\/mod\.mjs"\)/);
-    assert.match(code, /const a = /);
-    assert.match(code, /const c = /);
+    assert.match(code, /Object\.defineProperty\(__live, "a"/);
+    assert.match(code, /Object\.defineProperty\(__live, "c"/);
+    assert.match(code, /__live\["a"\]/);
     assert.match(code, /Object\.defineProperty\(__exports, "d"/);
     assert.doesNotMatch(code, /^\s*import\s/m);
   });
@@ -79,7 +80,8 @@ export default function greet(
     const src = `import $ from 'jquery';\nexport const $x = 1;\nconsole.log($, $x);\n`;
     const { code, staticSpecs } = transformEsm(src, '/os/main.mjs');
     assert.deepEqual(staticSpecs, ['jquery']);
-    assert.match(code, /const \$ = /);
+    assert.match(code, /Object\.defineProperty\(__live, "\$"/);
+    assert.match(code, /__live\["\$"\]/);
     assert.match(code, /Object\.defineProperty\(__exports, "\$x"/);
   });
 
