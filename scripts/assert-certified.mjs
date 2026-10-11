@@ -65,9 +65,11 @@ const { name, version, engines, files } = JSON.parse(
   execFileSync('tar', ['-xOzf', tgz, 'package/package.json'], { encoding: 'utf8' })
 );
 if (name !== NAME) refuse(`tarball is ${name}, not ${NAME}`);
-if (!/^\d+\.\d+\.\d+-\d+$/.test(version)) refuse(`version ${version} is not X.Y.Z-N`);
-if (engines?.['slicc-kernel'] !== '>=1.40.1') {
-  refuse(`engines.slicc-kernel is ${engines?.['slicc-kernel']}, want >=1.40.1`);
+if (!/^\d+\.\d+\.\d+(-\d+)?$/.test(version)) {
+  refuse(`version ${version} is not X.Y.Z or X.Y.Z-N`);
+}
+if (engines?.['slicc-kernel'] !== '>=1.53.2') {
+  refuse(`engines.slicc-kernel is ${engines?.['slicc-kernel']}, want >=1.53.2`);
 }
 if (!Array.isArray(files) || files.includes('test') || files.some((f) => String(f).startsWith('test/'))) {
   refuse('package.json files must not include test/');

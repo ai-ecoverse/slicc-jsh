@@ -609,11 +609,47 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     },
   };
 
-  function callbackify(fn) {
+  /** Node's ERR_INVALID_ARG_TYPE for a missing/invalid fs callback ("cb"). */
+  function requireCallback(cb) {
+    if (typeof cb === 'function') return cb;
+    let received;
+    if (cb === undefined) received = 'undefined';
+    else if (cb === null) received = 'null';
+    else if (typeof cb === 'string') received = `type string ('${cb}')`;
+    else if (typeof cb === 'object') {
+      const name = cb.constructor?.name;
+      received = name && name !== 'Object' ? `an instance of ${name}` : 'an instance of Object';
+    } else received = `type ${typeof cb}`;
+    const err = new TypeError(`The "cb" argument must be of type function. Received ${received}`);
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+  }
+
+  /**
+   * Wrap a sync fs method as a callback API. Missing/invalid callbacks throw
+   * ERR_INVALID_ARG_TYPE synchronously (Node), not "cb is not a function" later.
+   * `minArgsBeforeCb` is how many leading args are required before options/cb
+   * (1 for readFile/stat; 2 for writeFile/appendFile/rename). Matches Node's
+   * maybeCallback(callback || options): at that arity with no function →
+   * undefined; one more non-function → that value is the invalid "cb".
+   */
+  function callbackify(fn, { minArgsBeforeCb = 1 } = {}) {
     return (...args) => {
-      const cb = args.pop();
+      let cb;
+      let syncArgs;
+      if (args.length > 0 && typeof args[args.length - 1] === 'function') {
+        cb = args[args.length - 1];
+        syncArgs = args.slice(0, -1);
+      } else if (args.length <= minArgsBeforeCb) {
+        cb = undefined;
+        syncArgs = args;
+      } else {
+        cb = args[args.length - 1];
+        syncArgs = args.slice(0, -1);
+      }
+      requireCallback(cb);
       try {
-        const result = fn(...args);
+        const result = fn(...syncArgs);
         queueMicrotask(() => cb(null, result));
       } catch (err) {
         queueMicrotask(() => cb(err));
@@ -1011,12 +1047,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     createReadStream,
     createWriteStream,
     readFile: callbackify(syncApi.readFileSync),
-    writeFile: callbackify(syncApi.writeFileSync),
-    appendFile: callbackify(syncApi.appendFileSync),
+    writeFile: callbackify(syncApi.writeFileSync, { minArgsBeforeCb: 2 }),
+    appendFile: callbackify(syncApi.appendFileSync, { minArgsBeforeCb: 2 }),
     open: callbackify(syncApi.openSync),
     close: callbackify(syncApi.closeSync),
     read(fd, buffer, offset, length, position, callback) {
       const parsed = parseReadCallbackArgs(buffer, offset, length, position, callback);
+      const cb = requireCallback(parsed.callback);
       queueMicrotask(() => {
         try {
           const bytesRead = syncApi.readSync(
@@ -1026,32 +1063,36 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
             parsed.length,
             parsed.position
           );
-          parsed.callback(null, bytesRead, buffer);
+          cb(null, bytesRead, buffer);
         } catch (err) {
-          parsed.callback(err);
+          cb(err);
         }
       });
     },
     write(fd, data, offset, length, position, callback) {
       const parsed = parseWriteCallbackArgs(data, offset, length, position, callback);
+      const cb = requireCallback(parsed.callback);
       queueMicrotask(() => {
         try {
           const written = syncApi.writeSync(fd, data, ...parsed.syncArgs);
-          parsed.callback(null, written, data);
+          cb(null, written, data);
         } catch (err) {
-          parsed.callback(err);
+          cb(err);
         }
       });
     },
     fstat: callbackify(syncApi.fstatSync),
-    exists: (p, cb) => queueMicrotask(() => cb(syncApi.existsSync(p))),
+    exists(p, cb) {
+      requireCallback(cb);
+      queueMicrotask(() => cb(syncApi.existsSync(p)));
+    },
     stat: callbackify(syncApi.statSync),
     lstat: callbackify(syncApi.lstatSync),
     readdir: callbackify(syncApi.readdirSync),
     mkdir: callbackify(syncApi.mkdirSync),
     rmdir: callbackify(syncApi.rmdirSync),
     unlink: callbackify(syncApi.unlinkSync),
-    rename: callbackify(syncApi.renameSync),
+    rename: callbackify(syncApi.renameSync, { minArgsBeforeCb: 2 }),
     constants: {
       F_OK: 0,
       R_OK: 4,

@@ -6,11 +6,15 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 ## Status
 
+**0.2.0** — ships M2 net/http/https, M3 ESM, and host `jsh` (#22). Requires `slicc-kernel` ≥ 1.53.2 (Buffer `allocUnsafe` leak fix; 1.53.3 is the certified kernel). Published to npm `latest`.
+
 **M1 shipped (0.1.0-8)** — Node-entry lockdown ([slicc-kernel#297](https://github.com/ai-ecoverse/slicc-kernel/issues/297)): CJS wrapper is Node's 5-arg form; `process` / `Buffer` / timers are real globals; vendor stream/string_decoder share jsh's Buffer class; StringDecoder accepts TypedArrays; timer stacks keep script URLs. Certified on hb2.
 
-**M2 shipped (on main):** `globalThis.fetch` / `WebSocket` from kernel ≥ 1.53.0 `OPEN_SLOTS` (`ctx.fetch` / `ctx.websocket`). `net` / `http` on `ctx.net` (loopback TCP); `https.createServer` waits on TLS, `https.request`/`get` use `ctx.fetch` with `redirect: 'manual'` (Node entry) and fall back to `'follow'` on browser transports that reject manual redirects (`ENOTSUP`). jsh `Buffer.allocUnsafe` / `allocUnsafeSlow` zero-fill and `poolSize` is `0`. Requires `slicc-kernel` ≥ 1.53.0.
+**M2 shipped:** `globalThis.fetch` / `WebSocket` from kernel ≥ 1.53.0 `OPEN_SLOTS` (`ctx.fetch` / `ctx.websocket`). `net` / `http` on `ctx.net` (loopback TCP); `https.createServer` waits on TLS, `https.request`/`get` use `ctx.fetch` with `redirect: 'manual'` (Node entry) and fall back to `'follow'` on browser transports that reject manual redirects (`ENOTSUP`). jsh `Buffer.allocUnsafe` / `allocUnsafeSlow` zero-fill and `poolSize` is `0`.
 
-**M3 (in progress):** ESM — `.mjs` / `"type":"module"`, static `import`/`export`, dynamic `import()`, `import.meta.url` / `import.meta.resolve`, and CJS↔ESM interop (`import` of CJS, `require` of ESM, `package.json` `"exports"` `import`/`require` conditions). The transform uses **acorn** (bundled) so multi-line imports/exports, strings/comments, and `$` identifiers parse correctly; imports are hoisted and export getters are registered before evaluation for cycles. Publish of the next version waits on hb2 cert of a kernel with the hostfs fix (1.54.0 or newer when certified).
+**M3 shipped:** ESM — `.mjs` / `"type":"module"`, static `import`/`export`, dynamic `import()`, `import.meta.url` / `import.meta.resolve`, and CJS↔ESM interop (`import` of CJS, `require` of ESM, `package.json` `"exports"` `import`/`require` conditions). The transform uses **acorn** (bundled) so multi-line imports/exports, strings/comments, and `$` identifiers parse correctly; imports are hoisted and export getters are registered before evaluation for cycles. Node-style detect-module for `-e` / ambiguous `.js` (dynamic `import()` alone stays CJS).
+
+**Host jsh (#22):** package `bin` is `dist/host/jsh.mjs` — run `.jsh` on host Node 22+ with the same body scope and `sliccy:` modules as in the kernel.
 
 **HTTP/HTTPS limits (M2):** request and response bodies are buffered whole (no streaming / SSE yet); bodies over 64 MiB are rejected (`413` on the server, `ERR_OUT_OF_RANGE` on the client). `https.request` options `cert` / `key` / `pfx` / `ca` throw `ERR_NOT_SUPPORTED` (no client certs / custom CA on `ctx.fetch`). `rejectUnauthorized: false` is accepted but ignored — TLS verification stays stricter than Node with that flag. Responses with no `Content-Length` and no chunked encoding wait for the peer's FIN (`socket.end` half-closes via `writer.close()` only). On the **browser** entry, `https.get` tries `redirect: 'manual'` and falls back to `'follow'` when the transport rejects it with `ENOTSUP` — so plain requests work, but a redirect may be followed instead of surfaced (`statusCode` / `Location`). The Node entry's `nodeTransport` supports manual redirects. Embedders with `traits.redirectHops` (kernel #315) can surface redirects in the browser.
 
@@ -57,4 +61,4 @@ npm run jsh:record           # .jsh cases under test/jsh/fixtures/, recorded wit
 
 ## Publish
 
-Pre-releases (M1–M3) use the npm `next` tag via `.github/workflows/publish.yml` (`workflow_dispatch` with `run` + `certified` sha). Certification and publish are coordinator-owned; this package does not auto-publish from CI.
+Publish goes through `.github/workflows/publish.yml` (`workflow_dispatch` with `run` + `certified` sha). Stable versions (no `-` in the version) publish to `latest` and also advance the `next` dist-tag; prereleases publish to `next` only. Certification and publish are coordinator-owned; agents do not publish.

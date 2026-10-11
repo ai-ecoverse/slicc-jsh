@@ -1,6 +1,7 @@
 # Vendored npm ESM fixtures
 
 Real published package files used by `test/integration/esm.test.mjs`.
+Keep byte-identical to the vendoring snapshot (Renovate ignores `test/fixtures/**`).
 
 | Fixture | Upstream | Notes |
 |---------|----------|--------|

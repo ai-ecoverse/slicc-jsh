@@ -1,6 +1,6 @@
 {
   "name": "@ai-ecoverse/slicc-jsh",
-  "version": "0.1.0-8",
+  "version": "0.2.0",
   "description": "Node.js-compatible runtime for slicc-kernel: the node and jsh commands (abi: js)",
   "type": "module",
   "license": "Apache-2.0",
@@ -17,12 +17,12 @@
   },
   "engines": {
     "node": ">=22",
-    "slicc-kernel": ">=1.53.0"
+    "slicc-kernel": ">=1.53.2"
   },
   "publishConfig": {
     "access": "public",
     "provenance": true,
-    "tag": "next"
+    "tag": "latest"
   },
   "files": [
     "LICENSE",
