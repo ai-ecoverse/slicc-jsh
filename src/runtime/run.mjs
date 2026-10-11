@@ -394,16 +394,20 @@ export async function runNode(ctx, options = {}) {
           const module = { exports, id: '[eval]' };
           // Dynamic import() is valid in CJS; rewrite to the kernel loader
           // (host import() cannot see the in-memory FS).
-          const { code: cjsCode, changed: hasImport } = rewriteDynamicImports(parsed.code);
-          const __import = (spec) => esm.importModule(spec, evalParent);
+          const {
+            code: cjsCode,
+            changed: hasImport,
+            binding: importBinding = '__import',
+          } = rewriteDynamicImports(parsed.code);
+          const dynImport = (spec) => esm.importModule(spec, evalParent);
           const body = parsed.print
             ? `return (${cjsCode}\n)\n//# sourceURL=[eval]`
             : `${cjsCode}\n//# sourceURL=[eval]`;
           const args = ['exports', 'require', 'module', '__filename', '__dirname'];
           const values = [exports, require, module, '[eval]', process.cwd()];
           if (hasImport) {
-            args.push('__import');
-            values.push(__import);
+            args.push(importBinding);
+            values.push(dynImport);
           }
           const fn = new Function(...args, body);
           const result = fn(...values);

@@ -297,6 +297,25 @@ describe('ESM (M3)', () => {
     }
   });
 
+  it('CJS import() works when the file already declares __import', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/tla.mjs', 'export const ok = 2;\n');
+      await kernel.writeFile(
+        '/os/collide.cjs',
+        [
+          'const __import = 99;',
+          "import('./tla.mjs').then((m) => console.log('ok', m.ok, __import));",
+        ].join('\n')
+      );
+      const r = await run(['node', 'collide.cjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'ok 2 99\n');
+    } finally {
+      close();
+    }
+  });
+
   it('import { createRequire } from module + import.meta.dirname', async () => {
     const { kernel, run, close } = await withJsh();
     try {
@@ -314,6 +333,26 @@ describe('ESM (M3)', () => {
       const r = await run(['node', 'main.mjs']);
       assert.equal(r.status, 0, r.stderr);
       assert.equal(r.stdout, 'function function true true\n/os true\nrel 9\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('createRequire decodes percent-encoded file URL paths', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/a b/dep.cjs', 'module.exports = { v: 4 };\n');
+      await kernel.writeFile(
+        '/os/a b/main.mjs',
+        [
+          "import { createRequire } from 'module';",
+          'const require = createRequire(import.meta.url);',
+          "console.log(require('./dep.cjs').v);",
+        ].join('\n')
+      );
+      const r = await run(['node', 'a b/main.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '4\n');
     } finally {
       close();
     }

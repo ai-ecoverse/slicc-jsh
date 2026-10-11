@@ -323,8 +323,46 @@ function walkTopLevelAwait(node, report) {
 }
 
 /**
- * Rewrite dynamic `import(expr)` → `__import(expr)` for CJS evaluation.
- * Returns `{ code, changed }`. No-op when there are no ImportExpressions.
+ * Collect binding names that would collide with a Function parameter.
+ * @param {import('acorn').Node} ast
+ * @returns {Set<string>}
+ */
+function collectScriptBindingNames(ast) {
+  const used = new Set();
+  const add = (name) => {
+    if (typeof name === 'string') used.add(name);
+  };
+  const addPattern = (pattern) => {
+    if (!pattern) return;
+    if (pattern.type === 'Identifier') add(pattern.name);
+    else if (pattern.type === 'ObjectPattern') {
+      for (const prop of pattern.properties) {
+        if (prop.type === 'RestElement') addPattern(prop.argument);
+        else addPattern(prop.value);
+      }
+    } else if (pattern.type === 'ArrayPattern') {
+      for (const el of pattern.elements) if (el) addPattern(el);
+    } else if (pattern.type === 'AssignmentPattern') addPattern(pattern.left);
+    else if (pattern.type === 'RestElement') addPattern(pattern.argument);
+  };
+  walk(ast, (node) => {
+    if (node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression') {
+      if (node.id) add(node.id.name);
+      for (const p of node.params) addPattern(p);
+      return;
+    }
+    if (node.type === 'VariableDeclarator') addPattern(node.id);
+    if (node.type === 'ClassDeclaration' && node.id) add(node.id.name);
+    if (node.type === 'CatchClause' && node.param) addPattern(node.param);
+  });
+  return used;
+}
+
+/**
+ * Rewrite dynamic `import(expr)` → `<binding>(expr)` for CJS evaluation.
+ * Picks a binding that does not collide with declarations in the script
+ * (`__import`, then `__import$1`, …).
+ * Returns `{ code, changed, binding? }`. No-op when there are no ImportExpressions.
  */
 export function rewriteDynamicImports(source) {
   const body = stripHashbang(source);
@@ -345,12 +383,19 @@ export function rewriteDynamicImports(source) {
       replacements.push({
         start: node.start,
         end: node.source.start,
-        text: '__import(',
+        text: '\0IMPORT(', // placeholder; binding filled below
       });
     }
   });
   if (replacements.length === 0) return { code: source, changed: false };
-  return { code: applyReplacements(body, replacements), changed: true };
+
+  const used = collectScriptBindingNames(ast);
+  let binding = '__import';
+  let n = 0;
+  while (used.has(binding)) binding = `__import$${++n}`;
+  for (const r of replacements) r.text = `${binding}(`;
+
+  return { code: applyReplacements(body, replacements), changed: true, binding };
 }
 
 /**

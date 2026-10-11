@@ -21,13 +21,24 @@ describe('esm transform (acorn)', () => {
   });
 
   it('rewrites import() for CJS eval without touching string literals', () => {
-    const { code, changed } = rewriteDynamicImports(
+    const { code, changed, binding } = rewriteDynamicImports(
       "const fs=require('fs'); import('x').then(()=>{}); const s='import(y)';\n"
     );
     assert.equal(changed, true);
+    assert.equal(binding, '__import');
     assert.match(code, /__import\('x'\)/);
     assert.match(code, /const s='import\(y\)'/);
     assert.equal(rewriteDynamicImports('const a = 1;\n').changed, false);
+  });
+
+  it('avoids colliding with an existing __import binding', () => {
+    const { code, changed, binding } = rewriteDynamicImports(
+      "const __import = 1; import('x').then(()=>{});\n"
+    );
+    assert.equal(changed, true);
+    assert.equal(binding, '__import$1');
+    assert.match(code, /__import\$1\('x'\)/);
+    assert.match(code, /const __import = 1/);
   });
 
   it('handles multi-line import/export (prettier style)', () => {

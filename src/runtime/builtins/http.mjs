@@ -259,16 +259,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         const wouldBeBody = Buffer.concat(this.#chunks);
         const body = noBody ? Buffer.alloc(0) : wouldBeBody;
         // Node: HEAD still announces Content-Length of the would-be body.
-        // 204/304 omit Content-Length entirely.
-        const omitLength = this.statusCode === 204 || this.statusCode === 304;
+        // 204 always omits Content-Length. 304 must not auto-frame a body, but
+        // preserves an explicitly supplied Content-Length (selected representation).
+        const noAutoLength = this.statusCode === 204 || this.statusCode === 304;
         if (
-          !omitLength &&
+          !noAutoLength &&
           !this.hasHeader('content-length') &&
           !this.hasHeader('transfer-encoding')
         ) {
           this.setHeader('Content-Length', String(wouldBeBody.length));
         }
-        if (omitLength) {
+        if (this.statusCode === 204) {
           this.removeHeader('content-length');
           this.removeHeader('Content-Length');
         }

@@ -341,6 +341,36 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
     }
   });
 
+  it('http 304 preserves explicit Content-Length and omits body', async () => {
+    const { run, close } = await withJsh();
+    try {
+      const r = await run([
+        'node',
+        '-e',
+        [
+          "const http=require('http');",
+          "const s=http.createServer((req,res)=>{",
+          "  res.writeHead(304,{'Content-Length':'42'});",
+          "  res.end('should-not-send');",
+          "});",
+          "s.listen(0,()=>{",
+          "  http.get({host:'127.0.0.1',port:s.address().port},res=>{",
+          "    let n=0; res.on('data',c=>n+=c.length);",
+          "    res.on('end',()=>{",
+          "      console.log(res.statusCode,res.headers['content-length'],n);",
+          "      s.close(); setImmediate(()=>process.exit(0));",
+          "    });",
+          "  });",
+          "});",
+        ].join(''),
+      ]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, '304 42 0\n');
+    } finally {
+      close();
+    }
+  });
+
   it('resolves CJS require over node_modules on the memory root', async () => {
     const { kernel, run, close } = await withJsh();
     try {

@@ -87,7 +87,8 @@ export function createCjs({
       // Node accepts file URL strings (import.meta.url), not only URL objects.
       if (filename.startsWith('file:')) {
         try {
-          parent = new URL(filename).pathname;
+          // Decode percent-escapes (spaces, Unicode, etc.) like fileURLToPath.
+          parent = decodeURIComponent(new URL(filename).pathname);
         } catch {
           parent = filename;
         }
@@ -95,7 +96,11 @@ export function createCjs({
         parent = filename;
       }
     } else if (filename?.href) {
-      parent = filename.pathname;
+      try {
+        parent = decodeURIComponent(filename.pathname);
+      } catch {
+        parent = filename.pathname;
+      }
     } else {
       parent = `${process.cwd()}/`;
     }
@@ -187,9 +192,14 @@ export function createCjs({
 
     const stripped = stripHashbang(source);
     // Route import() through the ESM loader with this file as referrer (not data:).
-    const { code: body, changed: hasImport } = rewriteDynamicImports(stripped);
-    // Exact Node CJS wrapper arity — five parameters, plus __import when needed.
-    // process/Buffer/console/timers/fetch come from globalThis.
+    const {
+      code: body,
+      changed: hasImport,
+      binding: importBinding = '__import',
+    } = rewriteDynamicImports(stripped);
+    // Exact Node CJS wrapper arity — five parameters, plus a collision-free
+    // dynamic-import binding when needed. process/Buffer/console/timers/fetch
+    // come from globalThis.
     let wrapper;
     try {
       if (hasImport) {
@@ -199,7 +209,7 @@ export function createCjs({
           'module',
           '__filename',
           '__dirname',
-          '__import',
+          importBinding,
           `${body}\n//# sourceURL=${filename}`
         );
       } else {
