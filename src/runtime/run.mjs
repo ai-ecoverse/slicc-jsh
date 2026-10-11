@@ -139,6 +139,12 @@ export async function runNode(ctx, options = {}) {
       if (err instanceof NodeExitError) {
         exitStatus = err.code;
         timers.clearPending();
+        // Wake drainLoop so shouldStop can end the process while servers listen.
+        try {
+          handles.notify();
+        } catch {
+          /* ignore */
+        }
         return;
       }
       if (process.listenerCount('uncaughtException') > 0) {
@@ -483,6 +489,7 @@ export async function runNode(ctx, options = {}) {
       onBeforeExit: () => {
         emitBeforeExit();
       },
+      shouldStop: () => getDidExit() || exitStatus !== undefined,
     });
 
     // #297: unhandled rejections are reported on a later turn. Keep ctx hooks

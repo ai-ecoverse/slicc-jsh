@@ -58,9 +58,12 @@ function isIP(input) {
 }
 
 export function createNet({ ctx, process, Buffer, handles, getStream }) {
-  void process;
   const stream = getStream();
   const { Duplex } = stream;
+  const nextTick =
+    typeof process?.nextTick === 'function'
+      ? process.nextTick.bind(process)
+      : (fn) => queueMicrotask(fn);
 
   class Socket extends Duplex {
     #conn;
@@ -157,6 +160,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       this.#handle = { kind: 'socket', fd: conn.fd };
       handles.add(this.#handle);
       void this.#pumpRead();
+      // Node net.Socket delivers 'end'/'close' even without a 'data' listener;
+      // resume so buffered EOF from #pumpRead is consumed (fin4.js).
+      this.resume?.();
       this.emit('connect');
       this.emit('ready');
     }
@@ -252,16 +258,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
             // Yield so prior push(buf) nextTicks can run before EOF.
             await Promise.resolve();
             this.push(null);
-            // allowHalfOpen false: Duplex auto-ends the writable side after EOF.
-            // Call end() ourselves if the stream deferred it (keeps peer FIN flowing).
-            // Defer auto-end so this read turn settles before SHUT_WR (avoids
-            // racing writer.close with the kernel's EOF delivery).
-            const writableEnded = this.writableEnded === true || this._writableState?.ended;
-            if (!this.allowHalfOpen && !writableEnded && !this.#ended) {
-              queueMicrotask(() => {
-                if (!this.destroyed && !this.#ended) this.end();
-              });
-            }
+            // allowHalfOpen false: auto-end AFTER 'end' listeners so
+            // `s.on('end', () => s.end('bye'))` can still write (Node; endreply.js).
+            this.#scheduleAutoEnd();
             // Wake drainLoop to flush readable-stream's deferred 'data'/'end'.
             handles.notify();
             break;
@@ -283,12 +282,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
         if (!this.destroyed && (code === 'EBADF' || code === 'ECONNRESET' || code === 'EPIPE')) {
           this.#readableEof = true;
           this.push(null);
-          const writableEnded = this.writableEnded === true || this._writableState?.ended;
-          if (!this.allowHalfOpen && !writableEnded && !this.#ended) {
-            queueMicrotask(() => {
-              if (!this.destroyed && !this.#ended) this.end();
-            });
-          }
+          this.#scheduleAutoEnd();
           handles.notify();
         } else if (!this.destroyed) {
           this.destroy(errnoError(err, 'read'));
@@ -296,6 +290,20 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       } finally {
         this.#maybeFinishConn();
       }
+    }
+
+    /**
+     * Node: with allowHalfOpen false, the writable side ends after the readable
+     * 'end' event is delivered — not before — so handlers may still write.
+     */
+    #scheduleAutoEnd() {
+      if (this.allowHalfOpen) return;
+      const run = () => {
+        const writableEnded = this.writableEnded === true || this._writableState?.ended;
+        if (!this.destroyed && !writableEnded && !this.#ended) this.end();
+      };
+      // After readable-stream's nextTick 'end' emission (and its listeners).
+      nextTick(() => nextTick(run));
     }
 
     #ended = false;
@@ -448,7 +456,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
             try {
               this.emit('listening');
             } catch (err) {
-              this.emit('error', err);
+              // process.exit() already recorded didExit; do not emit listen EIO.
+              if (err?.name === 'NodeExitError') return;
+              // Other throws from the listen callback are uncaught, not listen failures.
+              nextTick(() => {
+                throw err;
+              });
+              return;
             }
             void this.#acceptLoop();
           })
@@ -471,8 +485,6 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           );
           const socket = new Socket({ allowHalfOpen: Boolean(this.#options.allowHalfOpen) });
           socket._attach(conn);
-          // Node net.Socket starts flowing (not paused) on accept.
-          socket.resume?.();
           this.emit('connection', socket);
           handles.notify();
         }

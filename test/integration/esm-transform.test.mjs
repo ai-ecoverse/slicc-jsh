@@ -112,4 +112,34 @@ export const y = 1;
     assert.ok(getterAt < importAt, 'export getters before imports');
     assert.ok(importAt < bodyAt, 'imports before body');
   });
+
+  it('expands object shorthand of imported live bindings (lodash-es)', () => {
+    const short = transformEsm(
+      `import x from './one.js';\nconst o = { x };\nconsole.log(o);\n`,
+      '/os/short.js'
+    );
+    assert.match(short.bodyCode, /const o = \{ x: __live\["x"\] \}/);
+    assert.doesNotMatch(short.bodyCode, /\{\s*__live/);
+
+    const named = transformEsm(
+      `import { x as y } from './one.js';\nconsole.log({ y });\n`,
+      '/os/short3.js'
+    );
+    assert.match(named.bodyCode, /\{\s*y: __live\["y"\]\s*\}/);
+
+    const def = transformEsm(
+      `import x from './one.js';\nexport default { x };\n`,
+      '/os/shortdef.js'
+    );
+    assert.match(def.code, /var __default_\d+ = \(\{ x: __live\["x"\] \}\)/);
+
+    // Param names that collide with imports must stay bindings (lodash.default.js).
+    const params = transformEsm(
+      `import func from './f.js';\nimport object from './o.js';\nvar mixin = (function(func) {\n  return function(object, source) { return func(object, source); };\n})(func);\nexport default mixin;\n`,
+      '/os/params.js'
+    );
+    assert.match(params.bodyCode, /function\(func\)/);
+    assert.match(params.bodyCode, /function\(object, source\)/);
+    assert.doesNotMatch(params.bodyCode, /function\(__live/);
+  });
 });

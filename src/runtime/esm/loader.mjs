@@ -297,25 +297,31 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
 
   async function importModule(specifier, parentFilename = `${process.cwd()}/`) {
-    const resolved = resolver.resolve(String(specifier), parentFilename, [parentFilename]);
-    if (resolved.type === 'builtin') {
-      return cjsToNamespace(builtins.load(resolved.id));
-    }
-    const filename = resolved.filename;
-    const cached = cache.get(filename);
-    if (cached?.namespace) return cached.namespace;
-    if (cached?.promise) return cached.promise;
-    // Cycle: live exports. Concurrent non-cycle evaluation: wait on promise below.
-    if (cached?.evaluating && evaluatingStack.has(filename)) return cached.exportsObj;
+    try {
+      const resolved = resolver.resolve(String(specifier), parentFilename, [parentFilename]);
+      if (resolved.type === 'builtin') {
+        return cjsToNamespace(builtins.load(resolved.id));
+      }
+      const filename = resolved.filename;
+      const cached = cache.get(filename);
+      if (cached?.namespace) return cached.namespace;
+      if (cached?.promise) return cached.promise;
+      // Cycle: live exports. Concurrent non-cycle evaluation: wait on promise below.
+      if (cached?.evaluating && evaluatingStack.has(filename)) return cached.exportsObj;
 
-    const promise = loadFileAsync(filename);
-    // Re-read: loadFileAsync may have already set {evaluating, exportsObj} before
-    // suspending; a stale pre-call snapshot would wipe those fields.
-    cache.set(filename, { ...(cache.get(filename) || {}), promise });
-    if (trackPromise && handles) trackPromise(handles, promise);
-    const ns = await promise;
-    cache.set(filename, { namespace: ns });
-    return ns;
+      const promise = loadFileAsync(filename);
+      // Re-read: loadFileAsync may have already set {evaluating, exportsObj} before
+      // suspending; a stale pre-call snapshot would wipe those fields.
+      cache.set(filename, { ...(cache.get(filename) || {}), promise });
+      if (trackPromise && handles) trackPromise(handles, promise);
+      const ns = await promise;
+      cache.set(filename, { namespace: ns });
+      return ns;
+    } catch (err) {
+      // Node ESM: missing modules use ERR_MODULE_NOT_FOUND (CJS uses MODULE_NOT_FOUND).
+      if (err && err.code === 'MODULE_NOT_FOUND') err.code = 'ERR_MODULE_NOT_FOUND';
+      throw err;
+    }
   }
 
   function runMain(filename, source) {

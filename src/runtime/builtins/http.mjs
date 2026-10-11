@@ -441,6 +441,63 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     return new Server(options, requestListener);
   }
 
+  class Agent extends EventEmitter {
+    constructor(options = {}) {
+      super();
+      this.options = options ?? {};
+      this.keepAlive = Boolean(options.keepAlive);
+      this.maxSockets = options.maxSockets ?? Infinity;
+      this.maxFreeSockets = options.maxFreeSockets ?? 256;
+      this.maxTotalSockets = options.maxTotalSockets ?? Infinity;
+      this.protocol = options.protocol;
+      this.scheduling = options.scheduling ?? 'lifo';
+      // Keep-alive pooling is not implemented yet (documented); surface matches Node.
+      this.sockets = Object.create(null);
+      this.freeSockets = Object.create(null);
+      this.requests = Object.create(null);
+    }
+    /** Idle keep-alive sockets are not pooled yet — no-op close. */
+    destroy() {
+      /* no idle sockets to close (connections are not reused) */
+    }
+    getName(options = {}) {
+      // Node: `${host}:${port}:${localAddress}` (trailing colon when no localAddress).
+      let name = options.host || options.hostname || 'localhost';
+      name += ':';
+      if (options.port) name += options.port;
+      name += ':';
+      if (options.localAddress) name += options.localAddress;
+      if (options.family === 4 || options.family === 6) name += `:${options.family}`;
+      return name;
+    }
+    createConnection(options, callback) {
+      return net.createConnection(options, callback);
+    }
+    keepSocketAlive() {
+      return false;
+    }
+    reuseSocket() {
+      /* keep-alive reuse not implemented */
+    }
+    addRequest() {
+      /* request queueing not implemented — ClientRequest dials via createConnection */
+    }
+    createSocket(_req, options, cb) {
+      const err = new Error('slicc-jsh: http.Agent socket pooling is not implemented');
+      err.code = 'ERR_NOT_SUPPORTED';
+      if (typeof cb === 'function') {
+        queueMicrotask(() => cb(err));
+        return;
+      }
+      throw err;
+    }
+    removeSocket() {
+      /* no pooled sockets */
+    }
+  }
+
+  const globalAgent = new Agent();
+
   class ClientRequest extends Writable {
     #opts;
     #headers = Object.create(null);
@@ -485,7 +542,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       const method = (opts.method ?? 'GET').toUpperCase();
       const host = opts.hostname ?? opts.host ?? '127.0.0.1';
       const port = Number(opts.port ?? (opts.protocol === 'https:' ? 443 : 80));
-      const socket = net.connect({ host, port });
+      // Do not pass HTTP `opts.path` (URL path) — net treats `path` as a UNIX socket.
+      const connectOpts = { host, port };
+      if (opts.socketPath) connectOpts.path = opts.socketPath;
+      if (opts.localAddress) connectOpts.localAddress = opts.localAddress;
+      if (opts.family) connectOpts.family = opts.family;
+      // agent-base / https-proxy-agent: subclasses override createConnection.
+      const agent = opts.agent === false ? undefined : (opts.agent ?? globalAgent);
+      const socket =
+        agent && typeof agent.createConnection === 'function'
+          ? agent.createConnection(connectOpts)
+          : net.connect(connectOpts);
       this.#socket = socket;
       let headBuf = Buffer.alloc(0);
       let head = null; // { parsed, headers, te, cl }
@@ -727,27 +794,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     return req;
   }
 
-  class Agent extends EventEmitter {
-    constructor(options = {}) {
-      super();
-      this.options = options ?? {};
-      this.keepAlive = Boolean(options.keepAlive);
-      this.maxSockets = options.maxSockets ?? Infinity;
-      this.maxFreeSockets = options.maxFreeSockets ?? 256;
-      this.protocol = options.protocol;
-    }
-    /** Idle keep-alive sockets are not pooled yet — no-op close. */
-    destroy() {
-      /* no idle sockets to close (connections are not reused) */
-    }
-    getName(options = {}) {
-      const host = options.host ?? options.hostname ?? 'localhost';
-      const port = options.port ?? '';
-      const local = options.localAddress ? `:${options.localAddress}` : '';
-      return `${host}:${port}${local}`;
-    }
-  }
-
   return {
     METHODS,
     STATUS_CODES,
@@ -758,7 +804,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     Server,
     ClientRequest,
     Agent,
-    globalAgent: new Agent(),
+    globalAgent,
     createServer,
     request,
     get,

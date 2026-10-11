@@ -15,28 +15,49 @@ function toProtocols(protocols) {
   return String(protocols);
 }
 
-function messageEvent(data) {
+/** EventTarget.dispatchEvent requires a real Event — never a plain object. */
+function asEvent(type, props = {}) {
   try {
-    return new MessageEvent('message', { data });
+    if (type === 'message' && typeof MessageEvent === 'function') {
+      return new MessageEvent('message', props);
+    }
+    if (type === 'close' && typeof CloseEvent === 'function') {
+      return new CloseEvent('close', props);
+    }
+    if (type === 'error' && typeof ErrorEvent === 'function') {
+      return new ErrorEvent('error', props);
+    }
   } catch {
-    return { type: 'message', data };
+    /* fall through */
   }
+  const ev = new Event(type);
+  for (const [k, v] of Object.entries(props)) {
+    try {
+      Object.defineProperty(ev, k, { value: v, enumerable: true, configurable: true });
+    } catch {
+      try {
+        ev[k] = v;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return ev;
+}
+
+function messageEvent(data) {
+  return asEvent('message', { data });
 }
 
 function closeEvent(code, reason, wasClean) {
-  try {
-    return new CloseEvent('close', { code, reason, wasClean });
-  } catch {
-    return { type: 'close', code, reason, wasClean };
-  }
+  return asEvent('close', { code, reason, wasClean });
 }
 
 function errorEvent(error) {
-  try {
-    return new ErrorEvent('error', { error, message: error?.message ?? String(error) });
-  } catch {
-    return { type: 'error', error, message: error?.message ?? String(error) };
-  }
+  return asEvent('error', {
+    error,
+    message: error?.message ?? String(error),
+  });
 }
 
 export function createWebSocket(ctx) {
