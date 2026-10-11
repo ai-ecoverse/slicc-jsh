@@ -202,7 +202,24 @@ export async function runNode(ctx, options = {}) {
       /* JsExit unwinds */
     }
   };
+  const isExit = (err) =>
+    err instanceof NodeExitError || err?.name === 'NodeExitError' || getDidExit();
   const rejectionHandler = (reason, promise) => {
+    // process.exit() from a WebSocket/EventTarget handler throws NodeExitError
+    // after _recordExit; treat it as a clean exit (Node: rc from exit(), no dump).
+    if (isExit(reason)) {
+      exitStatus =
+        reason instanceof NodeExitError || reason?.name === 'NodeExitError'
+          ? Number(reason.code) & 0xff
+          : getExitCode();
+      timers.clearPending();
+      try {
+        handles.notify();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     if (process.listenerCount('unhandledRejection') > 0) {
       process.emit('unhandledRejection', reason, promise ?? Promise.resolve());
       return;
@@ -223,6 +240,19 @@ export async function runNode(ctx, options = {}) {
     timers.clearPending();
   };
   const exceptionHandler = (err) => {
+    if (isExit(err)) {
+      exitStatus =
+        err instanceof NodeExitError || err?.name === 'NodeExitError'
+          ? Number(err.code) & 0xff
+          : getExitCode();
+      timers.clearPending();
+      try {
+        handles.notify();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
     if (process.listenerCount('uncaughtException') > 0) {
       process.emit(
         'uncaughtException',

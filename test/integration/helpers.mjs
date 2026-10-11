@@ -28,11 +28,17 @@ export function packageFiles() {
 /**
  * Boot a Node-entry kernel with slicc-jsh installed on the memory root
  * (no OPFS). Returns { kernel, run, close }.
+ *
+ * @param {{ nodeTransport?: boolean }} [options]
+ *   `nodeTransport: true` (default) matches the cert harness — WebSockets reach
+ *   the host. Pass `false` for the kernel's default loopback transport (refused
+ *   connects reject quickly; used to assert error-Event mapping).
  */
-export async function withJsh() {
-  // Match the cert harness: nodeTransport's WebSocket path is what refused
-  // connects exercise (the default loopback transport rejects much earlier).
-  const kernel = await createNodeKernel({ network: { transport: nodeTransport() } });
+export async function withJsh(options = {}) {
+  const useNodeTransport = options.nodeTransport !== false;
+  const kernel = await createNodeKernel(
+    useNodeTransport ? { network: { transport: nodeTransport() } } : {}
+  );
   const base = '/node_modules/@ai-ecoverse/slicc-jsh';
   for (const [rel, data] of packageFiles()) {
     await kernel.writeFile(`${base}/${rel}`, data);

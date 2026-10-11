@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { WebSocketServer } from 'ws';
 import { withJsh } from './helpers.mjs';
 
 const fixtures = join(fileURLToPath(new URL('.', import.meta.url)), '../fixtures/npm');
@@ -274,8 +275,42 @@ srv.listen(0, '127.0.0.1', () => {
     }
   });
 
-  it('WebSocket failed connect: Event instances, no crash without listeners', async () => {
-    const { kernel, run, close } = await withJsh();
+  it('host WebSocket echo under nodeTransport (open, echo, close)', async () => {
+    // thr_vhnh9gvngc hostws.mjs: ctx.websocket via nodeTransport reaches HOST 127.0.0.1.
+    // A kernel-loopback TCP probe must never gate this path.
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    wss.on('connection', (s) => {
+      s.on('message', (m) => s.send(`echo:${m}`));
+    });
+    await new Promise((r) => wss.on('listening', r));
+    const port = wss.address().port;
+    const { kernel, run, close } = await withJsh({ nodeTransport: true });
+    try {
+      await kernel.writeFile(
+        '/os/hostws.js',
+        `const w = new WebSocket('ws://127.0.0.1:${port}/');
+w.onopen = () => w.send('hi');
+w.onmessage = (m) => { console.log('got', m.data); w.close(); };
+w.onerror = () => console.log('error');
+w.onclose = (e) => { console.log('close', e.code); process.exit(0); };
+setTimeout(() => { console.log('timeout'); process.exit(3); }, 5000);
+`
+      );
+      const r = await run(['node', 'hostws.js'], { cwd: '/os' });
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(r.stdout, /got echo:hi/);
+      assert.match(r.stdout, /close 1000/);
+      assert.doesNotMatch(r.stdout, /error/);
+    } finally {
+      close();
+      await new Promise((r) => wss.close(r));
+    }
+  });
+
+  it('WebSocket ctx.websocket rejection → error Event, no close (default transport)', async () => {
+    // Default loopback transport rejects refused connects; nodeTransport currently
+    // hangs (kernel fetchTransport ignores the socket error event — see README).
+    const { kernel, run, close } = await withJsh({ nodeTransport: false });
     try {
       await kernel.writeFile(
         '/os/ws2.js',

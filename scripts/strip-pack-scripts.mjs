@@ -20,6 +20,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 const tgz = process.argv[2];
 if (!tgz) {
@@ -53,7 +54,29 @@ try {
   }
   writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
   stampTree(pkgDir, archived.atime, archived.mtime);
-  execFileSync('tar', ['-czf', tgz, '-C', dir, 'package'], { stdio: 'inherit' });
+  // Prefer GNU tar's deterministic order/owners when available so a fresh
+  // strip can match CI's uncompressed tar content hash; fall back to host tar.
+  try {
+    const packed = execFileSync(
+      'tar',
+      [
+        '-cf',
+        '-',
+        '--sort=name',
+        '--owner=0',
+        '--group=0',
+        '--numeric-owner',
+        '-C',
+        dir,
+        'package',
+      ],
+      { maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+    writeFileSync(tgz, gzipSync(packed, { level: 9 }));
+  } catch {
+    // macOS bsdtar lacks --sort=name; keep npm/host order.
+    execFileSync('tar', ['-czf', tgz, '-C', dir, 'package'], { stdio: 'inherit' });
+  }
   console.log(`stripped prepare/prepack from ${tgz}`);
 } finally {
   rmSync(dir, { recursive: true, force: true });
