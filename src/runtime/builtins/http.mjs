@@ -325,10 +325,18 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
   }
 
   function rejectPayloadTooLarge(socket) {
-    // end() (flush via writer.close), not destroy()/abort — the 413 must leave the wire.
+    // Flush 413 via end(), then destroy so the server socket does not sit half-open
+    // holding an event-loop ref waiting for a peer FIN that may never come.
     try {
       socket.end(
-        'HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'
+        'HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n',
+        () => {
+          try {
+            socket.destroy();
+          } catch {
+            /* ignore */
+          }
+        }
       );
     } catch {
       try {
