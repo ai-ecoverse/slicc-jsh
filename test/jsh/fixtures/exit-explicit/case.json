@@ -1,0 +1,4 @@
+{
+  "description": "process.exit() inside the body ends the program at once, pending timers included",
+  "args": []
+}

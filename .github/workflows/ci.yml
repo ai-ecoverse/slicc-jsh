@@ -47,6 +47,9 @@ jobs:
       - name: Golden (host Node 22)
         timeout-minutes: 5
         run: npm run test:golden
+      - name: jsh parity (host Node 22 baseline, kernel jsh)
+        timeout-minutes: 5
+        run: npm run test:jsh
       - name: Kernel integration (Node entry, memory root)
         timeout-minutes: 5
         run: npm run test:integration
@@ -70,6 +73,17 @@ jobs:
           test -n "$(grep 'package/dist/node.mjs' "$RUNNER_TEMP/listing.txt")"
           test -n "$(grep 'package/dist/jsh.mjs' "$RUNNER_TEMP/listing.txt")"
           test -n "$(grep 'package/NOTICE' "$RUNNER_TEMP/listing.txt")"
+          test -n "$(grep 'package/dist/host/jsh.mjs' "$RUNNER_TEMP/listing.txt")"
+      - name: Host jsh from the tarball (global install, #!/usr/bin/env jsh)
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/global"
+          npm install -g --prefix "$prefix" "$(ls "$RUNNER_TEMP"/ai-ecoverse-slicc-jsh-*.tgz)"
+          export PATH="$prefix/bin:$PATH"
+          jsh --version
+          printf '#!/usr/bin/env jsh\nconsole.log(require("sliccy:fmt").col("ok", 4) + "|", process.argv.slice(2).join(","));\n' > "$RUNNER_TEMP/smoke.jsh"
+          chmod +x "$RUNNER_TEMP/smoke.jsh"
+          test "$("$RUNNER_TEMP/smoke.jsh" a b)" = "ok  | a,b"
       - uses: actions/upload-artifact@v7
         with:
           name: package

@@ -1,0 +1,17 @@
+const cli = require('sliccy:cli');
+const color = require('sliccy:color');
+const fmt = require('sliccy:fmt');
+const time = require('sliccy:time');
+const pool = require('sliccy:pool');
+console.log('same instance', require('sliccy:fmt') === fmt);
+console.log('color off (not a tty)', color.enabled, JSON.stringify(color.red('x')));
+cli.out('plain');
+cli.out({ a: 1, b: [2] });
+cli.warn('careful');
+cli.warn('custom', { prefix: 'Note' });
+console.log(fmt.table([['name', 'size'], ['a', '1'], ['longer', '22']]));
+console.log(JSON.stringify([fmt.trunc('abcdef', 4), fmt.col('ab', 4), fmt.date(Date.UTC(2026, 0, 2, 12), 'iso')]));
+console.log(time.parseDuration('90s'), time.parseDuration('2h'), time.parseDuration(5));
+console.log(time.gmailDate('1d', new Date(2026, 0, 10)));
+console.log(JSON.stringify(await pool(2, [3, 1, 2], async (n, i) => n * 10 + i)));
+cli.die('boom', 4);

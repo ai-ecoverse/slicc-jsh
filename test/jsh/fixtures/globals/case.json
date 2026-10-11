@@ -1,0 +1,4 @@
+{
+  "description": "Node's globals are globals; SLICC_VERSION is unset outside SLICC",
+  "args": []
+}

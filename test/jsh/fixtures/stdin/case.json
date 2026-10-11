@@ -1,0 +1,5 @@
+{
+  "description": "stdin is a Node stream; fs.readFileSync(0) reads all of it",
+  "args": [],
+  "stdin": "line one\nline two\n"
+}

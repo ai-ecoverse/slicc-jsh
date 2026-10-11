@@ -1,0 +1,2 @@
+{"stdout":"42\n","stderr":"oops\n","exitCode":2}
+{"stdout":"piped input","stderr":"","exitCode":0}

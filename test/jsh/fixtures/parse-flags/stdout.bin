@@ -1,0 +1,2 @@
+{"positional":["sub","pos"],"flags":{"name":["x","y"],"n":"2","a":true,"b":true,"flag":true},"subcommand":"sub","passthrough":["--raw","z"]}
+false

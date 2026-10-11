@@ -1,0 +1,4 @@
+{"stdout":"child\n","stderr":"warn\n","exitCode":3}
+{"stdout":"","stderr":"no-such-command-here: command not found\n","exitCode":127}
+true {"stdout":"","stderr":"","exitCode":143}
+true

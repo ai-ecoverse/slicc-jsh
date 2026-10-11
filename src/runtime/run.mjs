@@ -60,8 +60,13 @@ function installJshGlobals(bindings) {
 
 /**
  * Run the node CLI against a JsProgramContext. Resolves with an exit status.
+ *
+ * `options.main`, when given, replaces the script/eval entry: it is called
+ * with the runtime (process, console, Buffer, CJS and ESM loaders, fetch)
+ * once everything is installed, and the program then ends as a script does
+ * (event loop, exit codes, uncaught errors). The kernel `jsh` uses it.
  */
-export async function runNode(ctx) {
+export async function runNode(ctx, options = {}) {
   installStackPrepare();
   const handles = createHandleTable();
   const nextTick = createNextTick();
@@ -283,7 +288,38 @@ export async function runNode(ctx) {
   cjs.setRequireEsmHook((filename) => esm.requireEsm(filename));
 
   try {
-    if (parsed.mode === 'empty') {
+    if (typeof options.main === 'function') {
+      try {
+        const result = options.main({
+          process,
+          console,
+          Buffer,
+          fetch,
+          createRequire: cjs.createRequire,
+          importModule: (specifier, parent) => esm.importModule(specifier, parent),
+          rewriteDynamicImports,
+        });
+        if (result != null && typeof result.then === 'function') {
+          // The tracking promise settles like `result`; its rejection is
+          // handled below through `await result`.
+          trackPromise(handles, result).catch(() => {});
+          await result;
+        }
+        nextTick.flushSync();
+      } catch (err) {
+        if (err instanceof NodeExitError) throw err;
+        if (process.listenerCount('uncaughtException') > 0) {
+          process.emit(
+            'uncaughtException',
+            err instanceof Error ? err : new Error(String(err)),
+            'uncaughtException'
+          );
+        } else {
+          printUncaught(err);
+          return 1;
+        }
+      }
+    } else if (parsed.mode === 'empty') {
       // Node: `echo '…' | node` runs the piped script as the main module ([stdin]).
       const chunks = [];
       try {

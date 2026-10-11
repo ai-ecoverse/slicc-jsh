@@ -5,7 +5,10 @@
  */
 import { moduleNotFound, packagePathNotExported } from './errors.mjs';
 
-const REQUIRE_CONDITIONS = ['require', 'node', 'default'];
+// `slicc` first: a package can ship a build for slicc-kernel (for example a
+// `sliccy-<name>` package that differs from its host build); host Node never
+// sets it. See docs/design/run-outside-slicc.md.
+const REQUIRE_CONDITIONS = ['slicc', 'require', 'node', 'default'];
 const DEFAULT_EXTENSIONS = ['.js', '.cjs', '.json'];
 
 export function createResolver({

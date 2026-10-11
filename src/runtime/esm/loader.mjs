@@ -7,7 +7,8 @@ import { createResolver } from '../cjs/resolve.mjs';
 import { shouldRunAsEsm, transformEsm } from './transform.mjs';
 
 const decoder = new TextDecoder();
-const IMPORT_CONDITIONS = ['import', 'node', 'default'];
+// `slicc` first, as for require (see cjs/resolve.mjs).
+const IMPORT_CONDITIONS = ['slicc', 'import', 'node', 'default'];
 
 function pathToFileURL(filename) {
   if (filename.startsWith('file:')) return filename;

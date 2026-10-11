@@ -1,0 +1,4 @@
+{
+  "description": "sliccy:<name> resolves @ai-ecoverse/sliccy-<name>, then sliccy-<name>, from the script's directory",
+  "args": []
+}

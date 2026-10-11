@@ -12,6 +12,9 @@
   "bugs": {
     "url": "https://github.com/ai-ecoverse/slicc-jsh/issues"
   },
+  "bin": {
+    "jsh": "dist/host/jsh.mjs"
+  },
   "engines": {
     "node": ">=22",
     "slicc-kernel": ">=1.53.0"
@@ -45,16 +48,18 @@
     }
   },
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "node scripts/build.mjs && node scripts/build-host.mjs",
     "prepack": "npm run build",
     "prepare": "npm run build",
     "lint": "node scripts/lint.mjs",
-    "test": "npm run test:golden && npm run test:integration",
+    "test": "npm run test:golden && npm run test:jsh && npm run test:integration",
     "test:golden": "node --max-old-space-size=512 scripts/golden.mjs check",
     "test:integration": "node --max-old-space-size=512 --test --test-timeout=120000 test/integration/*.test.mjs",
     "test:cert": "node --max-old-space-size=512 test/integration/cert/run.mjs",
     "test:node-parallel": "node --max-old-space-size=512 test/node-parallel/run.mjs",
-    "golden:record": "node --max-old-space-size=512 scripts/golden.mjs record"
+    "golden:record": "node --max-old-space-size=512 scripts/golden.mjs record",
+    "test:jsh": "node --max-old-space-size=512 scripts/jsh-golden.mjs check",
+    "jsh:record": "node --max-old-space-size=512 scripts/jsh-golden.mjs record"
   },
   "devDependencies": {
     "@ai-ecoverse/slicc-kernel": "1.54.2",

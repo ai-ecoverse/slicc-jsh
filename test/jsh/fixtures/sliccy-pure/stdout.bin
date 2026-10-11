@@ -1,0 +1,16 @@
+same instance true
+color off (not a tty) false "x"
+plain
+{
+  "a": 1,
+  "b": [
+    2
+  ]
+}
+name    size
+a       1
+longer  22
+["abc…","ab  ","2026-01-02T12:00:00.000Z"]
+90000 7200000 5
+2026/01/09
+[30,11,22]

@@ -7,7 +7,9 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
     const { run, close } = await withJsh();
     try {
       assert.deepEqual(await run(['node']), { status: 0, stdout: '', stderr: '' });
-      assert.deepEqual(await run(['jsh']), { status: 0, stdout: '', stderr: '' });
+      const bare = await run(['jsh']);
+      assert.equal(bare.status, 2);
+      assert.match(bare.stderr, /^Usage: jsh /);
     } finally {
       close();
     }

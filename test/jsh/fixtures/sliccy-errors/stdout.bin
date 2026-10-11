@@ -1,0 +1,5 @@
+require('sliccy:usb'): sliccy:usb is only available inside SLICC
+require('sliccy:agent'): sliccy:agent is only available inside SLICC
+require('sliccy:nope'): unknown sliccy: module 'nope'. Known names: cli, color, exec, fmt, http, pool, skill, time. Install @ai-ecoverse/sliccy-nope to provide it.
+require('sliccy:'): empty sliccy: module name
+sliccy:cli
