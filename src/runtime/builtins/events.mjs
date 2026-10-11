@@ -31,9 +31,10 @@ export class EventEmitter {
   }
 
   once(event, fn) {
+    const self = this;
     const wrapped = (...args) => {
-      this.off(event, wrapped);
-      fn(...args);
+      self.off(event, wrapped);
+      fn.call(self, ...args);
     };
     wrapped.listener = fn;
     return this.on(event, wrapped);
@@ -50,7 +51,7 @@ export class EventEmitter {
       throw err;
     }
     if (!list || list.length === 0) return false;
-    for (const fn of [...list]) fn(...args);
+    for (const fn of [...list]) fn.call(this, ...args);
     return true;
   }
 

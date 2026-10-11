@@ -20,44 +20,42 @@ function afterMicrotasks() {
 }
 
 /**
- * Drain microtasks then nextTick. Nested `.then` queued inside a promise job must
- * run before nextTick queued from that same job (Node: micro, tick).
+ * Drain microtasks then nextTick until a full idle checkpoint.
+ * Nested `.then` queued inside a promise job must run before nextTick queued
+ * from that same job (Node: micro, then tick).
+ */
+async function checkpoint(nextTick) {
+  let idle = 0;
+  for (let i = 0; i < 256; i++) {
+    await afterMicrotasks();
+    nextTick.flushSync();
+    if (nextTick.depth > 0) {
+      idle = 0;
+      continue;
+    }
+    idle++;
+    if (idle >= 6) break;
+  }
+}
+
+/**
+ * Drain microtasks then nextTick. Whenever a handle wakes us (I/O, timer,
+ * tracked promise), checkpoint again so nextTicks queued by that work — e.g.
+ * readable-stream's deferred 'data'/'end' — run before we wait or exit.
  */
 export async function drainLoop(handles, nextTick, { onBeforeExit } = {}) {
   for (;;) {
-    // Drain microtasks/nextTick generously so floating async IIFEs
-    // (for-await of Readable.from(asyncGen)) can schedule their next timer.
-    let idle = 0;
-    for (let i = 0; i < 256; i++) {
-      await afterMicrotasks();
-      nextTick.flushSync();
-      if (handles.refCount > 0) {
-        idle = 0;
-        break;
-      }
-      if (nextTick.depth > 0) {
-        idle = 0;
-        continue;
-      }
-      idle++;
-      // Several fully-idle rounds before treating the queue as empty.
-      if (idle >= 6) break;
-    }
+    await checkpoint(nextTick);
     if (handles.refCount > 0) {
       await handles.waitForProgress();
+      // I/O continuations often run as microtasks during the await above and
+      // queue nextTicks; drain those before waiting again.
+      await checkpoint(nextTick);
       continue;
     }
     if (onBeforeExit) {
       onBeforeExit();
-      idle = 0;
-      for (let i = 0; i < 64; i++) {
-        await afterMicrotasks();
-        nextTick.flushSync();
-        if (handles.refCount > 0) break;
-        if (nextTick.depth === 0) idle++;
-        else idle = 0;
-        if (idle >= 6) break;
-      }
+      await checkpoint(nextTick);
       if (handles.refCount > 0) continue;
     }
     return;

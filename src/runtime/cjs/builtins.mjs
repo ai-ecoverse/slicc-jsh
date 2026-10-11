@@ -1,6 +1,9 @@
 import { createAssert, createAssertStrict } from '../builtins/assert.mjs';
 import { createEvents } from '../builtins/events.mjs';
 import { createFs } from '../builtins/fs.mjs';
+import { createHttp } from '../builtins/http.mjs';
+import { createHttps } from '../builtins/https.mjs';
+import { createNet } from '../builtins/net.mjs';
 import { createOs } from '../builtins/os.mjs';
 import { createQuerystring } from '../builtins/querystring.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
@@ -17,7 +20,10 @@ const BUILTIN_LIST = [
   'events',
   'fs',
   'fs/promises',
+  'http',
+  'https',
   'module',
+  'net',
   'os',
   'path',
   'path/posix',
@@ -35,9 +41,6 @@ const BUILTIN_LIST = [
 
 const NOT_YET = [
   'child_process',
-  'net',
-  'http',
-  'https',
   'http2',
   'crypto',
   'zlib',
@@ -92,6 +95,21 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const fs = createFs({ ctx, path, process, Buffer, handles, getStream });
   const timersMod = createTimersModule(timers);
   const timersPromises = createTimersPromises(timers, handles);
+  let net;
+  const getNet = () => {
+    if (!net) net = createNet({ ctx, process, Buffer, handles, getStream });
+    return net;
+  };
+  let http;
+  const getHttp = () => {
+    if (!http) http = createHttp({ ctx, process, Buffer, handles, getStream, net: getNet() });
+    return http;
+  };
+  let https;
+  const getHttps = () => {
+    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles });
+    return https;
+  };
 
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
@@ -118,6 +136,9 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     'stream/promises': () => streamPromises,
     timers: () => timersMod,
     'timers/promises': () => timersPromises,
+    net: () => getNet(),
+    http: () => getHttp(),
+    https: () => getHttps(),
   };
 
   return {

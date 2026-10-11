@@ -40,7 +40,7 @@ function installJshGlobals(bindings) {
       try {
         globalThis[name] = value;
       } catch {
-        /* frozen / non-configurable (#297 fetch/WebSocket/require/…) */
+        /* non-configurable lockdown slots (require/module/…) */
       }
     }
   }
