@@ -1,0 +1,5 @@
+{
+  "description": "fs callback APIs throw ERR_INVALID_ARG_TYPE synchronously when cb is missing",
+  "argv": ["main.js"],
+  "shim": true
+}

@@ -17,8 +17,10 @@
 # trusted publishing). Node 22.x ships npm 10.x, which cannot do OIDC. The
 # verify job stays on Node 22.22.0 to match the package's Node 22 target.
 #
-# M1–M3 pre-releases publish with --tag next (also package.json publishConfig.tag).
-# The coordinator certifies and dispatches this workflow; agents do not publish.
+# Dist-tag: version with a '-' (prerelease) → --tag next; otherwise --tag latest
+# and then `npm dist-tag add @ai-ecoverse/slicc-jsh@<v> next` so next never
+# points below latest. The coordinator certifies and dispatches this workflow;
+# agents do not publish.
 name: publish
 
 on:
@@ -65,6 +67,7 @@ jobs:
         run: |
           npm run lint
           npm run test:golden
+          npm run test:jsh
           npm run test:integration
       - name: Pack a fresh build
         run: |
@@ -116,4 +119,14 @@ jobs:
           set -e
           if [ "$gate" -eq 10 ]; then exit 0; fi
           if [ "$gate" -ne 0 ]; then exit "$gate"; fi
-          npm publish "$RUNNER_TEMP/verified/certified.tgz" --access public --provenance --tag next
+          version=$(tar -xOzf "$RUNNER_TEMP/verified/certified.tgz" package/package.json | node -e 'let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>console.log(JSON.parse(s).version))')
+          if [[ "$version" == *-* ]]; then
+            tag=next
+          else
+            tag=latest
+          fi
+          npm publish "$RUNNER_TEMP/verified/certified.tgz" --access public --provenance --tag "$tag"
+          if [ "$tag" = "latest" ]; then
+            # Keep next ≥ latest. Fails loudly if OIDC does not cover dist-tag.
+            npm dist-tag add "@ai-ecoverse/slicc-jsh@${version}" next
+          fi
