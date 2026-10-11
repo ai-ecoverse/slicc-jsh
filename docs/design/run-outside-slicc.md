@@ -80,7 +80,7 @@ Under decision 1, the 47 scripts that use v6's `fs` must migrate. That means `re
 
 It is used twice:
 - **kernel `jsh`** = `src/jsh/` + the `node` runtime on `ctx` (`src/jsh.mjs`);
-- **host `jsh`** = `src/jsh/` + real Node (`src/host/jsh.mjs`, bundled to `dist/host/jsh.mjs`).
+- **host `jsh`** = `src/jsh/` + real Node (`src/host/main.mjs`, bundled to `dist/host/main.mjs`, behind the `bin` launcher `dist/host/jsh.mjs`).
 
 Each engine passes in what differs:
 
@@ -167,6 +167,12 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 ### Install and run
 
 - `"bin": { "jsh": "dist/host/jsh.mjs" }`, so `npm i -g @ai-ecoverse/slicc-jsh` or `npx @ai-ecoverse/slicc-jsh script.jsh` works.
+- **The `bin` inside the kernel.** A global `pnpm add -g @ai-ecoverse/slicc-jsh` in the kernel, as seven does it, links that `bin` into `$PNPM_HOME/bin`. That shadows the kernel's `jsh` command on `PATH`, so the host CLI ends up running under jsh's own `node` runtime, which lacks `vm` and the host-only builtins. To handle this, `dist/host/jsh.mjs` is a launcher with no static imports:
+  - jsh's `node` runtime sets a non-enumerable `globalThis[Symbol.for('slicc-jsh.kernel')]` (`src/jsh/kernel.mjs`). If the launcher finds it, it hands its arguments to the kernel jsh, the same engine as the `jsh` command.
+  - Otherwise it imports `./main.mjs`, the host CLI.
+  - Nothing else sets that symbol, so a real host always gets the host CLI.
+
+  `test/integration/pnpm-global.test.mjs` installs the packed tarball with the real wasi-pnpm and checks both the catalog `jsh` and the handoff. The case that goes through pnpm's bin shim needs `child_process` (the shim spawns `node`).
 - `jsh [--version | --help] <script.jsh> [args…]`:
   - with no script it prints usage and exits 2;
   - an unknown option exits 9, as Node does;

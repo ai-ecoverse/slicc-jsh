@@ -71,6 +71,7 @@
   },
   "devDependencies": {
     "@ai-ecoverse/slicc-kernel": "1.59.0",
+    "@ai-ecoverse/wasi-pnpm": "12.9.1-8",
     "abort-controller": "3.0.0",
     "acorn": "8.19.0",
     "esbuild": "0.28.2",
