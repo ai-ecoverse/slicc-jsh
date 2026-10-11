@@ -57,7 +57,7 @@
     "golden:record": "node --max-old-space-size=512 scripts/golden.mjs record"
   },
   "devDependencies": {
-    "@ai-ecoverse/slicc-kernel": "1.54.0",
+    "@ai-ecoverse/slicc-kernel": "1.54.2",
     "abort-controller": "3.0.0",
     "acorn": "8.19.0",
     "esbuild": "0.28.2",
