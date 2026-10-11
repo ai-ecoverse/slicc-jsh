@@ -287,7 +287,8 @@ w.onclose = (e) => console.log('close event', e.code, e.wasClean);
       const r = await run(['node', 'ws2.js'], { cwd: '/os' });
       assert.equal(r.status, 0, r.stderr);
       assert.match(r.stdout, /error event error true/);
-      assert.match(r.stdout, /close event 1006 false/);
+      // Node undici: error without close (readyState stays CONNECTING).
+      assert.doesNotMatch(r.stdout, /close event/);
       assert.doesNotMatch(r.stderr, /event argument must be an instance of Event/);
 
       await kernel.writeFile(
@@ -301,7 +302,7 @@ setTimeout(() => console.log('after 1.5 s:', ev.join(',') || 'no events', 'ready
       );
       const ws3 = await run(['node', 'ws3.js'], { cwd: '/os' });
       assert.equal(ws3.status, 0, ws3.stderr);
-      assert.match(ws3.stdout, /after 1\.5 s: error:true,close:1006 readyState 3/);
+      assert.match(ws3.stdout, /after 1\.5 s: error:true readyState 0/);
 
       await kernel.writeFile(
         '/os/ws-bare.js',
