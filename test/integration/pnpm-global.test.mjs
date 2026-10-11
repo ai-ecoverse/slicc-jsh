@@ -32,11 +32,19 @@ async function stage(kernel, dir, dest) {
   }
 }
 
-const withTimeout = (promise, ms, what) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`${what}: timeout after ${ms}ms`)), ms)),
-  ]);
+// The timer is cleared (and unref'd) so it never keeps the test process alive.
+async function withTimeout(promise, ms, what) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what}: timeout after ${ms}ms`)), ms);
+    timer.unref?.();
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 describe('pnpm add -g @ai-ecoverse/slicc-jsh in the kernel', () => {
   let kernel;
