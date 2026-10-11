@@ -22,7 +22,9 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 **npm ecosystem gaps:** packages that import `node:tty` (e.g. chalk's Node build) or need `crypto` (e.g. nanoid's main entry) fail with `ERR_NOT_SUPPORTED` until those modules ship. Prefer the browser/`default` export condition, or a fixture that pins it, when dogfooding. The `tls` module itself is unsupported (`ERR_NOT_SUPPORTED`) — so **http-proxy-agent** / **https-proxy-agent** (which import `tls` for CONNECT tunnels) cannot run yet even though `http.Agent` subclasses via agent-base work for plain `http`.
 
-**Still later:** `child_process` / `crypto` / `zlib` / `readline` / `tty` / `tls` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
+**`child_process` (0.3.0):** `spawn`, `execFile`, and `exec` (via `sh -c`) sit on `ctx.spawn` — argv/env/cwd, stdio `inherit`/`pipe`/`ignore`, streams on `.stdin`/`.stdout`/`.stderr`, events `spawn`/`exit`/`close`/`error` (ENOENT), `.kill(signal)`, `.pid`. Sync forms (`spawnSync`, `execSync`, `execFileSync`) and `fork` stay `ERR_NOT_SUPPORTED`. Also `fs.realpathSync` (no symlink walk) and `process.getuid`/`getgid`/`kill(self)` so pnpm's global cmd shims can resolve their target and re-raise signals.
+
+**Still later:** `crypto` / `zlib` / `readline` / `tty` / `tls` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

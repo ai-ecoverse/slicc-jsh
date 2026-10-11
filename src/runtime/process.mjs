@@ -339,6 +339,50 @@ class Process extends EventEmitter {
     return this._cwd;
   }
 
+  /** Root (0) until credential plumbing is exposed on process. */
+  getuid() {
+    return 0;
+  }
+
+  geteuid() {
+    return 0;
+  }
+
+  getgid() {
+    return 0;
+  }
+
+  getegid() {
+    return 0;
+  }
+
+  getgroups() {
+    return [0];
+  }
+
+  /**
+   * Minimal process.kill: only this process (pid === this.pid). Used by pnpm
+   * cmd shims to re-raise a child's terminating signal. Unknown pids → ESRCH.
+   */
+  kill(pid, signal = 'SIGTERM') {
+    const target = Number(pid);
+    if (target !== this.pid) {
+      const err = new Error(`kill ESRCH`);
+      err.code = 'ESRCH';
+      err.errno = -3;
+      err.syscall = 'kill';
+      throw err;
+    }
+    const name =
+      typeof signal === 'string' ? (signal.startsWith('SIG') ? signal : `SIG${signal}`) : 'SIGTERM';
+    // Terminating signals end the process; others are ignored for now.
+    if (name === 'SIGTERM' || name === 'SIGINT' || name === 'SIGHUP' || name === 'SIGKILL') {
+      const codes = { SIGTERM: 143, SIGINT: 130, SIGHUP: 129, SIGKILL: 137 };
+      this.exit(codes[name] ?? 1);
+    }
+    return true;
+  }
+
   chdir(path) {
     if (typeof path !== 'string') {
       const err = new TypeError(
