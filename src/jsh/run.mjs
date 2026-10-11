@@ -1,6 +1,7 @@
 /**
  * The `.jsh` layer shared by the kernel `jsh` (src/jsh.mjs) and the host
- * `jsh` (src/host/jsh.mjs). See docs/design/run-outside-slicc.md.
+ * `jsh` (src/host/jsh-host.mjs, loaded by src/host/jsh.mjs). See
+ * docs/design/run-outside-slicc.md.
  *
  * A `.jsh` file is the body of an async function, run sloppy, with slicc v6's
  * parameters. Its `require` is the engine's Node `require` from the script's

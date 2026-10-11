@@ -76,6 +76,7 @@ jobs:
           test -n "$(grep 'package/dist/jsh.mjs' "$RUNNER_TEMP/listing.txt")"
           test -n "$(grep 'package/NOTICE' "$RUNNER_TEMP/listing.txt")"
           test -n "$(grep 'package/dist/host/jsh.mjs' "$RUNNER_TEMP/listing.txt")"
+          test -n "$(grep 'package/dist/host/jsh-host.mjs' "$RUNNER_TEMP/listing.txt")"
       - name: Host jsh from the tarball (global install, #!/usr/bin/env jsh)
         run: |
           set -euo pipefail

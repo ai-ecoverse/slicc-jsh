@@ -166,7 +166,7 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 
 ### Install and run
 
-- `"bin": { "jsh": "dist/host/jsh.mjs" }`, so `npm i -g @ai-ecoverse/slicc-jsh` or `npx @ai-ecoverse/slicc-jsh script.jsh` works.
+- `"bin": { "jsh": "dist/host/jsh.mjs" }` (thin launcher) plus `dist/host/jsh-host.mjs` (host impl), so `npm i -g` / `npx` work on real Node. When that bin is executed by jsh's own `node` (e.g. after `pnpm add -g` puts `~/.local/share/pnpm/bin/jsh` first on PATH under K2), the launcher imports `dist/jsh.mjs` in-process and runs it on `process._ctx` — no spawn, no PATH edits.
 - `jsh [--version | --help] <script.jsh> [args…]`:
   - with no script it prints usage and exits 2;
   - an unknown option exits 9, as Node does;

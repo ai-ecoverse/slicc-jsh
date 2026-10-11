@@ -60,6 +60,64 @@ describe('kernel jsh', () => {
       close();
     }
   });
+
+  /**
+   * After `pnpm add -g @ai-ecoverse/slicc-jsh`, PATH often has
+   * `~/.local/share/pnpm/bin/jsh` → dist/host/jsh.mjs ahead of slicc.commands.jsh.
+   * The host bin must hand off in-process to dist/jsh.mjs (no spawn, no PATH strip).
+   */
+  it('host bin on jsh node hands off in-process (pnpm global PATH shadow)', async () => {
+    const { kernel, run, close } = await withJsh();
+    const hostBin = '/node_modules/@ai-ecoverse/slicc-jsh/dist/host/jsh.mjs';
+    const pnpmJsh = '/home/.local/share/pnpm/bin/jsh';
+    const env = {
+      HOME: '/home',
+      PNPM_HOME: '/home/.local/share/pnpm',
+      PATH: '/home/.local/share/pnpm/bin:/usr/bin:/bin',
+    };
+    try {
+      await kernel.writeFile(pnpmJsh, `#!/usr/bin/env node\nimport ${JSON.stringify(hostBin)};\n`);
+      await kernel.writeFile('/os/x.jsh', 'console.log("ok", process.argv.slice(2).join(","));\n');
+      await kernel.writeFile(
+        '/os/bang.jsh',
+        '#!/usr/bin/env jsh\nconsole.log("bang", process.argv.slice(2).join(","));\n'
+      );
+
+      assert.deepEqual(await run(['node', hostBin, '--version'], { cwd: '/os', env }), {
+        status: 0,
+        stdout: `${version}\n`,
+        stderr: '',
+      });
+      assert.deepEqual(await run(['node', hostBin, 'x.jsh', 'a', 'b'], { cwd: '/os', env }), {
+        status: 0,
+        stdout: 'ok a,b\n',
+        stderr: '',
+      });
+      assert.deepEqual(await run(['node', pnpmJsh, '--version'], { cwd: '/os', env }), {
+        status: 0,
+        stdout: `${version}\n`,
+        stderr: '',
+      });
+      assert.deepEqual(await run([pnpmJsh, 'x.jsh', 'path'], { cwd: '/os', env }), {
+        status: 0,
+        stdout: 'ok path\n',
+        stderr: '',
+      });
+      assert.deepEqual(await run(['/os/bang.jsh', 'z'], { cwd: '/os', env }), {
+        status: 0,
+        stdout: 'bang z\n',
+        stderr: '',
+      });
+      // slicc.commands.jsh still works alongside the PATH bin.
+      assert.deepEqual(await run(['jsh', '--version'], { cwd: '/os', env }), {
+        status: 0,
+        stdout: `${version}\n`,
+        stderr: '',
+      });
+    } finally {
+      close();
+    }
+  });
 });
 
 describe('host jsh', () => {
