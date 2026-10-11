@@ -10,6 +10,9 @@ test/integration/cert/last-diff-*.json
 test/integration/cert/.host-workspace/
 coverage/
 dist/
+# Vendored npm package sources under test fixtures include their own dist/.
+!test/fixtures/npm/**/dist/
+!test/fixtures/npm/**/dist/**
 *.tgz
 .DS_Store
 npm-debug.log*

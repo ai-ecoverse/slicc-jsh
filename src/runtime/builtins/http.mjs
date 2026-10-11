@@ -449,6 +449,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       this.maxSockets = options.maxSockets ?? Infinity;
       this.maxFreeSockets = options.maxFreeSockets ?? 256;
       this.maxTotalSockets = options.maxTotalSockets ?? Infinity;
+      this.totalSocketCount = 0;
       this.protocol = options.protocol;
       this.scheduling = options.scheduling ?? 'lifo';
       // Keep-alive pooling is not implemented yet (documented); surface matches Node.
@@ -458,7 +459,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     }
     /** Idle keep-alive sockets are not pooled yet — no-op close. */
     destroy() {
-      /* no idle sockets to close (connections are not reused) */
+      for (const name of Object.keys(this.freeSockets)) {
+        for (const s of this.freeSockets[name]) {
+          try {
+            s.destroy?.();
+          } catch {
+            /* ignore */
+          }
+        }
+        delete this.freeSockets[name];
+      }
     }
     getName(options = {}) {
       // Node: `${host}:${port}:${localAddress}` (trailing colon when no localAddress).
@@ -471,7 +481,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       return name;
     }
     createConnection(options, callback) {
-      return net.createConnection(options, callback);
+      // TCP only: never treat HTTP URL `path` as a UNIX socket path.
+      const opts = { ...options };
+      if (!opts.socketPath && typeof opts.path === 'string' && opts.path.startsWith('/')) {
+        delete opts.path;
+      }
+      return net.createConnection(opts, callback);
     }
     keepSocketAlive() {
       return false;
@@ -479,20 +494,106 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     reuseSocket() {
       /* keep-alive reuse not implemented */
     }
-    addRequest() {
-      /* request queueing not implemented — ClientRequest dials via createConnection */
-    }
-    createSocket(_req, options, cb) {
-      const err = new Error('slicc-jsh: http.Agent socket pooling is not implemented');
-      err.code = 'ERR_NOT_SUPPORTED';
-      if (typeof cb === 'function') {
-        queueMicrotask(() => cb(err));
+    /**
+     * Node `_http_agent.js` shape: addRequest → createSocket → createConnection.
+     * agent-base@7 overrides createSocket (async connect) and createConnection
+     * (returns the stashed socket) — ClientRequest must enter via addRequest.
+     */
+    addRequest(req, options, port, localAddress) {
+      if (typeof options === 'string') {
+        options = { host: options, port, localAddress };
+      }
+      options = { ...options, ...this.options };
+      if (options.socketPath) options.path = options.socketPath;
+
+      const name = this.getName(options);
+      this.sockets[name] ||= [];
+
+      const free = this.freeSockets[name];
+      if (free?.length) {
+        const socket = this.scheduling === 'fifo' ? free.shift() : free.pop();
+        if (!free.length) delete this.freeSockets[name];
+        if (socket && !socket.destroyed) {
+          this.reuseSocket(socket, req);
+          this.sockets[name].push(socket);
+          this.#handoffSocket(req, socket);
+          return;
+        }
+      }
+
+      const sockLen = this.sockets[name].length;
+      if (sockLen < this.maxSockets && this.totalSocketCount < this.maxTotalSockets) {
+        this.createSocket(req, options, (err, socket) => {
+          if (err) {
+            this.#handoffSocket(req, null, err);
+            return;
+          }
+          this.#handoffSocket(req, socket);
+        });
         return;
       }
-      throw err;
+
+      this.requests[name] ||= [];
+      this.requests[name].push(req);
     }
-    removeSocket() {
-      /* no pooled sockets */
+    createSocket(req, options, cb) {
+      options = { ...options, ...this.options };
+      if (options.socketPath) options.path = options.socketPath;
+      const name = this.getName(options);
+      options._agentKey = name;
+
+      // Connect options: HTTP URL path must not become a UNIX socket path.
+      // Keep request `options` intact for getName / agent-base; strip for dial.
+      const connectOpts = { ...options };
+      if (!connectOpts.socketPath && typeof connectOpts.path === 'string') {
+        delete connectOpts.path;
+      }
+
+      let settled = false;
+      const oncreate = (err, s) => {
+        if (settled) return;
+        settled = true;
+        if (err) return cb(err);
+        this.sockets[name] ||= [];
+        this.sockets[name].push(s);
+        this.totalSocketCount++;
+        s.once?.('close', () => this.removeSocket(s, options));
+        cb(null, s);
+      };
+
+      const newSocket = this.createConnection(connectOpts, oncreate);
+      if (newSocket) oncreate(null, newSocket);
+    }
+    removeSocket(socket, options = {}) {
+      const name = options._agentKey || this.getName(options);
+      const list = this.sockets[name];
+      if (!list) return;
+      const i = list.indexOf(socket);
+      if (i === -1) return;
+      list.splice(i, 1);
+      this.totalSocketCount = Math.max(0, this.totalSocketCount - 1);
+      if (!list.length) delete this.sockets[name];
+
+      const pending = this.requests[name];
+      if (pending?.length) {
+        const req = pending.shift();
+        if (!pending.length) delete this.requests[name];
+        this.createSocket(req, options, (err, s) => {
+          if (err) this.#handoffSocket(req, null, err);
+          else this.#handoffSocket(req, s);
+        });
+      }
+    }
+    #handoffSocket(req, socket, err) {
+      if (typeof req.onSocket === 'function') {
+        req.onSocket(socket, err);
+        return;
+      }
+      if (err) {
+        if (req.listenerCount?.('error')) req.emit('error', err);
+        return;
+      }
+      req.emit?.('socket', socket);
     }
   }
 
@@ -537,23 +638,45 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       this.destroy();
     }
 
+    /** Node ClientRequest.onSocket — Agent delivers the socket here. */
+    onSocket(socket, err) {
+      if (err) {
+        if (this.listenerCount('error')) this.emit('error', err);
+        return;
+      }
+      this.#attachSocket(socket);
+    }
+
     #connect() {
       const opts = this.#opts;
-      const method = (opts.method ?? 'GET').toUpperCase();
       const host = opts.hostname ?? opts.host ?? '127.0.0.1';
       const port = Number(opts.port ?? (opts.protocol === 'https:' ? 443 : 80));
-      // Do not pass HTTP `opts.path` (URL path) — net treats `path` as a UNIX socket.
-      const connectOpts = { host, port };
-      if (opts.socketPath) connectOpts.path = opts.socketPath;
-      if (opts.localAddress) connectOpts.localAddress = opts.localAddress;
-      if (opts.family) connectOpts.family = opts.family;
-      // agent-base / https-proxy-agent: subclasses override createConnection.
+      const options = {
+        host,
+        hostname: host,
+        port,
+        method: (opts.method ?? 'GET').toUpperCase(),
+        path: opts.path ?? '/',
+        protocol: opts.protocol,
+      };
+      if (opts.socketPath) options.socketPath = opts.socketPath;
+      if (opts.localAddress) options.localAddress = opts.localAddress;
+      if (opts.family) options.family = opts.family;
+
       const agent = opts.agent === false ? undefined : (opts.agent ?? globalAgent);
-      const socket =
-        agent && typeof agent.createConnection === 'function'
-          ? agent.createConnection(connectOpts)
-          : net.connect(connectOpts);
+      if (!agent) {
+        const connectOpts = { host, port };
+        if (options.socketPath) connectOpts.path = options.socketPath;
+        this.#attachSocket(net.connect(connectOpts));
+        return;
+      }
+      // Node / agent-base: must enter through addRequest → createSocket → createConnection.
+      agent.addRequest(this, options);
+    }
+
+    #attachSocket(socket) {
       this.#socket = socket;
+      const method = (this.#opts.method ?? 'GET').toUpperCase();
       let headBuf = Buffer.alloc(0);
       let head = null; // { parsed, headers, te, cl }
       let bodyBuf = Buffer.alloc(0);
@@ -565,7 +688,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         if (this.listenerCount('error')) this.emit('error', err);
         else socket.destroy();
       });
-      socket.on('connect', () => {
+      const onReady = () => {
         this.#connected = true;
         this.emit('socket', socket);
         // With Content-Length: send headers + any buffered body and stream the rest.
@@ -573,7 +696,14 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         if (this.#headers['content-length'] != null || this.#ended) {
           this.#flushHeadersAndBufferedBody();
         }
-      });
+      };
+      // Already connected (agent-base may hand off an open socket or generic Duplex
+      // with no `connecting` property and no future 'connect' event).
+      if (socket.connecting !== true && socket.readable !== false) {
+        queueMicrotask(onReady);
+      } else {
+        socket.on('connect', onReady);
+      }
 
       const emitResponse = (body) => {
         if (emitted) return;

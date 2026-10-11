@@ -60,7 +60,7 @@ function errorEvent(error) {
   });
 }
 
-export function createWebSocket(ctx) {
+export function createWebSocket(ctx, { handles, trackPromise } = {}) {
   class WebSocket extends EventTarget {
     static CONNECTING = CONNECTING;
     static OPEN = OPEN;
@@ -152,31 +152,43 @@ export function createWebSocket(ctx) {
       }
     }
 
-    async #open(url, protocols) {
-      try {
-        const socket = await ctx.websocket(url, protocols != null ? { protocols } : undefined);
-        if (this.#closed) {
-          socket.close();
-          return;
-        }
-        this.#socket = socket;
-        this.#url = socket.url ?? url;
-        this.#protocol = socket.protocol ?? '';
-        this.#writer = socket.writable.getWriter();
-        this.#readyState = OPEN;
-        this.dispatchEvent(new Event('open'));
-        void this.#readLoop(socket);
-        void socket.closed.then(
-          (close) => this.#finishClose(close?.code ?? 1000, close?.reason ?? '', true),
-          (err) => {
-            this.dispatchEvent(errorEvent(err));
-            this.#finishClose(1006, '', false);
+    #open(url, protocols) {
+      // Track the open promise so drainLoop stays alive until error/close fire
+      // (Node-entry refused connects reject quickly; without a handle the process
+      // exits before the catch runs — m2g/ws2.js).
+      const open = (async () => {
+        try {
+          const socket = await ctx.websocket(
+            url,
+            protocols != null ? { protocols } : undefined
+          );
+          if (this.#closed) {
+            socket.close();
+            return;
           }
-        );
-      } catch (err) {
-        this.dispatchEvent(errorEvent(err));
-        this.#finishClose(1006, '', false);
-      }
+          this.#socket = socket;
+          this.#url = socket.url ?? url;
+          this.#protocol = socket.protocol ?? '';
+          this.#writer = socket.writable.getWriter();
+          this.#readyState = OPEN;
+          this.dispatchEvent(new Event('open'));
+          const read = this.#readLoop(socket);
+          if (trackPromise && handles) trackPromise(handles, read);
+          const closed = socket.closed.then(
+            (close) => this.#finishClose(close?.code ?? 1000, close?.reason ?? '', true),
+            (err) => {
+              this.dispatchEvent(errorEvent(err));
+              this.#finishClose(1006, '', false);
+            }
+          );
+          if (trackPromise && handles) trackPromise(handles, closed);
+        } catch (err) {
+          this.dispatchEvent(errorEvent(err));
+          this.#finishClose(1006, '', false);
+        }
+      })();
+      if (trackPromise && handles) trackPromise(handles, open);
+      else void open;
     }
 
     async #readLoop(socket) {

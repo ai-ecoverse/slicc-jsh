@@ -4,11 +4,25 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { withJsh } from './helpers.mjs';
+
+const fixtures = join(fileURLToPath(new URL('.', import.meta.url)), '../fixtures/npm');
 
 async function writeTree(kernel, files) {
   for (const [path, body] of Object.entries(files)) {
     await kernel.writeFile(path, body);
+  }
+}
+
+async function writeDir(kernel, srcDir, destBase) {
+  for (const name of readdirSync(srcDir)) {
+    const src = join(srcDir, name);
+    const dest = `${destBase}/${name}`;
+    if (statSync(src).isDirectory()) await writeDir(kernel, src, dest);
+    else await kernel.writeFile(dest, readFileSync(src));
   }
 }
 
@@ -180,6 +194,61 @@ s.listen(0, '127.0.0.1', () => {
       assert.equal(sub.status, 0, sub.stderr);
       assert.match(sub.stdout, /custom-cc/);
       assert.match(sub.stdout, /body ok/);
+
+      // agentsub2: overridden addRequest must be called (agent-base entry path).
+      await kernel.writeFile(
+        '/os/agentsub2.js',
+        `const http = require('http'), net = require('net');
+class ProxyAgent extends http.Agent {
+  constructor(o) { super(o); }
+  addRequest(req, options) { this.added = (this.added || 0) + 1; return super.addRequest(req, options); }
+  createConnection(options, cb) { this.cc = (this.cc || 0) + 1; return net.createConnection({ port: options.port, host: options.host }, cb ? () => {} : undefined); }
+}
+const srv = http.createServer((q, s) => s.end('ok'));
+srv.listen(0, '127.0.0.1', () => {
+  const a = new ProxyAgent();
+  const r = http.request({ host: '127.0.0.1', port: srv.address().port, agent: a }, (res) => {
+    res.resume();
+    res.on('end', () => { console.log('status', res.statusCode, 'addRequest', a.added, 'createConnection', a.cc); srv.close(); });
+  });
+  r.on('error', (e) => { console.log('error', e.code, e.message); srv.close(); });
+  r.end();
+});
+`
+      );
+      const sub2 = await run(['node', 'agentsub2.js'], { cwd: '/os' });
+      assert.equal(sub2.status, 0, sub2.stderr);
+      assert.match(sub2.stdout, /status 200 addRequest 1 createConnection 1/);
+    } finally {
+      close();
+    }
+  });
+
+  it('agent-base@7 connect() subclass completes http.get', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await writeDir(kernel, join(fixtures, 'agent-base'), '/os/node_modules/agent-base');
+      await kernel.writeFile(
+        '/os/ab.js',
+        `const http = require('http'), net = require('net');
+const { Agent } = require('agent-base');
+class MyAgent extends Agent {
+  connect(req, opts) { this.calls = (this.calls || 0) + 1; return net.connect({ host: opts.host, port: opts.port }); }
+}
+const srv = http.createServer((q, s) => s.end('via agent-base ' + q.url));
+srv.listen(0, '127.0.0.1', () => {
+  const agent = new MyAgent();
+  http.get({ host: '127.0.0.1', port: srv.address().port, path: '/ab', agent }, (res) => {
+    let b = '';
+    res.on('data', (c) => (b += c));
+    res.on('end', () => { console.log(res.statusCode, b, 'connect() calls', agent.calls); srv.close(); });
+  }).on('error', (e) => { console.log('error', e.code, e.message); srv.close(); });
+});
+`
+      );
+      const r = await run(['node', 'ab.js'], { cwd: '/os' });
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(r.stdout, /200 via agent-base \/ab connect\(\) calls 1/);
     } finally {
       close();
     }
@@ -220,6 +289,19 @@ w.onclose = (e) => console.log('close event', e.code, e.wasClean);
       assert.match(r.stdout, /error event error true/);
       assert.match(r.stdout, /close event 1006 false/);
       assert.doesNotMatch(r.stderr, /event argument must be an instance of Event/);
+
+      await kernel.writeFile(
+        '/os/ws3.js',
+        `const w = new WebSocket('ws://127.0.0.1:9/');
+const ev = [];
+w.onerror = (e) => ev.push('error:' + (e instanceof Event));
+w.onclose = (e) => ev.push('close:' + e.code);
+setTimeout(() => console.log('after 1.5 s:', ev.join(',') || 'no events', 'readyState', w.readyState), 1500);
+`
+      );
+      const ws3 = await run(['node', 'ws3.js'], { cwd: '/os' });
+      assert.equal(ws3.status, 0, ws3.stderr);
+      assert.match(ws3.stdout, /after 1\.5 s: error:true,close:1006 readyState 3/);
 
       await kernel.writeFile(
         '/os/ws-bare.js',
