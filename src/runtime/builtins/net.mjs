@@ -280,6 +280,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
 
     _destroy(err, callback) {
       this.destroyed = true;
+      // Match Node: destroy does not flush. Prefer abort over writer.close(), which
+      // can hang forever waiting for a dead/stalled peer.
       const finish = () => {
         this.#dropHandle();
         callback(err);
@@ -287,12 +289,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       };
       void (async () => {
         try {
-          await this.#writer?.close?.();
+          await this.#reader?.cancel?.();
         } catch {
           /* ignore */
         }
         try {
-          await this.#reader?.cancel?.();
+          if (typeof this.#writer?.abort === 'function') await this.#writer.abort();
+          else await this.#writer?.close?.();
         } catch {
           /* ignore */
         }

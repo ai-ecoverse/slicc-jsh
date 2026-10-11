@@ -304,17 +304,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
   }
 
   function rejectPayloadTooLarge(socket) {
+    // end() (flush via writer.close), not destroy()/abort — the 413 must leave the wire.
     try {
-      socket.write(
+      socket.end(
         'HTTP/1.1 413 Payload Too Large\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'
       );
     } catch {
-      /* ignore */
-    }
-    try {
-      socket.destroy();
-    } catch {
-      /* ignore */
+      try {
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -445,45 +445,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       let bodyBuf = Buffer.alloc(0);
       let socketEnded = false;
       let emitted = false;
-      /** @type {ReturnType<typeof setTimeout> | null} */
-      let closeIdle = null;
-      // ctx.net loopback often never surfaces peer EOF to the client reader; after
-      // the last body byte, idle-finalize Connection: close / no-CL responses.
-      const CLOSE_IDLE_MS = 50;
-
-      const clearCloseIdle = () => {
-        if (closeIdle) {
-          clearTimeout(closeIdle);
-          closeIdle = null;
-        }
-      };
-
-      const isCloseFramed = () => {
-        if (!head) return false;
-        const { te, cl } = head;
-        return !te.includes('chunked') && cl == null;
-      };
-
-      const markEnded = () => {
-        socketEnded = true;
-        clearCloseIdle();
-        tryEmit();
-      };
-
-      const armCloseIdle = () => {
-        if (!isCloseFramed() || emitted || socketEnded) return;
-        clearCloseIdle();
-        closeIdle = setTimeout(() => {
-          closeIdle = null;
-          markEnded();
-        }, CLOSE_IDLE_MS);
-      };
 
       socket.on('error', (err) => {
-        if (isCloseFramed() && !emitted) {
-          markEnded();
-          return;
-        }
         if (emitted) return;
         if (this.listenerCount('error')) this.emit('error', err);
         else socket.destroy();
@@ -496,10 +459,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       const emitResponse = (body) => {
         if (emitted) return;
         emitted = true;
-        clearCloseIdle();
         socket.removeAllListeners('data');
         socket.removeAllListeners('end');
-        socket.removeAllListeners('close');
         // Drop the TCP handle; ignore late read errors from the kernel pump.
         socket.removeAllListeners('error');
         socket.on('error', () => {});
@@ -541,7 +502,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
           emitResponse(bodyBuf.subarray(0, cl));
           return;
         }
-        // No Content-Length and not chunked: body framed by connection close.
+        // No Content-Length and not chunked: body framed by peer FIN ('end').
+        // Do not idle-guess — if ctx.net never delivers FIN, that is a kernel bug.
         if (!socketEnded) return;
         emitResponse(bodyBuf);
       };
@@ -588,10 +550,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
           }
         }
         tryEmit();
-        armCloseIdle();
       });
-      socket.on('end', markEnded);
-      socket.on('close', markEnded);
+      socket.on('end', () => {
+        socketEnded = true;
+        tryEmit();
+      });
     }
 
     #flush() {

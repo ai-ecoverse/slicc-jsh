@@ -58,7 +58,7 @@ export function createWebSocket(ctx) {
     constructor(url, protocols) {
       super();
       if (typeof ctx.websocket !== 'function') {
-        const err = new Error("slicc-jsh: 'WebSocket' is not supported yet");
+        const err = new Error('slicc-jsh: WebSocket is not supported in slicc-jsh yet');
         err.code = 'ERR_NOT_SUPPORTED';
         throw err;
       }
