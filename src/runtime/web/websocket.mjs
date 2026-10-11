@@ -3,6 +3,8 @@
  * Kernel ≥ 1.53.0 leaves globalThis.WebSocket as a writable undefined slot.
  */
 
+import { NodeExitError } from '../exit.mjs';
+
 const CONNECTING = 0;
 const OPEN = 1;
 const CLOSING = 2;
@@ -136,18 +138,38 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
     }
 
     #handlers = new Map();
+    #userHandlers = new Map();
 
     #handler(type) {
-      return this.#handlers.get(type) ?? null;
+      return this.#userHandlers.get(type) ?? null;
     }
 
     #setHandler(type, fn) {
       const prev = this.#handlers.get(type);
       if (prev) this.removeEventListener(type, prev);
       if (typeof fn === 'function') {
-        this.#handlers.set(type, fn);
-        this.addEventListener(type, fn);
+        // EventTarget reports listener throws on nextTick (not sync), so catch
+        // NodeExitError here — process.exit() already recorded the code.
+        const wrapped = (ev) => {
+          try {
+            return fn.call(this, ev);
+          } catch (err) {
+            if (err instanceof NodeExitError || err?.name === 'NodeExitError') {
+              try {
+                handles?.notify?.();
+              } catch {
+                /* ignore */
+              }
+              return;
+            }
+            throw err;
+          }
+        };
+        this.#userHandlers.set(type, fn);
+        this.#handlers.set(type, wrapped);
+        this.addEventListener(type, wrapped);
       } else {
+        this.#userHandlers.delete(type);
         this.#handlers.delete(type);
       }
     }
@@ -155,9 +177,14 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
     #open(url, protocols) {
       // Track the open promise so drainLoop stays alive until error fires
       // (without a handle the process can exit before the catch runs — m2g/ws2.js).
+      // Straight to ctx.websocket — never probe via ctx.net.connect: that dials the
+      // kernel loopback, while nodeTransport WebSockets reach the host's 127.0.0.1.
       const open = (async () => {
         try {
-          const socket = await this.#dial(url, protocols);
+          const socket = await ctx.websocket(
+            url,
+            protocols != null ? { protocols } : undefined
+          );
           if (this.#closed) {
             socket.close();
             return;
@@ -167,72 +194,27 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
           this.#protocol = socket.protocol ?? '';
           this.#writer = socket.writable.getWriter();
           this.#readyState = OPEN;
-          this.dispatchEvent(new Event('open'));
+          this.#emit(new Event('open'));
           const read = this.#readLoop(socket);
           if (trackPromise && handles) trackPromise(handles, read);
           const closed = socket.closed.then(
             (close) => this.#finishClose(close?.code ?? 1000, close?.reason ?? '', true),
             (err) => {
-              this.dispatchEvent(errorEvent(err));
-              this.#finishClose(1006, '', false);
+              // Peer closed before open / transport failure after dial: error only,
+              // matching Node undici (no close event; readyState stays CONNECTING).
+              if (!this.#closed) this.#emit(errorEvent(err));
             }
           );
           if (trackPromise && handles) trackPromise(handles, closed);
         } catch (err) {
-          // Match Node's undici WebSocket on ECONNREFUSED: error event, no close,
-          // readyState stays CONNECTING. (Browsers fire close/1006; cert compares
-          // to Node 22.)
-          if (!this.#closed) this.dispatchEvent(errorEvent(err));
+          // When ctx.websocket rejects (default loopback transport, or a fixed
+          // fetchTransport): error Event, no close, readyState stays CONNECTING —
+          // same as Node 22 undici on ECONNREFUSED.
+          if (!this.#closed) this.#emit(errorEvent(err));
         }
       })();
       if (trackPromise && handles) trackPromise(handles, open);
       else void open;
-    }
-
-    /**
-     * Open via ctx.websocket. On loopback, TCP-probe first: nodeTransport's
-     * fetchTransport WebSocket ignores the error event and hangs on refuse.
-     */
-    async #dial(url, protocols) {
-      const ac = new AbortController();
-      const opts = { signal: ac.signal };
-      if (protocols != null) opts.protocols = protocols;
-
-      let host;
-      let port;
-      try {
-        const u = new URL(url);
-        host = u.hostname;
-        port = u.port ? Number(u.port) : u.protocol === 'wss:' ? 443 : 80;
-      } catch {
-        host = null;
-      }
-
-      const loopback =
-        host === '127.0.0.1' || host === 'localhost' || host === '0.0.0.0';
-      if (loopback && typeof ctx.net?.connect === 'function') {
-        try {
-          const conn = await ctx.net.connect({
-            host: host === 'localhost' || host === '0.0.0.0' ? '127.0.0.1' : host,
-            port,
-            signal: ac.signal,
-          });
-          try {
-            conn.close();
-          } catch {
-            /* ignore */
-          }
-        } catch (err) {
-          try {
-            ac.abort();
-          } catch {
-            /* ignore */
-          }
-          throw err;
-        }
-      }
-
-      return ctx.websocket(url, opts);
     }
 
     async #readLoop(socket) {
@@ -250,7 +232,7 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
                 ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
                 : new Blob([bytes]);
           }
-          this.dispatchEvent(messageEvent(data));
+          this.#emit(messageEvent(data));
         }
       } catch {
         /* closed / aborted */
@@ -287,7 +269,7 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
         },
         (err) => {
           this.#bufferedAmount = Math.max(0, this.#bufferedAmount - size);
-          this.dispatchEvent(errorEvent(err));
+          this.#emit(errorEvent(err));
         }
       );
     }
@@ -299,7 +281,7 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
       try {
         this.#socket?.close({ code, reason });
       } catch (err) {
-        this.dispatchEvent(errorEvent(err));
+        this.#emit(errorEvent(err));
         this.#finishClose(1006, '', false);
       }
     }
@@ -313,7 +295,24 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
       } catch {
         /* ignore */
       }
-      this.dispatchEvent(closeEvent(code, reason, wasClean));
+      this.#emit(closeEvent(code, reason, wasClean));
+    }
+
+    /** dispatchEvent; swallow NodeExitError (process.exit already recorded). */
+    #emit(ev) {
+      try {
+        this.dispatchEvent(ev);
+      } catch (err) {
+        if (err instanceof NodeExitError || err?.name === 'NodeExitError') {
+          try {
+            handles?.notify?.();
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
+        throw err;
+      }
     }
   }
 
