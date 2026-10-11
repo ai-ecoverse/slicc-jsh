@@ -5,9 +5,16 @@
  */
 import { moduleNotFound, packagePathNotExported } from './errors.mjs';
 
-const CONDITIONS = ['require', 'node', 'default'];
+const REQUIRE_CONDITIONS = ['require', 'node', 'default'];
+const DEFAULT_EXTENSIONS = ['.js', '.cjs', '.json'];
 
-export function createResolver({ fs, path, readPackageJson }) {
+export function createResolver({
+  fs,
+  path,
+  readPackageJson,
+  conditions = REQUIRE_CONDITIONS,
+  extensions = DEFAULT_EXTENSIONS,
+} = {}) {
   const tryStat = (p) => {
     try {
       if (!fs.exists(p)) return null;
@@ -24,7 +31,7 @@ export function createResolver({ fs, path, readPackageJson }) {
 
   const tryExtensions = (p) => {
     if (tryFile(p)) return p;
-    for (const ext of ['.js', '.cjs', '.json']) {
+    for (const ext of extensions) {
       const withExt = p + ext;
       if (tryFile(withExt)) return withExt;
     }
@@ -72,7 +79,7 @@ export function createResolver({ fs, path, readPackageJson }) {
       return null;
     }
     if (typeof target === 'object') {
-      for (const key of CONDITIONS) {
+      for (const key of conditions) {
         if (Object.prototype.hasOwnProperty.call(target, key)) {
           const hit = matchExportTarget(target[key], pkgDir);
           if (hit) return hit;
