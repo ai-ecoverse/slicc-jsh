@@ -77,7 +77,7 @@ export const cases = [
   { name: 'stream-readable-events', argv: ['-e', "const {Readable}=require('stream'); const r=new Readable({read(){}}); r.push('x'); r.push(null); r.on('data',d=>console.log('data',d)); r.on('end',()=>console.log('end')); r.on('close',()=>console.log('close'))"] },
   { name: 'timers-module', argv: ['-e', "const t=require('timers'); const tp=require('timers/promises'); t.setTimeout(()=>console.log('t'),1); tp.setTimeout(5,'val').then(v=>console.log('tp',v))"] },
   { name: 'globals', argv: ['-e', "console.log(typeof globalThis.global, typeof structuredClone, typeof TextEncoder, typeof URL, typeof AbortController, typeof atob, typeof performance.now(), typeof queueMicrotask, typeof setImmediate, typeof clearImmediate, typeof fetch, typeof WebSocket)"] },
-  // --- not in M1
+  // --- not in M1 / still M2
   { name: 'm1-esm-file', argv: ['main.mjs'], files: { 'main.mjs': "import fs from 'fs';\nconsole.log(typeof fs.readFileSync)\n" }, m1gap: true },
   // Node 22 detects wrapper-name redeclare as ESM; M1 surfaces the ESM gap message.
   { name: 'm1-esm-wrapper-redeclare', argv: ['main.js'], files: { 'main.js': "const require = 1;\nconsole.log(require)\n" }, m1gap: true },
@@ -86,6 +86,7 @@ export const cases = [
   { name: 'm1-child_process', argv: ['-e', "try { const cp=require('child_process'); console.log(typeof cp.execSync, cp.execSync('echo hi').toString().trim()) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },
   { name: 'm1-net', argv: ['-e', "try { const net=require('net'); const s=net.createServer(); s.listen(0, ()=>{ console.log('listening'); s.close() }) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },
   { name: 'm1-http', argv: ['-e', "try { require('http').createServer(()=>{}).listen(0,function(){console.log('http up'); this.close()}) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },
+  // fetch is installed; refuse may still DIFF vs Node's exact TypeError text → keep gap until http/net.
   { name: 'm1-fetch', argv: ['-e', "(async()=>{ try { const r = await fetch('http://127.0.0.1:9/'); console.log(r.status) } catch (e) { console.log('ERR', e.name, e.message) } })()"], m1gap: true },
   { name: 'm1-crypto', argv: ['-e', "try { console.log(require('crypto').createHash('sha256').update('x').digest('hex').slice(0,8)) } catch (e) { console.log('ERR', e.code, e.message) }"], m1gap: true },
   { name: 'm1-webcrypto', argv: ['-e', "console.log(typeof crypto, typeof crypto?.randomUUID, typeof crypto?.subtle)"], m1gap: true },

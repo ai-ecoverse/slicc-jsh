@@ -11,15 +11,17 @@ import { createNextTick } from './next-tick.mjs';
 import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
 import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
+import { createFetch } from './web/fetch.mjs';
+import { createWebSocket } from './web/websocket.mjs';
 
 const decoder = new TextDecoder();
 
 /**
- * Install jsh bindings on globalThis (slicc-kernel #297 Node-entry lockdown).
- * Writable slots after lockdown: process, Buffer, global, setImmediate, clearImmediate.
- * console / web timers are left alone by the kernel — we still overwrite them for
- * Node-shaped console + ref/unref timers. require/module/exports/__filename/__dirname
- * and fetch/WebSocket are fixed non-configurable undefined; defineProperty no-ops there.
+ * Install jsh bindings on globalThis (slicc-kernel Node-entry lockdown).
+ * Writable slots: process, Buffer, global, setImmediate, clearImmediate, fetch,
+ * WebSocket (OPEN_SLOTS since kernel 1.53.0). console / web timers are left alone
+ * by the kernel — we still overwrite them for Node-shaped console + ref/unref
+ * timers. require/module/exports/__filename/__dirname stay fixed undefined.
  */
 function installJshGlobals(bindings) {
   const saved = new Map();
@@ -122,27 +124,8 @@ export async function runNode(ctx) {
   }
 
   const console = createConsole(writeStdout, writeStderr, util);
-
-  // Prefer ctx.fetch / ctx.websocket when present. #297 freezes globalThis.fetch /
-  // WebSocket as non-configurable undefined, so installJshGlobals cannot publish
-  // these until the kernel leaves those slots writable (same as process/Buffer).
-  async function fetchStub(input, init) {
-    if (typeof ctx.fetch === 'function') return ctx.fetch(input, init);
-    const err = new Error("slicc-jsh: 'fetch' is not supported yet");
-    err.code = 'ERR_NOT_SUPPORTED';
-    throw err;
-  }
-  class WebSocketStub {
-    constructor() {
-      const err = new Error(
-        typeof ctx.websocket === 'function'
-          ? 'slicc-jsh: use ctx.websocket (global WebSocket frozen by #297)'
-          : "slicc-jsh: 'WebSocket' is not supported yet"
-      );
-      err.code = 'ERR_NOT_SUPPORTED';
-      throw err;
-    }
-  }
+  const fetch = createFetch(ctx);
+  const WebSocket = createWebSocket(ctx);
 
   const timers = createTimers(handles, {
     onCallbackError: (err) => {
@@ -176,7 +159,7 @@ export async function runNode(ctx) {
   // Pre-#297 fallback: host process may still exist before we overwrite globalThis.
   const hostProcess = globalThis.process;
 
-  // Install jsh globals into #297 writable slots (+ console/timers the kernel leaves alone).
+  // Install jsh globals into lockdown writable slots (+ console/timers left alone).
   restoreGlobals = installJshGlobals({
     process,
     Buffer,
@@ -188,8 +171,8 @@ export async function runNode(ctx) {
     clearInterval: timers.clearInterval,
     setImmediate: timers.setImmediate,
     clearImmediate: timers.clearImmediate,
-    fetch: fetchStub,
-    WebSocket: WebSocketStub,
+    fetch,
+    WebSocket,
   });
 
   const fatal = (err) => {
@@ -280,8 +263,8 @@ export async function runNode(ctx) {
     console,
     timers,
     handles,
-    fetch: fetchStub,
-    WebSocket: WebSocketStub,
+    fetch,
+    WebSocket,
   });
 
   try {

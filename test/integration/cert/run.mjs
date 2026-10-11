@@ -67,14 +67,16 @@ for (const [rel, data] of packageFiles()) {
 
 function m1GapShimAccepts(shim) {
   const out = `${shim.stdout ?? ''}${shim.stderr ?? ''}`.toLowerCase();
-  // jsh ERR_NOT_SUPPORTED stubs; #297 freezes fetch/WebSocket undefined; dynamic
-  // import of node: builtins is ERR_ACCESS_DENIED from the kernel.
+  // jsh ERR_NOT_SUPPORTED stubs; dynamic import of node: builtins is
+  // ERR_ACCESS_DENIED from the kernel until ESM lands.
   return (
     out.includes('not supported') ||
     out.includes('err_not_supported') ||
     out.includes('is not a function') ||
     out.includes('err_access_denied') ||
-    out.includes('access_denied')
+    out.includes('access_denied') ||
+    out.includes('fetch failed') ||
+    out.includes('econnrefused')
   );
 }
 
@@ -86,9 +88,6 @@ const ACCEPTED_DIFF = new Set([
   'cs-callsite-methods',
   // Shim must omit node:internal from err.stack; host Node includes real loader frames.
   'g-no-internal-stack',
-  // #297 freezes globalThis.fetch / WebSocket as non-configurable undefined;
-  // only process/Buffer/global/setImmediate/clearImmediate stay writable.
-  'globals',
 ]);
 
 function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {

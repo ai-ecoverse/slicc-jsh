@@ -50,6 +50,38 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
     }
   });
 
+  it('installs fetch and WebSocket into writable lockdown slots', async () => {
+    const { run, close } = await withJsh();
+    try {
+      assert.deepEqual(
+        await run([
+          'node',
+          '-e',
+          "const d=Object.getOwnPropertyDescriptor(globalThis,'fetch'); console.log(typeof fetch, typeof WebSocket, d.writable, d.configurable)",
+        ]),
+        { status: 0, stdout: 'function function true true\n', stderr: '' }
+      );
+    } finally {
+      close();
+    }
+  });
+
+  it('zero-fills allocUnsafe and exposes poolSize 0', async () => {
+    const { run, close } = await withJsh();
+    try {
+      assert.deepEqual(
+        await run([
+          'node',
+          '-e',
+          "const b=Buffer.allocUnsafe(8); const s=Buffer.allocUnsafeSlow(4); console.log(Buffer.poolSize, b.every(x=>x===0), s.every(x=>x===0))",
+        ]),
+        { status: 0, stdout: '0 true true\n', stderr: '' }
+      );
+    } finally {
+      close();
+    }
+  });
+
   it('resolves CJS require over node_modules on the memory root', async () => {
     const { kernel, run, close } = await withJsh();
     try {
