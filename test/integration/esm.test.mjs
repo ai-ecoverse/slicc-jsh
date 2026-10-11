@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { installNpmFixture } from './fixture-npm.mjs';
 import { withJsh } from './helpers.mjs';
 
 describe('ESM (M3)', () => {
@@ -30,13 +31,46 @@ describe('ESM (M3)', () => {
     const { kernel, run, close } = await withJsh();
     try {
       await kernel.writeFile('/os/x.mjs', 'export const v = 7;\n');
+      // -e with only import() stays CJS (require available).
       const r = await run([
         'node',
         '-e',
-        "import('fs').then(async fs=>{const x=await import('./x.mjs'); console.log(typeof fs.readFileSync, x.v)})",
+        "const req=require('fs'); import('./x.mjs').then(x=>console.log(typeof req.readFileSync, x.v))",
       ]);
       assert.equal(r.status, 0, r.stderr);
       assert.equal(r.stdout, 'function 7\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('-e: require+import() stays CJS; static import and TLA run as ESM', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/m.mjs', 'export default 5;\n');
+      const cjs = await run([
+        'node',
+        '-e',
+        "const fs=require('fs'); import('./m.mjs').then(m=>console.log('cjs', typeof fs.readFileSync, m.default))",
+      ]);
+      assert.equal(cjs.status, 0, cjs.stderr);
+      assert.equal(cjs.stdout, 'cjs function 5\n');
+
+      const esm = await run([
+        'node',
+        '-e',
+        "import fs from 'fs'; console.log('esm', typeof fs.readFileSync)",
+      ]);
+      assert.equal(esm.status, 0, esm.stderr);
+      assert.equal(esm.stdout, 'esm function\n');
+
+      const tla = await run([
+        'node',
+        '-e',
+        "const v = await Promise.resolve(9); console.log('tla', v)",
+      ]);
+      assert.equal(tla.status, 0, tla.stderr);
+      assert.equal(tla.stdout, 'tla 9\n');
     } finally {
       close();
     }
@@ -127,44 +161,42 @@ describe('ESM (M3)', () => {
     }
   });
 
-  it('prettier-style multi-line imports and export default function', async () => {
+  it('loads published chalk ESM (multi-line import list)', async () => {
     const { kernel, run, close } = await withJsh();
     try {
-      await kernel.writeFile(
-        '/os/node_modules/pretty-lib/package.json',
-        JSON.stringify({ name: 'pretty-lib', type: 'module', main: 'index.js' })
-      );
-      await kernel.writeFile(
-        '/os/node_modules/pretty-lib/index.js',
-        [
-          'export function alpha() {',
-          "  return 'A';",
-          '}',
-          'export function beta() {',
-          "  return 'B';",
-          '}',
-          'export default function greet(',
-          '  name,',
-          ') {',
-          "  return 'hi ' + name;",
-          '}',
-        ].join('\n')
-      );
+      await installNpmFixture(kernel, 'chalk');
+      // chalk's index.js is prettier-formatted with a multi-line import list
+      // and #imports; browser supports-color is pinned in the fixture package.json.
       await kernel.writeFile(
         '/os/app.mjs',
         [
-          'import greet, {',
-          '  alpha,',
-          '  beta,',
-          "} from 'pretty-lib';",
-          // brace in string must not confuse the transform
-          "const note = 'keep { import(x) literal';",
-          'console.log(greet("z"), alpha(), beta(), note.includes("import("));',
+          "import chalk from 'chalk';",
+          "console.log(typeof chalk.red, chalk.red('hi'));",
         ].join('\n')
       );
       const r = await run(['node', 'app.mjs']);
       assert.equal(r.status, 0, r.stderr);
-      assert.equal(r.stdout, 'hi z A B true\n');
+      // level 0 → chalk.red is a no-op string return
+      assert.equal(r.stdout, 'function hi\n');
+    } finally {
+      close();
+    }
+  });
+
+  it('loads fixture of published export * / export { default as } files', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await installNpmFixture(kernel, 'esm-reexports');
+      await kernel.writeFile(
+        '/os/app.mjs',
+        [
+          "import { delay, isArray } from 'esm-reexports';",
+          'console.log(typeof delay, isArray([1]), isArray(1));',
+        ].join('\n')
+      );
+      const r = await run(['node', 'app.mjs']);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'function true false\n');
     } finally {
       close();
     }

@@ -301,26 +301,69 @@ function walkTopLevelAwait(node, report) {
   }
 }
 
-/** True if source parses as a module with import/export, or looks like one. */
-export function sourceLooksLikeEsm(source) {
+/**
+ * Rewrite dynamic `import(expr)` → `__import(expr)` for CJS evaluation.
+ * Returns `{ code, changed }`. No-op when there are no ImportExpressions.
+ */
+export function rewriteDynamicImports(source) {
+  const body = stripHashbang(source);
+  let ast;
+  try {
+    ast = acorn.parse(body, {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      allowAwaitOutsideFunction: false,
+    });
+  } catch {
+    return { code: source, changed: false };
+  }
+  /** @type {{ start: number, end: number, text: string }[]} */
+  const replacements = [];
+  walk(ast, (node) => {
+    if (node.type === 'ImportExpression') {
+      replacements.push({
+        start: node.start,
+        end: node.source.start,
+        text: '__import(',
+      });
+    }
+  });
+  if (replacements.length === 0) return { code: source, changed: false };
+  return { code: applyReplacements(body, replacements), changed: true };
+}
+
+/**
+ * Node-style module detection (detect-module): run as CJS unless the source
+ * contains ESM-only syntax. Dynamic `import()` alone is valid in CommonJS.
+ *
+ * Try parse as a script; if that fails, accept as ESM when it parses as a
+ * module (static import/export, import.meta, or top-level await).
+ */
+export function shouldRunAsEsm(source) {
   const body = stripHashbang(source);
   try {
-    const ast = acorn.parse(body, {
+    acorn.parse(body, {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      allowAwaitOutsideFunction: false,
+    });
+    return false;
+  } catch {
+    /* try module */
+  }
+  try {
+    acorn.parse(body, {
       ecmaVersion: 'latest',
       sourceType: 'module',
       allowAwaitOutsideFunction: true,
     });
-    return ast.body.some(
-      (s) =>
-        s.type === 'ImportDeclaration' ||
-        s.type === 'ExportNamedDeclaration' ||
-        s.type === 'ExportDefaultDeclaration' ||
-        s.type === 'ExportAllDeclaration'
-    );
+    return true;
   } catch {
-    // Fallback for incomplete snippets in -e detection
-    return /^\s*(?:import\s|export\s)/m.test(
-      body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-    );
+    return false;
   }
+}
+
+/** @deprecated use shouldRunAsEsm — kept as alias for call sites */
+export function sourceLooksLikeEsm(source) {
+  return shouldRunAsEsm(source);
 }

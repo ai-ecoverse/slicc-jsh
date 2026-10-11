@@ -1,12 +1,33 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { sourceLooksLikeEsm, transformEsm } from '../../src/runtime/esm/transform.mjs';
+import {
+  rewriteDynamicImports,
+  shouldRunAsEsm,
+  transformEsm,
+} from '../../src/runtime/esm/transform.mjs';
 
 describe('esm transform (acorn)', () => {
-  it('detects import/export', () => {
-    assert.equal(sourceLooksLikeEsm('import x from "y";\n'), true);
-    assert.equal(sourceLooksLikeEsm('export const a = 1;\n'), true);
-    assert.equal(sourceLooksLikeEsm('const a = 1;\n'), false);
+  it('detect-module: dynamic import() alone stays CJS; static import/TLA are ESM', () => {
+    assert.equal(
+      shouldRunAsEsm("const fs=require('fs'); import('x').then(()=>{});\n"),
+      false
+    );
+    assert.equal(shouldRunAsEsm("import x from 'y';\nconsole.log(x);\n"), true);
+    assert.equal(shouldRunAsEsm("export const a = 1;\n"), true);
+    assert.equal(shouldRunAsEsm("await Promise.resolve(1);\n"), true);
+    assert.equal(shouldRunAsEsm("const a = 1;\n"), false);
+    // import/export-looking text inside a template must not force ESM
+    assert.equal(shouldRunAsEsm('const s = `import x from "y"`;\n'), false);
+  });
+
+  it('rewrites import() for CJS eval without touching string literals', () => {
+    const { code, changed } = rewriteDynamicImports(
+      "const fs=require('fs'); import('x').then(()=>{}); const s='import(y)';\n"
+    );
+    assert.equal(changed, true);
+    assert.match(code, /__import\('x'\)/);
+    assert.match(code, /const s='import\(y\)'/);
+    assert.equal(rewriteDynamicImports('const a = 1;\n').changed, false);
   });
 
   it('handles multi-line import/export (prettier style)', () => {

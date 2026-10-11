@@ -4,7 +4,7 @@
  */
 import { createPath } from '../path.mjs';
 import { createResolver } from '../cjs/resolve.mjs';
-import { sourceLooksLikeEsm, transformEsm } from './transform.mjs';
+import { shouldRunAsEsm, transformEsm } from './transform.mjs';
 
 const decoder = new TextDecoder();
 const IMPORT_CONDITIONS = ['import', 'node', 'default'];
@@ -94,7 +94,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     if (filename.endsWith('.cjs') || filename.endsWith('.json')) return false;
     const pkg = findNearestPackage(path.dirname(filename));
     if (pkg?.type === 'module') return true;
-    if (source != null && sourceLooksLikeEsm(source)) return true;
+    if (source != null && shouldRunAsEsm(source)) return true;
     return false;
   }
 

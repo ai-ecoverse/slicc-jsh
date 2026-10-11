@@ -5,7 +5,7 @@ import { createCjs } from './cjs/loader.mjs';
 import { parseNodeArgv } from './cli.mjs';
 import { createConsole } from './console.mjs';
 import { createEsm } from './esm/loader.mjs';
-import { sourceLooksLikeEsm } from './esm/transform.mjs';
+import { rewriteDynamicImports, shouldRunAsEsm } from './esm/transform.mjs';
 import { formatUncaughtError, formatUnhandledRejection } from './errors-format.mjs';
 import { NodeExitError } from './exit.mjs';
 import { createHandleTable } from './handles.mjs';
@@ -336,10 +336,8 @@ export async function runNode(ctx) {
       }
     } else if (parsed.mode === 'eval') {
       lastEvalCode = parsed.code;
-      const asEsm =
-        sourceLooksLikeEsm(parsed.code) ||
-        /\bimport\s*\(/.test(parsed.code) ||
-        /\bimport\.meta\b/.test(parsed.code);
+      // Node detect-module: CJS unless ESM-only syntax (not mere import()).
+      const asEsm = shouldRunAsEsm(parsed.code);
       try {
         if (asEsm) {
           const result = esm.runEsmEval(
@@ -352,22 +350,25 @@ export async function runNode(ctx) {
           }
           nextTick.flushSync();
         } else {
-          const require = cjs.makeRequire(`${process.cwd()}/[eval]`);
+          const evalParent = `${process.cwd()}/[eval]`;
+          const require = cjs.makeRequire(evalParent);
           const exports = {};
           const module = { exports, id: '[eval]' };
-          // Same 5-arg Node wrapper as CJS files — process/Buffer/console are globals.
+          // Dynamic import() is valid in CJS; rewrite to the kernel loader
+          // (host import() cannot see the in-memory FS).
+          const { code: cjsCode, changed: hasImport } = rewriteDynamicImports(parsed.code);
+          const __import = (spec) => esm.importModule(spec, evalParent);
           const body = parsed.print
-            ? `return (${parsed.code}\n)\n//# sourceURL=[eval]`
-            : `${parsed.code}\n//# sourceURL=[eval]`;
-          const fn = new Function(
-            'exports',
-            'require',
-            'module',
-            '__filename',
-            '__dirname',
-            body
-          );
-          const result = fn(exports, require, module, '[eval]', process.cwd());
+            ? `return (${cjsCode}\n)\n//# sourceURL=[eval]`
+            : `${cjsCode}\n//# sourceURL=[eval]`;
+          const args = ['exports', 'require', 'module', '__filename', '__dirname'];
+          const values = [exports, require, module, '[eval]', process.cwd()];
+          if (hasImport) {
+            args.push('__import');
+            values.push(__import);
+          }
+          const fn = new Function(...args, body);
+          const result = fn(...values);
           // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
           if (result != null && typeof result.then === 'function') {
             trackPromise(handles, result);
@@ -403,7 +404,7 @@ export async function runNode(ctx) {
         const useEsm =
           filePath.endsWith('.mjs') ||
           esm.isEsmFilename(filePath, source) ||
-          sourceLooksLikeEsm(source);
+          shouldRunAsEsm(source);
         if (useEsm) {
           const result = esm.runMain(filePath, source);
           if (result != null && typeof result.then === 'function') {
