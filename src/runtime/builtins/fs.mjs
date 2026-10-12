@@ -88,7 +88,11 @@ const S_IFDIR = 0o040000;
 const S_IFLNK = 0o120000;
 
 /** Node's fs.Stats: own data fields, type tests on the prototype. */
-const modeType = (mode) => Number(BigInt.asUintN(32, BigInt(mode)) & BigInt(S_IFMT));
+// Number or bigint mode; anything else (an empty `new fs.Stats()`) matches no type.
+const modeType = (mode) => {
+  if (typeof mode === 'bigint') return Number(BigInt.asUintN(32, mode) & BigInt(S_IFMT));
+  return typeof mode === 'number' ? mode & S_IFMT : -1;
+};
 
 class Stats {
   isFile() {
@@ -579,6 +583,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   const syncApi = {
     readFileSync(p, options) {
       const encoding = optEncoding(options);
+      checkEncoding(encoding);
       if (p === 0 || p === '0') return readStdinSync(encoding);
       if (typeof p === 'number') {
         const ent = fdTable.get(p);
@@ -1206,9 +1211,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       return track(
         (async () => {
           const encoding = optEncoding(options);
+          checkEncoding(encoding);
           try {
             return decodeAs(await asyncFs.readFile(abs(p)), encoding);
           } catch (err) {
+            // Argument errors (a bad encoding) stay as they are, as in Node.
+            if (String(err?.code).startsWith('ERR_')) throw err;
             throw nodeFsError(err?.code || 'ENOENT', 'open', p, err);
           }
         })()

@@ -20,6 +20,10 @@ stat bigint: ["bigint","bigint","bigint",true,"3n","atimeMs,atimeNs,birthtimeMs,
 stat keys: "atimeMs,birthtimeMs,blksize,blocks,ctimeMs,dev,gid,ino,mode,mtimeMs,nlink,rdev,size,uid"
 stat mtime is a Date: true
 symlinkSync existing: THROW Error EEXIST symlink "EEXIST: file already exists, symlink 'a.txt' -> 'l'"
+promises.readFile bogus encoding: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
+promises.readFile encoding buffer: THROW TypeError ERR_UNKNOWN_ENCODING undefined "Unknown encoding: buffer"
+promises.readFile missing, bogus encoding: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
+readFileSync missing, bogus encoding: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
 promises.realpath missing: THROW Error ENOENT realpath "ENOENT: no such file or directory, realpath 'zz'"
 realpathSync.native missing: THROW Error ENOENT realpath "ENOENT: no such file or directory, realpath 'zz'"
 realpathSync missing (code, syscall): ["ENOENT","lstat"]

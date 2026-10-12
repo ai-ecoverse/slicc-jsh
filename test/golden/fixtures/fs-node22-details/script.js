@@ -64,6 +64,10 @@ show('symlinkSync existing', () => (fs.symlinkSync('a.txt', 'l'), fs.symlinkSync
     }
     console.log(`${label}: ${v}`);
   };
+  await showA('promises.readFile bogus encoding', () => p.readFile('e.bin', 'bogus'));
+  await showA('promises.readFile encoding buffer', () => p.readFile('e.bin', 'buffer'));
+  await showA('promises.readFile missing, bogus encoding', () => p.readFile('missing', 'bogus'));
+  await showA('readFileSync missing, bogus encoding', () => fs.readFileSync('missing', 'bogus'));
   await showA('promises.realpath missing', () => p.realpath('zz'));
   await showA('realpathSync.native missing', () => fs.realpathSync.native('zz'));
   await showA('realpathSync missing (code, syscall)', () => {

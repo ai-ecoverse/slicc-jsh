@@ -47,10 +47,12 @@ const kind = (p) => {
   sync('cpSync into itself', () => fs.cpSync('c', 'c/s/in', { recursive: true }));
   sync('cpSync dir no recursive', () => fs.cpSync('c', 'p8'));
   sync('cpSync filter promise', () => fs.cpSync('c', 'p9', { recursive: true, filter: async () => true }));
-  fs.writeFileSync('c/s/x', 'old');
-  sync('cpSync tree file exists force false', () => fs.cpSync('c', 'c3b', { recursive: true }));
-  sync('cpSync tree into existing, errorOnExist', () => fs.cpSync('c', 'c3b', { recursive: true, force: false, errorOnExist: true }));
-  sync('cpSync tree into existing, force false', () => fs.cpSync('c', 'c3b', { recursive: true, force: false }));
+  // One file per tree: which conflict comes first depends on readdir order.
+  fs.mkdirSync('one/s', { recursive: true });
+  fs.writeFileSync('one/s/x', 'new');
+  sync('cpSync tree file exists force false', () => fs.cpSync('one', 'c3b', { recursive: true }));
+  sync('cpSync tree into existing, errorOnExist', () => fs.cpSync('one', 'c3b', { recursive: true, force: false, errorOnExist: true }));
+  sync('cpSync tree into existing, force false', () => fs.cpSync('one', 'c3b', { recursive: true, force: false }));
   process.chdir(os.tmpdir());
   fs.rmSync(work, { recursive: true, force: true });
 })();
