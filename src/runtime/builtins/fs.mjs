@@ -16,8 +16,9 @@ const ERRNO = {
   EACCES: -13,
   EINVAL: -22,
   EIO: -5,
-  ENOTEMPTY: -66,
+  ENOTEMPTY: -39, // Linux (the shim's process.platform)
   EBADF: -9,
+  ENOTSUP: -45,
 };
 
 const DESCRIPTIONS = {
@@ -31,6 +32,7 @@ const DESCRIPTIONS = {
   EIO: 'i/o error',
   ENOTEMPTY: 'directory not empty',
   EBADF: 'bad file descriptor',
+  ENOTSUP: 'operation not supported',
 };
 
 function nodeFsError(code, syscall, pathArg, err, dest) {
@@ -53,6 +55,27 @@ function nodeFsError(code, syscall, pathArg, err, dest) {
   return e;
 }
 
+const FS_READ_STREAM = Symbol('fs.ReadStream');
+const FS_WRITE_STREAM = Symbol('fs.WriteStream');
+
+function cpInvalid(message) {
+  const e = new Error(message);
+  e.code = 'ERR_FS_CP_EINVAL';
+  return e;
+}
+
+/** Node's rm() of a directory without `recursive`. */
+function rmIsDirectoryError(pathArg) {
+  const e = new Error(`Path is a directory: rm returned EISDIR (is a directory) ${pathArg}`);
+  e.name = 'SystemError';
+  e.code = 'ERR_FS_EISDIR';
+  e.errno = 21;
+  e.syscall = 'rm';
+  e.path = String(pathArg);
+  e.info = { code: 'EISDIR', message: 'is a directory', path: String(pathArg), syscall: 'rm', errno: 21 };
+  return e;
+}
+
 function toBytes(data) {
   if (typeof data === 'string') return encoder.encode(data);
   if (data instanceof Uint8Array) return data;
@@ -60,32 +83,71 @@ function toBytes(data) {
   return encoder.encode(String(data));
 }
 
+const S_IFMT = 0o170000;
+const S_IFREG = 0o100000;
+const S_IFDIR = 0o040000;
+const S_IFLNK = 0o120000;
+
+/** Node's fs.Stats: own data fields, type tests on the prototype. */
+class Stats {
+  isFile() {
+    return (this.mode & S_IFMT) === S_IFREG;
+  }
+  isDirectory() {
+    return (this.mode & S_IFMT) === S_IFDIR;
+  }
+  isSymbolicLink() {
+    return (this.mode & S_IFMT) === S_IFLNK;
+  }
+  isBlockDevice() {
+    return false;
+  }
+  isCharacterDevice() {
+    return false;
+  }
+  isFIFO() {
+    return false;
+  }
+  isSocket() {
+    return false;
+  }
+}
+
 function statView(st) {
   const mtimeMs = st.mtimeMs ?? (st.mtime ? Number(st.mtime) : 0);
   const atimeMs = st.atimeMs ?? mtimeMs;
   const ctimeMs = st.ctimeMs ?? mtimeMs;
-  return {
-    isFile: () => !!st.isFile,
-    isDirectory: () => !!st.isDirectory,
-    isSymbolicLink: () => !!st.isSymbolicLink,
-    size: st.size ?? 0,
-    mode: st.mode,
-    mtimeMs,
+  const type = st.isDirectory ? S_IFDIR : st.isSymbolicLink ? S_IFLNK : S_IFREG;
+  const perm = typeof st.mode === 'number' ? st.mode & ~S_IFMT : st.isDirectory ? 0o755 : 0o644;
+  const size = st.size ?? 0;
+  return Object.assign(new Stats(), {
+    dev: st.dev ?? 0,
+    mode: type | perm,
+    nlink: st.nlink ?? 1,
+    uid: st.uid ?? 0,
+    gid: st.gid ?? 0,
+    rdev: 0,
+    blksize: 4096,
+    ino: st.ino ?? 0,
+    size,
+    blocks: Math.ceil(size / 512),
     atimeMs,
+    mtimeMs,
     ctimeMs,
-    mtime: new Date(mtimeMs),
+    birthtimeMs: ctimeMs,
     atime: new Date(atimeMs),
+    mtime: new Date(mtimeMs),
     ctime: new Date(ctimeMs),
     birthtime: new Date(ctimeMs),
-    ino: st.ino,
-    dev: st.dev,
-  };
+  });
 }
 
 class Dirent {
-  constructor(name, type) {
+  constructor(name, type, parentPath) {
     this.name = name;
-    this._type = type; // 'file' | 'dir' | 'link' | 'unknown'
+    this.parentPath = parentPath;
+    this.path = parentPath;
+    Object.defineProperty(this, '_type', { value: type, enumerable: false }); // 'file' | 'dir' | 'link' | 'unknown'
   }
   isFile() {
     return this._type === 'file';
@@ -119,6 +181,24 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   const syncFs = ctx.sync.fs;
   const asyncFs = ctx.fs;
   const wrapBuffer = (bytes) => (Buffer ? Buffer.from(bytes) : bytes);
+  const optEncoding = (options) =>
+    typeof options === 'string' ? options : options?.encoding ?? null;
+  const optFlag = (options, fallback) =>
+    (options && typeof options === 'object' && options.flag) || fallback;
+  /** Bytes read from a file, as Node returns them for `encoding`. */
+  const decodeAs = (bytes, encoding) => {
+    if (!encoding || encoding === 'buffer') return wrapBuffer(bytes);
+    if (encoding === 'utf8' || encoding === 'utf-8') return decoder.decode(bytes);
+    return Buffer ? Buffer.from(bytes).toString(encoding) : decoder.decode(bytes);
+  };
+  /** Data to write, as Node encodes a string with `encoding`. */
+  const encodeAs = (data, encoding) => {
+    if (typeof data === 'string' && encoding && encoding !== 'utf8' && encoding !== 'utf-8' && Buffer) {
+      const b = Buffer.from(data, encoding);
+      return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+    }
+    return toBytes(data);
+  };
   const track = (p) => (handles ? trackPromise(handles, p) : p);
 
   /** @type {Map<number, { path: string, flags: string, pos: number, readable: boolean, writable: boolean }>} */
@@ -271,12 +351,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   function readStdinSync(encoding) {
     try {
       if (typeof process?._readStdinSync === 'function') {
-        const out = process._readStdinSync();
-        return encoding ? decoder.decode(out) : wrapBuffer(out);
+        return decodeAs(process._readStdinSync(), encoding);
       }
       if (typeof process?.stdin?._readAllSync === 'function') {
-        const out = process.stdin._readAllSync();
-        return encoding ? decoder.decode(out) : wrapBuffer(out);
+        return decodeAs(process.stdin._readAllSync(), encoding);
       }
       if (typeof ctx.sync?.read === 'function') {
         const chunks = [];
@@ -293,12 +371,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           out.set(c, at);
           at += c.length;
         }
-        return encoding ? decoder.decode(out) : wrapBuffer(out);
+        return decodeAs(out, encoding);
       }
     } catch {
       /* fall through */
     }
-    return encoding ? '' : wrapBuffer(new Uint8Array(0));
+    return decodeAs(new Uint8Array(0), encoding);
   }
 
   function mkdirSync(p, options = {}) {
@@ -314,47 +392,114 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
       return;
     }
+    // Node: the first directory created, or undefined when all existed.
     const parts = String(target).split('/').filter(Boolean);
     let cur = '';
+    let first;
     for (const part of parts) {
       cur += `/${part}`;
-      if (syncFs.exists(cur)) continue;
+      if (syncFs.exists(cur)) {
+        let st;
+        try {
+          st = syncFs.stat(cur);
+        } catch {
+          st = null;
+        }
+        if (st && !st.isDirectory) throw nodeFsError('ENOTDIR', 'mkdir', pathArg);
+        continue;
+      }
       try {
         syncFs.mkdir(cur);
+        // Node names it the way `p` was given (relative stays relative).
+        first ??= path.isAbsolute(String(p)) ? cur : path.relative(process.cwd(), cur);
       } catch (err) {
         if (err?.code === 'EEXIST') continue;
         throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
       }
     }
+    return first;
+  }
+
+  const typeAt = (full) => {
+    try {
+      const st = syncFs.lstat(full);
+      return st.isDirectory ? 'dir' : st.isSymbolicLink ? 'link' : st.isFile ? 'file' : 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  };
+
+  function mustExist(p, syscall) {
+    let ok = false;
+    try {
+      ok = syncFs.exists(abs(p));
+    } catch {
+      ok = false;
+    }
+    if (!ok) throw nodeFsError('ENOENT', syscall, p);
   }
 
   function readdirSync(p, options) {
     const pathArg = p;
     const target = abs(p);
+    const encoding = optEncoding(options);
+    const asName = (name) => (encoding === 'buffer' ? wrapBuffer(encoder.encode(name)) : name);
+    let names;
     try {
-      const names = syncFs.readdir(target);
-      if (options?.withFileTypes) {
-        return names.map((name) => {
-          let type = 'unknown';
-          try {
-            const st = syncFs.lstat(path.join(target, name));
-            type = st.isDirectory ? 'dir' : st.isSymbolicLink ? 'link' : st.isFile ? 'file' : 'unknown';
-          } catch {
-            /* ignore */
-          }
-          return new Dirent(name, type);
-        });
-      }
-      return names;
+      names = syncFs.readdir(target);
     } catch (err) {
       throw nodeFsError(err?.code || 'ENOENT', 'scandir', pathArg, err);
     }
+    if (!options?.recursive) {
+      if (options?.withFileTypes) {
+        return names.map((name) => new Dirent(name, typeAt(path.join(target, name)), String(pathArg)));
+      }
+      return names.map(asName);
+    }
+    // Node's recursive listing: breadth first, paths relative to `p`.
+    const out = [];
+    const queue = [{ dir: target, rel: '', parent: String(pathArg), names }];
+    while (queue.length) {
+      const { dir, rel, parent, names: entries } = queue.shift();
+      for (const name of entries) {
+        const full = path.join(dir, name);
+        const type = typeAt(full);
+        out.push(options.withFileTypes ? new Dirent(name, type, parent) : asName(rel ? `${rel}/${name}` : name));
+        if (type === 'dir') {
+          let children;
+          try {
+            children = syncFs.readdir(full);
+          } catch {
+            children = [];
+          }
+          queue.push({
+            dir: full,
+            rel: rel ? `${rel}/${name}` : name,
+            parent: path.join(parent, name),
+            names: children,
+          });
+        }
+      }
+    }
+    return out;
   }
 
   const syncApi = {
     readFileSync(p, options) {
-      const encoding = typeof options === 'string' ? options : options?.encoding;
+      const encoding = optEncoding(options);
       if (p === 0 || p === '0') return readStdinSync(encoding);
+      if (typeof p === 'number') {
+        const ent = fdTable.get(p);
+        if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
+        try {
+          const bytes = syncFs.readFile(ent.path);
+          const rest = bytes.subarray(Math.min(ent.pos, bytes.length));
+          ent.pos += rest.length;
+          return decodeAs(rest, encoding);
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'read', undefined, err);
+        }
+      }
       const pathArg = p;
       // Node: /dev/stdin (and /dev/fd/0) read the process stdin stream.
       if (pathArg === '/dev/stdin' || pathArg === '/dev/fd/0') {
@@ -371,32 +516,53 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           e.syscall = 'read';
           throw e;
         }
-        const bytes = syncFs.readFile(target);
-        if (encoding) return decoder.decode(bytes);
-        return wrapBuffer(bytes);
+        return decodeAs(syncFs.readFile(target), encoding);
       } catch (err) {
         if (err?.code && err.syscall) throw err;
         throw nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
       }
     },
     writeFileSync(p, data, options) {
+      const bytes = encodeAs(data, optEncoding(options));
+      const flag = optFlag(options, 'w');
+      // A descriptor: write at its position (stdout/stderr included).
+      if (typeof p === 'number') {
+        syncApi.writeSync(p, bytes);
+        return;
+      }
+      if (flag.includes('a')) {
+        syncApi.appendFileSync(p, bytes);
+        return;
+      }
       const pathArg = p;
       const target = abs(p);
-      void options;
+      if (flag.includes('x') && syncFs.exists(target)) throw nodeFsError('EEXIST', 'open', pathArg);
       try {
-        syncFs.writeFile(target, toBytes(data));
+        syncFs.writeFile(target, bytes);
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
       }
     },
     appendFileSync(p, data, options) {
+      const next = encodeAs(data, optEncoding(options));
+      if (typeof p === 'number') {
+        const ent = fdTable.get(p);
+        let end = null;
+        if (ent) {
+          try {
+            end = syncFs.stat(ent.path).size ?? 0;
+          } catch {
+            end = 0;
+          }
+        }
+        syncApi.writeSync(p, next, 0, next.length, end);
+        return;
+      }
       const pathArg = p;
       const target = abs(p);
-      void options;
       try {
         let prev = new Uint8Array(0);
         if (syncFs.exists(target)) prev = syncFs.readFile(target);
-        const next = toBytes(data);
         const merged = new Uint8Array(prev.length + next.length);
         merged.set(prev);
         merged.set(next, prev.length);
@@ -425,20 +591,24 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         throw nodeFsError(err?.code || 'ENOENT', 'access', pathArg, err);
       }
     },
-    statSync(p) {
+    statSync(p, options) {
       const pathArg = p;
       try {
         return statView(syncFs.stat(abs(p)));
       } catch (err) {
-        throw nodeFsError(err?.code || 'ENOENT', 'stat', pathArg, err);
+        const code = err?.code || 'ENOENT';
+        if (options?.throwIfNoEntry === false && (code === 'ENOENT' || code === 'ENOTDIR')) return undefined;
+        throw nodeFsError(code, 'stat', pathArg, err);
       }
     },
-    lstatSync(p) {
+    lstatSync(p, options) {
       const pathArg = p;
       try {
         return statView(syncFs.lstat(abs(p)));
       } catch (err) {
-        throw nodeFsError(err?.code || 'ENOENT', 'lstat', pathArg, err);
+        const code = err?.code || 'ENOENT';
+        if (options?.throwIfNoEntry === false && (code === 'ENOENT' || code === 'ENOTDIR')) return undefined;
+        throw nodeFsError(code, 'lstat', pathArg, err);
       }
     },
     /**
@@ -458,37 +628,58 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     },
     readdirSync,
     mkdirSync,
+    // The kernel's rm is recursive: only ever hand it an empty directory.
     rmdirSync(p, options = {}) {
       const pathArg = p;
       const target = abs(p);
+      let st;
       try {
-        if (options.recursive) {
-          syncApi.rmSync(p, { recursive: true, force: options.force });
-          return;
-        }
-        syncFs.rm(target);
+        st = syncFs.lstat(target);
       } catch (err) {
         throw nodeFsError(err?.code || 'ENOENT', 'rmdir', pathArg, err);
+      }
+      // Even with `recursive`, rmdir removes directories only (Node).
+      if (!st.isDirectory) throw nodeFsError('ENOTDIR', 'rmdir', pathArg);
+      if (options?.recursive) {
+        syncApi.rmSync(p, { recursive: true, force: options.force });
+        return;
+      }
+      let entries;
+      try {
+        entries = syncFs.readdir(target);
+      } catch (err) {
+        throw nodeFsError(err?.code || 'EIO', 'rmdir', pathArg, err);
+      }
+      if (entries.length > 0) throw nodeFsError('ENOTEMPTY', 'rmdir', pathArg);
+      try {
+        syncFs.rm(target);
+      } catch (err) {
+        throw nodeFsError(err?.code || 'EIO', 'rmdir', pathArg, err);
       }
     },
     rmSync(p, options = {}) {
       const pathArg = p;
       const target = abs(p);
+      let st;
       try {
-        const st = syncFs.lstat(target);
+        st = syncFs.lstat(target);
+      } catch (err) {
+        if (options?.force && (err?.code === 'ENOENT' || err?.code === 'ENOTDIR')) return;
+        throw nodeFsError(err?.code || 'ENOENT', 'lstat', pathArg, err);
+      }
+      if (st.isDirectory && !options?.recursive) throw rmIsDirectoryError(pathArg);
+      try {
         if (st.isDirectory) {
-          if (options.recursive) {
-            for (const name of syncFs.readdir(target)) {
-              syncApi.rmSync(path.join(target, name), { recursive: true, force: options.force });
-            }
+          for (const name of syncFs.readdir(target)) {
+            syncApi.rmSync(path.join(target, name), { recursive: true, force: options.force });
           }
           syncFs.rm(target);
         } else {
           syncFs.unlink(target);
         }
       } catch (err) {
-        if (options.force && (err?.code === 'ENOENT' || !syncFs.exists(target))) return;
-        throw nodeFsError(err?.code || 'ENOENT', 'rm', pathArg, err);
+        if (err?.syscall) throw err;
+        throw nodeFsError(err?.code || 'EIO', 'rm', pathArg, err);
       }
     },
     unlinkSync(p) {
@@ -563,7 +754,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         return n;
       }
       const ent = fdTable.get(fd);
-      if (!ent) throw nodeFsError('EBADF', 'read', undefined);
+      if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
       try {
         const bytes = syncFs.readFile(ent.path);
         const pos = filePosition == null ? ent.pos : filePosition;
@@ -582,7 +773,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         return bytes.byteLength;
       }
       const ent = fdTable.get(fd);
-      if (!ent) throw nodeFsError('EBADF', 'write', undefined);
+      // A descriptor opened read-only cannot be written (Node: EBADF).
+      if (!ent || !ent.writable) throw nodeFsError('EBADF', 'write', undefined);
       const { bytes, filePosition } = parseWriteSyncArgs(data, offset, length, position);
       try {
         return writeBytesAtPath(ent, bytes, filePosition);
@@ -635,7 +827,180 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         throw nodeFsError(err?.code || 'ENOENT', 'readlink', p, err);
       }
     },
+    copyFileSync(src, dest, mode = 0) {
+      const from = abs(src);
+      const to = abs(dest);
+      let st;
+      try {
+        st = syncFs.stat(from);
+      } catch (err) {
+        throw nodeFsError(err?.code || 'ENOENT', 'copyfile', src, err, dest);
+      }
+      if (st.isDirectory) throw nodeFsError('EISDIR', 'copyfile', src, undefined, dest);
+      // COPYFILE_EXCL = 1
+      if (mode & 1 && syncFs.exists(to)) throw nodeFsError('EEXIST', 'copyfile', src, undefined, dest);
+      try {
+        syncFs.writeFile(to, syncFs.readFile(from));
+      } catch (err) {
+        throw nodeFsError(err?.code || 'EIO', 'copyfile', src, err, dest);
+      }
+    },
+    cpSync(src, dest, options = {}) {
+      const from = abs(src);
+      const to = abs(dest);
+      // Node refuses before it creates anything: copying into itself would
+      // otherwise recurse into the copy it is making.
+      if (from === to) throw cpInvalid(`src and dest cannot be the same ${src}`);
+      if (to.startsWith(`${from}/`)) {
+        throw cpInvalid(`Cannot copy ${src}/ to a subdirectory of self ${dest}`);
+      }
+      let st;
+      try {
+        st = syncFs.stat(from);
+      } catch (err) {
+        throw nodeFsError(err?.code || 'ENOENT', 'cp', src, err);
+      }
+      if (st.isDirectory) {
+        if (!options?.recursive) {
+          const e = new Error(`Recursive option not enabled, cannot copy a directory: ${src}/`);
+          e.code = 'ERR_FS_EISDIR';
+          throw e;
+        }
+        mkdirSync(to, { recursive: true });
+        for (const name of syncFs.readdir(from)) {
+          syncApi.cpSync(path.join(from, name), path.join(to, name), options);
+        }
+        return;
+      }
+      const exists = syncFs.exists(to);
+      if (exists && options?.errorOnExist && options?.force === false) {
+        const e = new Error(`Target already exists: cp returned EEXIST (${to} already exists)`);
+        e.name = 'SystemError';
+        e.code = 'ERR_FS_CP_EEXIST';
+        throw e;
+      }
+      if (exists && options?.force === false) return;
+      syncFs.writeFile(to, syncFs.readFile(from));
+    },
+    mkdtempSync(prefix, options) {
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      const bytes = new Uint8Array(6);
+      for (let attempt = 0; attempt < 100; attempt++) {
+        crypto.getRandomValues(bytes);
+        const name = `${prefix}${[...bytes].map((b) => chars[b % chars.length]).join('')}`;
+        const target = abs(name);
+        if (syncFs.exists(target)) continue;
+        try {
+          syncFs.mkdir(target);
+        } catch (err) {
+          throw nodeFsError(err?.code || 'ENOENT', 'mkdtemp', `${prefix}XXXXXX`, err);
+        }
+        return optEncoding(options) === 'buffer' ? wrapBuffer(encoder.encode(name)) : name;
+      }
+      throw nodeFsError('EEXIST', 'mkdtemp', `${prefix}XXXXXX`);
+    },
+    truncateSync(p, len = 0) {
+      if (typeof p === 'number') {
+        syncApi.ftruncateSync(p, len);
+        return;
+      }
+      const target = abs(p);
+      let cur;
+      try {
+        cur = syncFs.readFile(target);
+      } catch (err) {
+        throw nodeFsError(err?.code || 'ENOENT', 'open', p, err);
+      }
+      const out = new Uint8Array(Math.max(0, len));
+      out.set(cur.subarray(0, Math.min(cur.length, out.length)), 0);
+      syncFs.writeFile(target, out);
+    },
+    // The kernel's JS fs has no mode bits, owners or times to set: these
+    // check that the path exists, as Node's do, and change nothing.
+    chmodSync(p) {
+      mustExist(p, 'chmod');
+    },
+    lchmodSync(p) {
+      mustExist(p, 'lchmod');
+    },
+    fchmodSync(fd) {
+      syncApi.fstatSync(fd);
+    },
+    chownSync(p) {
+      mustExist(p, 'chown');
+    },
+    lchownSync(p) {
+      mustExist(p, 'lchown');
+    },
+    fchownSync(fd) {
+      syncApi.fstatSync(fd);
+    },
+    utimesSync(p) {
+      mustExist(p, 'utime');
+    },
+    lutimesSync(p) {
+      mustExist(p, 'lutime');
+    },
+    futimesSync(fd) {
+      syncApi.fstatSync(fd);
+    },
+    fsyncSync(fd) {
+      if (fd !== 0 && fd !== 1 && fd !== 2 && !fdTable.has(fd)) throw nodeFsError('EBADF', 'fsync', undefined);
+    },
+    fdatasyncSync(fd) {
+      if (fd !== 0 && fd !== 1 && fd !== 2 && !fdTable.has(fd)) throw nodeFsError('EBADF', 'fdatasync', undefined);
+    },
+    opendirSync(p) {
+      const entries = readdirSync(p, { withFileTypes: true });
+      return createDir(String(p), entries);
+    },
   };
+
+  /** Node's fs.Dir over a listing taken when it was opened. */
+  function createDir(dirPath, entries) {
+    let closed = false;
+    const next = () => {
+      if (closed) {
+        const e = new Error('Directory handle was closed');
+        e.code = 'ERR_DIR_CLOSED';
+        throw e;
+      }
+      return entries.length ? entries.shift() : null;
+    };
+    return {
+      path: dirPath,
+      readSync: next,
+      read(cb) {
+        if (typeof cb === 'function') {
+          queueMicrotask(() => {
+            try {
+              cb(null, next());
+            } catch (err) {
+              cb(err);
+            }
+          });
+          return undefined;
+        }
+        return Promise.resolve().then(next);
+      },
+      closeSync() {
+        closed = true;
+      },
+      close(cb) {
+        closed = true;
+        if (typeof cb === 'function') queueMicrotask(() => cb(null));
+        else return Promise.resolve();
+        return undefined;
+      },
+      async *[Symbol.asyncIterator]() {
+        try {
+          for (let d = next(); d; d = next()) yield d;
+        } finally {
+          closed = true;
+        }
+      },
+    };
+  }
 
   /** Node's ERR_INVALID_ARG_TYPE for a missing/invalid fs callback ("cb"). */
   function requireCallback(cb) {
@@ -689,11 +1054,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     readFile(p, options) {
       return track(
         (async () => {
-          const encoding = typeof options === 'string' ? options : options?.encoding;
+          const encoding = optEncoding(options);
           try {
-            const bytes = await asyncFs.readFile(abs(p));
-            if (encoding) return decoder.decode(bytes);
-            return wrapBuffer(bytes);
+            return decodeAs(await asyncFs.readFile(abs(p)), encoding);
           } catch (err) {
             throw nodeFsError(err?.code || 'ENOENT', 'open', p, err);
           }
@@ -703,23 +1066,27 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     writeFile(p, data, options) {
       return track(
         (async () => {
-          void options;
+          const bytes = encodeAs(data, optEncoding(options));
+          const flag = optFlag(options, 'w');
+          if (flag.includes('a')) return promises.appendFile(p, bytes);
+          const target = abs(p);
+          if (flag.includes('x') && (await asyncFs.exists(target))) throw nodeFsError('EEXIST', 'open', p);
           try {
-            await asyncFs.writeFile(abs(p), toBytes(data));
+            await asyncFs.writeFile(target, bytes);
           } catch (err) {
             throw nodeFsError(err?.code || 'EIO', 'open', p, err);
           }
+          return undefined;
         })()
       );
     },
     appendFile(p, data, options) {
       return track(
         (async () => {
-          void options;
           const target = abs(p);
           let prev = new Uint8Array(0);
           if (await asyncFs.exists(target)) prev = await asyncFs.readFile(target);
-          const next = toBytes(data);
+          const next = encodeAs(data, optEncoding(options));
           const merged = new Uint8Array(prev.length + next.length);
           merged.set(prev);
           merged.set(next, prev.length);
@@ -750,76 +1117,52 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       );
     },
     readdir(p, options) {
-      return track(
-        (async () => {
-          try {
-            const names = await asyncFs.readdir(abs(p));
-            if (options?.withFileTypes) {
-              const out = [];
-              for (const name of names) {
-                let type = 'unknown';
-                try {
-                  const st = await asyncFs.lstat(path.join(abs(p), name));
-                  type = st.isDirectory ? 'dir' : st.isSymbolicLink ? 'link' : st.isFile ? 'file' : 'unknown';
-                } catch {
-                  /* ignore */
-                }
-                out.push(new Dirent(name, type));
-              }
-              return out;
-            }
-            return names;
-          } catch (err) {
-            throw nodeFsError(err?.code || 'ENOENT', 'scandir', p, err);
-          }
-        })()
-      );
+      return track((async () => readdirSync(p, options))());
     },
     mkdir(p, options = {}) {
-      return track(
-        (async () => {
-          const target = abs(p);
-          if (options?.recursive) {
-            const parts = String(target).split('/').filter(Boolean);
-            let cur = '';
-            for (const part of parts) {
-              cur += `/${part}`;
-              if (await asyncFs.exists(cur)) continue;
-              try {
-                await asyncFs.mkdir(cur);
-              } catch (err) {
-                if (err?.code !== 'EEXIST') throw nodeFsError(err?.code || 'EIO', 'mkdir', p, err);
-              }
-            }
-            return;
-          }
-          if (await asyncFs.exists(target)) throw nodeFsError('EEXIST', 'mkdir', p);
-          await asyncFs.mkdir(target);
-        })()
-      );
+      return track((async () => mkdirSync(p, options))());
     },
     rm(p, options = {}) {
-      return track(
-        (async () => {
-          const target = abs(p);
-          try {
-            const st = await asyncFs.lstat(target);
-            if (st.isDirectory) {
-              if (options.recursive) {
-                for (const name of await asyncFs.readdir(target)) {
-                  await promises.rm(path.join(target, name), { recursive: true, force: options.force });
-                }
-              }
-              await asyncFs.rm(target);
-            } else {
-              await asyncFs.unlink(target);
-            }
-          } catch (err) {
-            if (options.force && err?.code === 'ENOENT') return;
-            throw nodeFsError(err?.code || 'ENOENT', 'rm', p, err);
-          }
-        })()
-      );
+      return track((async () => syncApi.rmSync(p, options))());
+    },
+    rmdir(p, options = {}) {
+      return track((async () => syncApi.rmdirSync(p, options))());
+    },
+    copyFile(src, dest, mode) {
+      return track((async () => syncApi.copyFileSync(src, dest, mode))());
+    },
+    cp(src, dest, options) {
+      return track((async () => syncApi.cpSync(src, dest, options))());
+    },
+    mkdtemp(prefix, options) {
+      return track((async () => syncApi.mkdtempSync(prefix, options))());
+    },
+    truncate(p, len) {
+      return track((async () => syncApi.truncateSync(p, len))());
+    },
+    realpath(p) {
+      return track((async () => syncApi.realpathSync(p))());
+    },
+    chmod(p) {
+      return track((async () => syncApi.chmodSync(p))());
+    },
+    lchmod(p) {
+      return track((async () => syncApi.lchmodSync(p))());
+    },
+    chown(p) {
+      return track((async () => syncApi.chownSync(p))());
+    },
+    lchown(p) {
+      return track((async () => syncApi.lchownSync(p))());
+    },
+    utimes(p) {
+      return track((async () => syncApi.utimesSync(p))());
+    },
+    lutimes(p) {
+      return track((async () => syncApi.lutimesSync(p))());
+    },
+    opendir(p) {
+      return track((async () => syncApi.opendirSync(p))());
     },
     unlink(p) {
       return track(
@@ -910,10 +1253,32 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         ensureOpen('truncate');
         syncApi.ftruncateSync(fd, len);
       },
+      async readFile(options) {
+        ensureOpen('readFile');
+        return syncApi.readFileSync(fd, options);
+      },
+      async sync() {
+        ensureOpen('fsync');
+      },
+      async datasync() {
+        ensureOpen('fdatasync');
+      },
+      async chmod() {
+        ensureOpen('fchmod');
+      },
+      async chown() {
+        ensureOpen('fchown');
+      },
+      async utimes() {
+        ensureOpen('futimes');
+      },
       async close() {
         ensureOpen('close');
         closed = true;
         syncApi.closeSync(fd);
+      },
+      async [Symbol.asyncDispose ?? Symbol.for('nodejs.asyncDispose')]() {
+        if (!closed) await handle.close();
       },
     };
     return handle;
@@ -978,6 +1343,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     });
     r.path = p;
     r.bytesRead = 0;
+    Object.defineProperty(r, FS_READ_STREAM, { value: true });
 
     if (!openEmitted) {
       queueMicrotask(() => {
@@ -1044,6 +1410,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     });
     w.path = p;
     w.bytesWritten = 0;
+    Object.defineProperty(w, FS_WRITE_STREAM, { value: true });
 
     if (!openEmitted) {
       queueMicrotask(() => {
@@ -1068,10 +1435,23 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     return w;
   }
 
+  // fs.ReadStream / fs.WriteStream: callable like Node's, and `instanceof`
+  // holds for the streams createReadStream / createWriteStream make.
+  function ReadStream(p, options) {
+    return createReadStream(p, options);
+  }
+  Object.defineProperty(ReadStream, Symbol.hasInstance, { value: (x) => !!x?.[FS_READ_STREAM] });
+  function WriteStream(p, options) {
+    return createWriteStream(p, options);
+  }
+  Object.defineProperty(WriteStream, Symbol.hasInstance, { value: (x) => !!x?.[FS_WRITE_STREAM] });
+
   return {
     ...syncApi,
     promises,
     Dirent,
+    ReadStream,
+    WriteStream,
     createReadStream,
     createWriteStream,
     readFile: callbackify(syncApi.readFileSync),
@@ -1119,10 +1499,51 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     lstat: callbackify(syncApi.lstatSync),
     realpath: callbackify(syncApi.realpathSync),
     readdir: callbackify(syncApi.readdirSync),
-    mkdir: callbackify(syncApi.mkdirSync),
+    mkdir: callbackify(syncApi.mkdirSync, { minArgsBeforeCb: 2 }),
     rmdir: callbackify(syncApi.rmdirSync),
     unlink: callbackify(syncApi.unlinkSync),
     rename: callbackify(syncApi.renameSync, { minArgsBeforeCb: 2 }),
+    // Node 22's rm does not check its callback up front: without one it does
+    // the work, then calls the missing callback and throws from there.
+    rm(p, options, callback) {
+      const cb = typeof options === 'function' ? options : callback;
+      const opts = typeof options === 'function' ? undefined : options;
+      if (typeof cb === 'function') return callbackify(syncApi.rmSync)(p, opts ?? {}, cb);
+      let err = null;
+      try {
+        syncApi.rmSync(p, opts ?? {});
+      } catch (e) {
+        err = e;
+      }
+      void err;
+      // A macrotask later, as the thread pool would answer.
+      setTimeout(() => {
+        const e = new TypeError('callback is not a function');
+        e._fsPretty = `node:fs:1225\n      return callback(err);\n             ^\n\n${e.stack}\n`;
+        throw e;
+      }, 0);
+      return undefined;
+    },
+    copyFile: callbackify(syncApi.copyFileSync, { minArgsBeforeCb: 2 }),
+    cp: callbackify(syncApi.cpSync, { minArgsBeforeCb: 2 }),
+    mkdtemp: callbackify(syncApi.mkdtempSync),
+    truncate: callbackify(syncApi.truncateSync),
+    ftruncate: callbackify(syncApi.ftruncateSync),
+    chmod: callbackify(syncApi.chmodSync, { minArgsBeforeCb: 2 }),
+    lchmod: callbackify(syncApi.lchmodSync, { minArgsBeforeCb: 2 }),
+    fchmod: callbackify(syncApi.fchmodSync, { minArgsBeforeCb: 2 }),
+    chown: callbackify(syncApi.chownSync, { minArgsBeforeCb: 3 }),
+    lchown: callbackify(syncApi.lchownSync, { minArgsBeforeCb: 3 }),
+    fchown: callbackify(syncApi.fchownSync, { minArgsBeforeCb: 3 }),
+    utimes: callbackify(syncApi.utimesSync, { minArgsBeforeCb: 3 }),
+    lutimes: callbackify(syncApi.lutimesSync, { minArgsBeforeCb: 3 }),
+    futimes: callbackify(syncApi.futimesSync, { minArgsBeforeCb: 3 }),
+    fsync: callbackify(syncApi.fsyncSync),
+    fdatasync: callbackify(syncApi.fdatasyncSync),
+    opendir: callbackify(syncApi.opendirSync),
+    symlink: callbackify(syncApi.symlinkSync, { minArgsBeforeCb: 2 }),
+    readlink: callbackify(syncApi.readlinkSync),
+    Stats,
     constants: {
       F_OK: 0,
       R_OK: 4,
@@ -1134,6 +1555,14 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       O_CREAT: 0o100,
       O_TRUNC: 0o1000,
       O_APPEND: 0o2000,
+      O_EXCL: 0o200,
+      S_IFMT,
+      S_IFREG,
+      S_IFDIR,
+      S_IFLNK,
+      COPYFILE_EXCL: 1,
+      COPYFILE_FICLONE: 2,
+      COPYFILE_FICLONE_FORCE: 4,
     },
   };
 }

@@ -1,5 +1,5 @@
 {
   "status": 0,
-  "stdout": "fs.promises === fs/promises: true\nfs.promises === fs: false\nnode:fs/promises === fs/promises: true\nfsp.readFile utf8: \"hello data\\n\"\nfsp.readFile buffer: [true,11]\nfsp.writeFile + readFile: \"p\"\nfsp.readdir: [\"a.txt\",\"b.txt\",\"sub\"]\nfsp.stat isDirectory(): true\nfsp.access missing: THROW Error ENOENT: ENOENT: no such file or directory, access 'missing'\nfsp.mkdtemp: THROW TypeError: fsp.mkdtemp is not a function\nfsp.rm force missing: undefined\nfsp.open: THROW TypeError: h.readFile is not a function\n",
+  "stdout": "fs.promises === fs/promises: true\nfs.promises === fs: false\nnode:fs/promises === fs/promises: true\nfsp.readFile utf8: \"hello data\\n\"\nfsp.readFile buffer: [true,11]\nfsp.writeFile + readFile: \"p\"\nfsp.readdir: [\"a.txt\",\"b.txt\",\"sub\"]\nfsp.stat isDirectory(): true\nfsp.access missing: THROW Error ENOENT: ENOENT: no such file or directory, access 'missing'\nfsp.mkdtemp: \"string\"\nfsp.rm force missing: undefined\nfsp.open: \"hello data\\n\"\n",
   "stderr": ""
 }
