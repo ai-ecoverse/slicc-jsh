@@ -142,7 +142,7 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 | `color` | **on when stdout is a TTY**. `FORCE_COLOR` (anything but `''`, `0`, `false`) forces it on and `FORCE_COLOR=0` off; otherwise a non-empty `NO_COLOR` turns it off | on unless `NO_COLOR` |
 | `exec` | `exec(cmd)` runs the engine's shell; `exec.spawn(argv)` uses no shell; `exec.start()` is v6's killable, buffered-stdin handle; results are `{ stdout, stderr, exitCode }`; a missing command gives 127 and `<cmd>: command not found` | just-bash |
 | `http` | v6's `http.client`, over the engine's `fetch` | same, over the realm `fetch` |
-| `skill` | `dir`/`refs`/`assets` from `argv[1]`; `config()` uses Node's `fs`; `token(id)` runs `oauth-token <id>` and nothing else | same, over v6's `fs` and its shell |
+| `skill` | `dir` is the script's directory; `root`, `refs` and `assets` are the skill folder's (the parent of a `scripts/` directory, as in v6); `config()` uses Node's `fs`; `token(id)` runs `oauth-token <id>` and nothing else | same, over v6's `fs` and its shell |
 | `browser` | `@ai-ecoverse/sliccy-browser` over CDP ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)) | RPC to SLICC's CDP owner |
 | `agent`, `usb`, `serial`, `hid`, `computer` | error: SLICC only | yes |
 

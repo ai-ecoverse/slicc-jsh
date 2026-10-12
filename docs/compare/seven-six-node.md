@@ -12,6 +12,19 @@ Status: **measurement only** (phase 1). Nothing in slicc-jsh is changed yet; thi
   - `rmdirSync` deletes non-empty directories.
 - **Builtins seven doesn't have yet:** `zlib`, `crypto`, sync `child_process`, `readline`, `tty`.
 
+## Progress (phase 2)
+
+The matrix below is the measurement of 2026-10-11. The fixes since then, re-recorded in [results/](../../test/compare/results):
+
+| PR | release | fixes | rows now seven=node (or seven=six) |
+|---|---|---|---|
+| #75 | 0.3.5 | 1, 3, 4, 12, 14 (D1, D4, D5): nextTick while the entry is pending, in-flight work keeps the program alive, immediate `process.exit`, a body that never settles exits 0, Node's uncaught-error report | error-in-main-catch, error-in-timer, error-rejection-late-handled, error-unhandled-rejection, exit-floating-main-exec, exit-floating-main-fetch, exit-never-settles, exit-pending-fetch, fs-streams, net, process-exit-catchable, process-exit-in-async-catch, process-exit-in-catch-all, sliccy-cli, sliccy-cli-help-in-main-catch, timers |
+| #78 | 0.3.6 | 8: `fs` correctness (no over-deletion, encodings, flags, fds, missing calls) | fs-binary, fs-errors, fs-promises, fs-stat, fs-sync, fs-writefile-await |
+| #79 | | 9, 11: Buffer views share memory, `process.env` stores strings, `require('buffer')` | buffer, process-env |
+| #80 | | 10: `sliccy:skill` `root`/`refs`/`assets` | sliccy-skill (seven=six) |
+
+Kernel follow-ups: slicc-kernel#401 (an exit that never unwinds) and #402 (`/dev` for JS programs' `fs`).
+
 ## How this was measured
 
 | | version | how it ran |
@@ -208,7 +221,7 @@ The case name is given for every row below.
 | `exec.start()` kill | `124`, `bash: execution aborted` | `143` | `143` | six-only detail | 2 | sliccy-exec-start |
 | `http.client` | same | same (also exports `HttpError`) | same | same | 8 | sliccy-http |
 | `skill.dir`, `config()`, `token()` → `oauth-token` | same | same | same | same | 27 / 20 / 4 | sliccy-skill |
-| **`skill.refs` / `skill.assets` for `scripts/x.jsh`** | `<skill>/references`, `<skill>/assets`, plus `skill.root` | `<skill>/scripts/references`, `<skill>/scripts/assets`, no `root` | n/a | **seven≠six**: no Node counterpart, so fix toward six | 2 | sliccy-skill |
+| `skill.refs` / `skill.assets` for `scripts/x.jsh` | `<skill>/references`, `<skill>/assets`, plus `skill.root` | same since #80 (was `<skill>/scripts/references`, no `root`) | n/a | fixed (#80): seven=six, no Node counterpart | 2 | sliccy-skill |
 | `sliccy:browser` | the bridge (no browser here: `browser is not available in this runtime`) | unknown name unless `@ai-ecoverse/sliccy-browser` is installed | n/a | unknown for real seven | **37** | sliccy-browser |
 
 ### Globals

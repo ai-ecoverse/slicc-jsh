@@ -7,7 +7,8 @@
  *
  * test/jsh/fixtures/<case>/case.json:
  *   description  what the case pins (a row of the parity tables)
- *   args         arguments after `jsh main.jsh`
+ *   entry        the script to run, relative to the case (default main.jsh)
+ *   args         arguments after `jsh <entry>`
  *   stdin, env   optional
  *   stderr       "exact" (default); "error-line": compare only the first
  *                `…Error: …` line, since stack frames differ between engines;
@@ -85,7 +86,7 @@ function runHost(dir, meta) {
     delete env.FORCE_COLOR;
     delete env.NO_COLOR;
     Object.assign(env, meta.env ?? {});
-    const result = spawnSync('npx', ['-y', 'node@22.22.0', hostJsh, 'main.jsh', ...(meta.args ?? [])], {
+    const result = spawnSync('npx', ['-y', 'node@22.22.0', hostJsh, meta.entry ?? 'main.jsh', ...(meta.args ?? [])], {
       cwd: work,
       input: Buffer.from(meta.stdin ?? ''),
       encoding: 'buffer',
@@ -113,7 +114,7 @@ async function runKernel(dir, meta) {
       await kernel.writeFile(`/node_modules/@ai-ecoverse/slicc-jsh/${rel}`, data);
     }
     for (const { rel, data } of fixtureFiles(dir)) await kernel.writeFile(`/os/${rel}`, data);
-    const work = kernel.run(['jsh', 'main.jsh', ...(meta.args ?? [])], {
+    const work = kernel.run(['jsh', meta.entry ?? 'main.jsh', ...(meta.args ?? [])], {
       cwd: '/os',
       env: { ...(meta.env ?? {}) },
       ...(meta.stdin !== undefined ? { stdin: meta.stdin } : {}),
