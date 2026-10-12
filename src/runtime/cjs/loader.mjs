@@ -69,7 +69,8 @@ export function createCjs({
     this.paths = id.startsWith('/') ? nodeModulePaths(path.dirname(id)) : [];
   }
   Module._cache = cache;
-  Module._nodeModulePaths = nodeModulePaths;
+  // Node resolves a relative `from` against the working directory.
+  Module._nodeModulePaths = (from) => nodeModulePaths(path.resolve(process.cwd(), String(from)));
   Module.builtinModules = [
     'assert',
     'assert/strict',

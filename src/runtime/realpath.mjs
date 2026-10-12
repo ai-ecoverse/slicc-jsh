@@ -5,6 +5,8 @@
  * `fs` has lstat(p) → { isSymbolicLink }, stat(p) and readlink(p) on
  * absolute paths; `fail(code, syscall, path, err)` makes the error thrown.
  */
+import { createPath } from './path.mjs';
+
 export const MAX_LINKS = 40;
 
 export function realpathWith(fs, path, p, fail) {
@@ -44,3 +46,16 @@ export function realpathWith(fs, path, p, fail) {
   }
   return resolved;
 }
+
+/** The entry's real path, unless --preserve-symlinks-main (Node). */
+export function realMainPath(ctx, filePath, execArgv = []) {
+  if (execArgv.includes('--preserve-symlinks-main')) return filePath;
+  const fs = ctx?.sync?.fs;
+  if (typeof fs?.lstat !== 'function' || typeof fs?.readlink !== 'function') return filePath;
+  try {
+    return realpathWith(fs, createPath(() => ctx.cwd), filePath, (code) => Object.assign(new Error(code), { code }));
+  } catch {
+    return filePath;
+  }
+}
+

@@ -9,6 +9,7 @@ import { createEsm } from './esm/loader.mjs';
 import { rewriteDynamicImports, shouldRunAsEsm } from './esm/transform.mjs';
 import { formatUncaughtError, formatUnhandledRejection } from './errors-format.mjs';
 import { isExitError } from './exit.mjs';
+import { realMainPath } from './realpath.mjs';
 import { createHandleTable } from './handles.mjs';
 import { createNextTick } from './next-tick.mjs';
 import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
@@ -555,15 +556,19 @@ export async function runNode(ctx, options = {}) {
         return 1;
       }
       process.argv[1] = filePath;
+      // Node runs the entry from its real path (so its own requires, and a
+      // require of itself, resolve as for any module); process.argv[1] keeps
+      // the path as given. --preserve-symlinks-main keeps the link.
+      const mainPath = realMainPath(ctx, filePath, process.execArgv);
       try {
         // isEsmFilename covers .mjs, "type":"module", and detect-module for
         // ambiguous .js (not explicit "type":"commonjs").
-        const useEsm = esm.isEsmFilename(filePath, source);
+        const useEsm = esm.isEsmFilename(mainPath, source);
         if (useEsm) {
-          const result = esm.runMain(filePath, source);
+          const result = esm.runMain(mainPath, source);
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
         } else {
-          cjs.runMain(filePath, source);
+          cjs.runMain(mainPath, source);
         }
         nextTick.flushSync();
       } catch (err) {
