@@ -1,0 +1,5 @@
+{
+  "description": "process.exit(2) inside try/catch/finally exits at once: no catch, no finally, nothing after",
+  "argv": ["-e", "setTimeout(() => console.log('timer'), 5); try { console.log('working'); process.exit(2); } catch (e) { console.log('caught', e.message); process.exit(1); } finally { console.log('finally'); } console.log('after');"],
+  "shim": true
+}

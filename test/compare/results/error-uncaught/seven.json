@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "before\n",
-  "stderr": "Error: boom\n    at Object.<anonymous> ($CASE/main.jsh:2:7)\n"
+  "stderr": "$CASE/main.jsh:2\nthrow new Error('boom');\n      ^\n\nError: boom\n    at Object.<anonymous> ($CASE/main.jsh:2:7)\n\nNode.js v22.22.0\n"
 }

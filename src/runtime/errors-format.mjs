@@ -30,7 +30,7 @@ function frameLocation(stack) {
   return { file, line: Number(m[2]), column: Number(m[3]) };
 }
 
-function snippetFor(ctx, loc, evalCode) {
+function snippetFor(ctx, loc, evalCode, fromPromise = false) {
   if (!loc) return null;
   let source;
   if (loc.file === '[eval]') source = evalCode;
@@ -50,7 +50,11 @@ function snippetFor(ctx, loc, evalCode) {
   let col = loc.column;
   const throwAt = text.search(/\bthrow\b/);
   const isAsyncLine = /\basync\b/.test(text);
-  if (loc.file === '[eval]' && throwAt === 0) {
+  if (fromPromise && loc.column >= 1) {
+    // A rejection: Node points at the frame's own column (the error's
+    // construction in an async function), not at the `throw`.
+    col = loc.column;
+  } else if (loc.file === '[eval]' && throwAt === 0) {
     col = 1;
   } else if (throwAt >= 0 && isAsyncLine && /\bthrow\s+new\b/.test(text)) {
     col = text.indexOf('new', throwAt) + 1;
@@ -135,7 +139,7 @@ function glueStackAndProps(stack, props) {
   return `${frames} ${finalizeProps(props)}`;
 }
 
-export function formatUncaughtError(err, { ctx, util, version, evalCode } = {}) {
+export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPromise } = {}) {
   const trailer = `\nNode.js v${version}\n`;
   if (err instanceof Error && err._fsPretty) {
     let body = err._fsPretty;
@@ -199,7 +203,7 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode } = {}) 
   }
 
   const loc = frameLocation(rawStack);
-  const snip = snippetFor(ctx, loc, evalCode);
+  const snip = snippetFor(ctx, loc, evalCode, fromPromise);
   if (snip) head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
 
   // Node 22 uncaught: compact nested props; AggregateError [errors] is multiline.
@@ -319,7 +323,7 @@ function collapseMatchingCauseFrames(body, err) {
 export function formatUnhandledRejection(reason, { ctx, util, version, evalCode } = {}) {
   // Node: Error rejections print like uncaught errors (reject-site snippet).
   if (reason instanceof Error) {
-    return formatUncaughtError(reason, { ctx, util, version, evalCode });
+    return formatUncaughtError(reason, { ctx, util, version, evalCode, fromPromise: true });
   }
   const trailer = `\nNode.js v${version}\n`;
   void util;
@@ -332,7 +336,10 @@ export function formatUnhandledRejection(reason, { ctx, util, version, evalCode 
     `node:internal/process/promises:392\n` +
     `      new UnhandledPromiseRejection(reason);\n` +
     `      ^\n\n` +
-    `UnhandledPromiseRejection: ${msg} {\n` +
+    `UnhandledPromiseRejection: ${msg}\n` +
+    `    at throwUnhandledRejectionsMode (node:internal/process/promises:392:7)\n` +
+    `    at processPromiseRejections (node:internal/process/promises:475:17)\n` +
+    `    at process.processTicksAndRejections (node:internal/process/task_queues:106:32) {\n` +
     `  code: 'ERR_UNHANDLED_REJECTION'\n` +
     `}\n`;
   return { body: body + trailer };

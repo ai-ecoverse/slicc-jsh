@@ -1,5 +1,5 @@
 import { EventEmitter } from './builtins/events.mjs';
-import { assignProcessExitCode, NodeExitError, numericExitCode } from './exit.mjs';
+import { assignProcessExitCode, hardExitError, numericExitCode } from './exit.mjs';
 
 /** Node version reported by the shim (M1 target). */
 export const NODE_SHIM_VERSION = '22.22.0';
@@ -370,8 +370,13 @@ class Process extends EventEmitter {
       cached_builtins: true,
     };
 
-    const writeStdout = (value) => ctx.sync.write(1, toBytes(value));
-    const writeStderr = (value) => ctx.sync.write(2, toBytes(value));
+    // After process.exit() nothing more reaches stdout or stderr.
+    const writeStdout = (value) => {
+      if (!this._silenced) ctx.sync.write(1, toBytes(value));
+    };
+    const writeStderr = (value) => {
+      if (!this._silenced) ctx.sync.write(2, toBytes(value));
+    };
     this._writeStdout = writeStdout;
     this._writeStderr = writeStderr;
 
@@ -516,18 +521,16 @@ class Process extends EventEmitter {
     this._cwd = this._ctx.resolve(path);
   }
 
+  /**
+   * Node's process.exit: 'exit' listeners run, then the program ends. The
+   * kernel is told the status at once (see hardExitError); what still runs
+   * while the throw unwinds — a user `catch` or `finally` — is silenced:
+   * its output is dropped, a second exit() keeps the first status, and
+   * timers and ticks are stopped.
+   */
   exit(...args) {
-    if (args.length === 0) {
-      const code = numericExitCode(this._assignedExitCode);
-      this._recordExit(code);
-      try {
-        this.emit('exit', code);
-      } catch {
-        /* ignore */
-      }
-      throw new NodeExitError(code);
-    }
-    this._assignedExitCode = assignProcessExitCode(args[0]);
+    if (this._exitError) throw this._exitError;
+    if (args.length > 0) this._assignedExitCode = assignProcessExitCode(args[0]);
     const code = numericExitCode(this._assignedExitCode);
     this._recordExit(code);
     try {
@@ -535,7 +538,14 @@ class Process extends EventEmitter {
     } catch {
       /* ignore */
     }
-    throw new NodeExitError(code);
+    this._silenced = true;
+    try {
+      this._onHardExit?.(code);
+    } catch {
+      /* ignore */
+    }
+    this._exitError = hardExitError(this._ctx, code);
+    throw this._exitError;
   }
 
   _recordExit(code) {
@@ -546,8 +556,9 @@ class Process extends EventEmitter {
   }
 }
 
-export function createProcess({ ctx, argv, nextTick, onExit, handles, Buffer }) {
+export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles, Buffer }) {
   const process = new Process({ ctx, argv, nextTick, onExit, handles, Buffer });
+  process._onHardExit = onHardExit;
   return {
     process,
     writeStdout: process._writeStdout,

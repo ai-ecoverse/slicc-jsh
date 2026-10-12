@@ -1,0 +1,4 @@
+{
+  "description": "process.exit(0) inside an async main whose caller catches everything: exits 0, the catch never sees it (the cli.help-in-main shape)",
+  "args": []
+}

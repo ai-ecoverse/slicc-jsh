@@ -1,5 +1,5 @@
 {
   "status": 0,
-  "stdout": "body done\n",
+  "stdout": "body done\nfetched slow\n",
   "stderr": ""
 }

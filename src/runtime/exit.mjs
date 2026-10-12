@@ -4,7 +4,40 @@ export class NodeExitError extends Error {
     super(`Process exited with code ${code}`);
     this.name = 'NodeExitError';
     this.code = code;
+    this.status = code;
   }
+}
+
+/** True for what `process.exit` throws (ours, or the kernel's `JsExit` it reuses). */
+export function isExitError(err) {
+  return err instanceof NodeExitError || err?.name === 'NodeExitError' || err?.name === 'JsExit';
+}
+
+/**
+ * End the program now. `ctx.exit` tells the kernel the status at once (the
+ * kernel then ends the process as soon as this turn unwinds, whatever the
+ * script's promises do) and throws the kernel's `JsExit` to unwind. That
+ * error is what we throw: the kernel recognises it, so nothing reports it as
+ * an error. Without `ctx.exit` (an old kernel) a NodeExitError unwinds.
+ */
+export function hardExitError(ctx, code) {
+  if (typeof ctx?.exit === 'function') {
+    try {
+      ctx.exit(code);
+    } catch (err) {
+      if (err && typeof err === 'object' && err.name === 'JsExit') {
+        try {
+          Object.defineProperty(err, 'name', { value: 'NodeExitError', configurable: true, writable: true });
+          err.message = `Process exited with code ${code}`;
+          err.code = code;
+        } catch {
+          /* frozen: keep the kernel's */
+        }
+        return err;
+      }
+    }
+  }
+  return new NodeExitError(code);
 }
 
 export function numericExitCode(value) {

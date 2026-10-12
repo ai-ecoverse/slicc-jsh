@@ -6,7 +6,6 @@
  * runtime advertises to the host CLI (dist/host/jsh.mjs), so `jsh` run
  * through pnpm's global bin inside the kernel is still the kernel jsh.
  */
-import { NodeExitError } from '../runtime/exit.mjs';
 import { JSH_PARAMS, JSH_USAGE, JSH_VERSION, parseJshArgv, runJsh } from './run.mjs';
 
 /** The global the `node` runtime sets for the host CLI to hand off to. */
@@ -47,7 +46,7 @@ async function writeAll(stream, data) {
   }
 }
 
-function kernelSpawn(ctx, process) {
+function kernelSpawn(ctx, process, track) {
   return (argv, { stdin } = {}) => {
     let child = null;
     const done = (async () => {
@@ -74,9 +73,10 @@ function kernelSpawn(ctx, process) {
       ]);
       return { stdout: decoder.decode(out), stderr: decoder.decode(err), exitCode: status.status };
     })();
+    // A command in flight keeps the program alive, as a child process does.
     return {
       kill: async (sig = 'SIGTERM') => (child ? child.kill(sig) : false),
-      done,
+      done: track(done),
     };
   };
 }
@@ -107,7 +107,7 @@ export async function runKernelJsh(ctx, rt, filename) {
   const { process, console } = rt;
   let stdoutIsTTY = false;
   try {
-    stdoutIsTTY = !!(await ctx.isatty?.(1));
+    stdoutIsTTY = !!(await rt.track(Promise.resolve(ctx.isatty?.(1))));
   } catch {
     stdoutIsTTY = false;
   }
@@ -119,11 +119,11 @@ export async function runKernelJsh(ctx, rt, filename) {
     writeStdout: (s) => process.stdout.write(String(s)),
     writeStderr: (s) => process.stderr.write(String(s)),
     stdoutIsTTY,
-    spawn: kernelSpawn(ctx, process),
+    spawn: kernelSpawn(ctx, process, rt.track),
     shell: ['sh', '-c'],
     fetch: rt.fetch,
-    isExit: (err) => err instanceof NodeExitError,
     exit: (code) => process.exit(code),
+    started: (body) => rt.setEntry(body, 'jsh'),
   };
   await runJsh({ filename, engine, process, console });
 }

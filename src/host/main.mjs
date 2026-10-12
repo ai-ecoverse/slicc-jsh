@@ -11,7 +11,14 @@ import { constants as osConstants } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { JSH_USAGE, JSH_VERSION, parseJshArgv, runJsh, wrapSource } from '../jsh/run.mjs';
+import {
+  JSH_USAGE,
+  JSH_VERSION,
+  parseJshArgv,
+  runJsh,
+  WRAPPER_LINE_OFFSET,
+  wrapSource,
+} from '../jsh/run.mjs';
 
 const writeFd = (fd, text) => {
   const bytes = Buffer.from(String(text));
@@ -103,6 +110,7 @@ const engine = {
   compile: (body, filename) =>
     vm.runInThisContext(wrapSource(body), {
       filename,
+      lineOffset: WRAPPER_LINE_OFFSET,
       importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
     }),
   createRequire: (filename) => createRequire(filename),
@@ -115,7 +123,6 @@ const engine = {
   spawn,
   shell: [findOnPath('bash') ?? 'sh', '-c'],
   fetch: globalThis.fetch,
-  isExit: () => false,
   exit: (code) => process.exit(code),
 };
 

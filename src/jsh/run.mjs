@@ -58,12 +58,15 @@ export function prepareSource(source) {
 }
 
 /**
- * The wrapper's header shares the body's first line, so line numbers in
- * stack traces are the file's own.
+ * The wrapper's header has a line of its own: compile it with a line offset
+ * of -1 (WRAPPER_LINE_OFFSET), so the body's lines and columns, and the
+ * source line Node prints under an uncaught error, are the file's own.
  */
 export function wrapSource(body) {
-  return `(async function (${JSH_PARAMS.join(', ')}) {${body}\n})`;
+  return `(async function (${JSH_PARAMS.join(', ')}) {\n${body}\n})`;
 }
+
+export const WRAPPER_LINE_OFFSET = -1;
 
 function dirnameOf(path) {
   const idx = path.lastIndexOf('/');
@@ -92,10 +95,15 @@ function wrapRequire(baseRequire, requireSliccy, module) {
  * - `createRequire(filename)`, `selfRequire` (or null)
  * - `writeStdout(s)`, `writeStderr(s)` (synchronous), `stdoutIsTTY`
  * - `spawn(argv, { stdin }) → { kill(sig), done }`, `shell` (argv prefix)
- * - `fetch`, `isExit(err)`, `exit(code)`
+ * - `fetch`, `exit(code)`
+ * - `started(body)`, optional: takes the body's promise
  *
- * Resolves when the script body settles; the process then lives on until its
- * event loop is empty, as in Node. A throw prints the stack and exits 1.
+ * Returns once the body has started, as a CommonJS `(async () => { … })()`
+ * does: the body's promise runs alongside the event loop and, like any
+ * pending promise in Node, does not keep the program alive by itself. A body
+ * that throws is an unhandled rejection, which the engine reports as Node
+ * does (the host leaves it to Node itself; the kernel engine hands it to the
+ * runtime through `started`).
  */
 export async function runJsh({ filename, engine, process, console }) {
   let source;
@@ -127,14 +135,11 @@ export async function runJsh({ filename, engine, process, console }) {
   const requireSliccy = createSliccyResolver({ engine, process, require: baseRequire });
   const require = wrapRequire(baseRequire, requireSliccy, module);
 
-  try {
+  const body = (async () => {
     const fn = engine.compile(prepareSource(source), filename);
     await fn(process, console, require, module, module.exports, engine.fetch, dirname, filename);
     module.loaded = true;
-  } catch (err) {
-    if (engine.isExit(err)) return engine.exit(err.code);
-    engine.writeStderr(`${err?.stack ?? err}\n`);
-    return engine.exit(1);
-  }
+  })();
+  engine.started?.(body);
   return undefined;
 }

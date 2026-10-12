@@ -1,0 +1,5 @@
+{
+  "description": "an unhandled rejection with a string reason: Node's ERR_UNHANDLED_REJECTION report",
+  "argv": ["-e", "Promise.reject('just a string')"],
+  "shim": true
+}

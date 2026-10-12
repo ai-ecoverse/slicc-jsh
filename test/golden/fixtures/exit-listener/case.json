@@ -1,0 +1,5 @@
+{
+  "description": "exit listeners run with the code; a catch around process.exit never runs",
+  "argv": ["-e", "process.on('exit', (c) => console.log('exit', c)); try { process.exit(3); } catch { process.exitCode = 9; console.log('caught'); }"],
+  "shim": true
+}

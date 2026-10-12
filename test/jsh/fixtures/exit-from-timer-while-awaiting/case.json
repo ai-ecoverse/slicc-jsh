@@ -1,0 +1,4 @@
+{
+  "description": "process.exit(4) from a timer while the body is still awaiting ends the program",
+  "args": []
+}

@@ -1,0 +1,5 @@
+{
+  "description": "process.exit(0) in an async function whose rejection is caught: status 0, the catch never runs",
+  "argv": ["-e", "(async () => { await null; console.log('usage'); process.exit(0); })().catch((e) => { console.log('caught', e.message); process.exit(1); });"],
+  "shim": true
+}

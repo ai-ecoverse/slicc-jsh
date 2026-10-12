@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "Error: with props\n    at Object.<anonymous> ($CASE/main.jsh:1:11)\n"
+  "stderr": "$CASE/main.jsh:1\nconst e = new Error('with props');\n          ^\n\nError: with props\n    at Object.<anonymous> ($CASE/main.jsh:1:11) {\n  code: 'E_COMPARE',\n  detail: { n: 1 }\n}\n\nNode.js v22.22.0\n"
 }

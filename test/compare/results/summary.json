@@ -2,7 +2,7 @@
   "meta": {
     "node": "22.22.0",
     "jsh": "0.0.0",
-    "kernel": "1.59.1",
+    "kernel": "1.62.3",
     "kernelPackages": [
       "@ai-ecoverse/wasm-bash@5.3.0-17",
       "@ai-ecoverse/wasm-coreutils@9.12.0-5"
@@ -38,7 +38,7 @@
       ],
       "status": {
         "six": 0,
-        "seven": "timeout",
+        "seven": 0,
         "jsh": 0,
         "node": 0
       },
@@ -171,10 +171,10 @@
         "jsh": 1,
         "node": 1
       },
-      "six": "=",
+      "six": "≠",
       "seven": "=",
       "node": "≠",
-      "auto": "same"
+      "auto": "six≠node"
     },
     {
       "name": "error-in-main-catch",
@@ -191,9 +191,9 @@
         "node": 1
       },
       "six": "=",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "seven≠node"
+      "auto": "same"
     },
     {
       "name": "error-in-timer",
@@ -209,9 +209,9 @@
         "node": 1
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "≠",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "error-line-numbers",
@@ -241,9 +241,9 @@
         "node": 1
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "≠",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "error-throw-object",
@@ -256,10 +256,10 @@
         "jsh": 1,
         "node": 1
       },
-      "six": "=",
+      "six": "≠",
       "seven": "=",
       "node": "≠",
-      "auto": "same"
+      "auto": "six≠node"
     },
     {
       "name": "error-throw-string",
@@ -272,10 +272,10 @@
         "jsh": 1,
         "node": 1
       },
-      "six": "=",
+      "six": "≠",
       "seven": "=",
       "node": "≠",
-      "auto": "same"
+      "auto": "six≠node"
     },
     {
       "name": "error-uncaught",
@@ -288,10 +288,10 @@
         "jsh": 1,
         "node": 1
       },
-      "six": "=",
+      "six": "≠",
       "seven": "=",
       "node": "≠",
-      "auto": "same"
+      "auto": "six≠node"
     },
     {
       "name": "error-uncaught-props",
@@ -304,10 +304,10 @@
         "jsh": 1,
         "node": 1
       },
-      "six": "=",
+      "six": "≠",
       "seven": "=",
       "node": "≠",
-      "auto": "same"
+      "auto": "six≠node"
     },
     {
       "name": "error-unhandled-rejection",
@@ -321,9 +321,9 @@
         "node": 1
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "≠",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "events",
@@ -377,9 +377,9 @@
         "node": null
       },
       "six": "=",
-      "seven": "≠",
+      "seven": "=",
       "node": "–",
-      "auto": "seven≠node"
+      "auto": "same"
     },
     {
       "name": "exit-floating-main-fetch",
@@ -396,9 +396,9 @@
         "node": 0
       },
       "six": "=",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "seven≠node"
+      "auto": "same"
     },
     {
       "name": "exit-interval-cleared",
@@ -443,14 +443,14 @@
       "corpus": [],
       "status": {
         "six": "timeout",
-        "seven": "timeout",
+        "seven": 0,
         "jsh": 0,
         "node": 13
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "≠",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "exit-pending-fetch",
@@ -466,9 +466,9 @@
         "node": 0
       },
       "six": "=",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "seven≠node"
+      "auto": "same"
     },
     {
       "name": "exit-pending-timer",
@@ -677,14 +677,14 @@
       "corpus": [],
       "status": {
         "six": 0,
-        "seven": "timeout",
+        "seven": 0,
         "jsh": 0,
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "fs-surface",
@@ -814,7 +814,7 @@
       ],
       "status": {
         "six": 1,
-        "seven": "timeout",
+        "seven": 0,
         "jsh": 0,
         "node": 0
       },
@@ -938,14 +938,14 @@
       ],
       "status": {
         "six": 1,
-        "seven": "timeout",
+        "seven": 0,
         "jsh": 0,
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "os",
@@ -1073,9 +1073,9 @@
         "node": 3
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "six=seven≠node"
+      "auto": "six≠node"
     },
     {
       "name": "process-exit-code",
@@ -1142,14 +1142,14 @@
       ],
       "status": {
         "six": 1,
-        "seven": 1,
+        "seven": 0,
         "jsh": 0,
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "process-exit-in-catch-all",
@@ -1160,14 +1160,14 @@
       ],
       "status": {
         "six": 1,
-        "seven": 1,
+        "seven": 2,
         "jsh": 2,
         "node": 2
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "six=seven≠node"
+      "auto": "six≠node"
     },
     {
       "name": "process-exit-in-timer",
@@ -1563,9 +1563,9 @@
         "node": null
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "–",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "sliccy-cli-die-object",
@@ -1614,14 +1614,14 @@
       ],
       "status": {
         "six": 1,
-        "seven": 1,
+        "seven": 0,
         "jsh": 0,
         "node": null
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "–",
-      "auto": "six=seven≠node"
+      "auto": "six≠node"
     },
     {
       "name": "sliccy-color-force",
@@ -1961,7 +1961,7 @@
       ],
       "status": {
         "six": 0,
-        "seven": "timeout",
+        "seven": 0,
         "jsh": 0,
         "node": 0
       },
@@ -1984,9 +1984,9 @@
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "timers-immediate",

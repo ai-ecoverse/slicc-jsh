@@ -1,0 +1,5 @@
+{
+  "description": "A body that throws a string: Node unhandled-rejection output (ERR_UNHANDLED_REJECTION), status 1",
+  "args": [],
+  "stderr": "no-frames"
+}

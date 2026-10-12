@@ -8,7 +8,7 @@ import { createConsole } from './console.mjs';
 import { createEsm } from './esm/loader.mjs';
 import { rewriteDynamicImports, shouldRunAsEsm } from './esm/transform.mjs';
 import { formatUncaughtError, formatUnhandledRejection } from './errors-format.mjs';
-import { NodeExitError } from './exit.mjs';
+import { isExitError } from './exit.mjs';
 import { createHandleTable } from './handles.mjs';
 import { createNextTick } from './next-tick.mjs';
 import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
@@ -56,6 +56,50 @@ function installJshGlobals(bindings) {
         /* ignore */
       }
     }
+  };
+}
+
+/**
+ * Platform promises that settle on work outside JS (WebCrypto, WebAssembly
+ * compilation) keep the program alive while pending, as Node's thread-pool
+ * requests do. Returns the undo.
+ */
+function trackPlatformAsync(handles) {
+  const undo = [];
+  const wrap = (target, names) => {
+    if (!target) return;
+    for (const name of names) {
+      const original = target[name];
+      if (typeof original !== 'function') continue;
+      try {
+        target[name] = function tracked(...args) {
+          return trackPromise(handles, original.apply(this, args));
+        };
+        undo.push(() => {
+          target[name] = original;
+        });
+      } catch {
+        /* read-only: leave it */
+      }
+    }
+  };
+  wrap(globalThis.SubtleCrypto?.prototype, [
+    'decrypt',
+    'deriveBits',
+    'deriveKey',
+    'digest',
+    'encrypt',
+    'exportKey',
+    'generateKey',
+    'importKey',
+    'sign',
+    'unwrapKey',
+    'verify',
+    'wrapKey',
+  ]);
+  wrap(globalThis.WebAssembly, ['compile', 'compileStreaming', 'instantiate', 'instantiateStreaming']);
+  return () => {
+    for (const fn of undo.reverse()) fn();
   };
 }
 
@@ -125,6 +169,12 @@ export async function runNode(ctx, options = {}) {
     onExit: (code) => {
       exitStatus = code;
     },
+    // process.exit(): nothing the unwinding code schedules may run.
+    onHardExit: () => {
+      timers.stop();
+      nextTick.stop();
+      handles.notify();
+    },
   });
   process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
   if (parsed.mode === 'eval') {
@@ -133,13 +183,14 @@ export async function runNode(ctx, options = {}) {
   }
 
   const console = createConsole(writeStdout, writeStderr, util);
-  const fetch = createFetch(ctx);
+  const fetch = createFetch(ctx, { handles });
+  const restorePlatform = trackPlatformAsync(handles);
   const WebSocket = createWebSocket(ctx, { handles, trackPromise });
 
   const timers = createTimers(handles, {
     onCallbackError: (err) => {
-      if (err instanceof NodeExitError) {
-        exitStatus = err.code;
+      if (isExitError(err) || getDidExit()) {
+        exitStatus = getDidExit() ? getExitCode() : err.code;
         timers.clearPending();
         // Wake drainLoop so shouldStop can end the process while servers listen.
         try {
@@ -197,23 +248,20 @@ export async function runNode(ctx, options = {}) {
       /* ignore */
     }
     exitStatus = 1;
-    timers.clearPending();
+    // Before ctx.exit: the kernel ends the process on a timer of its own.
+    timers.stop();
     try {
       ctx.exit?.(1);
     } catch {
       /* JsExit unwinds */
     }
   };
-  const isExit = (err) =>
-    err instanceof NodeExitError || err?.name === 'NodeExitError' || getDidExit();
+  const isExit = (err) => isExitError(err) || getDidExit();
   const rejectionHandler = (reason, promise) => {
     // process.exit() from a WebSocket/EventTarget handler throws NodeExitError
     // after _recordExit; treat it as a clean exit (Node: rc from exit(), no dump).
     if (isExit(reason)) {
-      exitStatus =
-        reason instanceof NodeExitError || reason?.name === 'NodeExitError'
-          ? Number(reason.code) & 0xff
-          : getExitCode();
+      exitStatus = getDidExit() ? getExitCode() : Number(reason.code) & 0xff;
       timers.clearPending();
       try {
         handles.notify();
@@ -233,20 +281,17 @@ export async function runNode(ctx, options = {}) {
       evalCode: lastEvalCode,
     });
     writeStderr(body);
+    exitStatus = 1;
+    timers.stop();
     try {
       ctx.exit?.(1);
     } catch {
       /* JsExit */
     }
-    exitStatus = 1;
-    timers.clearPending();
   };
   const exceptionHandler = (err) => {
     if (isExit(err)) {
-      exitStatus =
-        err instanceof NodeExitError || err?.name === 'NodeExitError'
-          ? Number(err.code) & 0xff
-          : getExitCode();
+      exitStatus = getDidExit() ? getExitCode() : Number(err.code) & 0xff;
       timers.clearPending();
       try {
         handles.notify();
@@ -327,9 +372,36 @@ export async function runNode(ctx, options = {}) {
   // Dynamic import() inside CommonJS files — resolve relative to the CJS file.
   cjs.setImportModuleHook((specifier, parent) => esm.importModule(specifier, parent));
 
+  /**
+   * The entry promise: a `.jsh` body or an ES module's top-level await. It
+   * runs alongside the event loop (ticks and timers keep going while it is
+   * pending) and, as in Node, does not keep the program alive on its own.
+   * A `.jsh` body that never settles ends the program like an empty loop
+   * (Node's CommonJS); an ES module's unsettled top-level await exits 13.
+   */
+  let entry = null;
+  const setEntry = (promise, kind) => {
+    const current = { kind, pending: true, promise };
+    entry = current;
+    Promise.resolve(promise).then(
+      () => {
+        current.pending = false;
+        handles.notify();
+      },
+      (err) => {
+        current.pending = false;
+        if (kind === 'jsh') rejectionHandler(err, promise);
+        else exceptionHandler(err);
+        handles.notify();
+      }
+    );
+  };
+
   try {
     // What `options.main` and the kernel jsh handoff (see jsh/kernel.mjs) run on.
     const rt = {
+      setEntry,
+      track: (promise) => trackPromise(handles, promise),
       process,
       console,
       Buffer,
@@ -350,7 +422,7 @@ export async function runNode(ctx, options = {}) {
         }
         nextTick.flushSync();
       } catch (err) {
-        if (err instanceof NodeExitError) throw err;
+        if (isExitError(err)) throw err;
         if (process.listenerCount('uncaughtException') > 0) {
           process.emit(
             'uncaughtException',
@@ -401,7 +473,7 @@ export async function runNode(ctx, options = {}) {
         cjs.runMain('[stdin]', source, { setMain: false });
         nextTick.flushSync();
       } catch (err) {
-        if (err instanceof NodeExitError) throw err;
+        if (isExitError(err)) throw err;
         if (process.listenerCount('uncaughtException') > 0) {
           process.emit(
             'uncaughtException',
@@ -423,10 +495,7 @@ export async function runNode(ctx, options = {}) {
             parsed.print ? `console.log(${parsed.code}\n)` : parsed.code,
             '[eval]'
           );
-          if (result != null && typeof result.then === 'function') {
-            trackPromise(handles, result);
-            await result;
-          }
+          if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
           nextTick.flushSync();
         } else {
           const evalParent = `${process.cwd()}/[eval]`;
@@ -463,7 +532,7 @@ export async function runNode(ctx, options = {}) {
           }
         }
       } catch (err) {
-        if (err instanceof NodeExitError) throw err;
+        if (isExitError(err)) throw err;
         if (process.listenerCount('uncaughtException') > 0) {
           process.emit(
             'uncaughtException',
@@ -492,16 +561,13 @@ export async function runNode(ctx, options = {}) {
         const useEsm = esm.isEsmFilename(filePath, source);
         if (useEsm) {
           const result = esm.runMain(filePath, source);
-          if (result != null && typeof result.then === 'function') {
-            trackPromise(handles, result);
-            await result;
-          }
+          if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
         } else {
           cjs.runMain(filePath, source);
         }
         nextTick.flushSync();
       } catch (err) {
-        if (err instanceof NodeExitError) throw err;
+        if (isExitError(err)) throw err;
         if (process.listenerCount('uncaughtException') > 0) {
           process.emit(
             'uncaughtException',
@@ -525,7 +591,15 @@ export async function runNode(ctx, options = {}) {
         emitBeforeExit();
       },
       shouldStop: () => getDidExit() || exitStatus !== undefined,
+      weakPending: () => entry?.pending === true,
     });
+
+    if (entry?.pending && entry.kind === 'esm' && exitStatus === undefined && !getDidExit()) {
+      // Node: `Warning: Detected unsettled top-level await at <url>`, exit 13.
+      const where = parsed.mode === 'file' ? `file://${process.argv[1]}` : '[eval1]';
+      writeStderr(`Warning: Detected unsettled top-level await at ${where}\n\n\n`);
+      exitStatus = 13;
+    }
 
     // #297: unhandled rejections are reported on a later turn. Keep ctx hooks
     // registered through a few macrotasks so the kernel does not see an empty
@@ -557,9 +631,9 @@ export async function runNode(ctx, options = {}) {
     }
     return code;
   } catch (err) {
-    if (err instanceof NodeExitError) {
+    if (isExitError(err)) {
       timers.clearPending();
-      return err.code;
+      return getDidExit() ? getExitCode() : err.code;
     }
     try {
       printUncaught(err);
@@ -569,8 +643,10 @@ export async function runNode(ctx, options = {}) {
     return 1;
   } finally {
     timers.clearPending();
-    // Drop hooks only after the turn above; worker teardown follows.
-    for (const remove of removeCtxHooks) {
+    // Drop hooks only after the turn above; worker teardown follows. After
+    // process.exit() keep them: whatever the unwinding code still rejects
+    // must not reach the kernel's default report.
+    for (const remove of getDidExit() ? [] : removeCtxHooks) {
       try {
         remove?.();
       } catch {
@@ -579,6 +655,7 @@ export async function runNode(ctx, options = {}) {
     }
     try {
       restoreGlobals();
+      restorePlatform();
       removeJshHandoff();
     } catch {
       /* ignore */

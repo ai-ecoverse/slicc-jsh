@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "just a string\n"
+  "stderr": "node:internal/process/promises:392\n      new UnhandledPromiseRejection(reason);\n      ^\n\nUnhandledPromiseRejection: This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason \"just a string\".\n    at <internal> {\n  code: 'ERR_UNHANDLED_REJECTION'\n}\n\nNode.js v22.22.0\n"
 }

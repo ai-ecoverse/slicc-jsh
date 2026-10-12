@@ -195,8 +195,13 @@ function normalise(text, { caseRoots, port }) {
   const lines = [];
   for (const line of out.split('\n')) {
     const internal = /^\s+at /.test(line) && !line.includes('$CASE');
-    if (internal && lines.at(-1) === '    at <internal>') continue;
-    if (internal) lines.push('    at <internal>');
+    // A frame line can carry the `{` that opens Node's props block.
+    const marker = internal && /\{$/.test(line) ? '    at <internal> {' : '    at <internal>';
+    if (internal && lines.at(-1) === '    at <internal>') {
+      lines[lines.length - 1] = marker;
+      continue;
+    }
+    if (internal) lines.push(marker);
     else lines.push(line.length > 2000 ? `${line.slice(0, 300)}…[${line.length} chars]` : line);
   }
   return lines.join('\n');
@@ -433,12 +438,14 @@ function sixCommit() {
 
 // --- summary ---------------------------------------------------------------
 
-/** Status, stdout and stderr without stack frames or Node's source excerpt. */
+/** Status, stdout and stderr without stack frames (and Node's version trailer). */
 function signature(r) {
   if (!r) return null;
+  const frame = /^\s+(at |\.\.\. \d+ lines? matching)/;
   const stderr = r.stderr
     .split('\n')
-    .filter((l) => !/^\s+at /.test(l) && !/^Node\.js v\d/.test(l))
+    .map((l) => (frame.test(l) && /\{$/.test(l) ? '{' : l))
+    .filter((l) => !frame.test(l) && !/^Node\.js v\d/.test(l))
     .join('\n')
     .trim();
   return JSON.stringify([r.status, r.stdoutSha256 ?? r.stdout, stderr]);

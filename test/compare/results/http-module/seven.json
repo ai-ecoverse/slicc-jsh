@@ -1,5 +1,5 @@
 {
-  "status": "timeout",
-  "stdout": "",
-  "stderr": "[compare: kernel timeout]\n"
+  "status": 0,
+  "stdout": "server + get: [200,\"text/plain\",\"served GET /path?q=1\"]\nhttp.get the compare server: THROW Error ECONNREFUSED: connect ECONNREFUSED\nhttps.request: \"function\"\nSTATUS_CODES: \"Not Found\"\n",
+  "stderr": ""
 }

@@ -1,0 +1,4 @@
+{
+  "description": "process.exit() inside try/catch/finally ends the program at once: catch, finally and the code after them do not run (Node)",
+  "args": []
+}

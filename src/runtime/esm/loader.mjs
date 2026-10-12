@@ -332,22 +332,16 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       return cjs.runMain(filename, src);
     }
     const { hasTopLevelAwait } = transformEsm(src, filename);
-    if (hasTopLevelAwait) {
-      const p = evaluateEsmAsync(filename, src);
-      if (trackPromise && handles) trackPromise(handles, p);
-      return p;
-    }
+    // The entry's top-level await is not a handle: as in Node, a pending
+    // await does not keep the program alive (run.mjs reports it, exit 13).
+    if (hasTopLevelAwait) return evaluateEsmAsync(filename, src);
     return evaluateEsm(filename, src);
   }
 
   function runEsmEval(code, filename = '[eval]') {
     // Always treat as ESM (covers dynamic import() without static import/export).
     const { hasTopLevelAwait } = transformEsm(code, filename);
-    if (hasTopLevelAwait) {
-      const p = evaluateEsmAsync(filename, code);
-      if (trackPromise && handles) trackPromise(handles, p);
-      return p;
-    }
+    if (hasTopLevelAwait) return evaluateEsmAsync(filename, code);
     return evaluateEsm(filename, code);
   }
 

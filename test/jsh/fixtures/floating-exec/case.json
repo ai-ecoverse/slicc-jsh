@@ -1,0 +1,4 @@
+{
+  "description": "A floating async main whose exec is still running when the body returns: the program waits for it",
+  "args": []
+}
