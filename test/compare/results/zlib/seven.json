@@ -1,5 +1,5 @@
 {
-  "status": 1,
-  "stdout": "",
-  "stderr": "$CASE/main.jsh:2\nconst zlib = require('zlib');\n             ^\n\nError: slicc-jsh: 'zlib' is not supported yet\n    at Object.<anonymous> ($CASE/main.jsh:2:14) {\n  code: 'ERR_NOT_SUPPORTED'\n}\n\nNode.js v22.22.0\n"
+  "status": 0,
+  "stdout": "gzip round trip: \"hello zlib\"\ndeflateSync bytes: \"eJxLTEoGAAJNASc=\"\ninflateSync: \"inflate me\"\ndeflateRawSync: \"raw\"\ngunzipSync returns Buffer: true\nbrotli: THROW Error ERR_FEATURE_UNAVAILABLE_ON_PLATFORM: zlib.brotliCompressSync is not available in slicc-jsh (no Brotli/Zstd implementation)\ngzip callback: [null,\"cb\"]\ncreateGunzip stream: \"streamed\"\nconstants: \"number\"\n",
+  "stderr": ""
 }

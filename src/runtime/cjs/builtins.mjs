@@ -12,6 +12,7 @@ import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
 import { createUrl } from '../builtins/url.mjs';
 import { createUtil } from '../builtins/util.mjs';
+import { createZlib } from '../builtins/zlib.mjs';
 
 const BUILTIN_LIST = [
   'assert',
@@ -39,12 +40,12 @@ const BUILTIN_LIST = [
   'url',
   'util',
   'util/types',
+  'zlib',
 ];
 
 const NOT_YET = [
   'http2',
   'crypto',
-  'zlib',
   'readline',
   'tty',
   'worker_threads',
@@ -205,6 +206,11 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles });
     return https;
   };
+  let zlib;
+  const getZlib = () => {
+    zlib ??= createZlib({ ctx, process, Buffer, getStream, util, assert });
+    return zlib;
+  };
   let childProcess;
   const getChildProcess = () => {
     if (!childProcess) {
@@ -226,6 +232,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     'path/posix': () => path,
     module: () => ModuleExport,
     fs: () => fs,
+    zlib: getZlib,
     'fs/promises': () => fs.promises,
     events: () => events,
     assert: () => assert,

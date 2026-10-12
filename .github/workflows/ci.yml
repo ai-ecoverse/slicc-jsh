@@ -27,10 +27,11 @@ jobs:
           # Build already regenerates NOTICE from esbuild metafiles; fail if any
           # node_modules package appears in meta without a NOTICE section.
           node -e '
-            import { readFileSync } from "node:fs";
+            import { readdirSync, readFileSync } from "node:fs";
             import { packagesFromMetafiles } from "./scripts/generate-notice.mjs";
-            const metas = ["dist/meta-main.json","dist/meta-stream.json","dist/meta-decoder.json"]
-              .map((p) => JSON.parse(readFileSync(p, "utf8")));
+            const metas = readdirSync("dist")
+              .filter((f) => /^meta-.*\.json$/.test(f))
+              .map((f) => JSON.parse(readFileSync(`dist/${f}`, "utf8")));
             const pkgs = packagesFromMetafiles(metas);
             const notice = readFileSync("NOTICE", "utf8");
             const missing = [...pkgs.keys()].filter((n) => !notice.includes(`bundles ${n} `) && !notice.includes(`bundles ${n}\n`));

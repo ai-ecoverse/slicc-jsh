@@ -127,6 +127,107 @@ const decoder = await esbuild.build({
   ],
 });
 
+// zlib: browserify-zlib (Node's zlib.js over pako 1.x). stream, util and
+// assert stay external: the runtime hands its own to the bundle's require().
+const zlib = await esbuild.build({
+  entryPoints: [require.resolve('browserify-zlib/lib/index.js')],
+  outfile: join(dist, 'vendor/zlib.cjs'),
+  bundle: true,
+  format: 'cjs',
+  platform: 'neutral',
+  target: ['es2022'],
+  mainFields: ['main', 'module'],
+  logLevel: 'info',
+  metafile: true,
+  external: ['stream', 'util', 'assert', '__jsh/zlib-options'],
+  alias: { ...vendorBufferAlias },
+  plugins: [
+    {
+      // Node 22 behaviour the port (Node 8's zlib.js) lacks: option validation
+      // with Node's errors (src/runtime/builtins/zlib.mjs), ArrayBuffer and
+      // TypedArray input, `{ info: true }`, and destroy() closing the handle.
+      name: 'zlib-node22',
+      setup(build) {
+        build.onLoad({ filter: /browserify-zlib[/\\]lib[/\\]index\.js$/ }, async (args) => {
+          const { readFile } = await import('node:fs/promises');
+          let text = await readFile(args.path, 'utf8');
+          const patch = (from, to) => {
+            if (!text.includes(from)) throw new Error(`zlib-node22: no match for ${from}`);
+            text = text.replace(from, to);
+          };
+          patch(
+            'this._opts = opts = opts || {};',
+            "this._opts = opts = require('__jsh/zlib-options').options(opts || {}, mode);"
+          );
+          patch(
+            '  engine.end(buffer);\n  flow();',
+            "  buffer = require('__jsh/zlib-options').input(buffer);\n  engine.end(buffer);\n  flow();"
+          );
+          patch(
+            '    callback(err, buf);',
+            '    callback(err, buf && engine._opts.info ? { buffer: buf, engine: engine } : buf);'
+          );
+          patch(
+            "  if (typeof buffer === 'string') buffer = Buffer.from(buffer);\n\n  if (!Buffer.isBuffer(buffer)) throw new TypeError('Not a string or buffer');",
+            "  buffer = require('__jsh/zlib-options').input(buffer);"
+          );
+          patch(
+            '  return engine._processChunk(buffer, flushFlag);',
+            '  var out = engine._processChunk(buffer, flushFlag);\n  return engine._opts.info ? { buffer: out, engine: engine } : out;'
+          );
+          patch(
+            'util.inherits(Zlib, Transform);',
+            'util.inherits(Zlib, Transform);\n\nZlib.prototype._destroy = function (err, callback) {\n  _close(this);\n  callback(err);\n};'
+          );
+          // Node 22's close is destroy (one 'close' event; the callback via
+          // finished), not Node 8's close-and-emit.
+          patch(
+            'Zlib.prototype.close = function (callback) {\n  _close(this, callback);\n  process.nextTick(emitCloseNT, this);\n};',
+            "Zlib.prototype.close = function (callback) {\n  if (callback) require('stream').finished(this, callback);\n  this.destroy();\n};"
+          );
+          // maxOutputLength (Node 22): ERR_BUFFER_TOO_LARGE past the limit.
+          patch(
+            '    if (nread >= kMaxLength) {\n      err = new RangeError(kRangeErrorMessage);',
+            "    if (nread > engine._opts.maxOutputLength) {\n      err = require('__jsh/zlib-options').tooLarge(engine._opts.maxOutputLength);"
+          );
+          patch(
+            '    if (nread >= kMaxLength) {\n      _close(this);\n      throw new RangeError(kRangeErrorMessage);',
+            "    if (nread > this._opts.maxOutputLength) {\n      _close(this);\n      throw require('__jsh/zlib-options').tooLarge(this._opts.maxOutputLength);"
+          );
+                    // params() validates as Node 22 does.
+          patch(
+            'Zlib.prototype.params = function (level, strategy, callback) {',
+            "Zlib.prototype.params = function (level, strategy, callback) {\n  require('__jsh/zlib-options').params(level, strategy);"
+          );
+                    // A destroyed stream reports nothing more (a write still in flight).
+          patch(
+            '  this._handle.onerror = function (message, errno) {',
+            '  this._handle.onerror = function (message, errno) {\n    if (self.destroyed) return;'
+          );
+          return { contents: text, loader: 'js' };
+        });
+        // Raw inflate gets its dictionary at init (zlib has no Z_NEED_DICT
+        // for raw streams), as Node's binding does.
+        build.onLoad({ filter: /browserify-zlib[/\\]lib[/\\]binding\.js$/ }, async (args) => {
+          const { readFile } = await import('node:fs/promises');
+          let text = await readFile(args.path, 'utf8');
+          const from = '      this.err = zlib_deflate.deflateSetDictionary(this.strm, this.dictionary);\n      break;';
+          if (!text.includes(from)) throw new Error('zlib-node22: binding.js dictionary hook moved');
+          text = text.replace(
+            from,
+            `${from}\n    case exports.INFLATERAW:\n      this.err = zlib_inflate.inflateSetDictionary(this.strm, this.dictionary);\n      break;`
+          );
+          return { contents: text, loader: 'js' };
+        });
+      },
+    },
+  ],
+  // Embedded in dist/*.mjs as a string: keep it small. Names stay for stacks.
+  minify: true,
+  keepNames: true,
+  legalComments: 'inline',
+});
+
 const vendorEmbeddedPath = join(root, 'src/runtime/vendor-embedded.mjs');
 const vendorEmbeddedPlaceholder = `/**
  * @generated by scripts/build.mjs — placeholder until the next build.
@@ -144,7 +245,7 @@ function writeVendorEmbedded(full) {
     writeFileSync(vendorEmbeddedPath, vendorEmbeddedPlaceholder);
     return;
   }
-  const names = ['readable-stream', 'string_decoder'];
+  const names = ['readable-stream', 'string_decoder', 'zlib'];
   const entries = names.map((name) => {
     const text = readFileSync(join(dist, 'vendor', `${name}.cjs`), 'utf8');
     return `  ${JSON.stringify(name)}: ${JSON.stringify(text)}`;
@@ -183,8 +284,9 @@ writeVendorEmbedded(false);
 writeFileSync(join(dist, 'meta-main.json'), JSON.stringify(main.metafile));
 writeFileSync(join(dist, 'meta-stream.json'), JSON.stringify(stream.metafile));
 writeFileSync(join(dist, 'meta-decoder.json'), JSON.stringify(decoder.metafile));
+writeFileSync(join(dist, 'meta-zlib.json'), JSON.stringify(zlib.metafile));
 
-const pkgRoots = packagesFromMetafiles([main.metafile, stream.metafile, decoder.metafile]);
+const pkgRoots = packagesFromMetafiles([main.metafile, stream.metafile, decoder.metafile, zlib.metafile]);
 const notice = renderNotice(pkgRoots);
 writeFileSync(join(root, 'NOTICE'), notice);
 console.log(`NOTICE: ${pkgRoots.size} bundled package(s)`);
