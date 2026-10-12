@@ -223,7 +223,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   let childProcess;
   const getChildProcess = () => {
     if (!childProcess) {
-      childProcess = createChildProcess({ ctx, process, Buffer, handles, getStream });
+      childProcess = createChildProcess({ ctx, process, Buffer, handles, getStream, getFs: () => fs });
     }
     return childProcess;
   };

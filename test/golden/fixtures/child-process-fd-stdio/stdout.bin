@@ -1,0 +1,13 @@
+spawnSync fd out 0 undefined [null,null,null] 3000021 "head\nx" "\ntail\nerr\nafter\n"
+execFileSync fd out null
+  file "to file\n"
+append fd "first\nappended\n"
+spawnSync fd in 0 "line one\nline two\n"
+via streams
+spawnSync streams 0 [null,null,null]
+spawn props node ["node","-e"] null null null
+spawn fd out 0 null 3000021 "head\nx" "\ntail\nerr\nafter\n"
+spawn fd in 0 "line one\nline two\n"
+async via streams
+spawn streams 0
+exec props /bin/sh ["/bin/sh","-c","true"]
