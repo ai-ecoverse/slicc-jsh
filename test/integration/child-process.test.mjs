@@ -111,6 +111,56 @@ execFile('node', ['-e', 'console.log("x"); process.exit(3)'], { encoding: 'utf8'
     }
   });
 
+  it('util.promisify(exec|execFile) resolves to { stdout, stderr }', async () => {
+    // Without promisify.custom, default promisify yields [stdout, stderr] and
+    // `const { stdout } = await …` is undefined (seven child-process-async).
+    const { run, close } = await withJsh();
+    try {
+      const r = await cp(
+        run,
+        `
+const cp = require('child_process');
+const { promisify } = require('util');
+const custom = promisify.custom;
+const pFile = promisify(cp.execFile)('node', ['-e', 'process.stdout.write("ef\\\\n")']);
+// Prefer bash: bare memory root has /usr/bin/bash but often no sh.
+const pExec = promisify(cp.exec)('echo promised', { shell: 'bash' });
+Promise.allSettled([pFile, pExec]).then(([f, e]) => {
+  const b = f.status === 'fulfilled' ? f.value : null;
+  const a = e.status === 'fulfilled' ? e.value : null;
+  console.log(JSON.stringify({
+    hasExecCustom: typeof cp.exec[custom] === 'function',
+    hasFileCustom: typeof cp.execFile[custom] === 'function',
+    fileStdout: b && b.stdout,
+    fileKeys: b && Object.keys(b).sort(),
+    child: !!pFile.child,
+    execStdout: a && a.stdout,
+    execKeys: a && Object.keys(a).sort(),
+    execChild: !!pExec.child,
+    execErr: e.status === 'rejected' ? e.reason && e.reason.code : null,
+  }));
+});
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      const j = JSON.parse(r.stdout.trim());
+      assert.equal(j.hasExecCustom, true);
+      assert.equal(j.hasFileCustom, true);
+      assert.equal(j.fileStdout, 'ef\n');
+      assert.deepEqual(j.fileKeys, ['stderr', 'stdout']);
+      assert.equal(j.child, true);
+      if (j.execErr) {
+        assert.equal(j.execErr, 'ENOENT');
+      } else {
+        assert.equal(j.execStdout, 'promised\n');
+        assert.deepEqual(j.execKeys, ['stderr', 'stdout']);
+        assert.equal(j.execChild, true);
+      }
+    } finally {
+      close();
+    }
+  });
+
   it('exec: is sh -c via spawn (ENOENT without a shell is fine)', async () => {
     const { run, close } = await withJsh();
     try {

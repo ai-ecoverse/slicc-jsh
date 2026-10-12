@@ -5,6 +5,35 @@
 import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 
+/** Same symbol util.promisify reads (`nodejs.util.promisify.custom`). */
+const PROMISIFY_CUSTOM = Symbol.for('nodejs.util.promisify.custom');
+
+/**
+ * Node's util.promisify(exec|execFile) resolves to `{ stdout, stderr }`, not
+ * the multi-arg callback tuple. Attach via promisify.custom (seven comparison
+ * case `child-process-async`).
+ */
+function customPromiseExecFunction(orig) {
+  return function (...args) {
+    let resolve;
+    let reject;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    promise.child = orig(...args, (err, stdout, stderr) => {
+      if (err != null) {
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+    return promise;
+  };
+}
+
 const SIGNAL_NAMES = {
   1: 'SIGHUP',
   2: 'SIGINT',
@@ -566,6 +595,15 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     // Node's exec sets err.cmd to the original command, not `sh -c …`.
     return execFile(shell, ['-c', cmd], { ...opts, shell: false, _execCmd: cmd }, cb);
   }
+
+  Object.defineProperty(exec, PROMISIFY_CUSTOM, {
+    enumerable: false,
+    value: customPromiseExecFunction(exec),
+  });
+  Object.defineProperty(execFile, PROMISIFY_CUSTOM, {
+    enumerable: false,
+    value: customPromiseExecFunction(execFile),
+  });
 
   return {
     spawn,
