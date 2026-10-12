@@ -1,0 +1,17 @@
+stdin lines ["first line","second","third","last without newline"]
+split chunks ["a","b","","c"]
+question Ada "name? "
+promises question Grace
+aborted AbortError ABORT_ERR
+after close ERR_USE_AFTER_CLOSE readline was closed
+keypress [["a","a",false,false,false,"a"],[null,"up",false,false,false,"\u001b[A"],[null,"right",true,false,false,"\u001b[1;5C"],["\u0003","c",true,false,false,"\u0003"],["\r","return",false,false,false,"\r"],[null,"b",false,true,false,"\u001bb"],[null,"delete",false,false,false,"\u001b[3~"],["","backspace",false,false,false,""],["\t","tab",false,false,false,"\t"]]
+terminal lines ["hello","abc","hello","word ","!"] ["!","word ","hello","abc","hello"]  0
+terminal output "\u001b[1G\u001b[0J> \u001b[3Ghello\r\nab\u001b[1Dc\u001b[1C\r\n\u001b[1G\u001b[0J> abc\u001b[6G\u001b[1G\u001b[0J> hello\u001b[8G\r\nword one\u001b[1G\u001b[0J> word \u001b[8G\r\nxyz\u001b[3D\u001b[1G\u001b[0J> \u001b[3G!\r\n"
+getCursorPos {"cols":2,"rows":0}
+helpers ["\u001b[4;3H","\u001b[1D\u001b[1B","\u001b[2K","\u001b[0J"]
+no throw
+throw TypeError ERR_INVALID_ARG_TYPE The "history" argument must be an instance of Array. Received type number (1)
+throw RangeError ERR_OUT_OF_RANGE The value of "tabSize" is out of range. It must be >= 1 && <= 4294967295. Received 0
+throw TypeError ERR_INVALID_ARG_VALUE The argument 'completer' is invalid. Received 1
+exports Interface clearLine clearScreenDown createInterface cursorTo emitKeypressEvents moveCursor promises
+promises exports Interface Readline createInterface

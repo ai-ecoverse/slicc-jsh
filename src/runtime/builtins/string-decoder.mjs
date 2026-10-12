@@ -96,16 +96,21 @@ export function createStringDecoder({ ctx, process, Buffer } = {}) {
       }
 
       StringDecoder.prototype.write = function write(buf) {
+        // Node: a string goes through unchanged.
+        if (typeof buf === 'string') return buf;
         assertDecoderThis(this);
         return toUrl(this, baseWrite.call(this, toBuf(buf)));
       };
       StringDecoder.prototype.end = function end(buf) {
         assertDecoderThis(this);
         // npm string_decoder 1.3 leaves lastNeed set; Node clears it after end().
+        // Node's end(buf) is write(buf) + the rest; a string is written as is.
+        const head = typeof buf === 'string' ? buf : '';
         const out =
-          arguments.length === 0 || buf === undefined
+          head +
+          (arguments.length === 0 || buf === undefined || typeof buf === 'string'
             ? baseEnd.call(this)
-            : baseEnd.call(this, toBuf(buf));
+            : baseEnd.call(this, toBuf(buf)));
         this.lastNeed = 0;
         this.lastTotal = 0;
         return toUrl(this, out);

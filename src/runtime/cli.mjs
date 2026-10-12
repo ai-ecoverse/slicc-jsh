@@ -12,6 +12,7 @@ const BOOLEAN_FLAGS = new Set([
   '--trace-deprecation',
   '--throw-deprecation',
   '--pending-deprecation',
+  '--expose-internals',
 ]);
 const VALUED_FLAGS = ['--disable-warning', '--redirect-warnings'];
 

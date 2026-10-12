@@ -134,6 +134,14 @@ const special = {
 
 function make(name) {
   if (name in special) return special[name];
+  // `XApply`: X taking its arguments as an array (MathMaxApply(list),
+  // ArrayPrototypePushApply(arr, items)).
+  if (name.endsWith('Apply') && name !== 'ReflectApply' && name !== 'FunctionPrototypeApply') {
+    const base = make(name.slice(0, -5));
+    if (typeof base === 'function') {
+      return name.includes('Prototype') ? (thisArg, args) => base(thisArg, ...args) : (args) => base(...args);
+    }
+  }
   if (name in roots || (Object.prototype.hasOwnProperty.call(globalThis, name) && /^[A-Z]/.test(name))) {
     return rootOf(name);
   }

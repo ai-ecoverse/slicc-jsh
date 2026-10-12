@@ -74,7 +74,7 @@ function loadCase(name) {
   return { name, dir, meta };
 }
 
-function runNode22(argv, { cwd, stdin, timeoutMs = 30_000 } = {}) {
+function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
   const result = spawnSync('npx', ['-y', 'node@22.22.0', ...argv], {
     cwd: cwd ?? root,
     // case.json `stdin`: a pipe with that text (else none, as before).
@@ -82,7 +82,8 @@ function runNode22(argv, { cwd, stdin, timeoutMs = 30_000 } = {}) {
     encoding: 'buffer',
     timeout: timeoutMs,
     maxBuffer: 4 * 1024 * 1024,
-    env: { ...process.env, npm_config_yes: 'true' },
+    // case.json `env` applies to Node too (on top of the caller's).
+    env: { ...process.env, npm_config_yes: 'true', ...env },
   });
   if (result.error) throw result.error;
   return {
@@ -174,7 +175,7 @@ async function main() {
     const shimArgv = meta.shimArgv ?? argv;
 
     if (mode === 'record') {
-      const out = runNode22(hostArgv, { cwd, stdin: meta.stdin });
+      const out = runNode22(hostArgv, { cwd, stdin: meta.stdin, env: meta.env });
       writeGolden(dir, out);
       console.log(`recorded ${name}: status=${out.status} out=${out.stdout.length}B err=${out.stderr.length}B`);
       ran++;
@@ -188,7 +189,7 @@ async function main() {
       }
     }
     const expected = readGolden(dir);
-    const host = runNode22(hostArgv, { cwd, stdin: meta.stdin });
+    const host = runNode22(hostArgv, { cwd, stdin: meta.stdin, env: meta.env });
     compare(name, 'host', host, expected);
 
     if (meta.shim) {
