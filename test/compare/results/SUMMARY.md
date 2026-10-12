@@ -40,7 +40,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [fs-binary](fs-binary) | fs | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [fs-callbacks](fs-callbacks) | fs | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [fs-coherence](fs-coherence) | fs | ≠ | = | – | six≠node | 0 / 0 / 0 / – |
-| [fs-errors](fs-errors) | fs | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
+| [fs-errors](fs-errors) | fs | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [fs-exists](fs-exists) | fs | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [fs-fd](fs-fd) | fs | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [fs-promises](fs-promises) | fs | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |

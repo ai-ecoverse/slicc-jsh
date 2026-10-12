@@ -1,0 +1,6 @@
+{
+  "description": "fs.promises.cp and fs.cp with symlinks and their SystemErrors, as Node 22.22 does them (cp.js: dereference copies what a link points to); cpSync's own error wording next to them",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

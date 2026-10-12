@@ -575,9 +575,9 @@
         "node": 0
       },
       "six": "≠",
-      "seven": "=",
+      "seven": "≠",
       "node": "=",
-      "auto": "six≠node"
+      "auto": "all differ"
     },
     {
       "name": "fs-exists",
