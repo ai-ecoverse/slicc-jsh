@@ -1,0 +1,4 @@
+assets,config,dir,refs,root,token
+dir scripts root . refs references assets assets
+ref
+{"from":"scripts/.config"}

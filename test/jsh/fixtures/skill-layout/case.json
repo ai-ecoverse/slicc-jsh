@@ -1,0 +1,5 @@
+{
+  "description": "sliccy:skill for the Agent Skills layout: refs/assets/root are the skill folder's (the parent of scripts/), dir and .config the script's",
+  "entry": "scripts/main.jsh",
+  "args": []
+}

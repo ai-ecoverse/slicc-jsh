@@ -91,10 +91,31 @@ function joinChild(dir, name) {
  * engine's Node `fs`; `token(id)` runs `oauth-token <id>` and nothing else
  * (decided 2026-10-10 on slicc-jsh#22).
  */
+/**
+ * The skill folder for the Agent Skills layout, as in slicc v6
+ * (`skill-global.ts`): for a script under a `scripts` directory
+ * (`<skill>/scripts/<name>.jsh`, or a helper nested below it) it is that
+ * directory's parent; otherwise the script's own directory (a `.jsh` next
+ * to SKILL.md). v6 takes the first `scripts` segment of the path; this takes
+ * the last, so a host path such as `~/scripts/<skill>/scripts/x.jsh` still
+ * finds `<skill>`. The two agree for every skill path v6 has.
+ */
+export function skillRootOf(dir) {
+  if (!dir) return dir;
+  const absolute = dir.startsWith('/');
+  const parts = dir.split('/').filter(Boolean);
+  const at = parts.lastIndexOf('scripts');
+  if (at < 0) return dir;
+  const rootParts = parts.slice(0, at);
+  if (rootParts.length === 0) return absolute ? '/' : '';
+  return (absolute ? '/' : '') + rootParts.join('/');
+}
+
 export function createSkill({ argv, fs, exec }) {
   const dir = dirnameOf(argv[1] ?? '');
-  const refs = joinChild(dir, 'references');
-  const assets = joinChild(dir, 'assets');
+  const root = skillRootOf(dir);
+  const refs = joinChild(root, 'references');
+  const assets = joinChild(root, 'assets');
   const configPath = joinChild(dir, '.config');
 
   async function readConfig() {
@@ -139,5 +160,5 @@ export function createSkill({ argv, fs, exec }) {
     return stdout.replace(/\r?\n+$/, '');
   }
 
-  return Object.freeze({ dir, refs, assets, config, token });
+  return Object.freeze({ dir, root, refs, assets, config, token });
 }
