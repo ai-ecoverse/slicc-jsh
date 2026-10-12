@@ -8,12 +8,14 @@ const issues = [];
 
 function walk(dir) {
   for (const name of readdirSync(dir)) {
-    // Vendored npm fixtures keep upstream formatting (tabs); skip them.
+    // Vendored files keep upstream formatting (tabs); skip them.
     if (
       name === 'node_modules' ||
       name === 'dist' ||
       name === '.git' ||
-      (name === 'fixtures' && relative(root, dir) === 'test')
+      (name === 'fixtures' && relative(root, dir) === 'test') ||
+      // Node's own lib files, unchanged (lib/punycode.js has tabs).
+      (name === 'lib' && relative(root, dir) === join('src', 'node-lib'))
     ) {
       continue;
     }

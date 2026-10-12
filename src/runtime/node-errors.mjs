@@ -263,6 +263,34 @@ export class AbortError extends Error {
  * internal/errors' `codes` for Node lib files: each a constructor (`new
  * ERR_X(...)`, as they call them) that builds the error above.
  */
+/** Node's SystemError (internal/errors.js): `prefix: syscall returned CODE (message) path => dest`. */
+export function systemError(key, prefix, context = {}) {
+  let message = `${prefix}: ${context.syscall} returned ${context.code} (${context.message})`;
+  if (context.path !== undefined) message += ` ${context.path}`;
+  if (context.dest !== undefined) message += ` => ${context.dest}`;
+  const err = new Error(message);
+  Object.defineProperty(err, 'name', { value: 'SystemError', enumerable: false, writable: true, configurable: true });
+  err.stack = `SystemError [${key}]: ${message}${err.stack.slice(err.stack.indexOf('\n'))}`;
+  err.code = key;
+  Object.defineProperty(err, 'info', { value: context, enumerable: true, configurable: true, writable: false });
+  Object.defineProperty(err, 'errno', { get: () => context.errno, set: (v) => (context.errno = v), enumerable: true, configurable: true });
+  Object.defineProperty(err, 'syscall', { get: () => context.syscall, set: (v) => (context.syscall = v), enumerable: true, configurable: true });
+  return err;
+}
+
+export function ERR_INVALID_URL_SCHEME(expected) {
+  if (typeof expected === 'string') expected = [expected];
+  const res = expected.length === 2 ? `one of scheme ${expected[0]} or ${expected[1]}` : `of scheme ${expected[0]}`;
+  return nodeError(TypeError, 'ERR_INVALID_URL_SCHEME', `The URL must be ${res}`);
+}
+
+export function ERR_MISSING_ARGS(...args) {
+  const len = args.length;
+  const wrap = (a) => `"${a}"`;
+  const names = args.map((a) => (Array.isArray(a) ? a.map(wrap).join(' or ') : wrap(a)));
+  return nodeError(TypeError, 'ERR_MISSING_ARGS', `The ${formatList(names)} argument${len > 1 ? 's' : ''} must be specified`);
+}
+
 export function errorCodes() {
   const factories = {
     ERR_INVALID_ARG_TYPE,
@@ -273,6 +301,16 @@ export function errorCodes() {
     ERR_INVALID_THIS: (type) => nodeError(TypeError, 'ERR_INVALID_THIS', `Value of "this" must be of type ${type}`),
     ERR_UNHANDLED_ERROR: (err = undefined) =>
       nodeError(Error, 'ERR_UNHANDLED_ERROR', err === undefined ? 'Unhandled error.' : `Unhandled error. (${err})`),
+    ERR_INVALID_URI: () => nodeError(URIError, 'ERR_INVALID_URI', 'URI malformed'),
+    ERR_INVALID_URL: (input, base = null) =>
+      Object.assign(nodeError(TypeError, 'ERR_INVALID_URL', 'Invalid URL'), { input }, base != null ? { base } : {}),
+    ERR_INVALID_URL_SCHEME: (expected) => ERR_INVALID_URL_SCHEME(expected),
+    ERR_INVALID_FILE_URL_HOST: (platform) =>
+      nodeError(TypeError, 'ERR_INVALID_FILE_URL_HOST', `File URL host must be "localhost" or empty on ${platform}`),
+    ERR_INVALID_FILE_URL_PATH: (reason, input) =>
+      Object.assign(nodeError(TypeError, 'ERR_INVALID_FILE_URL_PATH', `File URL path ${reason}`), { input }),
+    ERR_MISSING_ARGS: (...args) => ERR_MISSING_ARGS(...args),
+    ERR_SYSTEM_ERROR: (ctx) => systemError('ERR_SYSTEM_ERROR', 'A system error occurred', ctx),
   };
   const codes = {};
   for (const [name, make] of Object.entries(factories)) {

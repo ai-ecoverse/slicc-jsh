@@ -1,0 +1,29 @@
+win32 ["a\\c","C:\\x\\y",{"root":"C:\\","dir":"C:\\dir","base":"f.txt","ext":".txt","name":"f"},"..\\c","\\\\?\\C:\\x",true]
+posix [true,true,true,"/",":"]
+format ["/a/b.c","/x.js"]
+matchesGlob [true,false]
+bad arg THROWS TypeError ERR_INVALID_ARG_TYPE The "path" argument must be of type string. Received type number (1)
+url.parse ["http:","user:pw","example.com:8080","8080","example.com","#hash","?query=string&a=1",{"query":"string","a":"1"},"/p/a/t/h","/p/a/t/h?query=string&a=1","http://user:pw@example.com:8080/p/a/t/h?query=string&a=1#hash",true]
+url.parse relative ["foo","/bar"]
+url.parse javascript javascript:alert(1)
+url.parse idn xn--espaol-zwa.com
+url.format obj https://a.com/x?q=1&r=2&r=3#h
+url.format URL https://español.com/x
+url.format str http://a.com/x
+url.resolve ["http://a.com/d","/one/two/four","http://example.com/one","http://example.com/two"]
+domain ["xn--espaol-zwa.com","español.com",""]
+fileURLToPath ["/a b/c","/x/y","C:\\x"]
+fileURLToPath bad THROWS TypeError ERR_INVALID_URL_SCHEME The URL must be of scheme file
+fileURLToPath host ["ERR_INVALID_FILE_URL_HOST",true]
+fileURLToPath slash THROWS TypeError ERR_INVALID_FILE_URL_PATH File URL path must not include encoded / characters
+pathToFileURL ["file:///a%20b/c%23%3F%25","file:///dir/","file:///C:/x%20y/z"]
+urlToHttpOptions {"protocol":"https:","hostname":"h.com","hash":"","search":"?y","pathname":"/x","path":"/x?y","href":"https://a:b@h.com:8080/x?y","port":8080,"auth":"a:b"}
+Url true
+qs.stringify ["a=1&a=2&b=x%20y&c=","a:1","a%20b%26c",true]
+qs.parse [{"a":["1","2"],"b":"x y","c":""},{"a":"1","b":"2"},{"a":"你","b":"%ZZ"},"A%zz"]
+qs maxKeys ["a","b"]
+punycode ["maana-pta","mañana","xn--maana-pta.com","mañana.com",[128512]]
+os [true,"/dev/null","LE","string","number","string",["gid","homedir","shell","uid","username"],["UV_UDP_REUSEADDR","dlopen","errno","priority","signals"],"number",{"PRIORITY_LOW":19,"PRIORITY_BELOW_NORMAL":10,"PRIORITY_NORMAL":0,"PRIORITY_ABOVE_NORMAL":-7,"PRIORITY_HIGH":-14,"PRIORITY_HIGHEST":-20}]
+os.loadavg 3
+os.priority bad THROWS RangeError ERR_OUT_OF_RANGE The value of "priority" is out of range. It must be >= -20 && <= 19. Received 100
+os.networkInterfaces lo true

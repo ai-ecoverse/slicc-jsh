@@ -46,6 +46,7 @@ const stubs = {
   'net-stub.js': readFileSync(join(here, 'net-stub.js')),
   'worker_threads-stub.js': readFileSync(join(here, 'worker_threads-stub.js')),
   'child_process-stub.js': readFileSync(join(here, 'child_process-stub.js')),
+  'node-test-stub.js': readFileSync(join(here, 'node-test-stub.js')),
 };
 for (const [name, data] of Object.entries(stubs)) {
   await k.writeFile(`/os/test/common/${name}`, data);
@@ -96,7 +97,10 @@ const flagsOf = (src) => {
 const results = [];
 
 for (const file of files) {
-  const src = readFileSync(join(fixturesDir, file));
+  // No node:test in slicc-jsh yet: the harness's minimal stand-in.
+  const src = Buffer.from(
+    readFileSync(join(fixturesDir, file), 'utf8').replace(/require\(['"]node:test['"]\)/g, "require('../common/node-test-stub')")
+  );
   await k.writeFile(`/os/test/parallel/${file}`, src);
   const t0 = Date.now();
   let shim;
