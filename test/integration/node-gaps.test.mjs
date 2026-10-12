@@ -33,7 +33,18 @@ describe('smaller Node 22 gaps (kernel)', () => {
     assert.equal(r.stdout, 'after\nhandler SIGUSR2 12\n');
   });
 
-  it('SIGIO / 29 reach a SIGPOLL listener (same Linux number), as in Node', async () => {
+  // Not a golden: Linux coalesces the pending signal and libuv's handler
+  // order is by handle address, so host Node's output varies.
+  it('a self-signal reaches listeners under every name of its number (SIGABRT/SIGIOT)', async () => {
+    const r = await node(
+      '-e',
+      "process.on('SIGIOT', (n, num) => console.log('IOT', n, num)); process.on('SIGABRT', (n, num) => console.log('ABRT', n, num)); console.log(process.kill(process.pid, 'SIGABRT')); setTimeout(() => {}, 20)"
+    );
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(r.stdout.split('\n').filter(Boolean).sort(), ['ABRT SIGABRT 6', 'IOT SIGIOT 6', 'true']);
+  });
+
+    it('SIGIO / 29 reach a SIGPOLL listener (same Linux number), as in Node', async () => {
     const r = await node(
       '-e',
       "process.on('SIGPOLL', (n, num) => console.log('poll', n, num)); process.kill(process.pid, 'SIGIO'); process.kill(process.pid, 29); setTimeout(() => {}, 20)"
