@@ -1,0 +1,17 @@
+stream is Stream: ["function","Stream",true,false,["function","function","function","function","function","function","function","object","function"]]
+legacy pipe: ["a","b"]
+throws regexp property: undefined
+throws regexp property mismatch: THROW AssertionError ERR_ASSERTION "Expected values to be strictly deep-equal:"
+throws validation function: undefined
+throws validation function false: THROW AssertionError ERR_ASSERTION "The \"check\" validation function is expected to return \"true\". Received false"
+throws arrow + class: undefined
+throws wrong class: THROW AssertionError ERR_ASSERTION "The error is expected to be an instance of \"RangeError\". Received \"TypeError\""
+throws Error object: undefined
+throws missing key: THROW AssertionError ERR_ASSERTION "Expected values to be strictly deep-equal:"
+getCallSites: [["where","script.js",48,true],["","script.js",50,true]]
+getCallSites options only: true
+getCallSites bad: THROW TypeError ERR_INVALID_ARG_TYPE "The \"frameCount\" argument must be of type number. Received type string ('x')"
+getCallSites 0: THROW RangeError ERR_OUT_OF_RANGE "The value of \"frameCount\" is out of range. It must be >= 1 && <= 200. Received 0"
+prepareStackTrace save/restore: [true,"function","TypeError: Cannot read properties of null (reading 'x')"]
+base64url decoder: ["base64url","","-_-_","AQID"]
+unknown encoding: THROW TypeError ERR_UNKNOWN_ENCODING "Unknown encoding: nope"

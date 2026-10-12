@@ -33,7 +33,16 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 **`zlib`:** browserify-zlib 0.2.0 (Node's own `zlib.js` port) over pako 1.0.11. The vendor bundle is minified and only evaluated by the first `require('zlib')`. It's patched to Node 22: option validation and its errors, ArrayBuffer and TypedArray input, `{ info: true }`, `destroy`/`close`, `params`, and raw-inflate dictionaries. Also `constants`/`codes` from Node 22 and `crc32`. Deflate output is byte-identical to Node's (golden `zlib-node22`). Brotli and Zstd have no implementation here: they throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`.
 
-**Still later:** `crypto` / `readline` / `tty` / `tls` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
+**`crypto`:** Node 22's own JS layer (`lib/internal/crypto/{hash,cipher,keys,pbkdf2,hkdf,scrypt,random}.js`, ported) over pure-JS primitives in a minified vendor bundle that's only evaluated by the first `require('crypto')`. The primitives are @noble/hashes 1.8.0 (digests, HMAC, PBKDF2, HKDF, scrypt) and browserify-aes 1.2.0 / browserify-des 1.0.2 (block ciphers). Random numbers, `webcrypto` and `subtle` come from the platform's WebCrypto. Available:
+- `createHash`/`hash` for md5, sha1, sha2, sha3, shake, ripemd160, blake2 and md5-sha1, under OpenSSL's names and aliases;
+- `createHmac`, `pbkdf2`, `hkdf` and `scrypt`, each sync and async;
+- `createCipheriv`/`createDecipheriv` for AES ECB/CBC/CFB/CFB8/CFB1/OFB/CTR/GCM and 3DES;
+- secret `KeyObject`s (`createSecretKey`, `generateKey`);
+- the `random*` family, `timingSafeEqual`, `getCiphers`/`getCipherInfo`/`getHashes`, and `constants`.
+
+Outputs and errors match Node 22.22.0 (golden `crypto-node22`). That includes Node's quirks, such as "Deriving bits failed" for a zero-length PBKDF2 or HKDF key. DES (single), Blowfish and the other ciphers in OpenSSL's legacy provider fail as `unsupported`, as in Node 22. Asymmetric keys, sign/verify, DH/ECDH, RSA encryption, primes, X509, and the CCM/OCB/XTS/ChaCha20/wrap ciphers have no implementation here: they throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` (`crypto.subtle` covers much of it).
+
+**Still later:** `readline` / `tty` / `tls` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

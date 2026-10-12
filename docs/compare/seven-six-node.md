@@ -22,6 +22,9 @@ The matrix below is the measurement of 2026-10-11. The fixes since then, re-reco
 | #78 | 0.3.6 | 8: `fs` correctness (no over-deletion, encodings, flags, fds, missing calls) | fs-binary, fs-errors, fs-promises, fs-stat, fs-sync, fs-writefile-await |
 | #79 | | 9, 11: Buffer views share memory, `process.env` stores strings, `require('buffer')` | buffer, process-env |
 | #80 | | 10: `sliccy:skill` `root`/`refs`/`assets` | sliccy-skill (seven=six) |
+| #83 | 0.3.9 | F1 (cert): modules resolve through symlinks to their real path, `--preserve-symlinks(-main)` | (cert m7) |
+| #84 | | 7: `zlib` (browserify-zlib over pako, patched to Node 22; no Brotli/Zstd) | |
+| crypto | | 7: `crypto` (Node's JS layer over @noble/hashes and browserify-aes/-des) | crypto |
 
 Kernel follow-ups: slicc-kernel#401 (an exit that never unwinds) and #402 (`/dev` for JS programs' `fs`).
 

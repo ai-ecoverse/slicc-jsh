@@ -15,7 +15,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [child-process-sync](child-process-sync) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [console-format](console-format) | console | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [console-methods](console-methods) | console | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
-| [crypto](crypto) | builtins | ≠ | ≠ | = | all differ | 0 / 1 / 0 / 0 |
+| [crypto](crypto) | builtins | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [env-paths](env-paths) | environment | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [error-cause](error-cause) | exit | ≠ | = | ≠ | six≠node | 1 / 1 / 1 / 1 |
 | [error-in-main-catch](error-in-main-catch) | exit | = | = | = | same | 1 / 1 / 1 / 1 |

@@ -164,6 +164,7 @@ export function wrapCallSite(frame) {
     getLineNumber: () => line,
     getColumnNumber: () => col,
     getEvalOrigin: () => frame.getEvalOrigin?.(),
+    getScriptId: () => frame.getScriptId?.(),
     isToplevel: () => !!isToplevel,
     isEval: () => frame.isEval?.() ?? false,
     isNative: () => frame.isNative?.() ?? false,
@@ -217,11 +218,13 @@ export function installStackPrepare() {
   Object.defineProperty(Error, 'prepareStackTrace', {
     configurable: true,
     enumerable: true,
+    // V8 reads the property to format every stack, so it stays the wrapper;
+    // restoring a saved value (the wrapper) must not make it call itself.
     get() {
       return wrapper;
     },
     set(fn) {
-      userPrepare = typeof fn === 'function' ? fn : null;
+      userPrepare = typeof fn === 'function' && fn !== wrapper ? fn : null;
     },
   });
 }

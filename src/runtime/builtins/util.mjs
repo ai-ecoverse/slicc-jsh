@@ -8,6 +8,8 @@ import {
   formatWithOptions,
 } from 'node-inspect-extracted';
 
+import { validateBoolean, validateNumber, validateObject } from '../node-errors.mjs';
+
 const INSPECT_CUSTOM = Symbol.for('nodejs.util.inspect.custom');
 const PROMISIFY_CUSTOM = Symbol.for('nodejs.util.promisify.custom');
 
@@ -23,6 +25,43 @@ function promisify(fn) {
   };
 }
 promisify.custom = PROMISIFY_CUSTOM;
+
+/**
+ * util.getCallSites (Node 22.9+): the caller's frames as plain objects, from
+ * the runtime's remapped CallSites (stack.mjs).
+ */
+function getCallSites(frameCount = 8, options) {
+  if (options === undefined && typeof frameCount === 'object' && frameCount !== null) {
+    options = frameCount;
+    frameCount = 8;
+  }
+  if (options !== undefined) {
+    validateObject(options, 'options');
+    if (options.sourceMap !== undefined) validateBoolean(options.sourceMap, 'options.sourceMap');
+  }
+  validateNumber(frameCount, 'frameCount', 1, 200);
+  const prevPrepare = Error.prepareStackTrace;
+  const prevLimit = Error.stackTraceLimit;
+  const holder = {};
+  try {
+    // Kernel and loader frames are dropped after capture: capture extra.
+    Error.stackTraceLimit = frameCount + 64;
+    Error.prepareStackTrace = (_, callSites) => callSites;
+    Error.captureStackTrace(holder, getCallSites);
+    const sites = holder.stack;
+    return (Array.isArray(sites) ? sites : []).slice(0, frameCount).map((site) => ({
+      functionName: site.getFunctionName() ?? '',
+      scriptId: String(site.getScriptId?.() ?? '0'),
+      scriptName: site.getFileName() ?? '',
+      lineNumber: site.getLineNumber() ?? 0,
+      columnNumber: site.getColumnNumber() ?? 0,
+      column: site.getColumnNumber() ?? 0,
+    }));
+  } finally {
+    Error.prepareStackTrace = prevPrepare;
+    Error.stackTraceLimit = prevLimit;
+  }
+}
 
 function isDeepStrictEqual(a, b) {
   if (Object.is(a, b)) return true;
@@ -103,6 +142,7 @@ export function createUtil() {
     promisify,
     types,
     isDeepStrictEqual,
+    getCallSites,
     TextEncoder: globalThis.TextEncoder,
     TextDecoder: globalThis.TextDecoder,
     inherits(ctor, superCtor) {
