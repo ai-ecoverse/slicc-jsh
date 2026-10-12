@@ -1,0 +1,7 @@
+{
+  "description": "for await (const chunk of process.stdin), with setEncoding, and readline-free line splitting",
+  "argv": ["script.js"],
+  "stdin": "alpha\nbeta\ngamma",
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

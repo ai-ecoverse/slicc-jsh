@@ -109,19 +109,14 @@ export async function runKernelJsh(ctx, rt, givenFilename) {
   // As Node runs a main module: __filename is the real path (links resolved),
   // process.argv[1] the path as given.
   const filename = realMainPath(ctx, givenFilename);
-  let stdoutIsTTY = false;
-  try {
-    stdoutIsTTY = !!(await rt.track(Promise.resolve(ctx.isatty?.(1))));
-  } catch {
-    stdoutIsTTY = false;
-  }
+  const stdoutIsTTY = process._stdio.isatty(1);
   const engine = {
     readSource: (path) => decoder.decode(ctx.sync.fs.readFile(path)),
     compile: compiler(rt),
     createRequire: (path) => rt.createRequire(path),
     selfRequire: rt.createRequire('/node_modules/@ai-ecoverse/slicc-jsh/package.json'),
-    writeStdout: (s) => process.stdout.write(String(s)),
-    writeStderr: (s) => process.stderr.write(String(s)),
+    writeStdout: (s) => process._stdoutWrite(String(s)),
+    writeStderr: (s) => process._stderrWrite(String(s)),
     stdoutIsTTY,
     spawn: kernelSpawn(ctx, process, rt.track),
     shell: ['sh', '-c'],
@@ -145,14 +140,14 @@ export function installJshHandoff(ctx, rt) {
     async runJsh(args) {
       const { process } = rt;
       const parsed = parseJshArgv([...args]);
-      if (parsed.action === 'version') return void process.stdout.write(`${JSH_VERSION}\n`);
-      if (parsed.action === 'help') return void process.stdout.write(JSH_USAGE);
+      if (parsed.action === 'version') return void process._stdoutWrite(`${JSH_VERSION}\n`);
+      if (parsed.action === 'help') return void process._stdoutWrite(JSH_USAGE);
       if (parsed.action === 'usage') {
-        process.stderr.write(JSH_USAGE);
+        process._stderrWrite(JSH_USAGE);
         return process.exit(2);
       }
       if (parsed.action === 'error') {
-        process.stderr.write(`${parsed.message}\n${JSH_USAGE}`);
+        process._stderrWrite(`${parsed.message}\n${JSH_USAGE}`);
         return process.exit(parsed.status);
       }
       const filename = ctx.resolve(parsed.script);

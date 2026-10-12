@@ -1,0 +1,12 @@
+stdin "from stdin\n"
+plain
+returned true
+throw TypeError ERR_INVALID_ARG_TYPE The "chunk" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (42)
+throw TypeError ERR_STREAM_NULL_VALUES May not write null values to stream
+throw TypeError ERR_INVALID_ARG_TYPE The "chunk" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object
+throw TypeError ERR_INVALID_ARG_TYPE The "chunk" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined
+a buffer
+u8
+hicaptured: ["captured line\n","captured info\n"]
+true false false function
+write callback

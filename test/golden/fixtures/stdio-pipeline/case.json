@@ -1,0 +1,7 @@
+{
+  "description": "stream.pipeline(process.stdin, gzip, gunzip, process.stdout) and 'readable' / read() on stdin",
+  "argv": ["script.js"],
+  "stdin": "compress me, then give me back\nsecond line\n",
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

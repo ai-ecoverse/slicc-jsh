@@ -9,7 +9,7 @@
  * global installs live under $PNPM_HOME/global/v11/<hash>/).
  * NOTICE is regenerated from esbuild metafiles (every bundled package → LICENSE).
  */
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,6 +42,7 @@ const stream = await esbuild.build({
   metafile: true,
   alias: {
     events: require.resolve('events/'),
+    process: join(root, 'src/vendor-shims/process.cjs'),
     string_decoder: sdPath,
     'abort-controller': require.resolve('abort-controller'),
     ...vendorBufferAlias,
@@ -51,6 +52,25 @@ const stream = await esbuild.build({
       name: 'string-decoder-slash',
       setup(build) {
         build.onResolve({ filter: /^string_decoder\/$/ }, () => ({ path: sdPath }));
+        build.onResolve({ filter: /^process\/$/ }, () => ({ path: join(root, 'src/vendor-shims/process.cjs') }));
+      },
+    },
+    {
+      // Node 22 writes and pushes any ArrayBufferView (as a Buffer over the
+      // same memory) and names TypedArray and DataView in its error.
+      name: 'chunks-node22',
+      setup(build) {
+        build.onLoad({ filter: /streams[/\\](writable|readable)\.js$/ }, async (args) => {
+          const { readFile } = await import('node:fs/promises');
+          let text = await readFile(args.path, 'utf8');
+          const views = text.split('Stream._isUint8Array(chunk)').length - 1;
+          const names = text.split("['string', 'Buffer', 'Uint8Array']").length - 1;
+          if (views === 0 || names === 0) throw new Error(`chunks-node22: ${args.path} changed`);
+          text = text
+            .replaceAll('Stream._isUint8Array(chunk)', 'ArrayBuffer.isView(chunk)')
+            .replaceAll("['string', 'Buffer', 'Uint8Array']", "['string', 'Buffer', 'TypedArray', 'DataView']");
+          return { contents: text, loader: 'js' };
+        });
       },
     },
     {
@@ -121,6 +141,36 @@ const decoder = await esbuild.build({
 }`
           );
           return { contents: text, loader: 'js' };
+        });
+      },
+    },
+  ],
+});
+
+// node-lib: Node v22.22.0's own lib files (src/node-lib/README.md).
+const nodeLibRoot = join(root, 'src/node-lib/lib');
+const nodeLib = await esbuild.build({
+  entryPoints: [join(root, 'src/node-lib/entry.cjs')],
+  outfile: join(dist, 'vendor/node-lib.cjs'),
+  bundle: true,
+  format: 'cjs',
+  platform: 'neutral',
+  target: ['es2022'],
+  logLevel: 'info',
+  metafile: true,
+  minify: true,
+  keepNames: true,
+  legalComments: 'inline',
+  inject: [join(root, 'src/node-lib/primordials-inject.mjs')],
+  plugins: [
+    {
+      name: 'node-lib-resolve',
+      setup(b) {
+        // A Node lib file we carry is bundled; any other id is the runtime's.
+        b.onResolve({ filter: /^[^./]/ }, (args) => {
+          const file = join(nodeLibRoot, `${args.path}.js`);
+          if (existsSync(file)) return { path: file };
+          return { path: args.path, external: true };
         });
       },
     },
@@ -294,7 +344,7 @@ function writeVendorEmbedded(full) {
     writeFileSync(vendorEmbeddedPath, vendorEmbeddedPlaceholder);
     return;
   }
-  const names = ['readable-stream', 'string_decoder', 'zlib', 'crypto'];
+  const names = ['readable-stream', 'string_decoder', 'zlib', 'crypto', 'node-lib'];
   const entries = names.map((name) => {
     const text = readFileSync(join(dist, 'vendor', `${name}.cjs`), 'utf8');
     return `  ${JSON.stringify(name)}: ${JSON.stringify(text)}`;
@@ -335,6 +385,7 @@ writeFileSync(join(dist, 'meta-stream.json'), JSON.stringify(stream.metafile));
 writeFileSync(join(dist, 'meta-decoder.json'), JSON.stringify(decoder.metafile));
 writeFileSync(join(dist, 'meta-zlib.json'), JSON.stringify(zlib.metafile));
 writeFileSync(join(dist, 'meta-crypto.json'), JSON.stringify(crypto.metafile));
+writeFileSync(join(dist, 'meta-node-lib.json'), JSON.stringify(nodeLib.metafile));
 
 const pkgRoots = packagesFromMetafiles([main.metafile, stream.metafile, decoder.metafile, zlib.metafile, crypto.metafile]);
 const notice = renderNotice(pkgRoots);

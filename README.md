@@ -20,7 +20,7 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 **HTTP/HTTPS limits (M2):** request and response bodies are buffered whole until `end()` when no `Content-Length` is set (then sent with a computed length); with `Content-Length`, body bytes stream as written. No chunked transfer encoding / SSE yet — multi-write responses still flush as one payload. Bodies over 64 MiB are rejected (`413` on the server, `ERR_OUT_OF_RANGE` on the client). `http.Agent` follows Node's `_http_agent.js` request path (`addRequest` → `createSocket` → `createConnection`) so **agent-base** / http(s)-proxy-agent subclasses work; `getName`, `destroy`, `keepSocketAlive`, `reuseSocket`, `removeSocket`, and `sockets` / `freeSockets` / `requests` are present. Keep-alive pooling is not implemented (`keepAlive` is accepted, `req.reusedSocket` is always `false`). `https.request` options `cert` / `key` / `pfx` / `ca` throw `ERR_NOT_SUPPORTED` (no client certs / custom CA on `ctx.fetch`). `rejectUnauthorized: false` is accepted but ignored — TLS verification stays stricter than Node with that flag. Responses with no `Content-Length` and no chunked encoding wait for the peer's FIN (`socket.end` half-closes via `writer.close()` only). On the **browser** entry, `https.get` tries `redirect: 'manual'` and falls back to `'follow'` when the transport rejects it with `ENOTSUP` — so plain requests work, but a redirect may be followed instead of surfaced (`statusCode` / `Location`). The Node entry's `nodeTransport` supports manual redirects. Embedders with `traits.redirectHops` (kernel #315) can surface redirects in the browser.
 
-**npm ecosystem gaps:** packages that import `node:tty` (e.g. chalk's Node build) or need `crypto` (e.g. nanoid's main entry) fail with `ERR_NOT_SUPPORTED` until those modules ship. Prefer the browser/`default` export condition, or a fixture that pins it, when dogfooding. The `tls` module itself is unsupported (`ERR_NOT_SUPPORTED`) — so **http-proxy-agent** / **https-proxy-agent** (which import `tls` for CONNECT tunnels) cannot run yet even though `http.Agent` subclasses via agent-base work for plain `http`.
+**npm ecosystem gaps:** The `tls` module itself is unsupported (`ERR_NOT_SUPPORTED`) — so **http-proxy-agent** / **https-proxy-agent** (which import `tls` for CONNECT tunnels) cannot run yet even though `http.Agent` subclasses via agent-base work for plain `http`.
 
 **`child_process` (0.3.0):** `spawn`, `execFile`, and `exec` (via `sh -c`) sit on `ctx.spawn` — argv/env/cwd, stdio `inherit`/`pipe`/`ignore`, streams on `.stdin`/`.stdout`/`.stderr`, events `spawn`/`exit`/`close`/`error` (ENOENT), `.kill(signal)`, `.pid`. Sync forms (`spawnSync`, `execSync`, `execFileSync`) and `fork` stay `ERR_NOT_SUPPORTED`. Also `fs.realpathSync` and `process.getuid`/`getgid`/`kill(self)` so pnpm's global cmd shims can resolve their target and re-raise signals. As of 0.3.3, pipe stdio loads `readable-stream` from sources embedded in the bundle (not a sync read of `/node_modules/@ai-ecoverse/slicc-jsh/dist/vendor/…`), so `pnpm add -g` installs under `$PNPM_HOME/global/v11/<hash>/` work on seven.
 
@@ -42,7 +42,20 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 Outputs and errors match Node 22.22.0 (golden `crypto-node22`). That includes Node's quirks, such as "Deriving bits failed" for a zero-length PBKDF2 or HKDF key. DES (single), Blowfish and the other ciphers in OpenSSL's legacy provider fail as `unsupported`, as in Node 22. Asymmetric keys, sign/verify, DH/ECDH, RSA encryption, primes, X509, and the CCM/OCB/XTS/ChaCha20/wrap ciphers have no implementation here: they throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` (`crypto.subtle` covers much of it).
 
-**Still later:** `readline` / `tty` / `tls` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
+**stdio and `tty`:** `process.stdin`, `process.stdout` and `process.stderr` are Node's streams, made on first access: a `stream.Readable` and `stream.Writable`s, so `pipe`, `stream.pipeline`, async iteration, `'data'`/`'end'`, `setEncoding` and `pause`/`resume` work.
+- On a terminal they're `tty.ReadStream` and `tty.WriteStream`:
+  - `isTTY`;
+  - `setRawMode` (the kernel's raw mode, put back when the program ends);
+  - `columns`/`rows`, with `'resize'` on `SIGWINCH`;
+  - `getColorDepth`/`hasColors` (Node's own `internal/tty.js`);
+  - `cursorTo`/`moveCursor`/`clearLine`/`clearScreenDown`.
+- Off a terminal they have no `isTTY`, as in Node.
+- **Paused stdin:** reading stdin keeps the program alive only while something consumes it, so a paused stdin lets the program end.
+- **`tty.isatty(fd)`:** answers for fds 0–2, which the runtime asks the kernel about before the program starts. Any other fd is `false`.
+- **Signals:** a `process.on('SIGINT' | 'SIGTERM' | 'SIGWINCH' | …)` listener installs a kernel signal handler. Removing the last listener puts the default action back. `SIGKILL`/`SIGSTOP` throw `uv_signal_start EINVAL`.
+- **Install timing:** the kernel installs a handler a moment after `process.on` returns, whereas Node does it synchronously.
+
+**Still later:** `readline` / `tls` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

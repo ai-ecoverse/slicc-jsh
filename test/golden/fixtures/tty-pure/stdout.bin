@@ -1,0 +1,38 @@
+{} 1 false false false false
+{"TERM":"dumb"} 1 false false false false
+{"TERM":"xterm"} 4 true true false false
+{"TERM":"xterm-256color"} 8 true true true false
+{"TERM":"xterm-kitty"} 24 true true true true
+{"COLORTERM":"truecolor"} 24 true true true true
+{"COLORTERM":"24bit","TERM":"xterm"} 24 true true true true
+{"NO_COLOR":"1","TERM":"xterm-256color"} 1 false false false false
+{"NODE_DISABLE_COLORS":"1","TERM":"xterm"} 1 false false false false
+{"FORCE_COLOR":"0"} 1 false false false false
+{"FORCE_COLOR":"1"} 4 true true false false
+{"FORCE_COLOR":"2"} 8 true true true false
+{"FORCE_COLOR":"3"} 24 true true true true
+{"FORCE_COLOR":""} 4 true true false false
+{"CI":"1","GITHUB_ACTIONS":"1"} 24 true true true true
+{"CI":"1","TRAVIS":"1"} 8 true true true false
+{"CI":"1"} 1 false false false false
+{"TERM":"screen"} 4 true true false false
+{"TERM":"linux"} 4 true true false false
+{"TERM_PROGRAM":"iTerm.app","TERM_PROGRAM_VERSION":"3.4"} 24 true true true true
+{"TERM_PROGRAM":"Apple_Terminal"} 8 true true true false
+{"TMUX":"1"} 24 true true true true
+{"TEAMCITY_VERSION":"2020.1"} 4 true true false false
+hasColors bad ERR_INVALID_ARG_TYPE The "count" argument must be of type number. Received type string ('x')
+cursorTo 3 true ["\u001b[4G"]
+cursorTo 3 4 true ["\u001b[5;4H"]
+cursorTo cb true ["\u001b[2G","cb"]
+cursorTo NaN "THROW TypeError ERR_INVALID_ARG_VALUE The argument 'x' is invalid. Received NaN" []
+cursorTo y only "THROW TypeError ERR_INVALID_CURSOR_POS Cannot set cursor row without setting its column" []
+moveCursor 2 -1 true ["\u001b[2C\u001b[1A"]
+moveCursor -3 2 true ["\u001b[3D\u001b[2B"]
+moveCursor 0 0 true []
+clearLine -1 true ["\u001b[1K"]
+clearLine 0 true ["\u001b[2K"]
+clearLine 1 true ["\u001b[0K"]
+clearScreenDown true ["\u001b[0J"]
+getWindowSize [7,3] []
+isTTY proto [true,null] []

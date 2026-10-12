@@ -244,3 +244,41 @@ export function validateEncoding(data, encoding) {
     throw ERR_INVALID_ARG_VALUE('encoding', encoding, `is invalid for data of length ${length}`);
   }
 }
+
+export const ERR_INVALID_CURSOR_POS = () =>
+  nodeError(TypeError, 'ERR_INVALID_CURSOR_POS', 'Cannot set cursor row without setting its column');
+
+export const ERR_USE_AFTER_CLOSE = (name = 'Object') => nodeError(Error, 'ERR_USE_AFTER_CLOSE', `${name} was closed`);
+
+/** internal/errors AbortError. */
+export class AbortError extends Error {
+  constructor(message = 'The operation was aborted', options = undefined) {
+    super(message, options);
+    this.code = 'ABORT_ERR';
+    this.name = 'AbortError';
+  }
+}
+
+/**
+ * internal/errors' `codes` for Node lib files: each a constructor (`new
+ * ERR_X(...)`, as they call them) that builds the error above.
+ */
+export function errorCodes() {
+  const factories = {
+    ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_VALUE,
+    ERR_OUT_OF_RANGE,
+    ERR_INVALID_CURSOR_POS,
+    ERR_USE_AFTER_CLOSE,
+  };
+  const codes = {};
+  for (const [name, make] of Object.entries(factories)) {
+    // A plain function (constructible): `new ERR_X()` returns the error made.
+    const ctor = function (...args) {
+      return make(...args);
+    };
+    Object.defineProperty(ctor, 'name', { value: name });
+    codes[name] = ctor;
+  }
+  return codes;
+}

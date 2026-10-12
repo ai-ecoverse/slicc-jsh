@@ -13,6 +13,7 @@ import { realMainPath } from './realpath.mjs';
 import { createHandleTable } from './handles.mjs';
 import { createNextTick } from './next-tick.mjs';
 import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
+import { probeStdio } from './stdio.mjs';
 import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
@@ -152,6 +153,9 @@ export async function runNode(ctx, options = {}) {
   }
 
   const Buffer = createBuffer();
+  // Terminal, file or pipe, for process.stdin/stdout/stderr (Node knows it
+  // synchronously; the kernel answers asynchronously, so ask up front).
+  const stdio = await probeStdio(ctx);
 
   const {
     process,
@@ -167,6 +171,7 @@ export async function runNode(ctx, options = {}) {
     nextTick,
     handles,
     Buffer,
+    stdio,
     onExit: (code) => {
       exitStatus = code;
     },
@@ -222,6 +227,9 @@ export async function runNode(ctx, options = {}) {
       timers.clearPending();
     },
   });
+  // A signal handler runs from the loop, as an immediate (its throw is an
+  // uncaught exception, handled as a timer callback's).
+  process._dispatchSignal = (fn) => timers.setImmediate(fn);
 
   // Pre-#297 fallback: host process may still exist before we overwrite globalThis.
   const hostProcess = globalThis.process;
