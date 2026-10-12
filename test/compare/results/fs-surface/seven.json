@@ -1,5 +1,5 @@
 {
   "status": 0,
-  "stdout": "missing: chmod chmodSync copyFile copyFileSync cp cpSync fsync mkdtemp mkdtempSync opendir opendirSync readlink rm statfs symlink truncate truncateSync unwatchFile utimes utimesSync watch watchFile Stats ReadStream WriteStream\nextra: (none)\nconstants.O_RDONLY number\n",
+  "stdout": "missing: statfs unwatchFile watch watchFile\nextra: (none)\nconstants.O_RDONLY number\n",
   "stderr": ""
 }
