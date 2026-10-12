@@ -40,8 +40,10 @@ const stream = await esbuild.build({
   mainFields: ['main', 'module', 'browser'],
   logLevel: 'info',
   metafile: true,
+  // events is the runtime's (Node's own lib/events.js), so streams are
+  // instances of require('events').
+  external: ['events'],
   alias: {
-    events: require.resolve('events/'),
     process: join(root, 'src/vendor-shims/process.cjs'),
     string_decoder: sdPath,
     'abort-controller': require.resolve('abort-controller'),

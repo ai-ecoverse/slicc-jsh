@@ -3,6 +3,7 @@
  */
 import { trackPromise } from '../async-handles.mjs';
 import { loadVendorCjs } from '../vendor-load.mjs';
+import { EventEmitter } from './events.mjs';
 
 const PACKAGE_ROOT = '/node_modules/@ai-ecoverse/slicc-jsh';
 
@@ -16,6 +17,7 @@ function getStreamApi({ ctx, process, Buffer }) {
     name: 'readable-stream',
     globals: { process, Buffer },
     process,
+    requires: { events: EventEmitter },
   });
   // readable-stream's browser entry exports Readable; Node's `stream` is the
   // legacy Stream constructor carrying Readable, Writable, …, pipeline (which

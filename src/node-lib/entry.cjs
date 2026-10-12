@@ -6,6 +6,7 @@
  * (src/runtime/node-lib.mjs).
  */
 module.exports = {
+  events: require('events'),
   tty: require('internal/tty'),
   readlineCallbacks: require('internal/readline/callbacks'),
   warning: require('internal/process/warning'),

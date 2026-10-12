@@ -86,6 +86,13 @@ const files = readdirSync(fixturesDir)
   .filter((f) => !process.env.ONLY || new RegExp(process.env.ONLY).test(f))
   .sort();
 
+// A test's `// Flags: …` line, as Node's test runner passes them (else
+// test/common re-spawns itself with them through child_process).
+const flagsOf = (src) => {
+  const m = /^\/\/ Flags: (.+)$/m.exec(src.toString('utf8'));
+  return m ? m[1].trim().split(/\s+/) : [];
+};
+
 const results = [];
 
 for (const file of files) {
@@ -95,7 +102,7 @@ for (const file of files) {
   let shim;
   try {
     shim = await Promise.race([
-      k.run(['node', `/os/test/parallel/${file}`], { cwd: '/os/test/parallel' }),
+      k.run(['node', ...flagsOf(src), `/os/test/parallel/${file}`], { cwd: '/os/test/parallel' }),
       new Promise((_, rej) => setTimeout(() => rej(new Error('TIMEOUT')), TIMEOUT_MS)),
     ]);
   } catch (e) {
