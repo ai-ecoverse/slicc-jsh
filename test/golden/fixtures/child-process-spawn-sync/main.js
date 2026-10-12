@@ -51,6 +51,14 @@ process.stdout.write('after inherit\n');
 show('inherit array fds', () => node('console.log("child via fd 1")', { stdio: [0, 1, 2] }).output);
 show('stdio objects', () => node('console.log("child via stream objects")', { stdio: [process.stdin, process.stdout, process.stderr] }).output);
 show('stdout to fd 2', () => node('console.log("stdout went to stderr")', { stdio: ['pipe', 2, 'pipe'] }).output);
+show('stdout to fd 2, past maxBuffer', () => {
+  const r = node('process.stdout.write("z".repeat(64) + "\\n")', { stdio: ['pipe', 2, 'pipe'], maxBuffer: 8 });
+  return [r.error && r.error.code, r.status, r.output];
+});
+show('cwd empty', () => {
+  const r = node('', { cwd: '' });
+  return [r.status, r.pid, r.error.message, r.error.code];
+});
 show('null stdio entries', () => node('console.log("n")', { stdio: [null, undefined, null], encoding: 'utf8' }).output);
 show('exit code', () => node('process.exit(42)').status);
 show('cwd relative', () => node('console.log(process.cwd())', { cwd: 'w-ss/sub', encoding: 'utf8' }).stdout);

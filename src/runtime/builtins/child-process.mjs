@@ -973,12 +973,17 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
 
     let failed;
     let raw;
-    if (options.cwd != null) {
+    let remapped = false;
+    if (options.cwd === '') {
+      // Node's sync path passes '' to uv_spawn, whose chdir('') is ENOENT.
+      failed = 'ENOENT';
+    } else if (options.cwd != null) {
       const bad = checkSpawnCwd(ctx, resolveSpawnCwd(path, options.cwd));
       if (bad) failed = bad;
     }
     if (!failed) {
       const how = [0, 1, 2].map((i) => kernelSlot(stdio[i], i));
+      remapped = [1, 2].some((i) => stdio[i]?.type === 'fd' && stdio[i].fd !== i);
       let input = stdio[0]?.input;
       if (stdio[0]?.type === 'fd' && stdio[0].fd !== 0) input = readFdToEnd(stdio[0].fd);
       const req = {
@@ -989,7 +994,11 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
         stdin: how[0],
         stdout: how[1],
         stderr: how[2],
-        maxBuffer: options.maxBuffer,
+        // Output remapped to another fd is captured here and written after
+        // the run; Node writes it straight through with no maxBuffer, so lift
+        // the kernel's limit (it keeps 64 MiB at most) and apply maxBuffer to
+        // the real pipes below.
+        maxBuffer: remapped ? Infinity : options.maxBuffer,
         killSignal: options.killSignal ?? SIGNALS.SIGTERM,
       };
       if (how[0] === 'pipe' && input != null) {
@@ -1013,13 +1022,23 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     }
 
     const output = stdio.map(() => null);
+    let overflow = false;
     for (const i of [1, 2]) {
       const slot = stdio[i];
       if (!slot) continue;
-      const bytes = i === 1 ? raw.stdout : raw.stderr;
-      if (slot.type === 'pipe') output[i] = Buffer.from(bytes ?? new Uint8Array(0));
-      else if (slot.type === 'fd' && slot.fd !== i && bytes?.length) ctx.sync.write(slot.fd, bytes);
+      let bytes = i === 1 ? raw.stdout : raw.stderr;
+      if (slot.type === 'pipe') {
+        bytes ??= new Uint8Array(0);
+        // With the kernel's limit lifted (remapped fds), keep maxBuffer here;
+        // the child has run to its end, so this can only truncate.
+        if (remapped && bytes.length > options.maxBuffer) {
+          bytes = bytes.subarray(0, options.maxBuffer);
+          overflow = true;
+        }
+        output[i] = Buffer.from(bytes);
+      } else if (slot.type === 'fd' && slot.fd !== i && bytes?.length) ctx.sync.write(slot.fd, bytes);
     }
+    if (overflow && !raw.error) raw = { ...raw, error: { code: 'ENOBUFS' } };
     // Extra pipes (fd 3+) have no kernel counterpart: empty, as if unused.
     for (let i = 3; i < stdio.length; i++) if (stdio[i].type === 'pipe') output[i] = Buffer.alloc(0);
 
