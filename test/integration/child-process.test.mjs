@@ -111,6 +111,64 @@ execFile('node', ['-e', 'console.log("x"); process.exit(3)'], { encoding: 'utf8'
     }
   });
 
+  it('missing or non-directory cwd fails like Node (ENOENT / ENOTDIR)', async () => {
+    // Cert fx/m9/relcwd2.js: missing cwd → ENOENT on error; file-as-cwd → throw ENOTDIR.
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/w-rc2/a/m', 'A');
+      const r = await cp(
+        run,
+        `
+const { spawn, execFile } = require('child_process');
+const rows = [];
+const runSpawn = (cwd) => new Promise((resolve) => {
+  try {
+    const c = spawn('node', ['-e', 'process.exit(0)'], { cwd, stdio: 'ignore' });
+    c.on('error', (e) => resolve({ kind: 'error', code: e.code, syscall: e.syscall, path: e.path }));
+    c.on('close', (code) => resolve({ kind: 'close', code }));
+  } catch (e) {
+    resolve({ kind: 'throw', code: e.code, syscall: e.syscall, path: e.path, errno: e.errno });
+  }
+});
+const runExec = (cwd) => new Promise((resolve) => {
+  try {
+    execFile('node', ['-e', 'process.exit(0)'], { cwd }, (e) => {
+      resolve(e ? { kind: 'cb', code: e.code, syscall: e.syscall, path: e.path } : { kind: 'ok' });
+    });
+  } catch (e) {
+    resolve({ kind: 'throw', code: e.code, syscall: e.syscall, errno: e.errno });
+  }
+});
+(async () => {
+  rows.push(['missing', await runSpawn('w-rc2/nope'), await runExec('w-rc2/nope')]);
+  rows.push(['abs', await runSpawn('/nonexistent-zz/abs'), await runExec('/nonexistent-zz/abs')]);
+  rows.push(['file', await runSpawn('w-rc2/a/m'), await runExec('w-rc2/a/m')]);
+  console.log(JSON.stringify(rows));
+})();
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      const rows = JSON.parse(r.stdout.trim());
+      const by = Object.fromEntries(rows.map(([k, sp, ef]) => [k, { sp, ef }]));
+      assert.equal(by.missing.sp.kind, 'error');
+      assert.equal(by.missing.sp.code, 'ENOENT');
+      assert.equal(by.missing.sp.syscall, 'spawn node');
+      assert.equal(by.missing.sp.path, 'node');
+      assert.equal(by.missing.ef.kind, 'cb');
+      assert.equal(by.missing.ef.code, 'ENOENT');
+      assert.equal(by.abs.sp.code, 'ENOENT');
+      assert.equal(by.abs.ef.code, 'ENOENT');
+      assert.equal(by.file.sp.kind, 'throw');
+      assert.equal(by.file.sp.code, 'ENOTDIR');
+      assert.equal(by.file.sp.syscall, 'spawn');
+      assert.equal(by.file.sp.errno, -20);
+      assert.equal(by.file.ef.kind, 'throw');
+      assert.equal(by.file.ef.code, 'ENOTDIR');
+    } finally {
+      close();
+    }
+  });
+
   it('relative cwd resolves against process.cwd(), not /', async () => {
     // Cert fx/m9/relcwd.js: execFile(..., { cwd: 'w-rc/sub' }) must run in $CWD/w-rc/sub.
     const { kernel, run, close } = await withJsh();

@@ -19,6 +19,31 @@ function resolveSpawnCwd(path, cwd) {
 }
 
 /**
+ * Stat the resolved cwd before spawn (cert fx/m9/relcwd2.js).
+ * Missing → ENOENT (async 'error', like a missing command). Not a directory →
+ * ENOTDIR (Node throws synchronously from spawn/execFile).
+ * @returns {'ENOENT' | 'ENOTDIR' | null}
+ */
+function checkSpawnCwd(ctx, cwdAbs) {
+  try {
+    const st = ctx.sync.fs.stat(cwdAbs);
+    if (st && st.isDirectory) return null;
+    return 'ENOTDIR';
+  } catch (err) {
+    if (err?.code === 'ENOTDIR') return 'ENOTDIR';
+    return 'ENOENT';
+  }
+}
+
+function enotdirSpawnError() {
+  const err = new Error('spawn ENOTDIR');
+  err.code = 'ENOTDIR';
+  err.errno = -20;
+  err.syscall = 'spawn';
+  return err;
+}
+
+/**
  * Node's util.promisify(exec|execFile) resolves to `{ stdout, stderr }`, not
  * the multi-arg callback tuple. Attach via promisify.custom (seven comparison
  * case `child-process-async`).
@@ -128,11 +153,44 @@ function decodeOutput(buf, encoding) {
 function spawnError(command, args, code, message) {
   const err = new Error(message ?? `spawn ${command} ${code}`);
   err.code = code;
-  err.errno = code === 'ENOENT' ? -2 : undefined;
+  err.errno = code === 'ENOENT' ? -2 : code === 'ENOTDIR' ? -20 : undefined;
   err.syscall = `spawn ${command}`;
   err.path = command;
   err.spawnargs = args;
   return err;
+}
+
+/** Emit spawn ENOENT then close(-2), matching Node (missing command or cwd). */
+function failSpawnEnoent(child, process, handles, file, argv) {
+  const error = spawnError(file, argv, 'ENOENT', `spawn ${file} ENOENT`);
+  try {
+    child.stdout?.push?.(null);
+  } catch {
+    /* ignore */
+  }
+  try {
+    child.stderr?.push?.(null);
+  } catch {
+    /* ignore */
+  }
+  process.nextTick(() => {
+    try {
+      child.emit('error', error);
+    } catch {
+      /* ignore */
+    }
+    child.exitCode = -2;
+    child._markClosing?.();
+    setTimeout(() => {
+      try {
+        child.emit('close', -2, null);
+      } catch {
+        /* ignore */
+      }
+      child._release?.();
+      handles.notify?.();
+    }, 20);
+  });
 }
 
 /**
@@ -363,6 +421,25 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     child.spawnfile = file;
     child.spawnargs = argv;
 
+    // Re-check in startSpawn so a cwd that vanishes between spawn() and the
+    // tick still fails; ENOTDIR already threw from spawn() when applicable.
+    if (options.cwd != null) {
+      const bad = checkSpawnCwd(ctx, cwd);
+      if (bad === 'ENOENT') {
+        failSpawnEnoent(child, process, handles, file, args);
+        return;
+      }
+      if (bad === 'ENOTDIR') {
+        // Should have thrown in spawn(); treat like ENOENT path if we get here.
+        const error = enotdirSpawnError();
+        process.nextTick(() => {
+          safeEmit(child, 'error', error);
+          finish(child, 1, null);
+        });
+        return;
+      }
+    }
+
     const spawnPromise = ctx.spawn({
       argv,
       cwd,
@@ -457,6 +534,25 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
 
     const stdio = normalizeStdio(opts.stdio);
     const child = new ChildProcess();
+
+    // Node: missing cwd → async ENOENT on 'error'; file-as-cwd → throw ENOTDIR.
+    if (opts.cwd != null) {
+      const cwdAbs = resolveSpawnCwd(path, opts.cwd);
+      const bad = checkSpawnCwd(ctx, cwdAbs);
+      if (bad === 'ENOTDIR') throw enotdirSpawnError();
+      if (bad === 'ENOENT') {
+        try {
+          prepareStdio(child, stdio);
+        } catch {
+          /* ignore pipe setup when we will fail spawn anyway */
+        }
+        child.spawnfile = file;
+        child.spawnargs = [file, ...argv];
+        failSpawnEnoent(child, process, handles, file, argv);
+        return child;
+      }
+    }
+
     // prepareStdio may sync-load readable-stream; never let that throw out of
     // spawn() (seven: missing /node_modules/.../vendor → uncaught, no callback).
     try {
