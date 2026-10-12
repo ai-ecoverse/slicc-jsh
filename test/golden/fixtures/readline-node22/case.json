@@ -1,0 +1,8 @@
+{
+  "description": "readline / readline/promises (Node's own lib/readline): lines over stdin and streams (\\n, \\r\\n, \\r, split chunks), for await, question, emitKeypressEvents key parsing, terminal-mode editing and history over a fake TTY, cursor helpers, errors",
+  "argv": ["script.js"],
+  "env": { "TERM": "xterm-256color" },
+  "stdin": "first line\r\nsecond\rthird\nlast without newline",
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

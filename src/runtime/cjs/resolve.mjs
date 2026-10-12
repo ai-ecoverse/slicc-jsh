@@ -13,6 +13,7 @@ const REQUIRE_CONDITIONS = ['slicc', 'require', 'node', 'default'];
 const DEFAULT_EXTENSIONS = ['.js', '.cjs', '.json'];
 
 export function createResolver({
+  exposeInternals,
   fs,
   path,
   readPackageJson,
@@ -266,6 +267,10 @@ export function createResolver({
     if (isBuiltinName(request)) {
       return { type: 'builtin', id: request };
     }
+    // node --expose-internals: Node's internal modules (those the runtime has).
+    if (request.startsWith('internal/') && exposeInternals?.()) {
+      return { type: 'builtin', id: request };
+    }
 
     const fromDir =
       parentFilename.endsWith('/') || tryStat(parentFilename)?.isDirectory
@@ -325,6 +330,7 @@ const BUILTIN_NAMES = new Set([
   'crypto',
   'zlib',
   'readline',
+  'readline/promises',
   'tty',
   'worker_threads',
   'dgram',

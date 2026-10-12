@@ -603,7 +603,8 @@ function walkTopLevelAwait(node, report) {
     // Don't look inside functions/classes for TLA
     return;
   }
-  if (node.type === 'AwaitExpression') {
+  // `await x`, and `for await (…)` (a ForOfStatement, no AwaitExpression).
+  if (node.type === 'AwaitExpression' || (node.type === 'ForOfStatement' && node.await)) {
     report(true);
     return;
   }

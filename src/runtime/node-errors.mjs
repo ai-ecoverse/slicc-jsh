@@ -291,3 +291,17 @@ export function validateAbortSignal(signal, name) {
     throw ERR_INVALID_ARG_TYPE(name, 'AbortSignal', signal);
   }
 }
+
+export function validateArray(value, name, minLength = 0) {
+  if (!Array.isArray(value)) throw ERR_INVALID_ARG_TYPE(name, 'Array', value);
+  if (value.length < minLength) {
+    throw ERR_INVALID_ARG_VALUE(name, value, `must be longer than ${minLength}`);
+  }
+}
+
+export function validateOneOf(value, name, oneOf) {
+  if (!oneOf.includes(value)) {
+    const allowed = oneOf.map((v) => (typeof v === 'string' ? `'${v}'` : String(v))).join(', ');
+    throw ERR_INVALID_ARG_VALUE(name, value, `must be one of: ${allowed}`);
+  }
+}

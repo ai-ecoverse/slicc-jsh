@@ -54,6 +54,8 @@ export function loadNodeLib({ ctx } = {}) {
       },
       'internal/validators': {
         validateAbortSignal: errors.validateAbortSignal,
+        validateArray: errors.validateArray,
+        validateOneOf: errors.validateOneOf,
         validateBoolean: errors.validateBoolean,
         validateFunction: errors.validateFunction,
         validateInteger: errors.validateInteger,
@@ -67,6 +69,20 @@ export function loadNodeLib({ ctx } = {}) {
         kEmptyObject: Object.freeze({ __proto__: null }),
         SymbolDispose: Symbol.dispose || Symbol.for('nodejs.dispose'),
         SymbolAsyncDispose: Symbol.asyncDispose || Symbol.for('nodejs.asyncDispose'),
+        // util.promisify, read when called (util is a builtin).
+        get promisify() {
+          return builtin('util').promisify;
+        },
+        assignFunctionName(name, fn, descriptor = {}) {
+          if (typeof name !== 'string') name = `[${name.description}]`;
+          return Object.defineProperty(fn, 'name', {
+            writable: false,
+            enumerable: false,
+            configurable: true,
+            ...descriptor,
+            value: name,
+          });
+        },
         spliceOne(list, index) {
           for (; index + 1 < list.length; index++) list[index] = list[index + 1];
           list.pop();
@@ -87,6 +103,9 @@ export function loadNodeLib({ ctx } = {}) {
       },
       'internal/process/task_queues': { queueMicrotask: (fn) => queueMicrotask(fn) },
       'internal/options': { getOptionValue },
+      'internal/streams/utils': lazy(() => ({ isWritable: builtin('stream').isWritable })),
+      string_decoder: lazy(() => builtin('string_decoder')),
+      timers: lazy(() => builtin('timers')),
       'internal/assert': function assert(value, message) {
         if (!value) throw new Error(message ?? 'Assertion failed');
       },

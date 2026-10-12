@@ -35,6 +35,8 @@ const BUILTIN_LIST = [
   'path/posix',
   'process',
   'querystring',
+  'readline',
+  'readline/promises',
   'stream',
   'stream/promises',
   'string_decoder',
@@ -49,7 +51,6 @@ const BUILTIN_LIST = [
 
 const NOT_YET = [
   'http2',
-  'readline',
   'worker_threads',
   'dgram',
   'dns',
@@ -243,6 +244,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     zlib: getZlib,
     crypto: getCrypto,
     tty: () => (tty ??= createTty({ process })),
+    readline: () => process._nodeLib().readline,
+    'readline/promises': () => process._nodeLib().readlinePromises,
     'fs/promises': () => fs.promises,
     events: () => events,
     assert: () => assert,
@@ -275,6 +278,10 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     },
     load(id) {
       const bare = id.startsWith('node:') ? id.slice(5) : id;
+      if (bare.startsWith('internal/') && process.execArgv.includes('--expose-internals')) {
+        const mod = process._nodeLib().internal(bare);
+        if (mod !== undefined) return mod;
+      }
       if (NOT_YET.includes(bare)) notSupported(bare);
       const factory = implemented[bare];
       if (!factory) {

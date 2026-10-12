@@ -27,7 +27,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [error-uncaught](error-uncaught) | exit | ≠ | = | ≠ | six≠node | 1 / 1 / 1 / 1 |
 | [error-uncaught-props](error-uncaught-props) | exit | ≠ | = | ≠ | six≠node | 1 / 1 / 1 / 1 |
 | [error-unhandled-rejection](error-unhandled-rejection) | exit | ≠ | = | ≠ | six≠node | 0 / 1 / 1 / 1 |
-| [events](events) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
+| [events](events) | builtins | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [exec-env-inherit](exec-env-inherit) | sliccy | ≠ | = | – | six≠node | 0 / 0 / 0 / – |
 | [exit-floating-main-exec](exit-floating-main-exec) | exit | = | = | – | same | 0 / 0 / 0 / – |
 | [exit-floating-main-fetch](exit-floating-main-fetch) | exit | = | = | = | same | 0 / 0 / 0 / 0 |
@@ -113,7 +113,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [stdin-read](stdin-read) | process.stdin | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [stdin-read-await](stdin-read-await) | process.stdin | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [stdin-read-empty](stdin-read-empty) | process.stdin | = | = | = | same | 0 / 0 / 0 / 0 |
-| [stdin-readline](stdin-readline) | process.stdin | = | ≠ | = | seven≠node | 0 / 1 / 0 / 0 |
+| [stdin-readline](stdin-readline) | process.stdin | = | = | = | same | 0 / 0 / 0 / 0 |
 | [stdin-text-helper](stdin-text-helper) | process.stdin | = | = | = | same | 0 / 0 / 0 / 0 |
 | [stdout-isatty-color](stdout-isatty-color) | process | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [stream](stream) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
