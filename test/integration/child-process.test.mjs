@@ -164,6 +164,48 @@ console.log(out.join(' '));
     }
   });
 
+  it('process.execPath is the resolved node bin; spawn(execPath) works', async () => {
+    // npm-run-all / cross-spawn / many test runners re-spawn via process.execPath.
+    // dist/node.mjs is not executable (ENOEXEC flat / ENOENT under pnpm -g).
+    const { run, close } = await withJsh();
+    try {
+      const r = await cp(
+        run,
+        `
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = process.execPath;
+if (typeof path !== 'string' || !path.startsWith('/') || !path.endsWith('/node')) {
+  console.log(JSON.stringify({ ok: false, path, reason: 'shape' }));
+  process.exit(0);
+}
+if (path.includes('slicc-jsh') || path.endsWith('.mjs')) {
+  console.log(JSON.stringify({ ok: false, path, reason: 'shim-path' }));
+  process.exit(0);
+}
+if (!fs.existsSync(path)) {
+  console.log(JSON.stringify({ ok: false, path, reason: 'missing' }));
+  process.exit(0);
+}
+const c = spawn(path, ['-e', 'console.log("from-execPath"); process.exit(0)']);
+let out = '';
+let errCode = null;
+c.stdout.on('data', (d) => { out += d; });
+c.on('error', (e) => { errCode = e.code; });
+c.on('close', (code) => {
+  console.log(JSON.stringify({ ok: errCode == null && code === 0 && out.trim() === 'from-execPath', path, code, out: out.trim(), errCode }));
+});
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      const j = JSON.parse(r.stdout.trim());
+      assert.equal(j.ok, true, JSON.stringify(j));
+      assert.equal(j.path, '/usr/bin/node');
+    } finally {
+      close();
+    }
+  });
+
   it('stdio inherit: pnpm-shim shape (spawn node script, exit code)', async () => {
     const { kernel, run, close } = await withJsh();
     try {

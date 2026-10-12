@@ -290,6 +290,32 @@ function readProcessCreds(ctx) {
   return { uid: 0, euid: 0, gid: 0, egid: 0, groups: [0] };
 }
 
+/**
+ * Absolute path of the kernel `node` command (what spawn(process.execPath)
+ * must run). dist/node.mjs is the shim entry, not an executable — npm-run-all,
+ * cross-spawn, and test runners re-spawn via execPath and need a real bin.
+ */
+function resolveNodeExecPath(ctx) {
+  const fs = ctx?.sync?.fs;
+  const pathEnv = ctx?.env?.PATH ?? '/usr/local/bin:/usr/bin:/bin';
+  for (const dir of String(pathEnv).split(':')) {
+    if (!dir) continue;
+    const candidate = dir.endsWith('/') ? `${dir}node` : `${dir}/node`;
+    try {
+      if (fs?.exists?.(candidate)) {
+        try {
+          return typeof fs.realpath === 'function' ? fs.realpath(candidate) : candidate;
+        } catch {
+          return candidate;
+        }
+      }
+    } catch {
+      /* next PATH entry */
+    }
+  }
+  return '/usr/bin/node';
+}
+
 class Process extends EventEmitter {
   constructor({ ctx, argv, nextTick, onExit, handles, Buffer }) {
     super();
@@ -311,7 +337,7 @@ class Process extends EventEmitter {
     this.arch = 'x64';
     this.pid = ctx.pid;
     this.ppid = undefined;
-    this.execPath = '/node_modules/@ai-ecoverse/slicc-jsh/dist/node.mjs';
+    this.execPath = resolveNodeExecPath(ctx);
     this.execArgv = [];
     this.nextTick = nextTick.nextTick.bind(nextTick);
     this._umask = 0o022;
