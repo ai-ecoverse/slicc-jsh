@@ -54,6 +54,24 @@ describe('process.exit on ctx.sync.exit (kernel)', () => {
     assert.ok(r.ms < SPIN * 0.75, `took ${r.ms} ms`);
   });
 
+  it('kill(self, SIGSTOP) stops the process; SIGCONT resumes it where it was (no exit)', async () => {
+    await jsh.kernel.writeFile(
+      '/os/self-stop.js',
+      "console.log('before'); process.kill(process.pid, 'SIGSTOP'); setTimeout(() => console.log('resumed'), 50);"
+    );
+    const r = await jsh.run([
+      'node',
+      '-e',
+      [
+        "const c = require('child_process').spawn('node', ['/os/self-stop.js']);",
+        "let out = ''; c.stdout.on('data', (d) => (out += d));",
+        "setTimeout(() => { console.log('stopped', c.exitCode === null, JSON.stringify(out)); c.kill('SIGCONT'); }, 500);",
+        "c.on('close', (code, sig) => console.log('closed', code, sig, JSON.stringify(out)));",
+      ].join('\n'),
+    ]);
+    assert.equal(r.stdout, 'stopped true "before\\n"\nclosed 0 null "before\\nresumed\\n"\n');
+  });
+
   it('kill(self) with no handler dies of the signal: its parent sees the signal, not a status', async () => {
     // The kernel delivers a JS program's default action on a turn of its
     // own, so the program unwinds first (silenced): ai-ecoverse/slicc-kernel#431.

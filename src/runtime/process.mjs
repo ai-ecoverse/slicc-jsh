@@ -492,6 +492,14 @@ class Process extends EventEmitter {
       return true;
     }
     if (name === 'SIGWINCH' || name === 'SIGCHLD' || name === 'SIGURG' || name === 'SIGCONT') return true;
+    // Job-control stops: the kernel stops the process (on a turn of its own)
+    // and SIGCONT resumes it where it was, as in Node: no exit.
+    if (name === 'SIGSTOP' || name === 'SIGTSTP' || name === 'SIGTTIN' || name === 'SIGTTOU') {
+      if (typeof this._ctx?.kill === 'function') {
+        Promise.resolve(this._ctx.kill(this._ctx.pid ?? this.pid, name)).catch(() => {});
+      }
+      return true;
+    }
     // Default action: the program dies of the signal now, as Node's does
     // (its parent sees the signal, not a status); nothing more runs.
     const code = 128 + num;
