@@ -63,7 +63,8 @@ describe('child_process sync forms (kernel)', () => {
       cols: 100,
       rows: 30,
       onData: (d) => {
-        out += decoder.decode(d);
+        // console colours a terminal's output, as Node: read it plain.
+        out += decoder.decode(d).replace(/\x1b\[[0-9;]*m/g, '');
       },
     });
     const until = async (re) => {
