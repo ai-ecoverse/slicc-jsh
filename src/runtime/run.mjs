@@ -125,12 +125,15 @@ export async function runNode(ctx, options = {}) {
   let removeJshHandoff = () => {};
   const removeCtxHooks = [];
   const util = createUtil();
+  // Set while the error being reported comes from an ES module entry.
+  let uncaughtFromEsm = false;
   const printUncaught = (err) => {
     const { body } = formatUncaughtError(err, {
       ctx,
       util,
       version: NODE_SHIM_VERSION,
       evalCode: lastEvalCode,
+      esmEntry: uncaughtFromEsm,
     });
     writeStderr(body);
   };
@@ -406,10 +409,10 @@ export async function runNode(ctx, options = {}) {
   // Sync require() of .mjs / "type":"module" — returns the ESM namespace object.
   cjs.setRequireEsmHook((filename, parentFilename) => esm.requireEsm(filename, parentFilename));
   // Dynamic import() inside CommonJS files — resolve relative to the CJS file.
-  cjs.setImportModuleHook((specifier, parent) => esm.importModule(specifier, parent));
+  cjs.setImportModuleHook((specifier, parent, options) => esm.importDynamic(specifier, parent, options));
   // import() inside new Function / AsyncFunction bodies (see function-import.mjs).
   const restoreFunctionImport = installFunctionImport({
-    importFrom: (specifier, referrer) => trackPromise(handles, esm.importModule(specifier, referrer)),
+    importFrom: (specifier, referrer, options) => trackPromise(handles, esm.importDynamic(specifier, referrer, options)),
     cwd: () => process.cwd(),
   });
 
@@ -432,7 +435,14 @@ export async function runNode(ctx, options = {}) {
       (err) => {
         current.pending = false;
         if (kind === 'jsh') rejectionHandler(err, promise);
-        else exceptionHandler(err);
+        else {
+          uncaughtFromEsm = kind === 'esm';
+          try {
+            exceptionHandler(err);
+          } finally {
+            uncaughtFromEsm = false;
+          }
+        }
         handles.notify();
       }
     );
@@ -448,7 +458,7 @@ export async function runNode(ctx, options = {}) {
       Buffer,
       fetch,
       createRequire: cjs.createRequire,
-      importModule: (specifier, parent) => esm.importModule(specifier, parent),
+      importModule: (specifier, parent, options) => esm.importDynamic(specifier, parent, options),
       rewriteDynamicImports,
     };
     removeJshHandoff = installJshHandoff(ctx, rt);
@@ -512,7 +522,9 @@ export async function runNode(ctx, options = {}) {
       const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(source);
       try {
         if (asEsm) {
-          const result = esm.runEsmEval(source, '[stdin]');
+          uncaughtFromEsm = true;
+          const result = esm.runEsmEval(source, `${process.cwd().replace(/\/$/, '')}/[eval1]`);
+          uncaughtFromEsm = false;
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
         } else {
           // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
@@ -542,10 +554,13 @@ export async function runNode(ctx, options = {}) {
           throw nodeError(Error, 'ERR_EVAL_ESM_CANNOT_PRINT', '--print cannot be used with ESM input');
         }
         if (asEsm) {
+          // Node: ES module input is the module <cwd>/[eval1].
+          uncaughtFromEsm = true;
           const result = esm.runEsmEval(
             parsed.print ? `console.log(${parsed.code}\n)` : parsed.code,
-            '[eval]'
+            `${process.cwd().replace(/\/$/, '')}/[eval1]`
           );
+          uncaughtFromEsm = false;
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
           nextTick.flushSync();
         } else {
@@ -560,7 +575,7 @@ export async function runNode(ctx, options = {}) {
             changed: hasImport,
             binding: importBinding = '__import',
           } = rewriteDynamicImports(parsed.code);
-          const dynImport = (spec) => esm.importModule(spec, evalParent);
+          const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
           const body = parsed.print
             ? `return (${cjsCode}\n)\n//# sourceURL=[eval]`
             : `${cjsCode}\n//# sourceURL=[eval]`;
@@ -613,16 +628,19 @@ export async function runNode(ctx, options = {}) {
         // isEsmFilename covers .mjs, "type":"module", and detect-module for
         // ambiguous .js (not explicit "type":"commonjs").
         const useEsm = esm.isEsmFilename(mainPath, source);
+        uncaughtFromEsm = useEsm;
         if (useEsm) {
           const result = esm.runMain(mainPath, source);
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
         } else {
           cjs.runMain(mainPath, source);
         }
+        uncaughtFromEsm = false;
         nextTick.flushSync();
       } catch (err) {
         if (isExitError(err)) throw err;
         if (process.listenerCount('uncaughtException') > 0) {
+          uncaughtFromEsm = false;
           process.emit(
             'uncaughtException',
             err instanceof Error ? err : new Error(String(err)),

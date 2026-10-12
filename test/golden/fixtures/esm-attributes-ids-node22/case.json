@@ -1,0 +1,7 @@
+{
+  "description": "Node 22's import attributes (type: json, its three errors, V8's option checks), a module's identity by its whole URL (query, fragment), file: URL hosts, encoded slashes, relative imports from data: modules",
+  "argv": [
+    "script.mjs"
+  ],
+  "shim": true
+}

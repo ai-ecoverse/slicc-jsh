@@ -7,6 +7,7 @@
  * through pnpm's global bin inside the kernel is still the kernel jsh.
  */
 import { realMainPath } from '../runtime/realpath.mjs';
+import { sliccyNamespace } from './sliccy/index.mjs';
 import { JSH_PARAMS, JSH_USAGE, JSH_VERSION, parseJshArgv, runJsh } from './run.mjs';
 
 /** The global the `node` runtime sets for the host CLI to hand off to. */
@@ -89,7 +90,7 @@ function kernelSpawn(ctx, process, track) {
  * the script.
  */
 function compiler(rt) {
-  return (body, filename) => {
+  return (body, filename, { requireSliccy } = {}) => {
     const head = '(async function () {';
     const { code, changed, binding = '__import' } = rt.rewriteDynamicImports(
       `${head}${body}\n})`
@@ -98,7 +99,18 @@ function compiler(rt) {
     const params = changed ? [...JSH_PARAMS, binding] : [...JSH_PARAMS];
     const fn = new AsyncFunction(...params, `${text}\n//# sourceURL=${filename}`);
     if (!changed) return fn;
-    const importFrom = (specifier) => rt.importModule(specifier, filename);
+    // One namespace per name, as a module is evaluated once.
+    const sliccyNamespaces = new Map();
+    const importSliccy = (id) => {
+      if (!sliccyNamespaces.has(id)) sliccyNamespaces.set(id, sliccyNamespace(requireSliccy(id)));
+      return sliccyNamespaces.get(id);
+    };
+    const importFrom = (specifier, options) => {
+      if (requireSliccy && String(specifier).startsWith('sliccy:')) {
+        return Promise.resolve().then(() => importSliccy(String(specifier)));
+      }
+      return rt.importModule(specifier, filename, options);
+    };
     return (...args) => fn(...args.slice(0, JSH_PARAMS.length), importFrom);
   };
 }

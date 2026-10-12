@@ -1,0 +1,5 @@
+{
+  "description": "Node 22's ESM resolver: exact files only (no extensions, no directory index), URL specifiers (%-escapes, query), node:/file:/data: and ERR_UNSUPPORTED_ESM_URL_SCHEME for others, Node's ERR_MODULE_NOT_FOUND / ERR_UNSUPPORTED_DIR_IMPORT / ERR_PACKAGE_PATH_NOT_EXPORTED messages with their `url` and the CommonJS hint",
+  "argv": ["script.mjs"],
+  "shim": true
+}

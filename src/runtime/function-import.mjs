@@ -104,7 +104,7 @@ export function installFunctionImport({ importFrom, cwd }) {
     }
   };
 
-  set(globalThis, IMPORT_KEY, (referrer, specifier) => importFrom(String(specifier), referrer));
+  set(globalThis, IMPORT_KEY, (referrer, specifier, options) => importFrom(String(specifier), referrer, options));
 
   const natives = [
     ['Function', Function],

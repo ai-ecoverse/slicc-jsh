@@ -1,0 +1,7 @@
+{
+  "description": "Frames in ES modules as Node prints them: file: URLs, the module's own lines and columns (hashbang, imports and exports keep them), unnamed top level, Type.method for method calls; CallSite getFileName() is the URL",
+  "argv": [
+    "script.mjs"
+  ],
+  "shim": true
+}

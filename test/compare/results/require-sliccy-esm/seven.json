@@ -1,5 +1,5 @@
 {
-  "status": 1,
-  "stdout": "",
-  "stderr": "$CASE/main.jsh:1\nconst e = await import('sliccy:exec');\n                ^\n\nError: Cannot find module 'sliccy:exec'\nRequire stack:\n- $CASE/main.jsh\n    at Object.<anonymous> ($CASE/main.jsh:1:17) {\n  code: 'ERR_MODULE_NOT_FOUND',\n  requireStack: [ '$CASE/main.jsh' ]\n}\n\nNode.js v22.22.0\n"
+  "status": 0,
+  "stdout": "function function function\nfunction function\n",
+  "stderr": ""
 }

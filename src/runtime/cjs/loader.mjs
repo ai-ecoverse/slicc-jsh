@@ -317,13 +317,13 @@ export function createCjs({
       throw err;
     }
     if (hasImport) {
-      const __import = (spec) => {
+      const __import = (spec, options) => {
         if (typeof importModuleHook !== 'function') {
           return Promise.reject(
             new Error('slicc-jsh: dynamic import() is not available in this context')
           );
         }
-        return importModuleHook(String(spec), filename);
+        return importModuleHook(String(spec), filename, options);
       };
       const require = makeRequire(filename, mod);
       wrapper.call(mod.exports, mod.exports, require, mod, filename, dirname, __import);

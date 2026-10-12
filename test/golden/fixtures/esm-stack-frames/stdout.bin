@@ -1,0 +1,9 @@
+    at BASE/script.mjs:11:17
+    at foo (BASE/script.mjs:13:10)
+    at K.m (BASE/script.mjs:18:12) |     at K.s (BASE/script.mjs:21:12)
+    at Object.meth (BASE/script.mjs:25:29)
+    at inHelper (BASE/helper.mjs:2:10) function
+Cannot read properties of null (reading 'x')     at BASE/script.mjs:29:8
+    at BASE/script.mjs:34:17
+callsite BASE/script.mjs 38 null
+this in an imported function undefined undefined

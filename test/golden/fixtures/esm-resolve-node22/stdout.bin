@@ -1,0 +1,33 @@
+./nope.mjs | ERR_MODULE_NOT_FOUND | Cannot find module 'DIR/nope.mjs' imported from DIR/script.mjs | ["code","url"] BASE/nope.mjs
+./ext | ERR_MODULE_NOT_FOUND | Cannot find module 'DIR/ext' imported from DIR/script.mjs | ["code","url"] BASE/ext
+./ext.mjs OK ext
+./ext.mjs?q=1 OK ext
+./a%20b.mjs OK space
+./dd | ERR_UNSUPPORTED_DIR_IMPORT | Directory import 'DIR/dd' is not supported resolving ES modules imported from DIR/script.mjs | ["code","url"] BASE/dd
+./dd/ | ERR_UNSUPPORTED_DIR_IMPORT | Directory import 'DIR/dd/' is not supported resolving ES modules imported from DIR/script.mjs | ["code","url"] BASE/dd/
+nopkg | ERR_MODULE_NOT_FOUND | Cannot find package 'nopkg' imported from DIR/script.mjs | ["code"] 
+@sc/nopkg/sub | ERR_MODULE_NOT_FOUND | Cannot find package '@sc/nopkg' imported from DIR/script.mjs | ["code"] 
+realpkg OK realpkg main
+realpkg/sub | ERR_MODULE_NOT_FOUND | Cannot find module 'DIR/node_modules/realpkg/sub' imported from DIR/script.mjs
+Did you mean to import "realpkg/sub.js"? | ["code","url"] BASE/node_modules/realpkg/sub
+realpkg/sub.js OK realpkg sub
+@sc/x OK sc
+@sc/x/i | ERR_MODULE_NOT_FOUND | Cannot find module 'DIR/node_modules/@sc/x/i' imported from DIR/script.mjs
+Did you mean to import "@sc/x/i.js"? | ["code","url"] BASE/node_modules/@sc/x/i
+expkg OK expkg
+expkg/missing | ERR_MODULE_NOT_FOUND | Cannot find module 'DIR/node_modules/expkg/lib/missing.mjs' imported from DIR/script.mjs | ["code","url"] BASE/node_modules/expkg/lib/missing.mjs
+expkg/x/a.mjs OK expkg a
+expkg/nothere | ERR_PACKAGE_PATH_NOT_EXPORTED | Package subpath './nothere' is not defined by "exports" in DIR/node_modules/expkg/package.json imported from DIR/script.mjs | ["code"] 
+/abs/nope.mjs | ERR_MODULE_NOT_FOUND | Cannot find module '/abs/nope.mjs' imported from DIR/script.mjs | ["code","url"] file:///abs/nope.mjs
+file:///abs/nope.mjs | ERR_MODULE_NOT_FOUND | Cannot find module '/abs/nope.mjs' imported from DIR/script.mjs | ["code","url"] file:///abs/nope.mjs
+sliccy:exec | ERR_UNSUPPORTED_ESM_URL_SCHEME | Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol 'sliccy:' | ["code"] 
+foo:bar | ERR_UNSUPPORTED_ESM_URL_SCHEME | Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol 'foo:' | ["code"] 
+https://x.example/a.js | ERR_UNSUPPORTED_ESM_URL_SCHEME | Only URLs with a scheme in: file and data are supported by the default ESM loader. Received protocol 'https:' | ["code"] 
+data:text/javascript,export default 7 OK 7
+data:text/javascript;base64,ZXhwb3J0IGRlZmF1bHQgOA== OK 8
+resolve ./ext.mjs?q#h BASE/ext.mjs?q#h
+resolve ./dd BASE/dd
+resolve ./missing.js BASE/missing.js
+resolve data:text/javascript,1 data:text/javascript,1
+resolve expkg BASE/node_modules/expkg/lib/main.mjs
+resolve nopkg ERR_MODULE_NOT_FOUND Cannot find package 'nopkg' imported from DIR/script.mjs
