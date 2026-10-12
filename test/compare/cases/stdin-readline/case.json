@@ -1,0 +1,8 @@
+{
+  "area": "process.stdin",
+  "description": "readline.createInterface({ input: process.stdin }) line events and for-await",
+  "stdin": "a\nb\r\nc",
+  "corpus": [
+    "readline"
+  ]
+}

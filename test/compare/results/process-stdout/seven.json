@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "write returns: true\nwrite callback: \"called\"\nstdout.isTTY: false\nstderr.isTTY: false\nstdin.isTTY: false\nstdout.columns: undefined\nstdout.fd: 1\nstdout.writable: undefined\nstdout.on: \"function\"\nstdout.once: \"function\"\ngetWindowSize: \"undefined\"\nhi\nwrite Uint8Array: \"ok\"\nbuf\nwrite Buffer: \"ok\"\n42write number: true\n",
+  "stderr": ""
+}

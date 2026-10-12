@@ -1,0 +1,7 @@
+{
+  "area": "require",
+  "description": "require('playwright') when no playwright is installed (v6 serves a CDP shim)",
+  "corpus": [
+    "playwright"
+  ]
+}

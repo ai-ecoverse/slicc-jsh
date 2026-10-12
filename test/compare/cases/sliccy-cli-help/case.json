@@ -1,0 +1,8 @@
+{
+  "area": "sliccy",
+  "description": "cli.help(text) prints to stdout and exits 0",
+  "corpus": [
+    "cli.help"
+  ],
+  "node": false
+}

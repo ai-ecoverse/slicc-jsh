@@ -1,0 +1,7 @@
+{
+  "area": "exit",
+  "description": "process.exit(3) inside try/catch/finally: does user code see it",
+  "corpus": [
+    "process.exit"
+  ]
+}

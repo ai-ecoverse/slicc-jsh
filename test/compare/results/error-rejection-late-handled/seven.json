@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "$CASE/main.jsh:1\nconst p = Promise.reject(new Error('handled late'));\n                         ^\n\nError: handled late\n    at Object.<anonymous> ($CASE/main.jsh:1:26)\n\nNode.js v22.22.0\n"
+}

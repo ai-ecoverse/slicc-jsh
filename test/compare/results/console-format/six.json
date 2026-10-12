@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "{\"a\":1,\"b\":\"two\",\"c\":[1,2]}\n[1,\"a\",null,null]\n%s is %d years Bob 42.5\n%o {\"o\":1}\n%j {\"j\":1}\nundefined null true 3\n{} {}\n{\"deep\":{\"deeper\":{\"deepest\":{\"gone\":1}}}}\n \na\nb tab\t\n\"1970-01-01T00:00:00.000Z\"\n{\"type\":\"Buffer\",\"data\":[104,105]}\n\"toJSON used\"\n{}\n",
+  "stderr": "{}\nprefix logged error\n"
+}

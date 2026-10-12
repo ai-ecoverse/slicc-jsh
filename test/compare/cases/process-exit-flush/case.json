@@ -1,0 +1,8 @@
+{
+  "area": "exit",
+  "description": "200 KB written to stdout, then process.exit(0): nothing is lost",
+  "corpus": [
+    "process.exit",
+    "stdout.write"
+  ]
+}

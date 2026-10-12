@@ -1,0 +1,7 @@
+{
+  "area": "process.stdin",
+  "description": "process.stdin.read() with nothing piped",
+  "corpus": [
+    "stdin.read"
+  ]
+}

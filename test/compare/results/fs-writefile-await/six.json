@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "await fs.writeFile: true\nreadFileSync after: \"not written\"\nawait fs.mkdir recursive: true\nawait fs.readdir: [\"a.txt\",\"b.txt\",\"sub\"]\nawait fs.appendFile: undefined\nawait fs.rm: true\nm exists: false\n",
+  "stderr": ""
+}

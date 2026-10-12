@@ -1,0 +1,5 @@
+{
+  "area": "exit",
+  "description": "a rejected promise nobody handles, while the body continues",
+  "corpus": []
+}

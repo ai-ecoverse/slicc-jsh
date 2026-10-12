@@ -1,0 +1,14 @@
+console.info('info → stdout');
+console.warn('warn → stderr');
+console.debug('debug → stdout');
+console.table([{ a: 1, b: 2 }, { a: 3, b: 4 }]);
+console.dir({ dir: { nested: true } }, { depth: 0 });
+console.group('group');
+console.log('indented');
+console.groupEnd();
+console.log('not indented');
+console.count();
+console.count('x');
+console.assert(1 === 2, 'assert message');
+console.assert(true, 'not printed');
+console.log(typeof console.time, typeof console.timeEnd, typeof console.trace);

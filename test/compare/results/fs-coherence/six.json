@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "promises write → readFileSync: THROW Error ENOENT: ENOENT: no such file or directory, '$CASE/a.txt'\nwriteFileSync → promises read: THROW Error ENOENT: ENOENT: no such file or directory, open '$CASE/b.txt'\nwriteFileSync → exec cat: \"seen by cat\"\nexec write → readFileSync: \"from-shell\\n\"\nexec write → existsSync: true\n",
+  "stderr": ""
+}

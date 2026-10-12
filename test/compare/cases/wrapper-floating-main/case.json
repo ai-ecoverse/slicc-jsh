@@ -1,0 +1,7 @@
+{
+  "area": "exit",
+  "description": "`main().catch(…)` without await: output after the body returns still appears",
+  "corpus": [
+    "floating-main"
+  ]
+}

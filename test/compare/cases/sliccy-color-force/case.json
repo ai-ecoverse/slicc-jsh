@@ -1,0 +1,11 @@
+{
+  "area": "sliccy",
+  "description": "sliccy:color with FORCE_COLOR=1 on a pipe",
+  "env": {
+    "FORCE_COLOR": "1"
+  },
+  "corpus": [
+    "sliccy:color"
+  ],
+  "node": false
+}

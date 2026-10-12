@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "execSync string: THROW Error ERR_NOT_SUPPORTED: slicc-jsh: child_process.execSync is not supported yet\nexecSync buffer: THROW Error ERR_NOT_SUPPORTED: slicc-jsh: child_process.execSync is not supported yet\nexecFileSync: THROW Error ERR_NOT_SUPPORTED: slicc-jsh: child_process.execFileSync is not supported yet\nspawnSync: THROW Error ERR_NOT_SUPPORTED: slicc-jsh: child_process.spawnSync is not supported yet\nexecSync failing: [null,\"undefined\"]\nexecSync input: THROW Error ERR_NOT_SUPPORTED: slicc-jsh: child_process.execSync is not supported yet\nspawnSync missing: THROW Error ERR_NOT_SUPPORTED: slicc-jsh: child_process.spawnSync is not supported yet\n",
+  "stderr": ""
+}

@@ -1,0 +1,8 @@
+{
+  "area": "sliccy",
+  "description": "sliccy:http client: baseUrl + get/post JSON, headers, a 404, a text response",
+  "corpus": [
+    "sliccy:http"
+  ],
+  "node": false
+}

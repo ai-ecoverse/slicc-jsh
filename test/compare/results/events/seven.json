@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "default export is class: true\norder: THROW TypeError: e.prependListener is not a function\nerror without listener: THROW Error: unhandled emitter error\nevents.once: [1,2]\nlistenerCount: 1\nsetMaxListeners: \"undefined\"\nEventTarget: \"function\"\ncaptureRejections: \"undefined\"\n",
+  "stderr": ""
+}

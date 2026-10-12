@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: require('http'): Node built-in 'http' is not available in the browser environment. Use fetch() instead.\n    at <internal>\n"
+}

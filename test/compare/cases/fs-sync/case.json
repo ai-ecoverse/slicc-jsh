@@ -1,0 +1,7 @@
+{
+  "area": "fs",
+  "description": "the sync calls the corpus uses: write/read/append/mkdir/readdir/rename/unlink/rm/copyFile",
+  "corpus": [
+    "fs.sync"
+  ]
+}

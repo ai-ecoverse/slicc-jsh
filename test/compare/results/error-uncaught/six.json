@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "before\n",
+  "stderr": "Error: boom\n    at <internal>\n"
+}

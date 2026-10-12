@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "inspect object: \"{ a: 1, b: 'two', c: [ 1, 2, { d: null } ], e: undefined }\"\ninspect nested depth: \"{ a: { b: { c: [Object] } } }\"\ninspect Map: \"Map(1) { 'k' => 1 }\"\ninspect class: \"Foo { x: 1 }\"\nformat: \"a=42 {\\\"j\\\":1} [ 1, [length]: 1 ]\"\nformat extra args: \"a b 1 { c: 2 }\"\npromisify: \"function\"\ntypes.isPromise: true\nparseArgs: {\"x\":\"1\",\"y\":true}\nstyleText: \"function\"\nisDeepStrictEqual: true\ndeprecate: \"function\"\nTextDecoder: \"function\"\ninherits: \"function\"\ncallbackify: \"function\"\n",
+  "stderr": ""
+}

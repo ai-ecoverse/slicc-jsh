@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "readFileSync bytes: [0,1,127,128,200,255]\nwriteFileSync Buffer: [0,128,255,10]\nwriteFileSync Uint8Array: [200,201]\npromises readFile bytes: [0,1,127,128,200,255]\nutf8 text: \"grüße ✓ 😀\\n\"\nlatin1 encoding: \"\\u0000\\u0001Èÿ\"\nbase64 encoding: \"AAF/gMj/\"\nhex write: [255,0]\n",
+  "stderr": ""
+}

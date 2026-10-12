@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "await fs.readFile(p): [\"string\",\"hello data\\n\"]\nawait fs.readFile(p, 'utf8'): \"hello data\\n\"\nawait fs.readFile(p, { encoding: 'utf8' }): \"hello data\\n\"\nawait fs.readFile(missing): THROW Error: ENOENT: no such file or directory, open '$CASE/missing.txt'\n",
+  "stderr": ""
+}

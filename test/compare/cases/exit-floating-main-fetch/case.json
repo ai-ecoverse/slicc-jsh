@@ -1,0 +1,8 @@
+{
+  "area": "exit",
+  "description": "`main().catch(…)` where main awaits a slow fetch: the program must wait for it (11 corpus scripts use the floating-main shape)",
+  "corpus": [
+    "floating-main",
+    "fetch"
+  ]
+}

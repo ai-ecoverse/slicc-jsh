@@ -1,0 +1,7 @@
+{
+  "area": "wrapper",
+  "description": "`import('http(s)://…')` (pdf, pptx2pdf import from esm.sh)",
+  "corpus": [
+    "import-url"
+  ]
+}

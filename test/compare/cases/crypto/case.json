@@ -1,0 +1,8 @@
+{
+  "area": "builtins",
+  "description": "createHash (md5/sha1/sha256/sha512), createHmac, randomBytes, randomUUID, timingSafeEqual, pbkdf2Sync, webcrypto",
+  "corpus": [
+    "crypto",
+    "crypto.subtle/randomUUID"
+  ]
+}

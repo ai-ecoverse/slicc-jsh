@@ -1,0 +1,8 @@
+{
+  "area": "wrapper",
+  "description": "the wrapper's parameters, __filename/__dirname, module/exports, require.main, this",
+  "corpus": [
+    "__dirname",
+    "module.exports"
+  ]
+}

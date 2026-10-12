@@ -1,0 +1,15 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+show('write returns', () => process.stdout.write(''));
+await showA('write callback', () => new Promise((r) => process.stdout.write('', () => r('called'))));
+show('stdout.isTTY', () => process.stdout.isTTY);
+show('stderr.isTTY', () => process.stderr.isTTY);
+show('stdin.isTTY', () => process.stdin.isTTY);
+show('stdout.columns', () => process.stdout.columns);
+show('stdout.fd', () => process.stdout.fd);
+show('stdout.writable', () => process.stdout.writable);
+show('stdout.on', () => typeof process.stdout.on);
+show('stdout.once', () => typeof process.stdout.once);
+show('getWindowSize', () => typeof process.stdout.getWindowSize);
+show('write Uint8Array', () => { process.stdout.write(new Uint8Array([104, 105, 10])); return 'ok'; });
+show('write Buffer', () => { process.stdout.write(Buffer.from('buf\n')); return 'ok'; });
+show('write number', () => process.stdout.write(42));

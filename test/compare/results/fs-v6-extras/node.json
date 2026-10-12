@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "typeof: [\"readFileBinary:undefined\",\"writeFileBinary:undefined\",\"readDir:undefined\",\"fetchToFile:undefined\"]\nreadFileBinary: THROW TypeError: fs.readFileBinary is not a function\nwriteFileBinary: THROW TypeError: fs.writeFileBinary is not a function\nreadDir: THROW TypeError: fs.readDir is not a function\nfetchToFile: THROW TypeError: fs.fetchToFile is not a function\n",
+  "stderr": ""
+}

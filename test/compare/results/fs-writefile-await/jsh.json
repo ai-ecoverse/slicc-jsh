@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "await fs.writeFile: THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received undefined\nreadFileSync after: \"not written\"\nawait fs.mkdir recursive: THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received undefined\nawait fs.readdir: THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received undefined\nawait fs.appendFile: THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received undefined\nawait fs.rm: undefined\nm exists: false\n",
+  "stderr": "node:fs:1225\n      return callback(err);\n             ^\n\nTypeError: callback is not a function\n    at <internal>\n\nNode.js v22.22.0\n"
+}

@@ -1,0 +1,1 @@
+throw 'just a string';

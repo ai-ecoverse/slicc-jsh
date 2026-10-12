@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "execSync string: THROW Error: child_process.execSync is not available in this browser realm (no synchronous bridge — the page has no controlling Service Worker). Use the async form instead: await promisify(exec)(…).\nexecSync buffer: THROW Error: child_process.execSync is not available in this browser realm (no synchronous bridge — the page has no controlling Service Worker). Use the async form instead: await promisify(exec)(…).\nexecFileSync: THROW Error: child_process.execFileSync is not available in this browser realm (no synchronous bridge — the page has no controlling Service Worker). Use the async form instead: await promisify(execFile)(…).\nspawnSync: [null,\"\",\"\"]\nexecSync failing: [null,\"undefined\"]\nexecSync input: THROW Error: child_process.execSync is not available in this browser realm (no synchronous bridge — the page has no controlling Service Worker). Use the async form instead: await promisify(exec)(…).\nspawnSync missing: [null,null]\n",
+  "stderr": ""
+}

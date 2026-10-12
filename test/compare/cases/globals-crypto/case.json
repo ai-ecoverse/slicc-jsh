@@ -1,0 +1,7 @@
+{
+  "area": "globals",
+  "description": "global crypto: randomUUID, getRandomValues, subtle.digest/HMAC",
+  "corpus": [
+    "crypto.subtle/randomUUID"
+  ]
+}

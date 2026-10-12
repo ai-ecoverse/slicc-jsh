@@ -1,0 +1,7 @@
+{
+  "area": "process",
+  "description": "process.on('SIGINT'/'SIGTERM') registration and process.kill(process.pid, 'SIGTERM') with a handler",
+  "corpus": [
+    "process.on"
+  ]
+}

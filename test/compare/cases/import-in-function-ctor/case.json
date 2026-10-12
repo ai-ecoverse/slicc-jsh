@@ -1,0 +1,7 @@
+{
+  "area": "wrapper",
+  "description": "`new Function('u', 'return import(u)')` (vpod's ESM loader) on a relative path and a builtin",
+  "corpus": [
+    "import-in-function-ctor"
+  ]
+}

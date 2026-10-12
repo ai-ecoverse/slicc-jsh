@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "implicit global: 5\nwith: 1\nlegacy octal: 8\narguments.callee: \"function\"\ndelete unqualified: false\n",
+  "stderr": ""
+}

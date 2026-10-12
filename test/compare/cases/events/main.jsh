@@ -1,0 +1,11 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+const EventEmitter = require('events');
+const { once } = require('events');
+show('default export is class', () => typeof EventEmitter === 'function' && EventEmitter.EventEmitter === EventEmitter);
+show('order', () => { const e = new EventEmitter(); const log = []; e.on('x', () => log.push('on')); e.prependListener('x', () => log.push('prepend')); e.once('x', () => log.push('once')); e.emit('x'); e.emit('x'); return log; });
+show('error without listener', () => new EventEmitter().emit('error', new Error('unhandled emitter error')));
+await showA('events.once', async () => { const e = new EventEmitter(); setTimeout(() => e.emit('ready', 1, 2), 5); return await once(e, 'ready'); });
+show('listenerCount', () => { const e = new EventEmitter(); e.on('a', () => {}); return e.listenerCount('a'); });
+show('setMaxListeners', () => typeof new EventEmitter().setMaxListeners);
+show('EventTarget', () => typeof EventTarget);
+show('captureRejections', () => typeof EventEmitter.captureRejections);

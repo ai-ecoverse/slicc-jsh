@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "await fs.exists(file): THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received undefined\nawait fs.exists(missing): THROW TypeError ERR_INVALID_ARG_TYPE: The \"cb\" argument must be of type function. Received undefined\nfs.exists(file, cb): true\nexistsSync(file): true\nexistsSync(dir): true\nexistsSync(missing): false\n",
+  "stderr": ""
+}

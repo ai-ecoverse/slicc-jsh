@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "keys assets,config,dir,refs,root,token\ndir $CASE/scripts\nrefs $CASE/references\nassets $CASE/assets\nconfig {\"existing\":1}\nconfig write {\"existing\":1,\"added\":true}\nconfig file {\"existing\": 1} \ntoken error skill.token('compare-provider'): oauth-token: unknown provider \"compare-provider\"\n",
+  "stderr": ""
+}

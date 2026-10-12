@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "handle done,kill,stdin end,write\ncat {\"stdout\":\"buffered stdin\",\"stderr\":\"\",\"exitCode\":0}\nkill true\nkilled {\"stdout\":\"\",\"stderr\":\"bash: execution aborted\\n\",\"exitCode\":124}\n",
+  "stderr": ""
+}

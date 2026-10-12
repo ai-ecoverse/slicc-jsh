@@ -1,0 +1,7 @@
+{
+  "area": "fs",
+  "description": "stat results: isDirectory as a property (v6) or a method (Node), size, mtime, mode",
+  "corpus": [
+    "fs.stat-prop"
+  ]
+}

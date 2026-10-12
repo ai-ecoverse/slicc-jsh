@@ -1,0 +1,7 @@
+{
+  "area": "wrapper",
+  "description": "`import('node:fs')`, `import('fs')`, `import('path')`: what the namespace has",
+  "corpus": [
+    "dynamic-import"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "area": "globals",
+  "description": "the global WebSocket against an echo server",
+  "corpus": [
+    "WebSocket"
+  ]
+}

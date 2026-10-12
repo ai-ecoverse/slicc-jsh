@@ -1,0 +1,7 @@
+{
+  "area": "wrapper",
+  "description": "a `#!/usr/bin/env jsh` line is ignored and line numbers stay the file's own",
+  "corpus": [
+    "shebang"
+  ]
+}

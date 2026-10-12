@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "$CASE/main.jsh:1\n(async function (process, console, require, module, exports, fetch, __dirname, __filename) {import path from 'node:path';\n                                                                                            ^^^^^^\n\nSyntaxError: Cannot use import statement outside a module\n    at <internal>\n"
+}

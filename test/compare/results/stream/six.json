@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "Readable.from + for await: THROW TypeError: Readable.from(...) is not a function or its return value is not async iterable\npipeline (stream/promises): THROW Error: require('stream/promises'): Node built-in 'stream/promises' is not available in the browser environment.\npipeline callback: THROW TypeError: Readable.from is not a function\nReadable is EventEmitter: false\nreadable.read() paused mode: THROW TypeError: rs.push is not a function\nstream/web: THROW Error: require('stream/web'): Node built-in 'stream/web' is not available in the browser environment.\nReadable.toWeb: \"undefined\"\n",
+  "stderr": ""
+}

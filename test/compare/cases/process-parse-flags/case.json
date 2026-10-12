@@ -1,0 +1,20 @@
+{
+  "area": "process",
+  "description": "process.argv.parseFlags() on a mix of flag styles",
+  "args": [
+    "sub",
+    "--name=val",
+    "--count",
+    "3",
+    "-v",
+    "--no-color",
+    "pos2",
+    "-abc",
+    "--empty=",
+    "--",
+    "--after"
+  ],
+  "corpus": [
+    "parseFlags"
+  ]
+}

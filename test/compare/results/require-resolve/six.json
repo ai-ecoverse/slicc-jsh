@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "resolve fs: THROW TypeError: require.resolve is not a function\nresolve node:fs: THROW TypeError: require.resolve is not a function\nresolve sliccy:cli: THROW TypeError: require.resolve is not a function\nresolve ./lib.js: THROW TypeError: require.resolve is not a function\nresolve pkg: THROW TypeError: require.resolve is not a function\nresolve missing: THROW TypeError: require.resolve is not a function\nrequire.cache: \"undefined\"\nmodule.paths[0]: undefined\nmodule.require: \"undefined\"\n",
+  "stderr": ""
+}

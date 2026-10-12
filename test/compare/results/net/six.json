@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: require('net'): Node built-in 'net' is not available in the browser environment.\n    at <internal>\n"
+}

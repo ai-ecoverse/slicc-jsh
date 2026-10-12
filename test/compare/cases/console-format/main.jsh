@@ -1,0 +1,18 @@
+console.log({ a: 1, b: 'two', c: [1, 2] });
+console.log([1, 'a', null, undefined]);
+console.log('%s is %d years', 'Bob', 42.5);
+console.log('%o', { o: 1 });
+console.log('%j', { j: 1 });
+console.log(undefined, null, true, 3n);
+console.log(new Map([['k', 'v']]), new Set([1]));
+console.log({ deep: { deeper: { deepest: { gone: 1 } } } });
+console.log(function named() {}, Symbol('s'));
+console.log('a\nb', 'tab\t');
+console.log(new Date(0));
+console.log(Buffer.from('hi'));
+const e = new Error('logged error');
+e.stack = 'Error: logged error\n    at <stack>';
+console.error(e);
+console.error('prefix', e.message);
+console.log({ toJSON() { return 'toJSON used'; } });
+console.log(Object.create(null));

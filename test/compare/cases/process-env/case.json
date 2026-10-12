@@ -1,0 +1,11 @@
+{
+  "area": "process",
+  "description": "process.env from the caller, assignment, coercion, delete; common variables",
+  "env": {
+    "COMPARE_FOO": "bar",
+    "COMPARE_EMPTY": ""
+  },
+  "corpus": [
+    "process.env"
+  ]
+}

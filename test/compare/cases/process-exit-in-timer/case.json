@@ -1,0 +1,8 @@
+{
+  "area": "exit",
+  "description": "process.exit(5) from a timer after the body returned",
+  "corpus": [
+    "process.exit",
+    "setTimeout"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "TypeError: process.on is not a function\n    at <internal>\n"
+}

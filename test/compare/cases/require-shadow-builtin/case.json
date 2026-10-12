@@ -1,0 +1,5 @@
+{
+  "area": "require",
+  "description": "node_modules/path and node_modules/events exist: builtins win; node_modules/sliccy-cli does not shadow sliccy:cli",
+  "corpus": []
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "nope error require('sliccy:nope'): unknown sliccy: module 'nope'. Known names: cli, color, exec, fmt, http, pool, skill, time. Install @ai-ecoverse/sliccy-nope to provide it.\n(empty) error require('sliccy:'): empty sliccy: module name\nagent error require('sliccy:agent'): sliccy:agent is only available inside SLICC\nusb error require('sliccy:usb'): sliccy:usb is only available inside SLICC\nserial error require('sliccy:serial'): sliccy:serial is only available inside SLICC\nhid error require('sliccy:hid'): sliccy:hid is only available inside SLICC\ncomputer error require('sliccy:computer'): sliccy:computer is only available inside SLICC\nbrowser error require('sliccy:browser'): unknown sliccy: module 'browser'. Known names: cli, color, exec, fmt, http, pool, skill, time. Install @ai-ecoverse/sliccy-browser to provide it.\n",
+  "stderr": ""
+}

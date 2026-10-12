@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "platform matches process: true\nEOL: \"\\n\"\ntmpdir: \"string\"\nhomedir === HOME: true\nhostname: \"string\"\ncpus: true\ntype: \"string\"\nuserInfo: \"string\"\narch: \"string\"\ntotalmem: \"number\"\nnetworkInterfaces: \"object\"\nconstants.signals.SIGINT: 2\navailableParallelism: \"function\"\n",
+  "stderr": ""
+}

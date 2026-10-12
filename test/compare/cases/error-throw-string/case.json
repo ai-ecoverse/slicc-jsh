@@ -1,0 +1,5 @@
+{
+  "area": "exit",
+  "description": "`throw 'a string'` and the stderr it gives",
+  "corpus": []
+}

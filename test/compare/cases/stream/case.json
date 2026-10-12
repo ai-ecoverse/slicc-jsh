@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "Readable.from, Transform, pipeline (stream/promises), PassThrough, Writable, backpressure basics",
+  "corpus": [
+    "stream"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "area": "require",
+  "description": "a package in the script's node_modules: main, exports conditions, nested deps, a scoped package",
+  "corpus": [
+    "require-package"
+  ]
+}

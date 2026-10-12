@@ -1,0 +1,13 @@
+{
+  "area": "sliccy",
+  "description": "sliccy:cli out/warn/help/die: streams, prefixes, exit codes (die inside try/catch)",
+  "corpus": [
+    "sliccy:cli",
+    "cli.die",
+    "cli.help"
+  ],
+  "env": {
+    "NO_COLOR": "1"
+  },
+  "node": false
+}

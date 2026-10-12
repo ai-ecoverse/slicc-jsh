@@ -1,0 +1,7 @@
+const fs = require('fs');
+const names = ['access', 'accessSync', 'appendFile', 'appendFileSync', 'chmod', 'chmodSync', 'close', 'closeSync', 'copyFile', 'copyFileSync', 'cp', 'cpSync', 'createReadStream', 'createWriteStream', 'exists', 'existsSync', 'fstat', 'fstatSync', 'fsync', 'lstat', 'lstatSync', 'mkdir', 'mkdirSync', 'mkdtemp', 'mkdtempSync', 'open', 'openSync', 'opendir', 'opendirSync', 'read', 'readFile', 'readFileSync', 'readSync', 'readdir', 'readdirSync', 'readlink', 'readlinkSync', 'realpath', 'realpathSync', 'rename', 'renameSync', 'rm', 'rmSync', 'rmdir', 'rmdirSync', 'stat', 'statSync', 'statfs', 'symlink', 'symlinkSync', 'truncate', 'truncateSync', 'unlink', 'unlinkSync', 'unwatchFile', 'utimes', 'utimesSync', 'watch', 'watchFile', 'write', 'writeFile', 'writeFileSync', 'writeSync', 'Dirent', 'Stats', 'ReadStream', 'WriteStream', 'constants'];
+const missing = names.filter((n) => fs[n] === undefined);
+console.log('missing:', missing.join(' ') || '(none)');
+const extra = Object.keys(fs).filter((k) => !names.includes(k) && !/^(promises|F_OK|R_OK|W_OK|X_OK|lchmod|lchmodSync|lchown|lchownSync|lutimes|lutimesSync|chown|chownSync|fchmod|fchmodSync|fchown|fchownSync|fdatasync|fdatasyncSync|fsyncSync|ftruncate|ftruncateSync|futimes|futimesSync|link|linkSync|readv|readvSync|writev|writevSync|statfsSync|openAsBlob|glob|globSync|Dir|FileReadStream|FileWriteStream|_toUnixTimestamp)$/.test(k));
+console.log('extra:', extra.sort().join(' ') || '(none)');
+console.log('constants.O_RDONLY', typeof (fs.constants && fs.constants.O_RDONLY));

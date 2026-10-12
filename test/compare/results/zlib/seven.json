@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: slicc-jsh: 'zlib' is not supported yet\n    at Object.<anonymous> ($CASE/main.jsh:2:14)\n"
+}

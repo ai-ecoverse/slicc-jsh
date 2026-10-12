@@ -1,0 +1,17 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+const util = require('util');
+show('inspect object', () => util.inspect({ a: 1, b: 'two', c: [1, 2, { d: null }], e: undefined }));
+show('inspect nested depth', () => util.inspect({ a: { b: { c: { d: 1 } } } }));
+show('inspect Map', () => util.inspect(new Map([['k', 1]])));
+show('inspect class', () => util.inspect(new (class Foo { constructor() { this.x = 1; } })()));
+show('format', () => util.format('%s=%d %j %o', 'a', 42, { j: 1 }, [1]));
+show('format extra args', () => util.format('a', 'b', 1, { c: 2 }));
+show('promisify', () => typeof util.promisify((cb) => cb(null, 1)));
+show('types.isPromise', () => util.types && util.types.isPromise(Promise.resolve()));
+show('parseArgs', () => util.parseArgs({ args: ['--x', '1', '-y'], options: { x: { type: 'string' }, y: { type: 'boolean', short: 'y' } } }).values);
+show('styleText', () => typeof util.styleText);
+show('isDeepStrictEqual', () => util.isDeepStrictEqual({ a: [1] }, { a: [1] }));
+show('deprecate', () => typeof util.deprecate);
+show('TextDecoder', () => typeof util.TextDecoder);
+show('inherits', () => typeof util.inherits);
+show('callbackify', () => typeof util.callbackify);

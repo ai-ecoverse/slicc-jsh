@@ -1,0 +1,8 @@
+{
+  "area": "builtins",
+  "description": "require('tty').isatty(0/1/2) under pipes",
+  "corpus": [
+    "tty",
+    "isTTY"
+  ]
+}

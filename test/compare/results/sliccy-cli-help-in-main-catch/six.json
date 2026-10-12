@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "Usage: tool <command>\n",
+  "stderr": "tool: Process exited with code 0\n"
+}

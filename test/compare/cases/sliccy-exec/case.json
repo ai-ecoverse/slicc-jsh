@@ -1,0 +1,9 @@
+{
+  "area": "sliccy",
+  "description": "sliccy:exec: exec(cmd) result shape, stderr, exit codes, pipes/redirects, exec.spawn quoting, a missing command",
+  "corpus": [
+    "sliccy:exec",
+    "exec.spawn"
+  ],
+  "node": false
+}

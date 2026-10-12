@@ -1,0 +1,10 @@
+{
+  "area": "process",
+  "description": "console.log of a boolean/number when FORCE_COLOR=1 (Node colours inspect output)",
+  "env": {
+    "FORCE_COLOR": "1"
+  },
+  "corpus": [
+    "console.log"
+  ]
+}

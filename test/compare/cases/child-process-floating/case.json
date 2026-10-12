@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "child_process.exec with a callback, not awaited by the body: the type of stdout",
+  "corpus": [
+    "child_process"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "./esm.mjs: [\"esm default\",\"named\",true]\nesm package: [\"esm-only default\",[\"default\",\"x\"]]\ntla esm: THROW SyntaxError: await is only valid in async functions and the top level bodies of modules\n",
+  "stderr": ""
+}

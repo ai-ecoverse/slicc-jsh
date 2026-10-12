@@ -1,0 +1,7 @@
+{
+  "area": "exit",
+  "description": "a fetch still in flight when the body returns (not awaited)",
+  "corpus": [
+    "fetch"
+  ]
+}

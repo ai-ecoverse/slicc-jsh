@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "await fs.exists(file): true\nawait fs.exists(missing): false\nfs.exists(file, cb): true\nexistsSync(file): true\nexistsSync(dir): true\nexistsSync(missing): false\n",
+  "stderr": ""
+}

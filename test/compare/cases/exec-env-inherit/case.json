@@ -1,0 +1,12 @@
+{
+  "area": "sliccy",
+  "description": "does a command run by exec() see the script's environment (caller's env and process.env changes)",
+  "env": {
+    "COMPARE_GIVEN": "given"
+  },
+  "corpus": [
+    "sliccy:exec",
+    "process.env"
+  ],
+  "node": false
+}

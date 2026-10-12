@@ -1,0 +1,7 @@
+{
+  "area": "fs",
+  "description": "non-UTF-8 bytes through readFileSync/writeFileSync and fs.promises (no latin1/UTF-8 mangling)",
+  "corpus": [
+    "Buffer"
+  ]
+}

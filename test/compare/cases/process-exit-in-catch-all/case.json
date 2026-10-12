@@ -1,0 +1,7 @@
+{
+  "area": "exit",
+  "description": "the common shape `try { … process.exit(2) … } catch (e) { console.error('failed:', e.message); process.exit(1) }`",
+  "corpus": [
+    "process.exit"
+  ]
+}

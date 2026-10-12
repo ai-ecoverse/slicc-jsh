@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "to fd 1\nwriteSync(1): 8\nwriteSync(2): 8\nwriteFileSync fd 1\nwriteFileSync(1): undefined\nopenSync/readSync: [5,\"hello\"]\nopenSync w + writeSync: \"via fd\"\nto /dev/stdout\n/dev/stdout: undefined\n/dev/null: undefined\n",
+  "stderr": "to fd 2\n"
+}

@@ -1,0 +1,7 @@
+{
+  "area": "exit",
+  "description": "a setInterval cleared after 3 ticks; and an unref'd interval that must not keep the program alive",
+  "corpus": [
+    "setInterval"
+  ]
+}

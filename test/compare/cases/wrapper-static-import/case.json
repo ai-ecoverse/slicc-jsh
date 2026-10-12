@@ -1,0 +1,7 @@
+{
+  "area": "wrapper",
+  "description": "a static `import` declaration (v6 lowers the entry to CJS)",
+  "corpus": [
+    "static-import"
+  ]
+}

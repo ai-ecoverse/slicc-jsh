@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "argv.length: 7\nargv[0]: \"node\"\nargv[1]: \"$CASE/main.jsh\"\nargv.slice(2): [\"a b\",\"--flag\",\"-x\",\"--\",\"last\"]\nargv0: undefined\nexecArgv: undefined\nparseFlags enumerable: false\ntypeof parseFlags: \"function\"\n",
+  "stderr": ""
+}

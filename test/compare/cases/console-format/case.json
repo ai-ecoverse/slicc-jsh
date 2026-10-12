@@ -1,0 +1,8 @@
+{
+  "area": "console",
+  "description": "console.log formatting of non-strings: objects, arrays, Errors, Map, %s/%d/%o, undefined, nested",
+  "corpus": [
+    "console.log",
+    "console.error(err)"
+  ]
+}

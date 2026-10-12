@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "require error require('sliccy:browser'): unknown sliccy: module 'browser'. Known names: cli, color, exec, fmt, http, pool, skill, time. Install @ai-ecoverse/sliccy-browser to provide it.\n",
+  "stderr": ""
+}

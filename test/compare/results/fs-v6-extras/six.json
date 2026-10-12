@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "typeof: [\"readFileBinary:function\",\"writeFileBinary:function\",\"readDir:function\",\"fetchToFile:function\"]\nreadFileBinary: [\"[object Uint8Array]\",11]\nwriteFileBinary: THROW Error ENOENT: ENOENT: no such file or directory, '$CASE/bin.out'\nreadDir: [\"a.txt\",\"b.txt\",\"sub\"]\nfetchToFile: THROW Error ENOENT: ENOENT: no such file or directory, '$CASE/fetched.txt'\n",
+  "stderr": ""
+}

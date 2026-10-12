@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "json: [200,true,\"application/json\",{\"ok\":true,\"n\":1}]\ntext: \"hello é\\n\"\n404: [404,false,\"Not Found\"]\nredirect followed: [200,true,true]\nredirect manual: [302,\"/json\"]\npost json: {\"method\":\"POST\",\"path\":\"/echo?q=1\",\"contentType\":\"application/json\",\"auth\":\"Bearer t\",\"custom\":null,\"body\":\"{\\\"a\\\":1}\"}\npost FormData: [\"multipart/form-data\",true]\nbytes: [0,1,254,255]\ncustom header: \"yes\"\nrefused: [\"TypeError\",\"fetch failed\",null]\nabort: \"AbortError\"\nResponse.json static: {\"s\":1}\n",
+  "stderr": ""
+}

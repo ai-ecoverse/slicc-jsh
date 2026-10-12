@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "cwd: \"$CASE\"\ncwd === __dirname: true\nchdir sub: THROW TypeError: process.chdir is not a function\nreadFileSync relative after chdir: THROW Error ENOENT: ENOENT: no such file or directory, '$CASE/inner.txt'\nrequire relative after chdir: \"top.js (relative to the script)\"\nchdir missing: THROW TypeError: process.chdir is not a function\n",
+  "stderr": ""
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "readFile cb null \"hello data\\n\"\nwriteFile cb null\nreaddir cb null [\"a.txt\",\"b.txt\",\"sub\"]\nmissing cb ENOENT\n",
+  "stderr": ""
+}

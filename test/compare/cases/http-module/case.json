@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "require('http'): createServer + listen on 127.0.0.1 and http.get to it; https.request shape",
+  "corpus": [
+    "http-module"
+  ]
+}

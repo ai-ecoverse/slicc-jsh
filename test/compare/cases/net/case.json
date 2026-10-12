@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "require('net'): a server and a client on 127.0.0.1",
+  "corpus": [
+    "http-module"
+  ]
+}

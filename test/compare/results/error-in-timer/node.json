@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "body done\n",
+  "stderr": "file://$CASE/main.plain.mjs:1\nimport { createRequire as __cr } from 'node:module'; import { fileURLToPath as __fu } from 'node:url'; const require = __cr(import.meta.url), __filename = __fu(import.meta.url), __dirname = __filename.slice(0, __filename.lastIndexOf('/')), module = { exports: {} }, exports = module.exports;setTimeout(() => { throw new Error('late boom'); }, 20);\n                                                                                                                                                                                                                                                                                                                      ^\n\nError: late boom\n    at Timeout._onTimeout (file://$CASE/main.plain.mjs:1:317)\n    at <internal>\n\nNode.js v22.22.0\n"
+}

@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "nope error require('sliccy:nope'): unknown sliccy: module 'nope'. Known names: agent, browser, cli, color, computer, exec, fmt, hid, http, pool, serial, skill, time, usb\n(empty) error require('sliccy:'): empty sliccy: module name\nagent loaded function spawn\nusb loaded object list,request\nserial loaded object list,request\nhid loaded object list,request\ncomputer loaded object register\nbrowser loaded object cookie,ensureTab,eval,evalAsync,fetch,findTab,localStorage,openWindow,setWindowBounds,websocket,windowBounds\n",
+  "stderr": ""
+}

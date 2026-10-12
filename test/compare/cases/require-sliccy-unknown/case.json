@@ -1,0 +1,9 @@
+{
+  "area": "sliccy",
+  "description": "require('sliccy:nope'), require('sliccy:') and the SLICC-only names",
+  "corpus": [
+    "sliccy:agent",
+    "sliccy:usb",
+    "sliccy:computer"
+  ]
+}

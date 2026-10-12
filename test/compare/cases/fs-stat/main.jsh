@@ -1,0 +1,14 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+const fs = require('fs');
+await showA('await fs.stat(dir).isDirectory', async () => { const s = await fs.stat('dir'); return [typeof s.isDirectory, typeof s.isFile, s.size !== undefined]; });
+show('statSync(dir).isDirectory()', () => fs.statSync('dir').isDirectory());
+show('statSync(file).isFile()', () => fs.statSync('data.txt').isFile());
+show('statSync size', () => fs.statSync('data.txt').size);
+show('statSync mtime is Date', () => fs.statSync('data.txt').mtime instanceof Date);
+show('statSync mtimeMs', () => typeof fs.statSync('data.txt').mtimeMs);
+show('statSync mode', () => typeof fs.statSync('data.txt').mode);
+show('statSync isSymbolicLink', () => typeof fs.statSync('data.txt').isSymbolicLink);
+show('lstatSync', () => fs.lstatSync('dir').isDirectory());
+show('statSync missing', () => fs.statSync('missing'));
+show('statSync missing throwIfNoEntry', () => fs.statSync('missing', { throwIfNoEntry: false }));
+show('stat callback', () => { fs.stat('data.txt', (err, s) => console.log('stat cb', err, s && s.isFile())); return 'scheduled'; });

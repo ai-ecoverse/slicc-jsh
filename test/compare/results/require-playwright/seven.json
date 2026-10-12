@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "error MODULE_NOT_FOUND | Cannot find module 'playwright'\n",
+  "stderr": ""
+}

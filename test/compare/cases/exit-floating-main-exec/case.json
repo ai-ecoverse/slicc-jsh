@@ -1,0 +1,9 @@
+{
+  "area": "exit",
+  "description": "`main().catch(…)` where main awaits sliccy:exec (sleep 0.3): the program must wait for it",
+  "corpus": [
+    "floating-main",
+    "sliccy:exec"
+  ],
+  "node": false
+}

@@ -1,0 +1,5 @@
+{
+  "area": "builtins",
+  "description": "assert, string_decoder, querystring, timers/promises, perf_hooks, module.createRequire, worker_threads, vm",
+  "corpus": []
+}

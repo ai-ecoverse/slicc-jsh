@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "missing: chmod close closeSync createReadStream createWriteStream fstat fstatSync fsync lstat open openSync opendir opendirSync read readlink readlinkSync realpath statfs symlink symlinkSync truncate unwatchFile utimes watch watchFile write Dirent Stats ReadStream WriteStream constants\nextra: fetchToFile readDir readFileBinary writeFileBinary\nconstants.O_RDONLY undefined\n",
+  "stderr": ""
+}

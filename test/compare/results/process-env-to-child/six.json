@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: child_process.execSync is not available in this browser realm (no synchronous bridge — the page has no controlling Service Worker). Use the async form instead: await promisify(exec)(…).\n    at <internal>\n"
+}

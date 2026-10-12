@@ -1,0 +1,9 @@
+{
+  "area": "process",
+  "description": "process.stdout/stderr shape: write() return and callback, isTTY, columns, fd, end()",
+  "corpus": [
+    "stdout.write",
+    "stderr.write",
+    "isTTY"
+  ]
+}

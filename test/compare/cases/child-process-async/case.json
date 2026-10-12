@@ -1,0 +1,7 @@
+{
+  "area": "builtins",
+  "description": "exec with a callback, util.promisify(exec), spawn with events, execFile",
+  "corpus": [
+    "child_process"
+  ]
+}

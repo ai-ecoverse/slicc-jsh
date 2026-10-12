@@ -1,0 +1,13 @@
+{
+  "area": "exit",
+  "description": "the corpus shape `await main().catch((e) => cli.die(e.message))` when main() calls cli.help() (metaculus, elevenlabs, …)",
+  "env": {
+    "NO_COLOR": "1"
+  },
+  "corpus": [
+    "main().catch",
+    "cli.help",
+    "cli.die"
+  ],
+  "node": false
+}

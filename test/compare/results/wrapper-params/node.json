@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "typeof params: [\"object\",\"object\",\"function\",\"object\",\"object\",\"function\",\"string\",\"string\"]\n__filename: \"$CASE/main.plain.mjs\"\n__dirname: \"$CASE\"\narguments.length: \"no arguments\"\nmodule.exports === exports: true\nrequire.main === module: false\nmodule.filename: undefined\nmodule.id: undefined\nmodule.loaded: undefined\nthis === globalThis: false\nthis === module.exports: false\nglobalThis.require: \"undefined\"\nglobalThis.process === process: true\nglobalThis.console === console: true\nglobalThis.fetch === fetch: true\n",
+  "stderr": ""
+}

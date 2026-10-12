@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "esm default named export\ncjs value default\nsub/x.mjs\n",
+  "stderr": ""
+}

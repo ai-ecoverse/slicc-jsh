@@ -1,0 +1,14 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+const H = process.env.COMPARE_HTTP;
+await showA('json', async () => { const r = await fetch(`${H}/json`); return [r.status, r.ok, r.headers.get('content-type'), await r.json()]; });
+await showA('text', async () => (await fetch(`${H}/text`)).text());
+await showA('404', async () => { const r = await fetch(`${H}/missing`); return [r.status, r.ok, r.statusText]; });
+await showA('redirect followed', async () => { const r = await fetch(`${H}/redirect`); return [r.status, r.redirected, r.url.endsWith('/json')]; });
+await showA('redirect manual', async () => { const r = await fetch(`${H}/redirect`, { redirect: 'manual' }); return [r.status, r.headers.get('location')]; });
+await showA('post json', async () => (await fetch(`${H}/echo?q=1`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer t' }, body: JSON.stringify({ a: 1 }) })).json());
+await showA('post FormData', async () => { const fd = new FormData(); fd.append('k', 'v'); const j = await (await fetch(`${H}/echo`, { method: 'POST', body: fd })).json(); return [j.contentType && j.contentType.split(';')[0], j.body.includes('name="k"')]; });
+await showA('bytes', async () => [...new Uint8Array(await (await fetch(`${H}/bytes`)).arrayBuffer())]);
+await showA('custom header', async () => (await (await fetch(`${H}/echo`, { headers: { 'x-custom': 'yes' } })).json()).custom);
+await showA('refused', async () => { try { await fetch('http://127.0.0.1:1/'); return 'no error'; } catch (e) { return [e.name, e.message, e.cause && e.cause.code]; } });
+await showA('abort', async () => { const ac = new AbortController(); const p = fetch(`${H}/slow`, { signal: ac.signal }); ac.abort(); try { await p; return 'not aborted'; } catch (e) { return e.name; } });
+await showA('Response.json static', async () => (await Response.json({ s: 1 }).json()));

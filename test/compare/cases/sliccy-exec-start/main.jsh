@@ -1,0 +1,12 @@
+const { exec } = require('sliccy:exec');
+const h = exec.start(['cat']);
+console.log('handle', Object.keys(h).sort().join(','), Object.keys(h.stdin || {}).sort().join(','));
+h.stdin.write('buffered ');
+h.stdin.write('stdin');
+h.stdin.end();
+console.log('cat', JSON.stringify(await h.done));
+const k = exec.start(['sleep', '5']);
+k.stdin.end();
+await new Promise((r) => setTimeout(r, 300));
+console.log('kill', await k.kill());
+console.log('killed', JSON.stringify(await k.done));

@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "SyntaxError: Cannot use import statement outside a module\n    at <internal>\n"
+}

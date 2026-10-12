@@ -1,0 +1,12 @@
+const execMod = require('sliccy:exec');
+const { exec } = execMod;
+console.log('module', typeof execMod, typeof execMod.exec, execMod.exec === execMod, typeof execMod.spawn);
+const show = (label, r) => console.log(label, JSON.stringify(r));
+show('echo', await exec('echo hello'));
+show('stderr+exit', await exec('echo out; echo err >&2; exit 3'));
+show('pipe', await exec('printf "b\\na\\n" | sort'));
+show('env var', await exec('echo "$COMPARE_HTTP" | cut -c1-4'));
+show('cwd', await exec('pwd'));
+show('spawn', await exec.spawn(['echo', 'a b', '$HOME']));
+show('spawn missing', await exec.spawn(['no-such-cmd-xyz']));
+show('exec missing', await exec('no-such-cmd-xyz'));

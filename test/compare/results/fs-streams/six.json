@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "createWriteStream: THROW TypeError: fs.createWriteStream is not a function\ncreateReadStream: THROW TypeError: fs.createReadStream is not a function\npipe: THROW TypeError: fs.createWriteStream is not a function\n",
+  "stderr": ""
+}

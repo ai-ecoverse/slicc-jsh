@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "Error: outer\n    at $CASE/main.jsh:1:99\n    at <internal>\n"
+}

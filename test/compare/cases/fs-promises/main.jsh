@@ -1,0 +1,15 @@
+const D=(v)=>{if(v===undefined)return'undefined';if(typeof v==='function')return'[function]';if(typeof v==='bigint')return`${v}n`;if(v&&typeof v.then==='function'){v.then(()=>{},()=>{});return'[Promise]'}if(typeof Buffer!=='undefined'&&Buffer.isBuffer&&Buffer.isBuffer(v))return`[Buffer ${v.length}]`;if(v instanceof Uint8Array)return`[Uint8Array ${v.length}]`;try{return JSON.stringify(v)}catch{return String(v)}},E=(e)=>`THROW ${e&&e.name}${e&&e.code?` ${e.code}`:''}: ${String(e&&e.message).split('\n')[0]}`,show=(k,f)=>{let s;try{s=D(f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)},showA=async(k,f)=>{let s;try{s=D(await f())}catch(e){s=E(e)}process.stdout.write(`${k}: ${s}\n`)};
+const fs = require('fs');
+const fsp = require('fs/promises');
+show('fs.promises === fs/promises', () => fs.promises === fsp);
+show('fs.promises === fs', () => fs.promises === fs);
+show("node:fs/promises === fs/promises", () => require('node:fs/promises') === fsp);
+await showA('fsp.readFile utf8', () => fsp.readFile('data.txt', 'utf8'));
+await showA('fsp.readFile buffer', async () => { const b = await fsp.readFile('data.txt'); return [Buffer.isBuffer(b), b.length]; });
+await showA('fsp.writeFile + readFile', async () => { await fsp.writeFile('p.txt', 'p'); return fsp.readFile('p.txt', 'utf8'); });
+await showA('fsp.readdir', async () => (await fsp.readdir('dir')).sort());
+await showA('fsp.stat isDirectory()', async () => (await fsp.stat('dir')).isDirectory());
+await showA('fsp.access missing', () => fsp.access('missing'));
+await showA('fsp.mkdtemp', async () => typeof (await fsp.mkdtemp('tmp-')));
+await showA('fsp.rm force missing', () => fsp.rm('missing', { force: true }));
+await showA('fsp.open', async () => { const h = await fsp.open('data.txt'); const s = (await h.readFile('utf8')); await h.close(); return s; });

@@ -1,0 +1,7 @@
+{
+  "area": "wrapper",
+  "description": "`await import('./lib.mjs')` and `import('./lib.cjs')` resolve against the script",
+  "corpus": [
+    "dynamic-import"
+  ]
+}

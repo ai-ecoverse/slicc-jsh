@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "module function function true function\necho {\"stdout\":\"hello\\n\",\"stderr\":\"\",\"exitCode\":0}\nstderr+exit {\"stdout\":\"out\\n\",\"stderr\":\"err\\n\",\"exitCode\":3}\npipe {\"stdout\":\"a\\nb\\n\",\"stderr\":\"\",\"exitCode\":0}\nenv var {\"stdout\":\"\\n\",\"stderr\":\"\",\"exitCode\":0}\ncwd {\"stdout\":\"$CASE\\n\",\"stderr\":\"\",\"exitCode\":0}\nspawn {\"stdout\":\"a b $HOME\\n\",\"stderr\":\"\",\"exitCode\":0}\nspawn missing {\"stdout\":\"\",\"stderr\":\"bash: no-such-cmd-xyz: command not found\\n\",\"exitCode\":127}\nexec missing {\"stdout\":\"\",\"stderr\":\"bash: no-such-cmd-xyz: command not found\\n\",\"exitCode\":127}\n",
+  "stderr": ""
+}

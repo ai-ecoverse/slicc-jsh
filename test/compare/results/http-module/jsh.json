@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "server + get: [200,\"text/plain\",\"served GET /path?q=1\"]\nhttp.get the compare server: [200,\"{\\\"ok\\\":true,\\\"n\\\":1}\"]\nhttps.request: \"function\"\nSTATUS_CODES: \"Not Found\"\n",
+  "stderr": ""
+}

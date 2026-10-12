@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "./esm.mjs: [\"esm default\",\"named\",null]\nesm package: [\"esm-only default\",[\"default\",\"x\"]]\ntla esm: THROW Error ERR_REQUIRE_ASYNC_MODULE: Cannot require() ES Module $CASE/tla.mjs because it uses top-level await.\n",
+  "stderr": ""
+}

@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "$CASE/main.jsh:2\nconst x = ;\n          ^\n\nSyntaxError: Unexpected token ';'\n    at <internal>\n"
+}

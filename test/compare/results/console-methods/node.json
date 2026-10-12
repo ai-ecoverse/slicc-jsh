@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "info → stdout\ndebug → stdout\n┌─────────┬───┬───┐\n│ (index) │ a │ b │\n├─────────┼───┼───┤\n│ 0       │ 1 │ 2 │\n│ 1       │ 3 │ 4 │\n└─────────┴───┴───┘\n{ dir: [Object] }\ngroup\n  indented\nnot indented\ndefault: 1\nx: 1\nfunction function function\n",
+  "stderr": "warn → stderr\nAssertion failed: assert message\n"
+}

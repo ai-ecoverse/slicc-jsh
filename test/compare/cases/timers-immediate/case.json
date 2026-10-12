@@ -1,0 +1,5 @@
+{
+  "area": "globals",
+  "description": "setImmediate/clearImmediate and setImmediate before a 10 ms timer",
+  "corpus": []
+}

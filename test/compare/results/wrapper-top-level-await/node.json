@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "awaited\nfor await 1\nfor await 2\n",
+  "stderr": ""
+}

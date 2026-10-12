@@ -1,0 +1,7 @@
+{
+  "area": "process",
+  "description": "process.stdout.write(chunk, callback): is the callback called",
+  "corpus": [
+    "stdout.write"
+  ]
+}

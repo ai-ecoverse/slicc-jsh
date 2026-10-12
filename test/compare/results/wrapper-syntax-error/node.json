@@ -1,0 +1,5 @@
+{
+  "status": 1,
+  "stdout": "",
+  "stderr": "file://$CASE/main.plain.mjs:2\nconst x = ;\n          ^\n\nSyntaxError: Unexpected token ';'\n    at <internal>\n\nNode.js v22.22.0\n"
+}

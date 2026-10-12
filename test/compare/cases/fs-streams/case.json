@@ -1,0 +1,5 @@
+{
+  "area": "fs",
+  "description": "fs.createReadStream / createWriteStream and piping",
+  "corpus": []
+}

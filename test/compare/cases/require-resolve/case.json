@@ -1,0 +1,7 @@
+{
+  "area": "require",
+  "description": "require.resolve for a builtin, sliccy:, relative and a package; require.cache; module.paths",
+  "corpus": [
+    "require-relative"
+  ]
+}

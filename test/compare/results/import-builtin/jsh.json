@@ -1,0 +1,5 @@
+{
+  "status": 0,
+  "stdout": "node:fs keys: [\"readFileSync:function\",\"promises:object\",\"default:object\"]\nfs default === require(fs): true\npath.join: \"a/b\"\n",
+  "stderr": ""
+}
