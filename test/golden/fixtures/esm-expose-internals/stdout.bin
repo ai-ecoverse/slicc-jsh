@@ -1,0 +1,6 @@
+static default function function
+static keys [ 'default' ]
+dynamic keys [ 'default' ] true
+node: prefix true
+import.meta.resolve node:internal/readline/utils
+require same true

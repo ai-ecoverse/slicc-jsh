@@ -78,7 +78,22 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     conditions: IMPORT_CONDITIONS,
     extensions: ['.js', '.mjs', '.cjs', '.json'],
     preserveSymlinks: preserveSymlinks(process),
+    // node --expose-internals: import 'internal/…', as require() has it.
+    exposeInternals: () => process.execArgv.includes('--expose-internals'),
   });
+
+  /**
+   * A builtin's namespace. Node 22 gives an internal module (exposed by
+   * --expose-internals) only a default export, its module.exports.
+   */
+  function builtinNamespace(id) {
+    const exports = builtins.load(id);
+    if (!id.startsWith('internal/')) return cjsToNamespace(exports);
+    const ns = Object.create(null);
+    Object.defineProperty(ns, 'default', { value: exports, enumerable: true, writable: true });
+    Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
+    return ns;
+  }
 
   /** @type {Map<string, { namespace?: object, exportsObj?: object, evaluating?: boolean, promise?: Promise<object> }>} */
   const cache = new Map();
@@ -142,7 +157,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   function resolveAndLoadSync(specifier, parentFilename) {
     const resolved = esmResolve(specifier, parentFilename);
     if (resolved.type === 'builtin') {
-      return cjsToNamespace(builtins.load(resolved.id));
+      return builtinNamespace(resolved.id);
     }
     return loadFileSync(resolved.filename);
   }
@@ -315,7 +330,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       throw err;
     }
     if (resolved.type === 'builtin') {
-      return cjsToNamespace(builtins.load(resolved.id));
+      return builtinNamespace(resolved.id);
     }
     const filename = resolved.filename;
     const cached = cache.get(filename);

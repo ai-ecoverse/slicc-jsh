@@ -1,0 +1,6 @@
+{
+  "description": "--expose-internals reaches the ESM resolver: static and dynamic import of internal/… (default export only, as in Node 22)",
+  "argv": ["--expose-internals", "script.mjs"],
+  "shim": true,
+  "files": [{ "path": "/os/script.mjs", "from": "script.mjs" }]
+}
