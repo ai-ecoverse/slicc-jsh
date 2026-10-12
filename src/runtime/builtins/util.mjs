@@ -30,10 +30,10 @@ promisify.custom = PROMISIFY_CUSTOM;
  * util.getCallSites (Node 22.9+): the caller's frames as plain objects, from
  * the runtime's remapped CallSites (stack.mjs).
  */
-function getCallSites(frameCount = 8, options) {
+function getCallSites(frameCount = 10, options) {
   if (options === undefined && typeof frameCount === 'object' && frameCount !== null) {
     options = frameCount;
-    frameCount = 8;
+    frameCount = 10;
   }
   if (options !== undefined) {
     validateObject(options, 'options');

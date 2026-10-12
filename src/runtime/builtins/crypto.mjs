@@ -161,12 +161,20 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     return enc ? buf.toString(enc) : buf;
   };
 
+  // Buffer.from(string, encoding) as the JS layer calls it: an unknown
+  // encoding throws (only the native update() paths fall back to UTF-8).
+  const bufferFromString = (str, encoding) => {
+    const enc = normalizeEncoding(encoding);
+    if (enc === undefined) throw nodeError(TypeError, 'ERR_UNKNOWN_ENCODING', `Unknown encoding: ${encoding}`);
+    return Buffer.from(str, enc);
+  };
+
   // lib/internal/crypto/util.js
   function getArrayBufferOrView(buffer, name, encoding) {
     if (isAnyArrayBuffer(buffer)) return buffer;
     if (typeof buffer === 'string') {
       if (encoding === 'buffer') encoding = 'utf8';
-      return Buffer.from(buffer, normalizeEncoding(encoding) ?? 'utf8');
+      return bufferFromString(buffer, encoding);
     }
     if (!isArrayBufferView(buffer)) {
       throw ERR_INVALID_ARG_TYPE(name, ['string', 'ArrayBuffer', 'Buffer', 'TypedArray', 'DataView'], buffer);
@@ -176,7 +184,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
   const toBuf = (val, encoding) => {
     if (typeof val === 'string') {
       if (encoding === 'buffer') encoding = 'utf8';
-      return Buffer.from(val, normalizeEncoding(encoding) ?? 'utf8');
+      return bufferFromString(val, encoding);
     }
     return val;
   };

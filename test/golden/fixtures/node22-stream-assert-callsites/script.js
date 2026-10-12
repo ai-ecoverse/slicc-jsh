@@ -48,7 +48,28 @@ function where() {
   return util.getCallSites(2).map((c) => [c.functionName, c.scriptName.split('/').pop(), c.lineNumber, c.columnNumber === c.column]);
 }
 show('getCallSites', () => where());
+show('getCallSites default 10', () => {
+  const deep = (n) => (n ? deep(n - 1) : util.getCallSites().length);
+  return deep(20);
+});
 show('getCallSites options only', () => util.getCallSites({ sourceMap: false }).length > 0);
+show('getCallSites keeps a custom prepareStackTrace', () => {
+  Error.prepareStackTrace = (err, sites) => `custom ${sites.length > 0}`;
+  util.getCallSites();
+  const s = new Error('x').stack;
+  Error.prepareStackTrace = undefined;
+  return [s, new Error('y').stack.split('\n')[0]];
+});
+show('save/restore a custom prepareStackTrace', () => {
+  Error.prepareStackTrace = () => 'mine';
+  const saved = Error.prepareStackTrace;
+  Error.prepareStackTrace = (_, sites) => sites;
+  const sites = new Error().stack;
+  Error.prepareStackTrace = saved;
+  const s = new Error().stack;
+  Error.prepareStackTrace = undefined;
+  return [Array.isArray(sites), s];
+});
 show('getCallSites bad', () => util.getCallSites('x'));
 show('getCallSites 0', () => util.getCallSites(0));
 

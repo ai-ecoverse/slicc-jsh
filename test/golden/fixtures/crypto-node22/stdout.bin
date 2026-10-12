@@ -152,6 +152,10 @@ scryptSync keylen -1: THROW RangeError ERR_OUT_OF_RANGE "The value of \"keylen\"
 createSecretKey: ["secret",3,"abc",{"kty":"oct","k":"YWJj"},true,true,"[object KeyObject]","SecretKeyObject",null]
 createSecretKey number: THROW TypeError ERR_INVALID_ARG_TYPE "The \"key\" argument must be an instance of ArrayBuffer, Buffer, TypedArray, or DataView. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "key" argument must be an instance of ArrayBuffer, Buffer, TypedArray, or DataView. Received type number (1)
 createSecretKey encoding: "abc"
+createSecretKey unknown encoding: THROW TypeError ERR_UNKNOWN_ENCODING "Unknown encoding: nope" | TypeError [ERR_UNKNOWN_ENCODING]: Unknown encoding: nope
+createHmac unknown key encoding: THROW TypeError ERR_UNKNOWN_ENCODING "Unknown encoding: nope" | TypeError [ERR_UNKNOWN_ENCODING]: Unknown encoding: nope
+setAuthTag unknown encoding: THROW TypeError ERR_UNKNOWN_ENCODING "Unknown encoding: nope" | TypeError [ERR_UNKNOWN_ENCODING]: Unknown encoding: nope
+update unknown encoding (utf8): "11f6ad8ec52a2984abaafd7c3b516503785c2072"
 new KeyObject: THROW TypeError ERR_INVALID_ARG_TYPE "The \"handle\" argument must be of type object. Received an instance of Object" | TypeError [ERR_INVALID_ARG_TYPE]: The "handle" argument must be of type object. Received an instance of Object
 new KeyObject bad type: THROW TypeError ERR_INVALID_ARG_VALUE "The argument 'type' is invalid. Received 'nope'" | TypeError [ERR_INVALID_ARG_VALUE]: The argument 'type' is invalid. Received 'nope'
 generateKeySync hmac: 15

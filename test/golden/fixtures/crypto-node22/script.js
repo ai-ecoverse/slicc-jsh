@@ -250,6 +250,11 @@ show('createSecretKey', () => {
 });
 show('createSecretKey number', () => crypto.createSecretKey(1));
 show('createSecretKey encoding', () => crypto.createSecretKey('616263', 'hex').export().toString());
+show('createSecretKey unknown encoding', () => crypto.createSecretKey('abc', 'nope'));
+show('createHmac unknown key encoding', () => crypto.createHmac('sha1', 'k', { encoding: 'nope' }));
+show('setAuthTag unknown encoding', () =>
+  crypto.createDecipheriv('aes-128-gcm', Buffer.alloc(16), Buffer.alloc(12)).setAuthTag('aa', 'nope'));
+show('update unknown encoding (utf8)', () => crypto.createHash('sha1').update('x', 'nope').digest('hex'));
 show('new KeyObject', () => new crypto.KeyObject('secret', {}));
 show('new KeyObject bad type', () => new crypto.KeyObject('nope', {}));
 show('generateKeySync hmac', () => crypto.generateKeySync('hmac', { length: 123 }).symmetricKeySize);
