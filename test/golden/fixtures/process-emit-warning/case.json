@@ -1,0 +1,6 @@
+{
+  "description": "process.emitWarning (Node's own internal/process/warning.js): the default (node:PID) output and its trace hint, 'warning' listeners, types/codes/detail/Error objects, argument errors, util.deprecate (one warning per code), crypto.Hash's DEP0179, tty getColorDepth's FORCE_COLOR vs NO_COLOR warning",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

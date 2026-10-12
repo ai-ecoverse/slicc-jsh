@@ -8,4 +8,5 @@
 module.exports = {
   tty: require('internal/tty'),
   readlineCallbacks: require('internal/readline/callbacks'),
+  warning: require('internal/process/warning'),
 };

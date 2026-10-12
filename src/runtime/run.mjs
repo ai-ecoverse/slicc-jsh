@@ -183,6 +183,7 @@ export async function runNode(ctx, options = {}) {
     },
   });
   process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
+  process._setupWarnings();
   if (parsed.mode === 'eval') {
     process._evalCode = parsed.code;
     lastEvalCode = parsed.code;

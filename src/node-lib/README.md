@@ -14,3 +14,4 @@ To update, copy the files from the new Node tag and re-run the goldens.
 | `lib/internal/tty.js` | `tty.WriteStream#getColorDepth` / `hasColors` |
 | `lib/internal/readline/callbacks.js` | `tty.WriteStream#cursorTo` / `moveCursor` / `clearLine` / `clearScreenDown` |
 | `lib/internal/readline/utils.js` | `CSI` for the above |
+| `lib/internal/process/warning.js` | `process.emitWarning` and the default `'warning'` listener |

@@ -1,6 +1,8 @@
 import { EventEmitter } from './builtins/events.mjs';
 import { assignProcessExitCode, hardExitError, numericExitCode } from './exit.mjs';
 import { createStdio } from './stdio.mjs';
+import { loadNodeLib } from './node-lib.mjs';
+import { createOs } from './builtins/os.mjs';
 import { nodeError } from './node-errors.mjs';
 
 /** Node version reported by the shim (M1 target). */
@@ -177,6 +179,12 @@ class Process extends EventEmitter {
     this.env = createEnv(ctx.env);
     this.versions = { node: NODE_SHIM_VERSION };
     this.version = `v${NODE_SHIM_VERSION}`;
+    this.release = {
+      name: 'node',
+      lts: 'Jod',
+      sourceUrl: `https://nodejs.org/download/release/v${NODE_SHIM_VERSION}/node-v${NODE_SHIM_VERSION}.tar.gz`,
+      headersUrl: `https://nodejs.org/download/release/v${NODE_SHIM_VERSION}/node-v${NODE_SHIM_VERSION}-headers.tar.gz`,
+    };
     this.platform = 'linux';
     this.arch = 'x64';
     this.pid = ctx.pid;
@@ -224,6 +232,19 @@ class Process extends EventEmitter {
     this._writeStdout = writeStdout;
     this._writeStderr = writeStderr;
 
+    // Node's own lib files (src/node-lib), loaded on first use.
+    let nodeLib;
+    this._nodeLib = () => {
+      nodeLib ??= loadNodeLib({
+        ctx,
+        process: this,
+        Buffer,
+        os: () => createOs(this.env),
+        builtin: (id) => this._builtin(id),
+      });
+      return nodeLib;
+    };
+
     // process.stdin / stdout / stderr: Node's streams, made on first access.
     const io = createStdio({ ctx, process: this, Buffer, handles, info: stdio });
     this._stdio = io;
@@ -266,6 +287,35 @@ class Process extends EventEmitter {
       return BigInt(Math.floor(now * 1e6));
     };
     this.hrtime = hrtime;
+  }
+
+  /** A builtin module by id (set by the CJS loader once it has them). */
+  _builtin(id) {
+    if (typeof this._builtinLoader !== 'function') throw new Error(`slicc-jsh: builtin ${id} not ready`);
+    return this._builtinLoader(id);
+  }
+
+  /**
+   * Node's warning options, from execArgv and NODE_NO_WARNINGS (bootstrap/
+   * node.js): noDeprecation & co., and the default 'warning' listener that
+   * prints `(node:PID) [CODE] Name: message`.
+   */
+  _setupWarnings() {
+    const has = (flag) => this.execArgv.includes(flag);
+    if (has('--no-deprecation')) this.noDeprecation = true;
+    if (has('--throw-deprecation')) this.throwDeprecation = true;
+    if (has('--trace-deprecation')) this.traceDeprecation = true;
+    if (has('--trace-warnings')) this.traceProcessWarnings = true;
+    if (!has('--no-warnings') && this.env.NODE_NO_WARNINGS !== '1') {
+      const process = this;
+      this.on('warning', function onWarning(warning) {
+        return process._nodeLib().warning.onWarning(warning);
+      });
+    }
+  }
+
+  emitWarning(warning, type, code, ctor) {
+    return this._nodeLib().warning.emitWarning(warning, type, code, ctor ?? this.emitWarning);
   }
 
   /** fs.readFileSync(0 | '/dev/stdin'): what fd 0 has left, read synchronously. */

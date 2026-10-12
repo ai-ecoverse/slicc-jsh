@@ -16,8 +16,6 @@
  */
 import { trackPromise } from './async-handles.mjs';
 import { createStream } from './builtins/stream.mjs';
-import { loadNodeLib } from './node-lib.mjs';
-import { createOs } from './builtins/os.mjs';
 import { nodeError } from './node-errors.mjs';
 
 /** fd → { type: 'tty' | 'file' | 'pipe', columns, rows }, from the kernel. */
@@ -54,11 +52,7 @@ export async function probeStdio(ctx) {
 export function createStdio({ ctx, process, Buffer, handles, info = {} }) {
   const kindOf = (fd) => info[fd]?.type ?? 'pipe';
   let classes;
-  let nodeLib;
-  const lib = () => {
-    nodeLib ??= loadNodeLib({ ctx, process, Buffer, os: () => createOs(process.env) });
-    return nodeLib;
-  };
+  const lib = () => process._nodeLib();
 
   function makeClasses() {
     const { Readable, Writable, Duplex } = createStream({ ctx, process, Buffer, handles });
@@ -164,7 +158,18 @@ export function createStdio({ ctx, process, Buffer, handles, info = {} }) {
       return [this.columns, this.rows];
     };
 
-    // --- readable side: one reader of fd 0 (or a tty fd), through ctx.read.
+    // --- readable side: one reader of fd 0 (or a tty fd), through ctx.read,
+    // or a context's stdin web stream when it has no ctx.read.
+    let webReader;
+    const readChunk = async (fd) => {
+      if (typeof ctx.read === 'function') return ctx.read(fd);
+      if (fd === 0 && typeof ctx.stdin?.getReader === 'function') {
+        webReader ??= ctx.stdin.getReader();
+        const { value, done } = await webReader.read();
+        return done || !value ? new Uint8Array(0) : value instanceof Uint8Array ? value : new Uint8Array(value);
+      }
+      return new Uint8Array(0);
+    };
     function initReadable(stream, fd, type, Base = Readable) {
       Base.call(stream, { highWaterMark: 64 * 1024, allowHalfOpen: false });
       if (Base === Duplex) stream.writable = false;
@@ -193,7 +198,7 @@ export function createStdio({ ctx, process, Buffer, handles, info = {} }) {
         if (inFlight) return;
         inFlight = true;
         update();
-        Promise.resolve(ctx.read(fd)).then(
+        Promise.resolve(readChunk(fd)).then(
           (chunk) => {
             inFlight = false;
             if (!chunk || chunk.byteLength === 0) {

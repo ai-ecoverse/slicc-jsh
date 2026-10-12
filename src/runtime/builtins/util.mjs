@@ -8,7 +8,7 @@ import {
   formatWithOptions,
 } from 'node-inspect-extracted';
 
-import { validateBoolean, validateNumber, validateObject } from '../node-errors.mjs';
+import { validateBoolean, validateNumber, validateObject, validateString } from '../node-errors.mjs';
 
 const INSPECT_CUSTOM = Symbol.for('nodejs.util.inspect.custom');
 const PROMISIFY_CUSTOM = Symbol.for('nodejs.util.promisify.custom');
@@ -25,6 +25,41 @@ function promisify(fn) {
   };
 }
 promisify.custom = PROMISIFY_CUSTOM;
+
+// Deprecation codes already warned about (Node's codesWarned): one warning
+// per code, however many wrappers share it.
+const codesWarned = new Set();
+
+/**
+ * util.deprecate (lib/internal/util.js): the wrapper warns once, through
+ * process.emitWarning, unless process.noDeprecation.
+ */
+export function deprecate(fn, msg, code) {
+  if (code !== undefined) validateString(code, 'code');
+  let warned = false;
+  function deprecated(...args) {
+    const process = globalThis.process;
+    if (!process?.noDeprecation && !warned) {
+      warned = true;
+      if (typeof process?.emitWarning === 'function') {
+        if (code !== undefined) {
+          if (!codesWarned.has(code)) {
+            process.emitWarning(msg, 'DeprecationWarning', code, deprecated);
+            codesWarned.add(code);
+          }
+        } else {
+          process.emitWarning(msg, 'DeprecationWarning', deprecated);
+        }
+      }
+    }
+    if (new.target) return Reflect.construct(fn, args, new.target);
+    return Reflect.apply(fn, this, args);
+  }
+  Object.setPrototypeOf(deprecated, fn);
+  if (fn.prototype) deprecated.prototype = fn.prototype;
+  Object.defineProperty(deprecated, 'length', { value: fn.length, configurable: true });
+  return deprecated;
+}
 
 /**
  * util.getCallSites (Node 22.9+): the caller's frames as plain objects, from
@@ -149,16 +184,7 @@ export function createUtil() {
       Object.setPrototypeOf(ctor.prototype, superCtor.prototype);
       ctor.super_ = superCtor;
     },
-    deprecate(fn, msg) {
-      let warned = false;
-      return function deprecated(...args) {
-        if (!warned) {
-          warned = true;
-          void msg;
-        }
-        return fn.apply(this, args);
-      };
-    },
+    deprecate,
   };
 }
 

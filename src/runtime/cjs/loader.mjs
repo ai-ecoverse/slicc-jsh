@@ -56,6 +56,8 @@ export function createCjs({
 
   const resolver = createResolver({ fs, path, readPackageJson, preserveSymlinks: preserveSymlinks(process) });
   const builtins = createBuiltins({ ctx, process, Buffer, console, path, handles, timers });
+  // Node lib files the runtime runs (src/node-lib) require fs, path, console.
+  process._builtinLoader = (id) => builtins.load(id);
   const cache = Object.create(null);
 
   function Module(id, parent) {

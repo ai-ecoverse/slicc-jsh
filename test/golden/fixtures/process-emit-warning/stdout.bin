@@ -1,0 +1,30 @@
+listeners 2 node
+throw ERR_INVALID_ARG_TYPE The "warning" argument must be of type string or an instance of Error. Received type number (1)
+throw ERR_INVALID_ARG_TYPE The "warning" argument must be of type string or an instance of Error. Received null
+throw ERR_INVALID_ARG_TYPE The "warning" argument must be of type string or an instance of Error. Received an instance of Object
+throw ERR_INVALID_ARG_TYPE The "type" argument must be of type string. Received type number (1)
+deprecated deprecated 2 3 1 1 1
+throw ERR_INVALID_ARG_TYPE
+forced vs no-color 4 24
+listener: Warning undefined "plain" undefined true
+listener: CustomWarning undefined "typed" undefined true
+listener: CustomWarning C1 "coded" undefined true
+listener: OptWarning C2 "options" more detail true
+listener: MyWarning undefined "an error" undefined true
+listener: DeprecationWarning DEP_F "f is deprecated" undefined true
+listener: DeprecationWarning undefined "no code" undefined true
+listener: DeprecationWarning DEP0179 "crypto.Hash constructor is deprecated." undefined true
+listener: Warning undefined "The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set." undefined true
+--- stderr ---
+(node:PID) Warning: plain
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:PID) CustomWarning: typed
+(node:PID) [C1] CustomWarning: coded
+(node:PID) [C2] OptWarning: options
+more detail
+(node:PID) MyWarning: an error
+(node:PID) [DEP_F] DeprecationWarning: f is deprecated
+(node:PID) DeprecationWarning: no code
+(node:PID) [DEP0179] DeprecationWarning: crypto.Hash constructor is deprecated.
+(node:PID) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+

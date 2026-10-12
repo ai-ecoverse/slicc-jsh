@@ -8,7 +8,29 @@ import * as errors from './node-errors.mjs';
 
 const PACKAGE_ROOT = '/node_modules/@ai-ecoverse/slicc-jsh';
 
-export function loadNodeLib({ ctx, process, Buffer, os }) {
+/** internal/options getOptionValue, over process.execArgv (`--x=v` or `--x v`). */
+function optionGetter(process) {
+  return function getOptionValue(name) {
+    const argv = process.execArgv ?? [];
+    const values = [];
+    for (let i = 0; i < argv.length; i++) {
+      const a = argv[i];
+      if (a === name) values.push(VALUED.has(name) ? argv[++i] : true);
+      else if (a.startsWith(`${name}=`)) values.push(a.slice(name.length + 1));
+    }
+    if (name === '--disable-warning') return values.filter((v) => typeof v === 'string');
+    if (VALUED.has(name)) return values.length ? String(values[values.length - 1]) : '';
+    return values.length > 0;
+  };
+}
+const VALUED = new Set(['--disable-warning', '--redirect-warnings', '--diagnostic-dir']);
+
+/**
+ * @param {object} o
+ * @param {() => object} o.os the os module (lazily)
+ * @param {(id: string) => any} o.builtin a builtin module by id (fs, path, console)
+ */
+export function loadNodeLib({ ctx, process, Buffer, os, builtin }) {
   return loadVendorCjs({
     ctx,
     packageRoot: PACKAGE_ROOT,
@@ -16,7 +38,18 @@ export function loadNodeLib({ ctx, process, Buffer, os }) {
     globals: { process, Buffer },
     process,
     requires: {
-      'internal/errors': { codes: errors.errorCodes(), AbortError: errors.AbortError },
+      'internal/errors': {
+        codes: errors.errorCodes(),
+        AbortError: errors.AbortError,
+        isErrorStackTraceLimitWritable: () => true,
+      },
+      'internal/options': { getOptionValue: optionGetter(process) },
+      'internal/assert': function assert(value, message) {
+        if (!value) throw new Error(message ?? 'Assertion failed');
+      },
+      'internal/console/global': Object.assign(() => builtin('console'), { lazyRequire: true }),
+      fs: Object.assign(() => builtin('fs'), { lazyRequire: true }),
+      path: Object.assign(() => builtin('path'), { lazyRequire: true }),
       'internal/validators': {
         validateBoolean: errors.validateBoolean,
         validateFunction: errors.validateFunction,
