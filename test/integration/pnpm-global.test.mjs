@@ -92,4 +92,27 @@ describe('pnpm add -g @ai-ecoverse/slicc-jsh in the kernel', () => {
   it('runs jsh through pnpm\'s global bin shim (the PATH entry)', async () => {
     assert.deepEqual(await run([`${globalBin}/jsh`, 'x.jsh', 'a', 'b']), { status: 0, stdout: EXPECTED, stderr: '' });
   });
+
+  it('piped child_process works from the global/v11 install (no /node_modules package)', async () => {
+    // Seven regression: getStream() used to sync-read
+    // /node_modules/@ai-ecoverse/slicc-jsh/dist/vendor/readable-stream.cjs, which
+    // does not exist after pnpm add -g (package is under $PNPM_HOME/global/v11/).
+    assert.match(hostCli, /\/global\/v11\//);
+    const missing = await run([
+      'node',
+      '-e',
+      `const fs=require('fs'); console.log(fs.existsSync('/node_modules/@ai-ecoverse/slicc-jsh'))`,
+    ]);
+    assert.equal(missing.status, 0, missing.stderr);
+    assert.equal(missing.stdout.trim(), 'false');
+
+    const r = await run([
+      'node',
+      '-e',
+      `require('child_process').execFile('node',['-e','process.exit(7)'],(e)=>{console.log('cb',e&&e.code); process.exit(0)}); setTimeout(()=>{},5000)`,
+    ]);
+    assert.equal(r.status, 0, r.stderr || r.stdout);
+    assert.equal(r.stdout.trim(), 'cb 7');
+    assert.equal(r.stderr, '');
+  });
 });
