@@ -1,0 +1,26 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const work = fs.mkdtempSync(path.join(os.tmpdir(), 'rdl-'));
+process.chdir(work);
+fs.mkdirSync('d/sub', { recursive: true });
+fs.mkdirSync('outside');
+fs.writeFileSync('outside/f', 'x');
+fs.writeFileSync('d/own', 'y');
+fs.writeFileSync('d/sub/deep', 'z');
+fs.symlinkSync('../outside', 'd/ln');
+fs.symlinkSync('own', 'd/fl');
+const names = (list) => list.map((e) => (typeof e === 'string' ? e : `${e.parentPath}|${e.name}`)).sort();
+console.log('readdirSync names', names(fs.readdirSync('d', { recursive: true })));
+console.log('readdirSync dirents', names(fs.readdirSync('d', { recursive: true, withFileTypes: true })));
+const dir = fs.opendirSync('d', { recursive: true });
+const seen = [];
+for (let e = dir.readSync(); e; e = dir.readSync()) seen.push(e);
+dir.closeSync();
+console.log('opendirSync', names(seen));
+(async () => {
+  console.log('promises names', names(await fs.promises.readdir('d', { recursive: true })));
+  console.log('promises dirents', names(await fs.promises.readdir('d', { recursive: true, withFileTypes: true })));
+  process.chdir(os.tmpdir());
+  fs.rmSync(work, { recursive: true, force: true });
+})();

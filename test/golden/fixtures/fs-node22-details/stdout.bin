@@ -1,0 +1,30 @@
+read ascii: "C)\u0000A"
+read encoding buffer: THROW TypeError ERR_UNKNOWN_ENCODING undefined "Unknown encoding: buffer"
+read bogus encoding: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
+read { encoding: bogus }: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
+write bogus encoding: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
+readdir bogus encoding: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
+readdir buffer dirents: [true]
+appendFileSync flag w: "new"
+appendFileSync flag wx: THROW Error EEXIST open "EEXIST: file already exists, open 'a.txt'"
+writeFileSync flag r+: "New"
+writeFileSync flag r+ missing: THROW Error ENOENT open "ENOENT: no such file or directory, open 'missing.txt'"
+mkdtempSync missing parent: THROW Error ENOENT mkdtemp "ENOENT: no such file or directory, mkdtemp 'nope/x-XXXXXX'"
+nope created: false
+copyFileSync mode 8: THROW RangeError ERR_OUT_OF_RANGE undefined "mode is out of range: >= 0 && <= 7"
+copyFileSync mode string: THROW TypeError ERR_INVALID_ARG_TYPE undefined "mode must be int32 or null/undefined"
+opendirSync recursive: ["od/x|y","od|x"]
+Dir double closeSync: THROW Error ERR_DIR_CLOSED undefined "Directory handle was closed"
+opendirSync missing: THROW Error ENOENT opendir "ENOENT: no such file or directory, opendir"
+stat bigint: ["bigint","bigint","bigint",true,"3n","atimeMs,atimeNs,birthtimeMs,birthtimeNs,blksize,blocks,ctimeMs,ctimeNs,dev,gid,ino,mode,mtimeMs,mtimeNs,nlink,rdev,size,uid"]
+stat keys: "atimeMs,birthtimeMs,blksize,blocks,ctimeMs,dev,gid,ino,mode,mtimeMs,nlink,rdev,size,uid"
+stat mtime is a Date: true
+symlinkSync existing: THROW Error EEXIST symlink "EEXIST: file already exists, symlink 'a.txt' -> 'l'"
+promises.readFile bogus encoding: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
+promises.readFile encoding buffer: THROW TypeError ERR_UNKNOWN_ENCODING undefined "Unknown encoding: buffer"
+promises.readFile missing, bogus encoding: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
+readFileSync missing, bogus encoding: THROW TypeError ERR_INVALID_ARG_VALUE undefined "The argument 'encoding' is invalid encoding. Received 'bogus'"
+promises.realpath missing: THROW Error ENOENT realpath "ENOENT: no such file or directory, realpath 'zz'"
+realpathSync.native missing: THROW Error ENOENT realpath "ENOENT: no such file or directory, realpath 'zz'"
+realpathSync missing (code, syscall): ["ENOENT","lstat"]
+promises.appendFile flag wx: THROW Error EEXIST open "EEXIST: file already exists, open 'a.txt'"

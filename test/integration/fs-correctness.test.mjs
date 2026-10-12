@@ -31,3 +31,33 @@ describe('fs never deletes more than Node (kernel)', () => {
     assert.equal(r.stdout, 'ENOTDIR rmdir\nENOTDIR rmdir\nkeep\n');
   });
 });
+
+describe('fs.linkSync goes to the kernel (kernel)', () => {
+  let jsh;
+  before(async () => {
+    jsh = await withJsh();
+    await jsh.kernel.writeFile('/os/t/.keep', '');
+    await jsh.kernel.mount({ type: 'tmpfs', source: 'none', target: '/os/t' });
+  });
+  after(() => jsh?.close());
+
+  it('links on tmpfs (one inode, nlink 2) and passes the root file system’s EPERM through', async () => {
+    await jsh.kernel.writeFile(
+      '/os/link.js',
+      [
+        "const fs = require('fs');",
+        "fs.writeFileSync('t/a', 'shared');",
+        "fs.linkSync('t/a', 't/b');",
+        "const a = fs.statSync('t/a'); const b = fs.statSync('t/b');",
+        "fs.appendFileSync('t/b', '!');",
+        "console.log('tmpfs', a.ino === b.ino, fs.statSync('t/a').nlink, fs.readFileSync('t/a', 'utf8'));",
+        "fs.writeFileSync('root-a', 'x');",
+        "try { fs.linkSync('root-a', 'root-b'); console.log('root linked'); } catch (e) { console.log('root', e.code, e.syscall, e.path, e.dest); }",
+        "try { fs.linkSync('t/missing', 't/x'); } catch (e) { console.log('missing', e.code, e.syscall); }",
+      ].join('\n')
+    );
+    const r = await jsh.run(['node', 'link.js']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'tmpfs true 2 shared!\nroot EPERM link root-a root-b\nmissing ENOENT link\n');
+  });
+});

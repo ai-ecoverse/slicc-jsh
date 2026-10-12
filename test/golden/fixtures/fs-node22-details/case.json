@@ -1,0 +1,6 @@
+{
+  "description": "fs details Node 22 has: encoding names validated (ascii drops the high bit, 'buffer' cannot decode), appendFile's flag, mkdtemp without its parent, opendir recursive and double close, bigint Stats, Date fields as prototype getters, readdir buffer dirents, r+ writes",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

@@ -1,0 +1,6 @@
+{
+  "description": "cpSync and realpathSync with symlinks, as Node 22.22 does them: links stay links (absolute targets unless verbatimSymlinks, even with dereference), a link loop is copied as a link, nothing behind a link outside the tree is copied; realpath resolves every link",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

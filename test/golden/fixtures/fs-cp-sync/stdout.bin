@@ -1,0 +1,37 @@
+cpSync with symlinks (default): undefined
+  c3 ol link -> $W/outside
+  c3 xl link -> $W/c/x
+cpSync dereference: undefined
+  c4 ol link -> $W/outside
+  c4 xl link -> $W/c/x
+cpSync verbatimSymlinks: undefined
+  c5 ol link -> ../outside
+  c5 xl link -> x
+cpSync file symlink alone: undefined
+  xl-copy link -> $W/c/x
+cpSync dir symlink alone (recursive): undefined
+  ol-copy link -> $W/outside
+cpSync filter with symlinks: undefined
+  c6 ol@ s/ s/y xl@ | ol link -> $W/outside | xl link -> $W/c/x
+cpSync symlink loop: undefined
+  lout s/ s/f s/up@ | up link -> $W/l
+cpSync dangling symlink: undefined
+  cd2 dang@ f | dang link -> $W/cd/nowhere
+cpSync existing dest errorOnExist: THROW SystemError ERR_FS_CP_EEXIST cp "Target already exists: cp returned EEXIST (c/s/y already exists) c/s/y"
+cpSync existing dest force false: undefined
+  y file "y"
+cpSync existing dest (force): undefined
+  y file "x"
+cpSync dir onto file: THROW Error ERR_FS_CP_DIR_TO_NON_DIR undefined "Cannot overwrite non-directory c/x with directory c/s"
+cpSync file onto dir: THROW Error ERR_FS_CP_NON_DIR_TO_DIR undefined "Cannot overwrite directory c/s with non-directory c/x"
+cpSync missing src: THROW Error ENOENT lstat "ENOENT: no such file or directory, lstat 'nope'"
+cpSync into a missing parent: undefined
+  new deep/ deep/x
+cpSync tree into existing dest: undefined
+  c3 ol@ s/ s/y x xl@
+outside kd/ keep
+realpathSync link: "$W/outside"
+realpathSync loop: "$W/l"
+realpathSync file link: "$W/c/x"
+realpathSync dangling: THROW Error ENOENT stat "ENOENT: no such file or directory, stat '$W/cd/dang'"
+realpathSync.native: "function"

@@ -1,0 +1,27 @@
+promises.cp default: undefined
+  p3 ol link -> $W/outside
+  p3 xl link -> $W/c/x
+promises.cp dereference: undefined
+  p4 ol dir []
+  p4 xl file "x"
+promises.cp verbatim: undefined
+  p5 ol link -> ../outside
+  p5 xl link -> x
+promises.cp onto itself: THROW SystemError ERR_FS_CP_EINVAL cp 22 "Invalid src or dest: cp returned EINVAL (src and dest cannot be the same) c"
+promises.cp into itself: THROW SystemError ERR_FS_CP_EINVAL cp 22 "Invalid src or dest: cp returned EINVAL (cannot copy c to a subdirectory of self c/s/in) c/s/in"
+promises.cp dir no recursive: THROW SystemError ERR_FS_EISDIR cp 21 "Path is a directory: cp returned EISDIR (c is a directory (not copied)) c"
+promises.cp dir onto file: THROW SystemError ERR_FS_CP_DIR_TO_NON_DIR cp 21 "Cannot overwrite non-directory with directory: cp returned EISDIR (cannot overwrite non-directory c/x with directory c/s) c/x"
+promises.cp file onto dir: THROW SystemError ERR_FS_CP_NON_DIR_TO_DIR cp 20 "Cannot overwrite directory with non-directory: cp returned ENOTDIR (cannot overwrite directory c/s with non-directory c/x) c/s"
+promises.cp errorOnExist: THROW SystemError ERR_FS_CP_EEXIST cp 17 "Target already exists: cp returned EEXIST (c/s/y already exists) c/s/y"
+promises.cp missing: THROW Error ENOENT lstat -2 "ENOENT: no such file or directory, lstat 'nope'"
+cb cp default: undefined
+  p7 ol link -> $W/outside
+promises.cp loop: undefined
+  up link -> $W/l
+cpSync onto itself THROW Error ERR_FS_CP_EINVAL undefined undefined "src and dest cannot be the same c"
+cpSync into itself THROW Error ERR_FS_CP_EINVAL undefined undefined "Cannot copy c/ to a subdirectory of self c/s/in"
+cpSync dir no recursive THROW Error ERR_FS_EISDIR undefined undefined "Recursive option not enabled, cannot copy a directory: c/"
+cpSync filter promise THROW TypeError ERR_INVALID_RETURN_VALUE undefined undefined "Expected boolean to be returned from the \"filter\" function but got an instance of Promise."
+cpSync tree file exists force false ok
+cpSync tree into existing, errorOnExist THROW Error ERR_FS_CP_EEXIST undefined undefined "[ERR_FS_CP_EEXIST]: Target already exists: cp returned EEXIST (c3b/s/x already exists)"
+cpSync tree into existing, force false ok

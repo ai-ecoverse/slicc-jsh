@@ -3,6 +3,7 @@
  * Async ops are tracked as ref'd handles so the event loop stays alive.
  */
 import { trackPromise } from '../async-handles.mjs';
+import { createCp } from './fs-cp.mjs';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -19,6 +20,8 @@ const ERRNO = {
   ENOTEMPTY: -39, // Linux (the shim's process.platform)
   EBADF: -9,
   ENOTSUP: -45,
+  EXDEV: -18,
+  ELOOP: -40,
 };
 
 const DESCRIPTIONS = {
@@ -33,6 +36,8 @@ const DESCRIPTIONS = {
   ENOTEMPTY: 'directory not empty',
   EBADF: 'bad file descriptor',
   ENOTSUP: 'operation not supported',
+  EXDEV: 'cross-device link not permitted',
+  ELOOP: 'too many symbolic links encountered',
 };
 
 function nodeFsError(code, syscall, pathArg, err, dest) {
@@ -57,12 +62,6 @@ function nodeFsError(code, syscall, pathArg, err, dest) {
 
 const FS_READ_STREAM = Symbol('fs.ReadStream');
 const FS_WRITE_STREAM = Symbol('fs.WriteStream');
-
-function cpInvalid(message) {
-  const e = new Error(message);
-  e.code = 'ERR_FS_CP_EINVAL';
-  return e;
-}
 
 /** Node's rm() of a directory without `recursive`. */
 function rmIsDirectoryError(pathArg) {
@@ -89,15 +88,21 @@ const S_IFDIR = 0o040000;
 const S_IFLNK = 0o120000;
 
 /** Node's fs.Stats: own data fields, type tests on the prototype. */
+// Number or bigint mode; anything else (an empty `new fs.Stats()`) matches no type.
+const modeType = (mode) => {
+  if (typeof mode === 'bigint') return Number(BigInt.asUintN(32, mode) & BigInt(S_IFMT));
+  return typeof mode === 'number' ? mode & S_IFMT : -1;
+};
+
 class Stats {
   isFile() {
-    return (this.mode & S_IFMT) === S_IFREG;
+    return modeType(this.mode) === S_IFREG;
   }
   isDirectory() {
-    return (this.mode & S_IFMT) === S_IFDIR;
+    return modeType(this.mode) === S_IFDIR;
   }
   isSymbolicLink() {
-    return (this.mode & S_IFMT) === S_IFLNK;
+    return modeType(this.mode) === S_IFLNK;
   }
   isBlockDevice() {
     return false;
@@ -113,13 +118,52 @@ class Stats {
   }
 }
 
-function statView(st) {
+// Node 22: the Date fields are getters on the prototype (not own keys),
+// made from the *Ms numbers; assigning one replaces it.
+for (const name of ['atime', 'mtime', 'ctime', 'birthtime']) {
+  Object.defineProperty(Stats.prototype, name, {
+    configurable: true,
+    enumerable: false,
+    get() {
+      return new Date(Number(this[`${name}Ms`]));
+    },
+    set(value) {
+      Object.defineProperty(this, name, { value, writable: true, configurable: true, enumerable: true });
+    },
+  });
+}
+
+function statView(st, bigint = false) {
   const mtimeMs = st.mtimeMs ?? (st.mtime ? Number(st.mtime) : 0);
   const atimeMs = st.atimeMs ?? mtimeMs;
   const ctimeMs = st.ctimeMs ?? mtimeMs;
   const type = st.isDirectory ? S_IFDIR : st.isSymbolicLink ? S_IFLNK : S_IFREG;
   const perm = typeof st.mode === 'number' ? st.mode & ~S_IFMT : st.isDirectory ? 0o755 : 0o644;
   const size = st.size ?? 0;
+  if (bigint) {
+    const B = (v) => BigInt(Math.trunc(Number(v) || 0));
+    const ns = (ms) => BigInt(Math.trunc(ms * 1e6));
+    return Object.assign(new Stats(), {
+      dev: B(st.dev),
+      mode: B(type | perm),
+      nlink: B(st.nlink ?? 1),
+      uid: B(st.uid),
+      gid: B(st.gid),
+      rdev: 0n,
+      blksize: 4096n,
+      ino: B(st.ino),
+      size: B(size),
+      blocks: B(Math.ceil(size / 512)),
+      atimeMs: B(atimeMs),
+      mtimeMs: B(mtimeMs),
+      ctimeMs: B(ctimeMs),
+      birthtimeMs: B(ctimeMs),
+      atimeNs: ns(atimeMs),
+      mtimeNs: ns(mtimeMs),
+      ctimeNs: ns(ctimeMs),
+      birthtimeNs: ns(ctimeMs),
+    });
+  }
   return Object.assign(new Stats(), {
     dev: st.dev ?? 0,
     mode: type | perm,
@@ -135,10 +179,6 @@ function statView(st) {
     mtimeMs,
     ctimeMs,
     birthtimeMs: ctimeMs,
-    atime: new Date(atimeMs),
-    mtime: new Date(mtimeMs),
-    ctime: new Date(ctimeMs),
-    birthtime: new Date(ctimeMs),
   });
 }
 
@@ -185,14 +225,40 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     typeof options === 'string' ? options : options?.encoding ?? null;
   const optFlag = (options, fallback) =>
     (options && typeof options === 'object' && options.flag) || fallback;
+  const ENCODINGS = new Set([
+    'utf8', 'utf-8', 'ucs2', 'ucs-2', 'utf16le', 'utf-16le', 'latin1', 'binary',
+    'base64', 'base64url', 'hex', 'ascii', 'buffer',
+  ]);
+  /** Node's assertEncoding: an unknown name is ERR_INVALID_ARG_VALUE. */
+  const checkEncoding = (encoding) => {
+    if (encoding == null || ENCODINGS.has(String(encoding).toLowerCase())) return;
+    const err = new TypeError(`The argument 'encoding' is invalid encoding. Received '${encoding}'`);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    throw err;
+  };
   /** Bytes read from a file, as Node returns them for `encoding`. */
   const decodeAs = (bytes, encoding) => {
-    if (!encoding || encoding === 'buffer') return wrapBuffer(bytes);
-    if (encoding === 'utf8' || encoding === 'utf-8') return decoder.decode(bytes);
-    return Buffer ? Buffer.from(bytes).toString(encoding) : decoder.decode(bytes);
+    checkEncoding(encoding);
+    if (!encoding) return wrapBuffer(bytes);
+    const enc = String(encoding).toLowerCase();
+    if (enc === 'buffer') {
+      // Node 22 accepts the name, then fails decoding with it.
+      const err = new TypeError('Unknown encoding: buffer');
+      err.code = 'ERR_UNKNOWN_ENCODING';
+      throw err;
+    }
+    if (enc === 'utf8' || enc === 'utf-8') return decoder.decode(bytes);
+    // Node's ascii decoder drops the high bit of each byte.
+    if (enc === 'ascii') {
+      let out = '';
+      for (let i = 0; i < bytes.length; i++) out += String.fromCharCode(bytes[i] & 0x7f);
+      return out;
+    }
+    return Buffer ? Buffer.from(bytes).toString(enc) : decoder.decode(bytes);
   };
   /** Data to write, as Node encodes a string with `encoding`. */
   const encodeAs = (data, encoding) => {
+    checkEncoding(encoding);
     if (typeof data === 'string' && encoding && encoding !== 'utf8' && encoding !== 'utf-8' && Buffer) {
       const b = Buffer.from(data, encoding);
       return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
@@ -392,10 +458,19 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
       return;
     }
-    // Node: the first directory created, or undefined when all existed.
+    // Node: the first directory created, or undefined when all existed,
+    // named the way `p` was given (its prefixes, by dirname, keep any './').
+    const given = [];
+    for (let cur = String(p); ; ) {
+      given.unshift(cur);
+      const up = path.dirname(cur);
+      if (up === cur) break;
+      cur = up;
+    }
     const parts = String(target).split('/').filter(Boolean);
     let cur = '';
     let first;
+    let firstAbs;
     for (const part of parts) {
       cur += `/${part}`;
       if (syncFs.exists(cur)) {
@@ -410,12 +485,14 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
       try {
         syncFs.mkdir(cur);
-        // Node names it the way `p` was given (relative stays relative).
-        first ??= path.isAbsolute(String(p)) ? cur : path.relative(process.cwd(), cur);
+        firstAbs ??= cur;
       } catch (err) {
         if (err?.code === 'EEXIST') continue;
         throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
       }
+    }
+    if (firstAbs !== undefined) {
+      first = given.find((g) => abs(g) === firstAbs) ?? firstAbs;
     }
     return first;
   }
@@ -439,11 +516,21 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     if (!ok) throw nodeFsError('ENOENT', syscall, p);
   }
 
-  function readdirSync(p, options) {
+  // How many symlinks a path may pass through before the kernel refuses it
+  // (Linux's MAXSYMLINKS): Node's recursive readdir follows linked
+  // directories until the OS answers ELOOP.
+  const MAX_LINK_DEPTH = 40;
+
+  // `followLinks`: Node descends into linked directories in readdirSync
+  // (names and dirents) and promises.readdir (names), not in
+  // promises.readdir with dirents nor in opendir.
+  function readdirSync(p, options, { followLinks = true } = {}) {
     const pathArg = p;
     const target = abs(p);
     const encoding = optEncoding(options);
+    checkEncoding(encoding);
     const asName = (name) => (encoding === 'buffer' ? wrapBuffer(encoder.encode(name)) : name);
+    const dirent = (name, type, parent) => new Dirent(asName(name), type, parent);
     let names;
     try {
       names = syncFs.readdir(target);
@@ -452,33 +539,42 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     }
     if (!options?.recursive) {
       if (options?.withFileTypes) {
-        return names.map((name) => new Dirent(name, typeAt(path.join(target, name)), String(pathArg)));
+        return names.map((name) => dirent(name, typeAt(path.join(target, name)), String(pathArg)));
       }
       return names.map(asName);
     }
-    // Node's recursive listing: breadth first, paths relative to `p`.
+    // Node's recursive listing: breadth first, paths relative to `p`, and
+    // into directories behind symlinks too (lib/fs.js handleDirents).
     const out = [];
-    const queue = [{ dir: target, rel: '', parent: String(pathArg), names }];
+    const queue = [{ dir: target, rel: '', parent: String(pathArg), names, links: 0 }];
     while (queue.length) {
-      const { dir, rel, parent, names: entries } = queue.shift();
+      const { dir, rel, parent, names: entries, links } = queue.shift();
       for (const name of entries) {
         const full = path.join(dir, name);
         const type = typeAt(full);
-        out.push(options.withFileTypes ? new Dirent(name, type, parent) : asName(rel ? `${rel}/${name}` : name));
-        if (type === 'dir') {
-          let children;
+        out.push(options.withFileTypes ? dirent(name, type, parent) : asName(rel ? `${rel}/${name}` : name));
+        let descend = type === 'dir';
+        if (followLinks && type === 'link' && links < MAX_LINK_DEPTH) {
           try {
-            children = syncFs.readdir(full);
+            descend = !!syncFs.stat(full).isDirectory;
           } catch {
-            children = [];
+            descend = false;
           }
-          queue.push({
-            dir: full,
-            rel: rel ? `${rel}/${name}` : name,
-            parent: path.join(parent, name),
-            names: children,
-          });
         }
+        if (!descend) continue;
+        let children;
+        try {
+          children = syncFs.readdir(full);
+        } catch {
+          continue;
+        }
+        queue.push({
+          dir: full,
+          rel: rel ? `${rel}/${name}` : name,
+          parent: path.join(parent, name),
+          names: children,
+          links: links + (type === 'link' ? 1 : 0),
+        });
       }
     }
     return out;
@@ -487,6 +583,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   const syncApi = {
     readFileSync(p, options) {
       const encoding = optEncoding(options);
+      checkEncoding(encoding);
       if (p === 0 || p === '0') return readStdinSync(encoding);
       if (typeof p === 'number') {
         const ent = fdTable.get(p);
@@ -518,7 +615,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         }
         return decodeAs(syncFs.readFile(target), encoding);
       } catch (err) {
-        if (err?.code && err.syscall) throw err;
+        if ((err?.code && err.syscall) || String(err?.code).startsWith('ERR_')) throw err;
         throw nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
       }
     },
@@ -537,6 +634,24 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       const pathArg = p;
       const target = abs(p);
       if (flag.includes('x') && syncFs.exists(target)) throw nodeFsError('EEXIST', 'open', pathArg);
+      if (flag.startsWith('r')) {
+        // r+: the file must exist; write from the start, keep what's beyond.
+        let cur;
+        try {
+          cur = syncFs.readFile(target);
+        } catch (err) {
+          throw nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
+        }
+        const out = new Uint8Array(Math.max(cur.length, bytes.length));
+        out.set(cur, 0);
+        out.set(bytes, 0);
+        try {
+          syncFs.writeFile(target, out);
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'write', pathArg, err);
+        }
+        return;
+      }
       try {
         syncFs.writeFile(target, bytes);
       } catch (err) {
@@ -545,6 +660,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     },
     appendFileSync(p, data, options) {
       const next = encodeAs(data, optEncoding(options));
+      // A flag other than append (Node allows any) writes as writeFileSync does.
+      const flag = optFlag(options, 'a');
+      if (!flag.includes('a')) {
+        syncApi.writeFileSync(p, next, { flag });
+        return;
+      }
       if (typeof p === 'number') {
         const ent = fdTable.get(p);
         let end = null;
@@ -594,7 +715,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     statSync(p, options) {
       const pathArg = p;
       try {
-        return statView(syncFs.stat(abs(p)));
+        return statView(syncFs.stat(abs(p)), options?.bigint === true);
       } catch (err) {
         const code = err?.code || 'ENOENT';
         if (options?.throwIfNoEntry === false && (code === 'ENOENT' || code === 'ENOTDIR')) return undefined;
@@ -604,27 +725,17 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     lstatSync(p, options) {
       const pathArg = p;
       try {
-        return statView(syncFs.lstat(abs(p)));
+        return statView(syncFs.lstat(abs(p)), options?.bigint === true);
       } catch (err) {
         const code = err?.code || 'ENOENT';
         if (options?.throwIfNoEntry === false && (code === 'ENOENT' || code === 'ENOTDIR')) return undefined;
         throw nodeFsError(code, 'lstat', pathArg, err);
       }
     },
-    /**
-     * Resolve to a canonical absolute path. Symlink walk is not implemented;
-     * when the path exists we return the normalized absolute form (enough for
-     * pnpm's cmd shims, which only need dirname(realpathSync(argv[1]))).
-     */
-    realpathSync(p) {
-      const pathArg = p;
-      const target = abs(p);
-      try {
-        syncFs.stat(target);
-        return target;
-      } catch (err) {
-        throw nodeFsError(err?.code || 'ENOENT', 'realpath', pathArg, err);
-      }
+    /** Node's JS realpath: every symlink along the path resolved. */
+    realpathSync(p, options) {
+      const real = getCp().realpathSync(abs(p));
+      return optEncoding(options) === 'buffer' ? wrapBuffer(encoder.encode(real)) : real;
     },
     readdirSync,
     mkdirSync,
@@ -782,11 +893,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         throw nodeFsError(err?.code || 'EIO', 'write', ent.path, err);
       }
     },
-    fstatSync(fd) {
+    fstatSync(fd, options) {
       const ent = fdTable.get(fd);
       if (!ent) throw nodeFsError('EBADF', 'fstat', undefined);
       try {
-        return statView(syncFs.stat(ent.path));
+        return statView(syncFs.stat(ent.path), options?.bigint === true);
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'fstat', ent.path, err);
       }
@@ -817,7 +928,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       try {
         syncFs.symlink(target, abs(p));
       } catch (err) {
-        throw nodeFsError(err?.code || 'EIO', 'symlink', p, err);
+        // Node names both: symlink 'target' -> 'path'.
+        throw nodeFsError(err?.code || 'EIO', 'symlink', target, err, p);
       }
     },
     readlinkSync(p) {
@@ -828,6 +940,17 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
     },
     copyFileSync(src, dest, mode = 0) {
+      if (mode == null) mode = 0;
+      if (typeof mode !== 'number' || !Number.isInteger(mode)) {
+        const err = new TypeError('mode must be int32 or null/undefined');
+        err.code = 'ERR_INVALID_ARG_TYPE';
+        throw err;
+      }
+      if (mode < 0 || mode > 7) {
+        const err = new RangeError('mode is out of range: >= 0 && <= 7');
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+      }
       const from = abs(src);
       const to = abs(dest);
       let st;
@@ -845,44 +968,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         throw nodeFsError(err?.code || 'EIO', 'copyfile', src, err, dest);
       }
     },
-    cpSync(src, dest, options = {}) {
-      const from = abs(src);
-      const to = abs(dest);
-      // Node refuses before it creates anything: copying into itself would
-      // otherwise recurse into the copy it is making.
-      if (from === to) throw cpInvalid(`src and dest cannot be the same ${src}`);
-      if (to.startsWith(`${from}/`)) {
-        throw cpInvalid(`Cannot copy ${src}/ to a subdirectory of self ${dest}`);
-      }
-      let st;
-      try {
-        st = syncFs.stat(from);
-      } catch (err) {
-        throw nodeFsError(err?.code || 'ENOENT', 'cp', src, err);
-      }
-      if (st.isDirectory) {
-        if (!options?.recursive) {
-          const e = new Error(`Recursive option not enabled, cannot copy a directory: ${src}/`);
-          e.code = 'ERR_FS_EISDIR';
-          throw e;
-        }
-        mkdirSync(to, { recursive: true });
-        for (const name of syncFs.readdir(from)) {
-          syncApi.cpSync(path.join(from, name), path.join(to, name), options);
-        }
-        return;
-      }
-      const exists = syncFs.exists(to);
-      if (exists && options?.errorOnExist && options?.force === false) {
-        const e = new Error(`Target already exists: cp returned EEXIST (${to} already exists)`);
-        e.name = 'SystemError';
-        e.code = 'ERR_FS_CP_EEXIST';
-        throw e;
-      }
-      if (exists && options?.force === false) return;
-      syncFs.writeFile(to, syncFs.readFile(from));
+    cpSync(src, dest, options) {
+      getCp().cpSync(src, dest, options);
     },
-    mkdtempSync(prefix, options) {
+    mkdtempSync(prefix, options, { namedError = false } = {}) {
       const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
       const bytes = new Uint8Array(6);
       for (let attempt = 0; attempt < 100; attempt++) {
@@ -890,6 +979,16 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         const name = `${prefix}${[...bytes].map((b) => chars[b % chars.length]).join('')}`;
         const target = abs(name);
         if (syncFs.exists(target)) continue;
+        // The kernel's mkdir makes parents; Node's mkdtemp does not.
+        const parent = path.dirname(target);
+        let parentOk = false;
+        try {
+          parentOk = !!syncFs.stat(parent).isDirectory;
+        } catch {
+          parentOk = false;
+        }
+        // Sync errors show the template, the promise form the name it tried.
+        if (!parentOk) throw nodeFsError('ENOENT', 'mkdtemp', namedError ? name : `${prefix}XXXXXX`);
         try {
           syncFs.mkdir(target);
         } catch (err) {
@@ -950,11 +1049,57 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     fdatasyncSync(fd) {
       if (fd !== 0 && fd !== 1 && fd !== 2 && !fdTable.has(fd)) throw nodeFsError('EBADF', 'fdatasync', undefined);
     },
-    opendirSync(p) {
-      const entries = readdirSync(p, { withFileTypes: true });
+    opendirSync(p, options) {
+      let entries;
+      try {
+        entries = readdirSync(p, { withFileTypes: true, recursive: options?.recursive === true }, { followLinks: false });
+      } catch (err) {
+        // Node's opendir errors name the syscall, not the path.
+        throw nodeFsError(err?.code || 'ENOENT', 'opendir', undefined, err);
+      }
       return createDir(String(p), entries);
     },
+    linkSync(existingPath, newPath) {
+      // The kernel decides: tmpfs links (one inode, nlink 2), the root file
+      // system and fsa refuse (EPERM), across mounts it's EXDEV.
+      try {
+        syncFs.link(abs(existingPath), abs(newPath));
+      } catch (err) {
+        throw nodeFsError(err?.code || 'EIO', 'link', existingPath, err, newPath);
+      }
+    },
   };
+
+  let cpImpl;
+  function getCp() {
+    cpImpl ??= createCp({
+      path,
+      abs,
+      fsError: nodeFsError,
+      copyFileSync: (src, dest, mode) => syncApi.copyFileSync(src, dest, mode),
+      mkdirpSync: (p) => mkdirSync(p, { recursive: true }),
+      ops: {
+        lstat: (p) => syncFs.lstat(p),
+        stat: (p) => syncFs.stat(p),
+        readlink: (p) => syncFs.readlink(p),
+        symlink: (target, p) => syncFs.symlink(target, p),
+        readdir: (p) => syncFs.readdir(p),
+        mkdir: (p) => syncFs.mkdir(p),
+        unlink: (p) => syncFs.unlink(p),
+      },
+    });
+    return cpImpl;
+  }
+  // realpathSync.native and the promise form are realpath(3): their errors
+  // name `realpath` and the path as given.
+  function realpathNative(p, options) {
+    try {
+      return syncApi.realpathSync(p, options);
+    } catch (err) {
+      throw nodeFsError(err?.code || 'ENOENT', 'realpath', p, err);
+    }
+  }
+  syncApi.realpathSync.native = realpathNative;
 
   /** Node's fs.Dir over a listing taken when it was opened. */
   function createDir(dirPath, entries) {
@@ -984,13 +1129,24 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         return Promise.resolve().then(next);
       },
       closeSync() {
+        if (closed) next();
         closed = true;
       },
       close(cb) {
+        let err = null;
+        if (closed) {
+          try {
+            next();
+          } catch (e) {
+            err = e;
+          }
+        }
         closed = true;
-        if (typeof cb === 'function') queueMicrotask(() => cb(null));
-        else return Promise.resolve();
-        return undefined;
+        if (typeof cb === 'function') {
+          queueMicrotask(() => cb(err));
+          return undefined;
+        }
+        return err ? Promise.reject(err) : Promise.resolve();
       },
       async *[Symbol.asyncIterator]() {
         try {
@@ -1055,61 +1211,55 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       return track(
         (async () => {
           const encoding = optEncoding(options);
+          checkEncoding(encoding);
           try {
             return decodeAs(await asyncFs.readFile(abs(p)), encoding);
           } catch (err) {
+            // Argument errors (a bad encoding) stay as they are, as in Node.
+            if (String(err?.code).startsWith('ERR_')) throw err;
             throw nodeFsError(err?.code || 'ENOENT', 'open', p, err);
           }
         })()
       );
     },
+    // The write happens when the call is made, as Node's open does in call
+    // order: a later `flag: 'wx'` sees the file an earlier writeFile made.
     writeFile(p, data, options) {
-      return track(
-        (async () => {
-          const bytes = encodeAs(data, optEncoding(options));
-          const flag = optFlag(options, 'w');
-          if (flag.includes('a')) return promises.appendFile(p, bytes);
-          const target = abs(p);
-          if (flag.includes('x') && (await asyncFs.exists(target))) throw nodeFsError('EEXIST', 'open', p);
-          try {
-            await asyncFs.writeFile(target, bytes);
-          } catch (err) {
-            throw nodeFsError(err?.code || 'EIO', 'open', p, err);
-          }
-          return undefined;
-        })()
-      );
+      let result;
+      try {
+        syncApi.writeFileSync(p, data, options);
+        result = Promise.resolve();
+      } catch (err) {
+        result = Promise.reject(err);
+      }
+      return track(result);
     },
     appendFile(p, data, options) {
-      return track(
-        (async () => {
-          const target = abs(p);
-          let prev = new Uint8Array(0);
-          if (await asyncFs.exists(target)) prev = await asyncFs.readFile(target);
-          const next = encodeAs(data, optEncoding(options));
-          const merged = new Uint8Array(prev.length + next.length);
-          merged.set(prev);
-          merged.set(next, prev.length);
-          await asyncFs.writeFile(target, merged);
-        })()
-      );
+      let result;
+      try {
+        syncApi.appendFileSync(p, data, options);
+        result = Promise.resolve();
+      } catch (err) {
+        result = Promise.reject(err);
+      }
+      return track(result);
     },
-    stat(p) {
+    stat(p, options) {
       return track(
         (async () => {
           try {
-            return statView(await asyncFs.stat(abs(p)));
+            return statView(await asyncFs.stat(abs(p)), options?.bigint === true);
           } catch (err) {
             throw nodeFsError(err?.code || 'ENOENT', 'stat', p, err);
           }
         })()
       );
     },
-    lstat(p) {
+    lstat(p, options) {
       return track(
         (async () => {
           try {
-            return statView(await asyncFs.lstat(abs(p)));
+            return statView(await asyncFs.lstat(abs(p)), options?.bigint === true);
           } catch (err) {
             throw nodeFsError(err?.code || 'ENOENT', 'lstat', p, err);
           }
@@ -1117,7 +1267,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       );
     },
     readdir(p, options) {
-      return track((async () => readdirSync(p, options))());
+      return track((async () => readdirSync(p, options, { followLinks: !options?.withFileTypes }))());
     },
     mkdir(p, options = {}) {
       return track((async () => mkdirSync(p, options))());
@@ -1132,16 +1282,19 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       return track((async () => syncApi.copyFileSync(src, dest, mode))());
     },
     cp(src, dest, options) {
-      return track((async () => syncApi.cpSync(src, dest, options))());
+      return track(getCp().cp(src, dest, options));
+    },
+    link(existingPath, newPath) {
+      return track((async () => syncApi.linkSync(existingPath, newPath))());
     },
     mkdtemp(prefix, options) {
-      return track((async () => syncApi.mkdtempSync(prefix, options))());
+      return track((async () => syncApi.mkdtempSync(prefix, options, { namedError: true }))());
     },
     truncate(p, len) {
       return track((async () => syncApi.truncateSync(p, len))());
     },
-    realpath(p) {
-      return track((async () => syncApi.realpathSync(p))());
+    realpath(p, options) {
+      return track((async () => realpathNative(p, options))());
     },
     chmod(p) {
       return track((async () => syncApi.chmodSync(p))());
@@ -1161,8 +1314,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     lutimes(p) {
       return track((async () => syncApi.lutimesSync(p))());
     },
-    opendir(p) {
-      return track((async () => syncApi.opendirSync(p))());
+    opendir(p, options) {
+      return track((async () => syncApi.opendirSync(p, options))());
     },
     unlink(p) {
       return track(
@@ -1497,7 +1650,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     access: callbackify(syncApi.accessSync),
     stat: callbackify(syncApi.statSync),
     lstat: callbackify(syncApi.lstatSync),
-    realpath: callbackify(syncApi.realpathSync),
+    realpath: Object.assign(callbackify(syncApi.realpathSync), {
+      native: callbackify(realpathNative),
+    }),
     readdir: callbackify(syncApi.readdirSync),
     mkdir: callbackify(syncApi.mkdirSync, { minArgsBeforeCb: 2 }),
     rmdir: callbackify(syncApi.rmdirSync),
@@ -1525,7 +1680,16 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       return undefined;
     },
     copyFile: callbackify(syncApi.copyFileSync, { minArgsBeforeCb: 2 }),
-    cp: callbackify(syncApi.cpSync, { minArgsBeforeCb: 2 }),
+    cp(src, dest, options, callback) {
+      const cb = typeof options === 'function' ? options : callback;
+      const opts = typeof options === 'function' ? undefined : options;
+      requireCallback(cb);
+      track(getCp().cp(src, dest, opts)).then(
+        () => cb(null),
+        (err) => cb(err)
+      );
+    },
+    link: callbackify(syncApi.linkSync, { minArgsBeforeCb: 2 }),
     mkdtemp: callbackify(syncApi.mkdtempSync),
     truncate: callbackify(syncApi.truncateSync),
     ftruncate: callbackify(syncApi.ftruncateSync),
