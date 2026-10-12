@@ -1,0 +1,5 @@
+{
+  "description": "child_process cwd missing→ENOENT, file→ENOTDIR (Node 22; cert fx/m9/relcwd2)",
+  "argv": ["main.js"],
+  "shim": true
+}

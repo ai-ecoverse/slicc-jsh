@@ -1,0 +1,3 @@
+cwd w-rc2/nope spawn=ERR ENOENT spawn node node execFile=ERR ENOENT spawn node node
+cwd /nonexistent-zz/abs spawn=ERR ENOENT spawn node node execFile=ERR ENOENT spawn node node
+cwd w-rc2/a/m spawn=THROW ENOTDIR spawn -20 execFile=THROW ENOTDIR spawn -20
