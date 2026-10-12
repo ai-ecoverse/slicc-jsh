@@ -74,6 +74,11 @@ function loadCase(name) {
   return { name, dir, meta };
 }
 
+function withoutColorEnv(env) {
+  const { NO_COLOR, FORCE_COLOR, NODE_DISABLE_COLORS, ...rest } = env;
+  return rest;
+}
+
 function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
   const result = spawnSync('npx', ['-y', 'node@22.22.0', ...argv], {
     cwd: cwd ?? root,
@@ -82,8 +87,9 @@ function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
     encoding: 'buffer',
     timeout: timeoutMs,
     maxBuffer: 4 * 1024 * 1024,
-    // case.json `env` applies to Node too (on top of the caller's).
-    env: { ...process.env, npm_config_yes: 'true', ...env },
+    // case.json `env` applies to Node too (on top of the caller's, less the
+    // colour switches: the shim's environment has none unless the case sets them).
+    env: { ...withoutColorEnv(process.env), npm_config_yes: 'true', ...env },
   });
   if (result.error) throw result.error;
   return {
@@ -166,8 +172,9 @@ async function main() {
     const { dir, meta } = loadCase(name);
     const cwd = meta.cwd ? join(dir, meta.cwd) : dir;
     const argv = meta.argv;
-    if (!Array.isArray(argv) || argv.length === 0) {
-      fail(`${name}: case.json argv must be a non-empty array`);
+    // An empty argv (plain `node`) needs stdin to read the program from.
+    if (!Array.isArray(argv) || (argv.length === 0 && meta.stdin === undefined)) {
+      fail(`${name}: case.json argv must be a non-empty array (or empty, with stdin)`);
       continue;
     }
 

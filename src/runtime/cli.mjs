@@ -14,7 +14,18 @@ const BOOLEAN_FLAGS = new Set([
   '--pending-deprecation',
   '--expose-internals',
 ]);
-const VALUED_FLAGS = ['--disable-warning', '--redirect-warnings'];
+const VALUED_FLAGS = ['--disable-warning', '--redirect-warnings', '--input-type'];
+const INPUT_TYPES = ['module', 'commonjs', 'module-typescript', 'commonjs-typescript'];
+
+/** --input-type's value from execArgv (`--input-type=x` or `--input-type x`), or undefined. */
+export function inputTypeOf(execArgv = []) {
+  let type;
+  for (let i = 0; i < execArgv.length; i++) {
+    if (execArgv[i] === '--input-type') type = execArgv[++i];
+    else if (execArgv[i].startsWith('--input-type=')) type = execArgv[i].slice(13);
+  }
+  return type;
+}
 
 export function parseNodeArgv(argv) {
   const argv0 = argv[0] ?? 'node';
@@ -100,6 +111,17 @@ export function parseNodeArgv(argv) {
     script = arg;
     userArgs.push(...args.slice(i + 1));
     break;
+  }
+
+  const inputType = inputTypeOf(flags);
+  if (inputType !== undefined && !INPUT_TYPES.includes(inputType)) {
+    return {
+      error: `${argv0}: --input-type must be "module","commonjs", "module-typescript" or "commonjs-typescript"`,
+      status: 9,
+    };
+  }
+  if (inputType?.endsWith('-typescript')) {
+    return { error: `${argv0}: --input-type=${inputType} is not supported by slicc-jsh (no TypeScript)`, status: 9 };
   }
 
   if (evalCode !== undefined) {

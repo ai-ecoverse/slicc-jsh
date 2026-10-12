@@ -1,0 +1,11 @@
+{
+  "description": "FORCE_COLOR colours console output off a TTY (Node's shouldColorize); console.dir and %o too",
+  "argv": [
+    "-e",
+    "console.log('a', 1, { b: [true, 'x'] }, null, undefined, 1n, Symbol('s')); console.error([null]); console.dir({ n: 2 }); console.log('%o and %O and %s', { a: 1 }, { b: 2 }, 3); console.log(new Map([[1, 'one']]))"
+  ],
+  "env": {
+    "FORCE_COLOR": "1"
+  },
+  "shim": true
+}

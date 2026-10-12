@@ -1,0 +1,8 @@
+{
+  "description": "after an uncaught error, 'exit' runs with 1 and may change the status",
+  "argv": [
+    "-e",
+    "process.on('exit', (c) => { console.log('exit', c, process.exitCode); process.exitCode = 5; }); throw 1"
+  ],
+  "shim": true
+}

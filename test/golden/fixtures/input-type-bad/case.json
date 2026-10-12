@@ -1,0 +1,9 @@
+{
+  "description": "--input-type with a bad value is a bad option, status 9",
+  "argv": [
+    "--input-type=bogus",
+    "-e",
+    "1"
+  ],
+  "shim": true
+}

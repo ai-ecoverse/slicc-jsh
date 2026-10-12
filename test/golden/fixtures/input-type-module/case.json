@@ -1,0 +1,9 @@
+{
+  "description": "--input-type=module runs -e as ESM",
+  "argv": [
+    "--input-type=module",
+    "-e",
+    "console.log(typeof require, import.meta.url.startsWith('file:'))"
+  ],
+  "shim": true
+}

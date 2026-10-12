@@ -1,0 +1,6 @@
+{
+  "description": "an ES module piped to node runs as ESM ([eval1] in the cwd), by detection",
+  "argv": [],
+  "stdin": "import p from 'node:path';\nconsole.log(typeof p.join, typeof require, import.meta.url.endsWith('/[eval1]'), import.meta.filename.endsWith('/[eval1]'));\n",
+  "shim": true
+}

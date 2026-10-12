@@ -1,0 +1,8 @@
+{
+  "description": "process.exit() inside an 'exit' listener ends at once with its code",
+  "argv": [
+    "-e",
+    "process.on('exit', (c) => { console.log('exit', c); process.exit(7); console.log('not reached'); }); process.on('exit', () => console.log('second listener')); throw 1"
+  ],
+  "shim": true
+}

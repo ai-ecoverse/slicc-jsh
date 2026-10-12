@@ -5,28 +5,203 @@
  * memory. `allocUnsafe` / `allocUnsafeSlow` zero-fill; `poolSize` is 0 (no pool).
  */
 
+import { inspect } from 'node-inspect-extracted';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, nodeError, normalizeEncoding, validateInteger, validateString } from './node-errors.mjs';
+
 const encoder = new TextEncoder();
+const kMaxLength = 2 ** 53 - 1;
+const validateOffset = (value, name, min = 0, max = kMaxLength) => validateInteger(value, name, min, max);
+
+/** lib/buffer.js base64ByteLength. */
+function base64ByteLength(str, bytes) {
+  if (str.charCodeAt(bytes - 1) === 0x3d) bytes--;
+  if (bytes > 1 && str.charCodeAt(bytes - 1) === 0x3d) bytes--;
+  return (bytes * 3) >>> 2;
+}
+
+/** Node's byteLength for a string in a canonical encoding. */
+function stringByteLength(str, enc) {
+  switch (enc) {
+    case 'utf16le':
+      return str.length * 2;
+    case 'latin1':
+    case 'ascii':
+      return str.length;
+    case 'hex':
+      return str.length >>> 1;
+    case 'base64':
+    case 'base64url':
+      return base64ByteLength(str, str.length);
+    default:
+      return encoder.encode(str).length;
+  }
+}
+
+/**
+ * A string's bytes for write(): at most `max`, and — as Node's writers —
+ * never part of a UTF-8 character or half a UTF-16 unit.
+ */
+function encodeForWrite(str, enc, max) {
+  const bytes = encodeString(str, enc);
+  if (bytes.length <= max) return bytes;
+  let n = max;
+  if (enc === 'utf8') {
+    while (n > 0 && (bytes[n] & 0xc0) === 0x80) n--;
+  } else if (enc === 'utf16le') {
+    n -= n % 2;
+  }
+  return bytes.subarray(0, n);
+}
+
+/** lib/buffer.js bidirectionalIndexOf. */
+function bidirectionalIndexOf(buffer, val, byteOffset, encoding, dir) {
+  if (typeof byteOffset === 'string') {
+    encoding = byteOffset;
+    byteOffset = undefined;
+  } else if (byteOffset > 0x7fffffff) {
+    byteOffset = 0x7fffffff;
+  } else if (byteOffset < -0x80000000) {
+    byteOffset = -0x80000000;
+  }
+  byteOffset = +byteOffset;
+  if (Number.isNaN(byteOffset)) byteOffset = dir ? 0 : buffer.length;
+  byteOffset = Math.trunc(byteOffset);
+  if (typeof val === 'number') return searchBytes(buffer, new Uint8Array([val >>> 0 & 0xff]), byteOffset, dir, false);
+  const enc = encoding === undefined ? 'utf8' : getEncodingOps(encoding);
+  if (typeof val === 'string') {
+    if (enc === undefined) throw unknownEncoding(encoding);
+    return searchBytes(buffer, encodeString(val, enc), byteOffset, dir, enc === 'utf16le');
+  }
+  if (val instanceof Uint8Array) return searchBytes(buffer, val, byteOffset, dir, enc === 'utf16le');
+  throw ERR_INVALID_ARG_TYPE('value', ['number', 'string', 'Buffer', 'Uint8Array'], val);
+}
+
+/** src/node_buffer.cc IndexOfOffset. */
+function indexOfOffset(length, offset, needleLength, isForward) {
+  if (offset < 0) {
+    if (offset + length >= 0) return length + offset;
+    if (isForward || needleLength === 0) return 0;
+    return -1;
+  }
+  if (offset + needleLength <= length) return offset;
+  if (needleLength === 0) return length;
+  if (isForward) return -1;
+  return length - 1;
+}
+
+/** Node's IndexOfString / IndexOfBuffer / IndexOfNumber over bytes. */
+function searchBytes(haystack, needle, byteOffset, isForward, ucs2) {
+  const len = haystack.length;
+  let opt = indexOfOffset(len, byteOffset, needle.length, isForward);
+  if (needle.length === 0) return opt;
+  if (len === 0 || opt <= -1) return -1;
+  if (ucs2) {
+    // UTF-16 code units: only even offsets, as Node compares uint16 arrays.
+    if (len < 2 || needle.length < 2) return -1;
+  }
+  const lastStart = len - needle.length;
+  if (lastStart < 0) return -1;
+  const step = ucs2 ? 2 : 1;
+  const matchesAt = (i) => {
+    for (let j = 0; j < needle.length; j++) if (haystack[i + j] !== needle[j]) return false;
+    return true;
+  };
+  if (isForward) {
+    let i = opt;
+    if (ucs2 && i % 2) i--;
+    for (; i <= lastStart; i += step) if (matchesAt(i)) return i;
+    return -1;
+  }
+  let i = Math.min(opt, lastStart);
+  if (ucs2 && i % 2) i--;
+  for (; i >= 0; i -= step) if (matchesAt(i)) return i;
+  return -1;
+}
 const decoder = new TextDecoder();
 const INSPECT_CUSTOM = Symbol.for('nodejs.util.inspect.custom');
 
-function normalizeEncoding(enc) {
-  if (!enc) return 'utf8';
-  const e = String(enc).toLowerCase();
-  if (e === 'utf-8' || e === 'utf8') return 'utf8';
-  if (e === 'ucs2' || e === 'ucs-2' || e === 'utf16le' || e === 'utf-16le') return 'utf16le';
-  if (e === 'latin1' || e === 'binary') return 'latin1';
-  if (e === 'ascii') return 'ascii';
-  if (e === 'base64url') return 'base64url';
-  return e;
+/**
+ * lib/buffer.js getEncodingOps: an encoding's canonical name (utf8,
+ * utf16le, latin1, ascii, base64, base64url, hex), or undefined.
+ */
+function getEncodingOps(encoding) {
+  encoding += '';
+  const lc = encoding.toLowerCase();
+  switch (encoding.length) {
+    case 4:
+      if (lc === 'utf8') return 'utf8';
+      if (lc === 'ucs2') return 'utf16le';
+      break;
+    case 5:
+      if (lc === 'utf-8') return 'utf8';
+      if (lc === 'ascii') return 'ascii';
+      if (lc === 'ucs-2') return 'utf16le';
+      break;
+    case 7:
+      if (lc === 'utf16le') return 'utf16le';
+      break;
+    case 8:
+      if (lc === 'utf-16le') return 'utf16le';
+      break;
+    case 6:
+      if (lc === 'latin1' || lc === 'binary') return 'latin1';
+      if (lc === 'base64') return 'base64';
+      break;
+    case 3:
+      if (lc === 'hex') return 'hex';
+      break;
+    case 9:
+      if (lc === 'base64url') return 'base64url';
+      break;
+  }
+  return undefined;
 }
 
-function fromBase64(value, url) {
-  let s = value.replace(/\s+/g, '');
-  if (url) s = s.replace(/-/g, '+').replace(/_/g, '/');
-  while (s.length % 4) s += '=';
-  const bin = atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+function unknownEncoding(encoding) {
+  // Node: 'Unknown encoding: %s'.
+  const shown =
+    typeof encoding === 'object' && encoding !== null
+      ? inspect(encoding, { depth: 0, colors: false, compact: 3 })
+      : String(encoding);
+  return nodeError(TypeError, 'ERR_UNKNOWN_ENCODING', `Unknown encoding: ${shown}`);
+}
+
+/** The canonical encoding, or ERR_UNKNOWN_ENCODING. */
+function encodingOrThrow(encoding) {
+  const enc = getEncodingOps(encoding);
+  if (enc === undefined) throw unknownEncoding(encoding);
+  return enc;
+}
+
+// Node's base64 decoder is forgiving: both alphabets, anything else skipped,
+// and it stops at the first '='.
+const B64 = new Int8Array(128).fill(-1);
+for (let i = 0; i < 64; i++) {
+  B64['ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.charCodeAt(i)] = i;
+}
+B64[45] = 62; // '-'
+B64[95] = 63; // '_'
+
+function fromBase64(value) {
+  const sextets = new Uint8Array(value.length);
+  let n = 0;
+  for (let i = 0; i < value.length; i++) {
+    const c = value.charCodeAt(i);
+    if (c === 61) break; // '='
+    const v = c < 128 ? B64[c] : -1;
+    if (v >= 0) sextets[n++] = v;
+  }
+  const out = new Uint8Array(Math.floor(n / 4) * 3 + [0, 0, 1, 2][n % 4]);
+  let o = 0;
+  let i = 0;
+  for (; i + 4 <= n; i += 4) {
+    const v = (sextets[i] << 18) | (sextets[i + 1] << 12) | (sextets[i + 2] << 6) | sextets[i + 3];
+    out[o++] = v >> 16;
+    out[o++] = (v >> 8) & 0xff;
+    out[o++] = v & 0xff;
+  }
+  if (n - i >= 2) out[o++] = (sextets[i] << 2) | (sextets[i + 1] >> 4);
+  if (n - i === 3) out[o++] = ((sextets[i + 1] & 15) << 4) | (sextets[i + 2] >> 2);
   return out;
 }
 
@@ -65,10 +240,9 @@ function hexVal(c) {
   return -1;
 }
 
-function asUint8(value, encoding = 'utf8') {
-  if (value instanceof Uint8Array) return value;
-  if (typeof value === 'string') {
-    const enc = normalizeEncoding(encoding);
+/** A string's bytes in a canonical encoding (see getEncodingOps). */
+function encodeString(value, enc) {
+  {
     if (enc === 'hex') {
       // Node: whole pairs only, up to the first that isn't two hex digits.
       const pairs = value.length >>> 1;
@@ -82,8 +256,7 @@ function asUint8(value, encoding = 'utf8') {
       }
       return n === pairs ? out : out.slice(0, n);
     }
-    if (enc === 'base64') return fromBase64(value, false);
-    if (enc === 'base64url') return fromBase64(value, true);
+    if (enc === 'base64' || enc === 'base64url') return fromBase64(value);
     if (enc === 'utf16le') {
       const out = new Uint8Array(value.length * 2);
       for (let i = 0; i < value.length; i++) {
@@ -100,6 +273,12 @@ function asUint8(value, encoding = 'utf8') {
     }
     return encoder.encode(value);
   }
+}
+
+/** Bytes of a value; a string in `encoding` (utf8 if unknown — callers check first). */
+function asUint8(value, encoding = 'utf8') {
+  if (value instanceof Uint8Array) return value;
+  if (typeof value === 'string') return encodeString(value, getEncodingOps(encoding ?? 'utf8') ?? 'utf8');
   if (typeof value === 'number') return new Uint8Array([value & 0xff]);
   if (ArrayBuffer.isView(value)) {
     return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
@@ -109,9 +288,8 @@ function asUint8(value, encoding = 'utf8') {
   return encoder.encode(String(value));
 }
 
-function toStringOf(bytes, encoding = 'utf8', start = 0, end = bytes.length) {
+function toStringOf(bytes, enc = 'utf8', start = 0, end = bytes.length) {
   const slice = bytes.subarray(start, end);
-  const enc = normalizeEncoding(encoding);
   if (enc === 'hex') {
     let out = '';
     for (const b of slice) out += b.toString(16).padStart(2, '0');
@@ -126,9 +304,11 @@ function toStringOf(bytes, encoding = 'utf8', start = 0, end = bytes.length) {
     }
     return out;
   }
-  if (enc === 'latin1' || enc === 'binary' || enc === 'ascii') {
+  if (enc === 'latin1' || enc === 'ascii') {
+    // Node's ascii decoder drops each byte's high bit.
+    const mask = enc === 'ascii' ? 0x7f : 0xff;
     let out = '';
-    for (const b of slice) out += String.fromCharCode(b);
+    for (const b of slice) out += String.fromCharCode(b & mask);
     return out;
   }
   return decoder.decode(slice);
@@ -778,7 +958,13 @@ export function createBuffer() {
     static poolSize = 0;
 
     static from(value, encodingOrOffset, length) {
-      if (typeof value === 'string') return Buffer.fromBytes(asUint8(value, encodingOrOffset ?? 'utf8'));
+      if (typeof value === 'string') {
+        // lib/buffer.js fromString: a non-string or empty encoding is utf8.
+        const encoding = encodingOrOffset;
+        const enc =
+          !encoding || encoding === 'utf8' || typeof encoding !== 'string' ? 'utf8' : encodingOrThrow(encoding);
+        return Buffer.fromBytes(encodeString(value, enc));
+      }
       if (typeof value === 'number') {
         const e = new TypeError(
           'The first argument must be of type string or an instance of Buffer, ArrayBuffer, or Array or an Array-like Object. Received type number'
@@ -847,12 +1033,21 @@ export function createBuffer() {
       return out;
     }
 
-    static byteLength(value, encoding = 'utf8') {
-      if (typeof value === 'string') return asUint8(value, encoding).length;
-      if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
-        return value.byteLength ?? value.length;
+    static byteLength(value, encoding) {
+      if (typeof value !== 'string') {
+        if (
+          ArrayBuffer.isView(value) ||
+          value instanceof ArrayBuffer ||
+          (typeof SharedArrayBuffer === 'function' && value instanceof SharedArrayBuffer)
+        ) {
+          return value.byteLength;
+        }
+        throw ERR_INVALID_ARG_TYPE('string', ['string', 'Buffer', 'ArrayBuffer'], value);
       }
-      return asUint8(value).length;
+      if (value.length === 0) return 0;
+      // Node: an unknown encoding counts as utf8 (no throw).
+      const enc = !encoding ? 'utf8' : (getEncodingOps(encoding) ?? 'utf8');
+      return stringByteLength(value, enc);
     }
 
     static isBuffer(value) {
@@ -898,8 +1093,17 @@ export function createBuffer() {
       return buf;
     }
 
-    toString(encoding = 'utf8', start = 0, end = this.length) {
-      return toStringOf(this, encoding, start, end);
+    toString(encoding, start, end) {
+      if (arguments.length === 0) return toStringOf(this, 'utf8', 0, this.length);
+      const len = this.length;
+      if (start <= 0) start = 0;
+      else if (start >= len) return '';
+      else start = Math.trunc(start) || 0;
+      if (end === undefined || end > len) end = len;
+      else end = Math.trunc(end) || 0;
+      if (end <= start) return '';
+      if (encoding === undefined) return toStringOf(this, 'utf8', start, end);
+      return toStringOf(this, encodingOrThrow(encoding), start, end);
     }
 
     equals(other) {
@@ -918,36 +1122,38 @@ export function createBuffer() {
       return max;
     }
 
-    write(string, offset = 0, length, encoding = 'utf8') {
-      if (typeof offset === 'string') {
-        encoding = offset;
-        offset = 0;
-        length = undefined;
-      } else if (typeof length === 'string') {
-        encoding = length;
-        length = undefined;
-      }
-      if (typeof offset !== 'number' || !Number.isFinite(offset)) {
-        const e = new TypeError(
-          `The "offset" argument must be of type number. Received type ${typeof offset}${
-            typeof offset === 'string' ? ` ('${offset}')` : ''
-          }`
-        );
+    /** lib/buffer.js Buffer.prototype.write. */
+    write(string, offset, length, encoding) {
+      if (typeof string !== 'string') {
+        // Node's C++ writer: a plain message.
+        const e = new TypeError('argument must be a string');
         e.code = 'ERR_INVALID_ARG_TYPE';
         throw e;
       }
-      if (offset < 0 || offset > this.length) {
-        const e = new RangeError(
-          `The value of "offset" is out of range. It must be >= 0 && <= ${this.length}. Received ${offset}`
-        );
-        e.code = 'ERR_OUT_OF_RANGE';
-        throw e;
+      if (offset === undefined) {
+        offset = 0;
+        length = this.length;
+      } else if (length === undefined && typeof offset === 'string') {
+        encoding = offset;
+        length = this.length;
+        offset = 0;
+      } else {
+        validateOffset(offset, 'offset', 0, this.length);
+        const remaining = this.length - offset;
+        if (length === undefined) {
+          length = remaining;
+        } else if (typeof length === 'string') {
+          encoding = length;
+          length = remaining;
+        } else {
+          validateOffset(length, 'length', 0, this.length);
+          if (length > remaining) length = remaining;
+        }
       }
-      const bytes = asUint8(String(string), encoding);
-      const max = length == null ? this.length - offset : Math.min(length, this.length - offset);
-      const n = Math.min(bytes.length, max);
-      this.set(bytes.subarray(0, n), offset);
-      return n;
+      const enc = !encoding || encoding === 'utf8' ? 'utf8' : encodingOrThrow(encoding);
+      const bytes = encodeForWrite(string, enc, length);
+      this.set(bytes, offset);
+      return bytes.length;
     }
 
     compare(target) {
@@ -965,55 +1171,63 @@ export function createBuffer() {
       return new Buffer(view.buffer, view.byteOffset, view.length);
     }
 
-    fill(value, offset = 0, end = this.length, encoding = 'utf8') {
-      if (typeof offset === 'string') {
-        encoding = offset;
+    /** lib/buffer.js _fill. */
+    fill(value, offset, end, encoding) {
+      let enc;
+      if (typeof value === 'string') {
+        if (offset === undefined || typeof offset === 'string') {
+          encoding = offset;
+          offset = 0;
+          end = this.length;
+        } else if (typeof end === 'string') {
+          encoding = end;
+          end = this.length;
+        }
+        enc = normalizeEncoding(encoding);
+        if (enc === undefined) {
+          validateString(encoding, 'encoding');
+          throw unknownEncoding(encoding);
+        }
+        if (value.length === 0) value = 0;
+      }
+      if (offset === undefined) {
         offset = 0;
         end = this.length;
-      } else if (typeof end === 'string') {
-        encoding = end;
-        end = this.length;
-      }
-      if (offset < 0 || offset > this.length) {
-        const e = new RangeError(
-          `The value of "offset" is out of range. It must be >= 0 && <= ${this.length}. Received ${offset}`
-        );
-        e.code = 'ERR_OUT_OF_RANGE';
-        throw e;
-      }
-      if (end < 0 || end > this.length) {
-        const e = new RangeError(
-          `The value of "end" is out of range. It must be >= 0 && <= ${this.length}. Received ${end}`
-        );
-        e.code = 'ERR_OUT_OF_RANGE';
-        throw e;
+      } else {
+        validateOffset(offset, 'offset');
+        if (end === undefined) end = this.length;
+        else validateOffset(end, 'end', 0, this.length);
+        if (offset >= end) return this;
       }
       let bytes;
-      if (typeof value === 'string') bytes = asUint8(value, encoding);
-      else if (typeof value === 'number') bytes = new Uint8Array([value & 0xff]);
+      if (typeof value === 'number') bytes = new Uint8Array([value & 0xff]);
+      else if (typeof value === 'string') bytes = encodeString(value, enc);
+      else if (typeof value === 'boolean') bytes = new Uint8Array([Number(value)]);
       else bytes = asUint8(value);
-      if (bytes.length === 0) return this;
+      if (offset > end || end > this.length) {
+        const e = new RangeError('Attempt to access memory outside buffer bounds');
+        e.code = 'ERR_BUFFER_OUT_OF_BOUNDS';
+        throw e;
+      }
+      if (bytes.length === 0) {
+        // Node: a string (or buffer) that encodes to nothing is invalid.
+        if (typeof value === 'string' || ArrayBuffer.isView(value)) throw ERR_INVALID_ARG_VALUE('value', value);
+        bytes = new Uint8Array([0]);
+      }
       for (let i = offset; i < end; i++) this[i] = bytes[(i - offset) % bytes.length];
       return this;
     }
 
-    indexOf(value, byteOffset = 0) {
-      const needle = typeof value === 'number' ? new Uint8Array([value & 0xff]) : asUint8(value);
-      for (let i = byteOffset; i <= this.length - needle.length; i++) {
-        let ok = true;
-        for (let j = 0; j < needle.length; j++) {
-          if (this[i + j] !== needle[j]) {
-            ok = false;
-            break;
-          }
-        }
-        if (ok) return i;
-      }
-      return -1;
+    indexOf(val, byteOffset, encoding) {
+      return bidirectionalIndexOf(this, val, byteOffset, encoding, true);
     }
 
-    includes(value, byteOffset) {
-      return this.indexOf(value, byteOffset) !== -1;
+    lastIndexOf(val, byteOffset, encoding) {
+      return bidirectionalIndexOf(this, val, byteOffset, encoding, false);
+    }
+
+    includes(val, byteOffset, encoding) {
+      return this.indexOf(val, byteOffset, encoding) !== -1;
     }
 
     readUInt8(offset = 0) {

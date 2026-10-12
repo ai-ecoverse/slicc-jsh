@@ -22,15 +22,18 @@ describe('readline on a terminal (kernel)', () => {
         out += decoder.decode(d);
       },
     });
+    // console colours a terminal's output, as Node: read it plain (stripped
+    // whole, so a sequence split across chunks goes too).
+    const plain = () => out.replace(/\x1b\[[0-9;]*m/g, '');
     for (const [after, key] of keys) {
-      for (let i = 0; i < 200 && !after.test(out); i++) await new Promise((r) => setTimeout(r, 25));
+      for (let i = 0; i < 200 && !after.test(plain()); i++) await new Promise((r) => setTimeout(r, 25));
       // The kernel applies raw mode a moment after setRawMode returns.
       await new Promise((r) => setTimeout(r, 150));
       term.write(key);
     }
     const status = await Promise.race([term.exited, new Promise((r) => setTimeout(() => r('timeout'), 20000))]);
     if (status === 'timeout') term.close();
-    return { out, status };
+    return { out: plain(), status };
   }
 
   const repl = [

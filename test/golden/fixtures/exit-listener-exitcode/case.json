@@ -1,0 +1,8 @@
+{
+  "description": "an 'exit' listener's process.exitCode is the final status",
+  "argv": [
+    "-e",
+    "process.on('exit', (c) => { console.log('exit', c, process.exitCode); process.exitCode = 9; }); process.exitCode = 2"
+  ],
+  "shim": true
+}

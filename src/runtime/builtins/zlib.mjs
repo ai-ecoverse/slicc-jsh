@@ -143,11 +143,34 @@ function zlibOptionsHelpers(Buffer) {
   };
 }
 
+function unavailableError(name) {
+  const err = new Error(`zlib.${name} is not available in slicc-jsh (no Brotli/Zstd implementation)`);
+  err.code = 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM';
+  return err;
+}
+
 function unavailable(name) {
+  // The callback forms (brotliCompress(buffer[, options], callback), …)
+  // check their arguments as Node's zlibBuffer does, then report through the
+  // callback, as a failing engine would.
+  if (/^(brotli|zstd)(Compress|Decompress)$/.test(name)) {
+    return function notAvailable(buffer, opts, callback) {
+      if (typeof opts === 'function') callback = opts;
+      if (typeof callback !== 'function') {
+        throw typeError('callback', 'of type function', callback);
+      }
+      const isBytes =
+        typeof buffer === 'string' ||
+        ArrayBuffer.isView(buffer) ||
+        Object.prototype.toString.call(buffer) === '[object ArrayBuffer]';
+      if (!isBytes) {
+        throw typeError('chunk', 'of type string or an instance of Buffer, TypedArray, or DataView', buffer);
+      }
+      setImmediate(() => callback(unavailableError(name)));
+    };
+  }
   return function notAvailable() {
-    const err = new Error(`zlib.${name} is not available in slicc-jsh (no Brotli/Zstd implementation)`);
-    err.code = 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM';
-    throw err;
+    throw unavailableError(name);
   };
 }
 

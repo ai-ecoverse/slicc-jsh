@@ -2,12 +2,17 @@ import { EventEmitter } from './builtins/events.mjs';
 import { assignProcessExitCode, hardExitError, numericExitCode } from './exit.mjs';
 import { createStdio } from './stdio.mjs';
 import { loadNodeLib } from './node-lib.mjs';
-import { nodeError } from './node-errors.mjs';
+import { ERR_INVALID_ARG_TYPE, nodeError } from './node-errors.mjs';
 
 /** Node version reported by the shim (M1 target). */
 export const NODE_SHIM_VERSION = '22.22.0';
 
-const SIGNAL_EXIT_CODES = { SIGTERM: 143, SIGINT: 130, SIGHUP: 129, SIGKILL: 137 };
+
+function uvError(code, errno, syscall) {
+  const err = new Error(`${syscall} ${code}`);
+  Object.assign(err, { errno, code, syscall });
+  return err;
+}
 
 /** Linux signal numbers (Node's os.constants.signals). */
 export const SIGNALS = {
@@ -17,7 +22,6 @@ export const SIGNALS = {
   SIGTTOU: 22, SIGURG: 23, SIGXCPU: 24, SIGXFSZ: 25, SIGVTALRM: 26, SIGPROF: 27, SIGWINCH: 28,
   SIGIO: 29, SIGPOLL: 29, SIGPWR: 30, SIGSYS: 31,
 };
-const SIGNAL_BY_NUMBER = { 1: 'SIGHUP', 2: 'SIGINT', 9: 'SIGKILL', 15: 'SIGTERM' };
 
 function toBytes(value) {
   if (typeof value === 'string') return value;
@@ -161,7 +165,7 @@ function resolveNodeExecPath(ctx) {
 }
 
 class Process extends EventEmitter {
-  constructor({ ctx, argv, nextTick, onExit, handles, Buffer, stdio }) {
+  constructor({ ctx, argv, nextTick, onExit, handles, Buffer, stdio, ppid }) {
     super();
     this._signals = new Set();
     // As Node's bootstrap: a listener for a signal name installs a handler.
@@ -179,7 +183,21 @@ class Process extends EventEmitter {
     this.argv = argv.slice();
     this.argv0 = argv[0] ?? 'node';
     this.env = createEnv(ctx.env);
-    this.versions = { node: NODE_SHIM_VERSION };
+    // Node 22.22.0's versions for what the runtime has or mirrors (zlib's
+    // output is zlib 1.3.1's). No brotli, zstd, openssl, nghttp2, …: code that
+    // checks for them would then try what isn't there.
+    this.versions = {
+      node: NODE_SHIM_VERSION,
+      cldr: '47.0',
+      icu: '77.1',
+      modules: '127',
+      napi: '10',
+      tz: '2025b',
+      unicode: '16.0',
+      uv: '1.51.0',
+      v8: '12.4.254.21-node.33',
+      zlib: '1.3.1-470d3a2',
+    };
     this.version = `v${NODE_SHIM_VERSION}`;
     this.release = {
       name: 'node',
@@ -190,7 +208,8 @@ class Process extends EventEmitter {
     this.platform = 'linux';
     this.arch = 'x64';
     this.pid = ctx.pid;
-    this.ppid = undefined;
+    // From the kernel at start (ctx.ppid is asynchronous).
+    this.ppid = ppid ?? 1;
     this.execPath = resolveNodeExecPath(ctx);
     this.execArgv = [];
     this.nextTick = nextTick.nextTick.bind(nextTick);
@@ -437,47 +456,82 @@ class Process extends EventEmitter {
   }
 
   /**
-   * Minimal process.kill: this process, plus signal 0 as a liveness check.
-   * Unknown / dead pids → ESRCH (Node).
+   * process.kill (lib/internal/process/per_thread.js): validates as Node does.
+   * To this process: a signal with listeners is delivered to them a moment
+   * later (as the kernel would); without, its default action — ignored
+   * (SIGWINCH, SIGCHLD, SIGURG, SIGCONT) or the end of the program at once,
+   * status 128 + n, with no 'exit' event (a signal is not process.exit()).
+   * Other pids: signal 0 and any signal answer ESRCH (no synchronous view of
+   * the process table yet).
    */
-  kill(pid, signal = 'SIGTERM') {
-    const target = Number(pid);
-    const esrch = () => {
-      const err = new Error(`kill ESRCH`);
-      err.code = 'ESRCH';
-      err.errno = -3;
-      err.syscall = 'kill';
-      throw err;
-    };
-    // signal 0: existence check only — return true, send nothing.
-    if (signal === 0 || signal === '0') {
-      if (target !== this.pid) esrch();
+  kill(pid, sig = 'SIGTERM') {
+    if (pid != (pid | 0)) throw ERR_INVALID_ARG_TYPE('pid', 'number', pid); // eslint-disable-line eqeqeq
+    let name;
+    let num;
+    if (sig === (sig | 0)) {
+      num = sig;
+      if (num !== 0) {
+        name = Object.keys(SIGNALS).find((k) => SIGNALS[k] === num);
+        if (!name) throw uvError('EINVAL', -22, 'kill');
+      }
+    } else {
+      sig = sig || 'SIGTERM';
+      if (typeof sig !== 'string' || !(sig in SIGNALS)) {
+        throw nodeError(TypeError, 'ERR_UNKNOWN_SIGNAL', `Unknown signal: ${sig}`);
+      }
+      name = sig;
+      num = SIGNALS[sig];
+    }
+    if (Number(pid) !== this.pid) throw uvError('ESRCH', -3, 'kill');
+    if (num === 0) return true;
+    // Node: a listener under any name of that number (SIGIO/SIGPOLL,
+    // SIGABRT/SIGIOT) handles it, each emitted under its own name.
+    // In the order the listeners' names were first added, as Node's wraps.
+    const handled = this.eventNames().filter(
+      (k) => typeof k === 'string' && SIGNALS[k] === num && this.listenerCount(k) > 0
+    );
+    if (handled.length > 0) {
+      const dispatch = this._dispatchSignal ?? ((fn) => queueMicrotask(fn));
+      dispatch(() => {
+        for (const k of handled) if (this.listenerCount(k) > 0) this.emit(k, k, num);
+      });
       return true;
     }
-    if (target !== this.pid) esrch();
-    let name;
-    if (typeof signal === 'string') {
-      name = signal.startsWith('SIG') ? signal : `SIG${signal}`;
-    } else if (typeof signal === 'number') {
-      name = SIGNAL_BY_NUMBER[signal] ?? 'SIGTERM';
-    } else {
-      name = 'SIGTERM';
+    if (name === 'SIGWINCH' || name === 'SIGCHLD' || name === 'SIGURG' || name === 'SIGCONT') return true;
+    // Default action: the program ends now, killed (128 + n); nothing more runs.
+    const code = 128 + num;
+    this._recordExit(code);
+    this._silenced = true;
+    try {
+      this._onHardExit?.(code);
+    } catch {
+      /* ignore */
     }
-    if (SIGNAL_EXIT_CODES[name] != null) {
-      this.exit(SIGNAL_EXIT_CODES[name]);
-    }
-    return true;
+    this._exitError = hardExitError(this._ctx, code);
+    throw this._exitError;
   }
 
-  chdir(path) {
-    if (typeof path !== 'string') {
-      const err = new TypeError(
-        `The "directory" argument must be of type string. Received type ${typeof path}`
-      );
-      err.code = 'ERR_INVALID_ARG_TYPE';
+  chdir(directory) {
+    if (typeof directory !== 'string') throw ERR_INVALID_ARG_TYPE('directory', 'string', directory);
+    const from = this._cwd;
+    const target = directory.startsWith('/') ? directory : `${from.replace(/\/$/, '')}/${directory}`;
+    const fail = (code, errno, text) => {
+      const err = new Error(`${code}: ${text}, chdir '${from}' -> '${directory}'`);
+      Object.assign(err, { errno, code, syscall: 'chdir', path: from, dest: directory });
       throw err;
+    };
+    let st;
+    try {
+      st = this._ctx.sync?.fs?.stat?.(target);
+    } catch (err) {
+      if (err?.code === 'ENOTDIR') fail('ENOTDIR', -20, 'not a directory');
+      if (err?.code === 'EACCES') fail('EACCES', -13, 'permission denied');
+      fail('ENOENT', -2, 'no such file or directory');
     }
-    this._cwd = this._ctx.resolve(path);
+    if (st && !(typeof st.isDirectory === 'function' ? st.isDirectory() : st.isDirectory)) {
+      fail('ENOTDIR', -20, 'not a directory');
+    }
+    this._cwd = this._ctx.resolve(target);
   }
 
   /**
@@ -490,13 +544,20 @@ class Process extends EventEmitter {
   exit(...args) {
     if (this._exitError) throw this._exitError;
     if (args.length > 0) this._assignedExitCode = assignProcessExitCode(args[0]);
-    const code = numericExitCode(this._assignedExitCode);
-    this._recordExit(code);
-    try {
-      this.emit('exit', code);
-    } catch {
-      /* ignore */
+    let code = numericExitCode(this._assignedExitCode);
+    // Node: 'exit' listeners run first and may change process.exitCode,
+    // which is the status (process.exit() inside one ends at once).
+    if (!this._exiting) {
+      this._exiting = true;
+      try {
+        this.emit('exit', code);
+      } catch {
+        /* ignore */
+      }
+      if (this._exitError) throw this._exitError;
+      code = numericExitCode(this._assignedExitCode);
     }
+    this._recordExit(code);
     this._silenced = true;
     try {
       this._onHardExit?.(code);
@@ -515,8 +576,8 @@ class Process extends EventEmitter {
   }
 }
 
-export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles, Buffer, stdio }) {
-  const process = new Process({ ctx, argv, nextTick, onExit, handles, Buffer, stdio });
+export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles, Buffer, stdio, ppid }) {
+  const process = new Process({ ctx, argv, nextTick, onExit, handles, Buffer, stdio, ppid });
   process._onHardExit = onHardExit;
   return {
     process,
@@ -531,6 +592,24 @@ export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles
     },
     emitExit: (code) => {
       process.emit('exit', code);
+    },
+    /**
+     * The program ends with `code` (0, or 1 for an uncaught error): Node sets
+     * process.exitCode to it, emits 'exit', and ends with process.exitCode as
+     * the listeners left it.
+     */
+    finishExit: (code) => {
+      if (!process._exiting && !process._didExit) {
+        process._exiting = true;
+        if (code !== numericExitCode(process._assignedExitCode)) process._assignedExitCode = code;
+        try {
+          process.emit('exit', code);
+        } catch {
+          /* ignore */
+        }
+      }
+      if (process._didExit) return numericExitCode(process._forcedExitCode);
+      return numericExitCode(process._assignedExitCode ?? code);
     },
   };
 }

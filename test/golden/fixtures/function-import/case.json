@@ -1,0 +1,13 @@
+{
+  "description": "import() inside new Function / AsyncFunction bodies resolves against the calling script, as V8 does for Node",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

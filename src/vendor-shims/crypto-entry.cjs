@@ -3,7 +3,7 @@
  * The primitives behind slicc-jsh's `crypto` (bundled to
  * dist/vendor/crypto.cjs; Node's API layer is src/runtime/builtins/crypto.mjs):
  * @noble/hashes for digests, HMAC and the KDFs; browserify-aes and
- * browserify-des for the block ciphers.
+ * browserify-des for the block ciphers; SM3 in ./sm3.cjs on noble's base.
  */
 const legacy = require('@noble/hashes/legacy');
 const sha2 = require('@noble/hashes/sha2');
@@ -14,6 +14,7 @@ const { hmac } = require('@noble/hashes/hmac');
 const { pbkdf2, pbkdf2Async } = require('@noble/hashes/pbkdf2');
 const { hkdf } = require('@noble/hashes/hkdf');
 const { scrypt, scryptAsync } = require('@noble/hashes/scrypt');
+const { sm3 } = require('./sm3.cjs');
 const aes = require('browserify-aes/browser');
 const DES = require('browserify-des');
 
@@ -35,6 +36,7 @@ exports.hashes = {
   shake256: sha3.shake256,
   blake2b512: blake2b,
   blake2s256: blake2s,
+  sm3,
 };
 exports.hmac = hmac;
 exports.pbkdf2 = pbkdf2;

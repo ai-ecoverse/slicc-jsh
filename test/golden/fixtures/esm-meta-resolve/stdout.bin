@@ -1,0 +1,8 @@
+./missing.js?x=1#y BASE/missing.js?x=1#y
+./m%20x.js BASE/m%20x.js
+./a b.js BASE/a%20b.js
+./sub/../up.js#f BASE/up.js#f
+/abs/q.js?z file:///abs/q.js?z
+./dir?x BASE/dir?x
+file:///q/z.mjs file:///q/z.mjs
+no-such-pkg THROWS ERR_MODULE_NOT_FOUND

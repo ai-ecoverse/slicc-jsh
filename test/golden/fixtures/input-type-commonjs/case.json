@@ -1,0 +1,10 @@
+{
+  "description": "--input-type commonjs runs -e as CommonJS",
+  "argv": [
+    "--input-type",
+    "commonjs",
+    "-e",
+    "console.log(typeof require)"
+  ],
+  "shim": true
+}

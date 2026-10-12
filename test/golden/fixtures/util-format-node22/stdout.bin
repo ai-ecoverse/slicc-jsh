@@ -1,0 +1,5 @@
+{ a: 'Symbol(x): y', [Symbol(s)]: 3 } | { a: 'Symbol(x): y', [Symbol(s)]: 3 }|{ a: 'Symbol(x): y', [Symbol(s)]: 3 }|{ a: 'Symbol(x): y', [Symbol(s)]: 3 }|42|4|1.5|{"a":"Symbol(x): y"}||%|%x Symbol(a): b ArrayBuffer { [Uint8Contents]: <00 00>, byteLength: 2 }
+[Object: null prototype] {} custom [ 1, [Array] ] Error: e -0 12345678901234567890n
+{ a: 1 } { b: [33m2[39m }  1 a null
+ERR_INVALID_ARG_TYPE
+Map(2) { 1 => 'a', 'b' => { c: 2 } } Set(3) { 1, 'x', [ 2 ] } [ 1, <1 empty item>, 3 ] { 'a-b': 1, ok: 2, [Symbol(s)]: 3 } ArrayBuffer { [Uint8Contents]: <00 00 00 00>, byteLength: 4 }

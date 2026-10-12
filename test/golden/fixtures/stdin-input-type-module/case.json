@@ -1,0 +1,8 @@
+{
+  "description": "--input-type=module makes piped input ESM even with no import/export",
+  "argv": [
+    "--input-type=module"
+  ],
+  "stdin": "console.log(typeof require, typeof import.meta.dirname);\n",
+  "shim": true
+}

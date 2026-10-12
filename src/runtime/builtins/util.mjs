@@ -4,7 +4,6 @@
  */
 import {
   inspect as nodeInspect,
-  format as nodeFormat,
   formatWithOptions,
 } from 'node-inspect-extracted';
 
@@ -170,10 +169,99 @@ export function createUtil() {
   inspect.custom = INSPECT_CUSTOM;
   inspect.defaultOptions = nodeInspect.defaultOptions ?? { depth: 2, colors: false };
 
+  /**
+   * Node's formatWithOptionsInternal (lib/internal/util/inspect.js), over the
+   * inspect above so objects print as util.inspect prints them. Primitive
+   * placeholders (%d %i %f %j, %s of a non-object) go to the vendored format,
+   * which has no objects to show.
+   */
+  const stringOf = (v) => {
+    try {
+      return String(v);
+    } catch {
+      return undefined;
+    }
+  };
+  function formatWithOptionsInternal(inspectOptions, args) {
+    const first = args[0];
+    let a = 0;
+    let str = '';
+    let join = '';
+    if (typeof first === 'string') {
+      if (args.length === 1) return first;
+      let tempStr;
+      let lastPos = 0;
+      for (let i = 0; i < first.length - 1; i++) {
+        if (first.charCodeAt(i) !== 37) continue; // '%'
+        const nextChar = first.charCodeAt(++i);
+        if (a + 1 !== args.length) {
+          switch (nextChar) {
+            case 115: {
+              // 's': an object with a built-in toString is inspected (depth 0)
+              const arg = args[++a];
+              tempStr = formatWithOptions(inspectOptions ?? {}, '%s', arg);
+              if (typeof arg === 'object' && arg !== null && tempStr !== stringOf(arg)) {
+                tempStr = inspect(arg, { ...inspectOptions, depth: 0, colors: false, compact: 3 });
+              }
+              break;
+            }
+            case 106: // 'j'
+            case 100: // 'd'
+            case 105: // 'i'
+            case 102: // 'f'
+              tempStr = formatWithOptions(inspectOptions ?? {}, `%${String.fromCharCode(nextChar)}`, args[++a]);
+              break;
+            case 79: // 'O'
+              tempStr = inspect(args[++a], inspectOptions);
+              break;
+            case 111: // 'o'
+              tempStr = inspect(args[++a], { ...inspectOptions, showHidden: true, showProxy: true, depth: 4 });
+              break;
+            case 99: // 'c'
+              a += 1;
+              tempStr = '';
+              break;
+            case 37: // '%'
+              str += first.slice(lastPos, i);
+              lastPos = i + 1;
+              continue;
+            default:
+              continue;
+          }
+          if (lastPos !== i - 1) str += first.slice(lastPos, i - 1);
+          str += tempStr;
+          lastPos = i + 1;
+        } else if (nextChar === 37) {
+          str += first.slice(lastPos, i);
+          lastPos = i + 1;
+        }
+      }
+      if (lastPos !== 0) {
+        a++;
+        join = ' ';
+        if (lastPos < first.length) str += first.slice(lastPos);
+      }
+    }
+    while (a < args.length) {
+      const value = args[a];
+      str += join;
+      str += typeof value !== 'string' ? inspect(value, inspectOptions) : value;
+      join = ' ';
+      a++;
+    }
+    return str;
+  }
+  const format = (...args) => formatWithOptionsInternal(undefined, args);
+  function formatWithOptionsChecked(inspectOptions, ...args) {
+    // Node: validateObject(inspectOptions, 'inspectOptions', kValidateObjectAllowArray).
+    formatWithOptions(inspectOptions);
+    return formatWithOptionsInternal(inspectOptions, args);
+  }
+
   return {
     inspect,
-    format: nodeFormat,
-    formatWithOptions,
+    format,
+    formatWithOptions: formatWithOptionsChecked,
     promisify,
     types,
     isDeepStrictEqual,

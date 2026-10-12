@@ -1,0 +1,13 @@
+{
+  "description": "util.format / formatWithOptions (and so console) print objects as util.inspect does: [Symbol(s)] keys, ArrayBuffer byteLength; placeholders as Node's formatWithOptionsInternal",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

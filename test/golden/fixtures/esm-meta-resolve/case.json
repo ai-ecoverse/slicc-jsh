@@ -1,0 +1,9 @@
+{
+  "description": "import.meta.resolve of files that don't exist: their URL (query, fragment and %-escapes kept, as URL resolution), only an unknown package throws",
+  "argv": [
+    "--input-type=module",
+    "-e",
+    "const base = new URL('./', import.meta.url).href; for (const s of ['./missing.js?x=1#y', './m%20x.js', './a b.js', './sub/../up.js#f', '/abs/q.js?z', './dir?x', 'file:///q/z.mjs', 'no-such-pkg']) { try { console.log(s, import.meta.resolve(s).replace(base, 'BASE/')); } catch (e) { console.log(s, 'THROWS', e.code); } }"
+  ],
+  "shim": true
+}

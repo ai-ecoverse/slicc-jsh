@@ -1,0 +1,8 @@
+{
+  "description": "process.exit(3): 'exit' runs with 3, and its process.exitCode is the status",
+  "argv": [
+    "-e",
+    "process.on('exit', (c) => { console.log('exit', c, process.exitCode); process.exitCode = 6; }); process.exit(3)"
+  ],
+  "shim": true
+}
