@@ -1,0 +1,5 @@
+{
+  "description": "child_process.spawnSync on ctx.sync.run: result shape, encoding, input, stdio, cwd, env, ENOENT/ENOTDIR, ETIMEDOUT, ENOBUFS, validation (Node 22)",
+  "argv": ["main.js"],
+  "shim": true
+}

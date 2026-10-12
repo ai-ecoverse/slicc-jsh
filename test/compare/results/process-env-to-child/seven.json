@@ -1,5 +1,5 @@
 {
-  "status": 1,
-  "stdout": "",
-  "stderr": "$CASE/main.jsh:2\nconsole.log(typeof process.env.COMPARE_NUM, require('child_process').execSync('echo $COMPARE_NUM', { encoding: 'utf8' }).trim());\n                                                                     ^\n\nError: slicc-jsh: child_process.execSync is not supported yet\n    at Object.<anonymous> ($CASE/main.jsh:2:70) {\n  code: 'ERR_NOT_SUPPORTED'\n}\n\nNode.js v22.22.0\n"
+  "status": 0,
+  "stdout": "string 7\n",
+  "stderr": ""
 }

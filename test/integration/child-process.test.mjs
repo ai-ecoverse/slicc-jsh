@@ -284,7 +284,7 @@ exec('true', { encoding: 'utf8', cwd: '/nonexistent-zz-exec-shell' }, (err, stdo
     }
   });
 
-  it('sync forms and fork stay ERR_NOT_SUPPORTED', async () => {
+  it('fork stays ERR_NOT_SUPPORTED; the sync forms run on ctx.sync.run', async () => {
     const { run, close } = await withJsh();
     try {
       const r = await cp(
@@ -293,7 +293,7 @@ exec('true', { encoding: 'utf8', cwd: '/nonexistent-zz-exec-shell' }, (err, stdo
 const cp = require('child_process');
 const out = [];
 for (const name of ['spawnSync', 'execSync', 'execFileSync', 'fork']) {
-  try { cp[name]('x'); out.push(name + ':ok'); }
+  try { const r = cp[name]('x'); out.push(name + ':' + (r && r.error ? r.error.code : 'ok')); }
   catch (e) { out.push(name + ':' + e.code); }
 }
 console.log(out.join(' '));
@@ -302,7 +302,8 @@ console.log(out.join(' '));
       assert.equal(r.status, 0, r.stderr);
       assert.equal(
         r.stdout.trim(),
-        'spawnSync:ERR_NOT_SUPPORTED execSync:ERR_NOT_SUPPORTED execFileSync:ERR_NOT_SUPPORTED fork:ERR_NOT_SUPPORTED'
+        // No /bin/sh in this kernel (no wasm-bash), so execSync is ENOENT too.
+        'spawnSync:ENOENT execSync:ENOENT execFileSync:ENOENT fork:ERR_NOT_SUPPORTED'
       );
     } finally {
       close();

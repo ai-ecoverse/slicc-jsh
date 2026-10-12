@@ -1,0 +1,4 @@
+[before passthrough]
+to stderr
+[after passthrough]
+boom

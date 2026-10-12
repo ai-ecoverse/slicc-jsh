@@ -25,7 +25,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-import { packageFiles } from '../helpers.mjs';
+import { devPackageFiles, packageFiles } from '../helpers.mjs';
 
 const certDir = dirname(fileURLToPath(import.meta.url));
 const root = join(certDir, '../../..');
@@ -63,6 +63,10 @@ const k = await createNodeKernel();
 const jshBase = '/node_modules/@ai-ecoverse/slicc-jsh';
 for (const [rel, data] of packageFiles()) {
   await k.writeFile(`${jshBase}/${rel}`, data);
+}
+// /bin/sh for exec / execSync, as the host has.
+for (const [path, data] of devPackageFiles('@ai-ecoverse/wasm-bash')) {
+  await k.writeFile(path, data);
 }
 
 function m1GapShimAccepts(shim) {

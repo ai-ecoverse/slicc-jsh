@@ -190,7 +190,7 @@ The case name is given for every row below.
 | behavior | six | seven | node | verdict | corpus | case |
 |---|---|---|---|---|---|---|
 | `child_process.exec/spawn/execFile` (async) | works | works when the body doesn't await it; **hangs when it does** (nextTick) | works | seven≠node | 2 | child-process-async, child-process-floating |
-| `execSync`, `execFileSync`, `spawnSync` | unknown *(harness: needs the SW sync bridge)* | `not supported yet` | works | seven≠node | 2 | child-process-sync, process-env-to-child |
+| `execSync`, `execFileSync`, `spawnSync` | unknown *(harness: needs the SW sync bridge)* | works (on slicc-kernel ≥ 1.65.0's `ctx.sync.run`; `ERR_NOT_SUPPORTED` naming that version on older kernels) | works | seven=node | 2 | child-process-sync, process-env-to-child |
 | `crypto` | md5/sha1/sha256 only; no `createHmac`, `pbkdf2Sync`, `timingSafeEqual`, `getHashes` | `'crypto' is not supported yet` | full | seven≠node | 2 (plus 5 using the global `crypto`, which works everywhere) | crypto, globals-crypto |
 | `zlib` | sync and callback (pako); no brotli, no streams | `'zlib' is not supported yet` | full | seven≠node | 3 | zlib |
 | `stream`: `Readable.from`, `pipeline`, `stream/promises` | stubs | **hangs** | works | seven≠node | 1 | stream |

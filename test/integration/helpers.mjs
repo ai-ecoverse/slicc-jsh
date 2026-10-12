@@ -50,3 +50,31 @@ export async function withJsh(options = {}) {
     close: () => kernel.terminate(),
   };
 }
+
+/**
+ * Files of an installed devDependency (e.g. `@ai-ecoverse/wasm-bash`, which
+ * gives the kernel `bash` and `/bin/sh`), as [kernel path, bytes] pairs under
+ * /node_modules/<name>/ for kernel.writeFile.
+ */
+export function devPackageFiles(name) {
+  const dir = join(root, 'node_modules', name);
+  const out = [];
+  const walk = (d) => {
+    for (const n of readdirSync(d)) {
+      const p = join(d, n);
+      if (statSync(p).isDirectory()) walk(p);
+      else out.push([`/node_modules/${name}/${relative(dir, p).replaceAll('\\', '/')}`, readFileSync(p)]);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+/** withJsh plus /bin/sh (wasm-bash), for exec / execSync. */
+export async function withJshAndSh(options = {}) {
+  const env = await withJsh(options);
+  for (const [path, data] of devPackageFiles('@ai-ecoverse/wasm-bash')) {
+    await env.kernel.writeFile(path, data);
+  }
+  return env;
+}
