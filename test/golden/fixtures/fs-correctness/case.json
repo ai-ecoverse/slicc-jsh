@@ -1,0 +1,6 @@
+{
+  "description": "fs: rmdir/rm never delete more than Node does, encodings, flags, fds, recursive readdir, mkdir's return, throwIfNoEntry, copy/cp/mkdtemp/truncate, Stats, Dirent",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

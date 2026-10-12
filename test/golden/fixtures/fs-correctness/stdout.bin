@@ -1,0 +1,52 @@
+rmdirSync non-empty: THROW Error ENOTEMPTY -66 rmdir "ENOTEMPTY: directory not empty, rmdir 'd'"
+d/a.txt still there: true
+rmdirSync file: THROW Error ENOTDIR -20 rmdir "ENOTDIR: not a directory, rmdir 'd/a.txt'"
+rmSync dir without recursive: THROW SystemError ERR_FS_EISDIR 21 rm "Path is a directory: rm returned EISDIR (is a directory) d"
+d/s/b.txt still there: true
+rmSync missing: THROW Error ENOENT -2 lstat "ENOENT: no such file or directory, lstat 'missing'"
+rmSync missing force: undefined
+mkdirSync recursive returns first created: "m"
+mkdirSync recursive all exist: undefined
+readdirSync recursive: ["a.txt","s","s/b.txt"]
+readdirSync recursive withFileTypes: [["n","m",true],["o","m/n",true]]
+readdirSync buffer: [true,true]
+readFileSync latin1: "\u0000\u0001Èÿ"
+readFileSync base64: "AAF/gMj/"
+readFileSync { encoding: hex }: "00017f80c8ff"
+writeFileSync hex: [255,0]
+writeFileSync base64: [0,1,127]
+writeFileSync flag a: [255,0,120]
+writeFileSync flag wx: THROW Error EEXIST -17 open "EEXIST: file already exists, open 'h.bin'"
+appendFileSync latin1: [255,0,120,233]
+writeFileSync(fd): "one two"
+readFileSync(fd) from position: "two"
+to stdout
+writeFileSync(1): undefined
+statSync throwIfNoEntry: undefined
+lstatSync throwIfNoEntry: undefined
+statSync instanceof Stats: true
+Stats: [true,false,2,"number","number","number","number"]
+Dirent: ["a.txt","d",true,true]
+copyFileSync: "a\n"
+copyFileSync EXCL: THROW Error EEXIST -17 copyfile "EEXIST: file already exists, copyfile 'd/a.txt' -> 'c.txt'"
+copyFileSync missing: THROW Error ENOENT -2 copyfile "ENOENT: no such file or directory, copyfile 'missing' -> 'c2.txt'"
+cpSync dir without recursive: THROW Error ERR_FS_EISDIR undefined undefined "Recursive option not enabled, cannot copy a directory: d/"
+cpSync recursive: ["a.txt","s","s/b.txt"]
+mkdtempSync: true
+truncateSync: "a"
+truncateSync longer: [97,0,0]
+truncateSync missing: THROW Error ENOENT -2 open "ENOENT: no such file or directory, open 'missing'"
+chmodSync missing: THROW Error ENOENT -2 chmod "ENOENT: no such file or directory, chmod 'missing'"
+opendirSync: ["a.txt","s"]
+promises.rm dir without recursive: THROW SystemError ERR_FS_EISDIR rm "Path is a directory: rm returned EISDIR (is a directory) d"
+promises.rmdir non-empty: THROW Error ENOTEMPTY rmdir "ENOTEMPTY: directory not empty, rmdir 'd'"
+promises.readFile base64: "AAF/gMj/"
+promises.writeFile flag a: "xy"
+promises.mkdir recursive: "q"
+promises.readdir recursive: ["r"]
+promises.copyFile: "a\n"
+promises.mkdtemp: true
+promises.truncate: ""
+FileHandle.readFile: "a\n"
+rm callback dir without recursive: "ERR_FS_EISDIR"
+cleaned true
