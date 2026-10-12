@@ -9,7 +9,8 @@ const show = (label, f) => {
     v = f();
     v = v === undefined ? 'undefined' : JSON.stringify(v);
   } catch (e) {
-    v = `THROW ${e.name} ${e.code} ${e.errno} ${e.syscall} ${JSON.stringify(e.message)}`;
+    // errno is left out: its numbers differ between macOS and Linux.
+    v = `THROW ${e.name} ${e.code} ${e.syscall} ${JSON.stringify(e.message)}`;
   }
   console.log(`${label}: ${v}`);
 };
@@ -77,6 +78,34 @@ show('copyFileSync EXCL', () => fs.copyFileSync('d/a.txt', 'c.txt', fs.constants
 show('copyFileSync missing', () => fs.copyFileSync('missing', 'c2.txt'));
 show('cpSync dir without recursive', () => fs.cpSync('d', 'e'));
 show('cpSync recursive', () => (fs.cpSync('d', 'e', { recursive: true }), fs.readdirSync('e', { recursive: true }).sort()));
+show('cpSync into itself', () => fs.cpSync('d', 'd/s/inner', { recursive: true }));
+show('d/s/inner not created', () => !fs.existsSync('d/s/inner'));
+show('cpSync onto itself', () => fs.cpSync('d', 'd', { recursive: true }));
+show('writeFileSync read-only fd', () => {
+  const fd = fs.openSync('d/a.txt', 'r');
+  try {
+    fs.writeFileSync(fd, 'clobbered');
+  } finally {
+    fs.closeSync(fd);
+  }
+});
+show('writeSync read-only fd', () => {
+  const fd = fs.openSync('d/a.txt', 'r');
+  try {
+    return fs.writeSync(fd, 'x');
+  } finally {
+    fs.closeSync(fd);
+  }
+});
+show('readFileSync write-only fd', () => {
+  const fd = fs.openSync('w-only.txt', 'w');
+  try {
+    return fs.readFileSync(fd, 'utf8');
+  } finally {
+    fs.closeSync(fd);
+  }
+});
+show('d/a.txt unchanged', () => fs.readFileSync('d/a.txt', 'utf8'));
 show('mkdtempSync', () => /^t-[A-Za-z0-9]{6}$/.test(fs.mkdtempSync('t-')));
 show('truncateSync', () => (fs.truncateSync('c.txt', 1), fs.readFileSync('c.txt', 'utf8')));
 show('truncateSync longer', () => (fs.truncateSync('c.txt', 3), [...fs.readFileSync('c.txt')]));

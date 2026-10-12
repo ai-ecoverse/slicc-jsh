@@ -16,7 +16,7 @@ const ERRNO = {
   EACCES: -13,
   EINVAL: -22,
   EIO: -5,
-  ENOTEMPTY: -66,
+  ENOTEMPTY: -39, // Linux (the shim's process.platform)
   EBADF: -9,
   ENOTSUP: -45,
 };
@@ -57,6 +57,12 @@ function nodeFsError(code, syscall, pathArg, err, dest) {
 
 const FS_READ_STREAM = Symbol('fs.ReadStream');
 const FS_WRITE_STREAM = Symbol('fs.WriteStream');
+
+function cpInvalid(message) {
+  const e = new Error(message);
+  e.code = 'ERR_FS_CP_EINVAL';
+  return e;
+}
 
 /** Node's rm() of a directory without `recursive`. */
 function rmIsDirectoryError(pathArg) {
@@ -484,7 +490,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       if (p === 0 || p === '0') return readStdinSync(encoding);
       if (typeof p === 'number') {
         const ent = fdTable.get(p);
-        if (!ent) throw nodeFsError('EBADF', 'read', undefined);
+        if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
         try {
           const bytes = syncFs.readFile(ent.path);
           const rest = bytes.subarray(Math.min(ent.pos, bytes.length));
@@ -626,17 +632,18 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     rmdirSync(p, options = {}) {
       const pathArg = p;
       const target = abs(p);
-      if (options?.recursive) {
-        syncApi.rmSync(p, { recursive: true, force: options.force });
-        return;
-      }
       let st;
       try {
         st = syncFs.lstat(target);
       } catch (err) {
         throw nodeFsError(err?.code || 'ENOENT', 'rmdir', pathArg, err);
       }
+      // Even with `recursive`, rmdir removes directories only (Node).
       if (!st.isDirectory) throw nodeFsError('ENOTDIR', 'rmdir', pathArg);
+      if (options?.recursive) {
+        syncApi.rmSync(p, { recursive: true, force: options.force });
+        return;
+      }
       let entries;
       try {
         entries = syncFs.readdir(target);
@@ -747,7 +754,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         return n;
       }
       const ent = fdTable.get(fd);
-      if (!ent) throw nodeFsError('EBADF', 'read', undefined);
+      if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
       try {
         const bytes = syncFs.readFile(ent.path);
         const pos = filePosition == null ? ent.pos : filePosition;
@@ -766,7 +773,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         return bytes.byteLength;
       }
       const ent = fdTable.get(fd);
-      if (!ent) throw nodeFsError('EBADF', 'write', undefined);
+      // A descriptor opened read-only cannot be written (Node: EBADF).
+      if (!ent || !ent.writable) throw nodeFsError('EBADF', 'write', undefined);
       const { bytes, filePosition } = parseWriteSyncArgs(data, offset, length, position);
       try {
         return writeBytesAtPath(ent, bytes, filePosition);
@@ -840,6 +848,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     cpSync(src, dest, options = {}) {
       const from = abs(src);
       const to = abs(dest);
+      // Node refuses before it creates anything: copying into itself would
+      // otherwise recurse into the copy it is making.
+      if (from === to) throw cpInvalid(`src and dest cannot be the same ${src}`);
+      if (to.startsWith(`${from}/`)) {
+        throw cpInvalid(`Cannot copy ${src}/ to a subdirectory of self ${dest}`);
+      }
       let st;
       try {
         st = syncFs.stat(from);
