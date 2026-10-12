@@ -111,6 +111,39 @@ execFile('node', ['-e', 'console.log("x"); process.exit(3)'], { encoding: 'utf8'
     }
   });
 
+  it('relative cwd resolves against process.cwd(), not /', async () => {
+    // Cert fx/m9/relcwd.js: execFile(..., { cwd: 'w-rc/sub' }) must run in $CWD/w-rc/sub.
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/w-rc/sub/marker', 'here');
+      const r = await cp(
+        run,
+        `
+const { execFile } = require('child_process');
+const mask = (s) => String(s).split(process.cwd()).join('CWD');
+execFile(
+  'node',
+  ['-e', 'process.stdout.write(process.cwd()+"\\\\n"+require("fs").readFileSync("marker","utf8"))'],
+  { cwd: 'w-rc/sub' },
+  (err, stdout, stderr) => {
+    console.log(JSON.stringify({
+      err: err && err.code,
+      out: mask(stdout),
+      errOut: mask(stderr).slice(0, 80),
+    }));
+  }
+);
+`
+      );
+      assert.equal(r.status, 0, r.stderr);
+      const j = JSON.parse(r.stdout.trim());
+      assert.equal(j.err, null);
+      assert.equal(j.out, 'CWD/w-rc/sub\nhere');
+    } finally {
+      close();
+    }
+  });
+
   it('util.promisify(exec|execFile) resolves to { stdout, stderr }', async () => {
     // Without promisify.custom, default promisify yields [stdout, stderr] and
     // `const { stdout } = await …` is undefined (seven child-process-async).
