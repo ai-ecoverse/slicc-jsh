@@ -772,10 +772,14 @@ export function createBuffer() {
         e.code = 'ERR_INVALID_ARG_TYPE';
         throw e;
       }
-      if (value instanceof ArrayBuffer) {
+      if (
+        value instanceof ArrayBuffer ||
+        (typeof SharedArrayBuffer === 'function' && value instanceof SharedArrayBuffer)
+      ) {
         const offset = encodingOrOffset ?? 0;
         const len = length ?? value.byteLength - offset;
-        return Buffer.fromBytes(new Uint8Array(value, offset, len));
+        // Node: a view on the ArrayBuffer, not a copy.
+        return new Buffer(value, offset, len);
       }
       if (value instanceof Uint8Array || Array.isArray(value) || ArrayBuffer.isView(value)) {
         return Buffer.fromBytes(asUint8(value));
@@ -937,13 +941,14 @@ export function createBuffer() {
       return Buffer.compare(this, target);
     }
 
+    // Node: both are views on the same memory (slice is subarray's old name).
     slice(start, end) {
-      return Buffer.fromBytes(Uint8Array.prototype.slice.call(this, start, end));
+      return this.subarray(start, end);
     }
 
     subarray(start, end) {
       const view = Uint8Array.prototype.subarray.call(this, start, end);
-      return Buffer.fromBytes(view);
+      return new Buffer(view.buffer, view.byteOffset, view.length);
     }
 
     fill(value, offset = 0, end = this.length, encoding = 'utf8') {

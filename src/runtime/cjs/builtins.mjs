@@ -70,6 +70,52 @@ function notSupported(id) {
 /**
  * Builtins available to require() in M1.
  */
+/** require('buffer'): Node 22's exports around our Buffer. */
+function bufferModule(Buffer) {
+  const MAX_LENGTH = 2 ** 53 - 1;
+  const MAX_STRING_LENGTH = 536870888;
+  const fatal = new TextDecoder('utf-8', { fatal: true });
+  const bytesOf = (input) => {
+    if (input instanceof ArrayBuffer) return new Uint8Array(input);
+    if (ArrayBuffer.isView(input)) return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+    const err = new TypeError(
+      'The "input" argument must be an instance of ArrayBuffer, Buffer, TypedArray, or DataView.'
+    );
+    err.code = 'ERR_INVALID_ARG_TYPE';
+    throw err;
+  };
+  function SlowBuffer(size) {
+    return Buffer.allocUnsafeSlow(size);
+  }
+  return {
+    Buffer,
+    SlowBuffer,
+    transcode(source, fromEnc, toEnc) {
+      return Buffer.from(Buffer.from(bytesOf(source)).toString(fromEnc), toEnc);
+    },
+    isUtf8(input) {
+      try {
+        fatal.decode(bytesOf(input));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    isAscii(input) {
+      return bytesOf(input).every((b) => b < 0x80);
+    },
+    kMaxLength: MAX_LENGTH,
+    kStringMaxLength: MAX_STRING_LENGTH,
+    btoa: globalThis.btoa,
+    atob: globalThis.atob,
+    constants: { MAX_LENGTH, MAX_STRING_LENGTH },
+    INSPECT_MAX_BYTES: 50,
+    Blob: globalThis.Blob,
+    File: globalThis.File,
+    resolveObjectURL: () => undefined,
+  };
+}
+
 export function createBuiltins({ ctx, process, Buffer, console, path, handles, timers }) {
   const util = createUtil();
   const events = createEvents();
@@ -119,12 +165,14 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     return childProcess;
   };
 
+  let bufferExports;
+
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
 
   const implemented = {
     process: () => process,
-    buffer: () => ({ Buffer, kMaxLength: 0x7fffffff, INSPECT_MAX_BYTES: 50 }),
+    buffer: () => (bufferExports ??= bufferModule(Buffer)),
     console: () => console,
     path: () => path,
     'path/posix': () => path,

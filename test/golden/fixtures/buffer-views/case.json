@@ -1,0 +1,5 @@
+{
+  "description": "Buffer views share memory as in Node: subarray, slice, Buffer.from(ArrayBuffer[, offset, length]) and SharedArrayBuffer; Buffer.from(buffer) copies",
+  "argv": ["-e", "const ab = new ArrayBuffer(4); const b = Buffer.from(ab, 1, 2); b[0] = 7; const s = new SharedArrayBuffer(2); Buffer.from(s)[0] = 1; const x = Buffer.from('abcd'); const y = x.slice(1, 2); y[0] = 90; const z = x.subarray(2); z[0] = 89; Buffer.from(x)[0] = 65; console.log(new Uint8Array(ab)[1], new Uint8Array(s)[0], x.toString(), y instanceof Buffer, z instanceof Buffer, z.byteOffset - x.byteOffset, z.buffer === x.buffer, b.length);"],
+  "shim": true
+}
