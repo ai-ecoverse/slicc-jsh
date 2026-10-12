@@ -15,6 +15,7 @@ function getStreamApi({ ctx, process, Buffer }) {
     packageRoot: PACKAGE_ROOT,
     name: 'readable-stream',
     globals: { process, Buffer },
+    process,
   });
   try {
     delete mod.default;
