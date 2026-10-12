@@ -1,5 +1,5 @@
 {
-  "status": "timeout",
+  "status": 0,
   "stdout": "before\n",
-  "stderr": "[compare: kernel timeout]\n"
+  "stderr": ""
 }

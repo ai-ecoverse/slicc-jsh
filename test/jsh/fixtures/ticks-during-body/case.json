@@ -1,0 +1,4 @@
+{
+  "description": "process.nextTick and stream callbacks run while the body is still awaiting",
+  "args": []
+}

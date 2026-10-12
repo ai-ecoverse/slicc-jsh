@@ -100,16 +100,17 @@ Each engine passes in what differs:
 
 1. Read the file as UTF-8. Drop a BOM, and blank a leading `#!…` line so line numbers stay the same.
 2. Wrap it as `(async function (process, console, require, module, exports, fetch, __dirname, __filename) {<body>\n})`.
-   - The wrapper's header sits on the body's first line, so stack line numbers are the file's own.
+   - Line and column numbers are the file's own: the host compiles the header on a line of its own with a line offset of -1, and the kernel's stack formatting drops `new AsyncFunction`'s header lines.
    - The code runs sloppy, as in v6.
    - A static `import` is a `SyntaxError`; use `await import()`.
 3. Call it:
    - `process.argv` is `[runtime, /abs/script.jsh, ...args]` with `parseFlags()`;
    - `module` is a CommonJS module object for the script, `require.main === module`, and `exports === module.exports`.
-4. Exit:
-   - When the body resolves, the program lives on until its event loop is empty, as in Node.
-   - When it throws, the stack goes to stderr and the program exits 1 at once, pending timers included.
-   - `process.exit(n)` exits at once.
+4. Exit, as for a CommonJS `(async () => { … })()` in Node:
+   - The body runs alongside the event loop: ticks, timers and I/O callbacks run while it awaits.
+   - The program lives until its event loop is empty. A pending body does not keep it alive by itself, so a body that never settles ends with status 0 (or `process.exitCode`). Requests in flight (`fetch` and its body, `exec`, child processes, sockets, WebCrypto) do keep it alive.
+   - When the body throws, that is an unhandled rejection: Node's report (source excerpt, message, `code`/`cause` properties, `Node.js v22…`) goes to stderr and the program exits 1 at once, pending timers included.
+   - `process.exit(n)` runs the `'exit'` listeners and ends the program at once; no user `catch` or `finally` sees it. In the kernel the status reaches the kernel at once (`ctx.exit`); whatever still runs while the throw unwinds is silenced (no output, no timers, the first status stays).
 
 **Host.** `vm.runInThisContext` with `importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER` resolves `import('./x.mjs')` and `import('pkg')` against the script, as Node does; a plain `new AsyncFunction` resolves neither. Node 22 prints an `ExperimentalWarning` for that constant. The launcher drops that one warning in `process.emitWarning` and passes every other warning through. The launcher doesn't use a top-level `await`, so a script whose promise never settles ends the way a Node program does when its loop is empty, not with Node's exit code 13.
 
@@ -199,7 +200,7 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 | stdin | buffered; `read()` returns all of it | Node stream; `fs.readFileSync(0, 'utf8')` | Node stream; `fs.readFileSync(0, 'utf8')` |
 | exit | when the promise settles, after a short grace period | when the event loop is empty | when the event loop is empty |
 | `process.exit()` | an exception user code can catch | exits at once | exits at once |
-| uncaught error | stack to stderr, status 1 | same, at once | same, at once |
+| uncaught error | stack to stderr, status 1 | Node's report, status 1, at once | same |
 | `sliccy:color` | on unless `NO_COLOR` | on a TTY | on a TTY |
 | `SLICC_VERSION` | set | unset | unset |
 

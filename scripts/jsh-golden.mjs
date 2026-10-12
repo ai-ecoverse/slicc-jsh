@@ -9,8 +9,10 @@
  *   description  what the case pins (a row of the parity tables)
  *   args         arguments after `jsh main.jsh`
  *   stdin, env   optional
- *   stderr       "exact" (default) or "error-line": compare only the first
- *                `…Error: …` line, since stack frames differ between engines
+ *   stderr       "exact" (default); "error-line": compare only the first
+ *                `…Error: …` line, since stack frames differ between engines;
+ *                "no-frames": all of it but the `    at …` frames (the source
+ *                excerpt, the message, the `{ code, cause }` block)
  *   kernel       false to skip the kernel run; `kernelReason` says why
  *
  * Host runs happen in a temporary copy of the fixture, so a case can write
@@ -92,10 +94,12 @@ function runHost(dir, meta) {
       env,
     });
     if (result.error) throw result.error;
+    // The kernel runs the case in /os; say the same for the host's copy.
+    const asOs = (buf) => Buffer.from((buf ?? Buffer.alloc(0)).toString('utf8').split(work).join('/os'));
     return {
       status: result.status ?? 1,
-      stdout: result.stdout ?? Buffer.alloc(0),
-      stderr: result.stderr ?? Buffer.alloc(0),
+      stdout: asOs(result.stdout),
+      stderr: asOs(result.stderr),
     };
   } finally {
     rmSync(work, { recursive: true, force: true });
@@ -125,6 +129,15 @@ async function runKernel(dir, meta) {
 }
 
 const errorLine = (buf) => /^[A-Za-z]*Error\b.*$/m.exec(buf.toString('utf8'))?.[0] ?? '';
+// Stack frames differ between engines (and name engine paths); a frame line
+// that carries the `{` of a props block keeps the brace.
+const noFrames = (buf) =>
+  buf
+    .toString('utf8')
+    .split('\n')
+    .map((l) => (/^\s+(at |\.\.\. \d+ lines? matching).*\{$/.test(l) ? '{' : l))
+    .filter((l) => !/^\s+(at |\.\.\. \d+ lines? matching)/.test(l))
+    .join('\n');
 
 function compare(name, label, actual, expected, meta) {
   const problems = [];
@@ -132,10 +145,14 @@ function compare(name, label, actual, expected, meta) {
   if (Buffer.compare(actual.stdout, expected.stdout) !== 0) {
     problems.push(`stdout\n--- expected ---\n${expected.stdout}\n--- actual ---\n${actual.stdout}`);
   }
-  const stderrOk =
-    meta.stderr === 'error-line'
-      ? errorLine(actual.stderr) === errorLine(expected.stderr) && errorLine(expected.stderr) !== ''
-      : Buffer.compare(actual.stderr, expected.stderr) === 0;
+  let stderrOk;
+  if (meta.stderr === 'error-line') {
+    stderrOk = errorLine(actual.stderr) === errorLine(expected.stderr) && errorLine(expected.stderr) !== '';
+  } else if (meta.stderr === 'no-frames') {
+    stderrOk = noFrames(actual.stderr) === noFrames(expected.stderr);
+  } else {
+    stderrOk = Buffer.compare(actual.stderr, expected.stderr) === 0;
+  }
   if (!stderrOk) {
     problems.push(`stderr (${meta.stderr ?? 'exact'})\n--- expected ---\n${expected.stderr}\n--- actual ---\n${actual.stderr}`);
   }
@@ -152,7 +169,9 @@ for (const name of listCases()) {
   if (mode === 'record') {
     writeFileSync(join(dir, 'stdout.bin'), host.stdout);
     // An error-line case keeps only that line: stacks name machine paths.
-    const stderr = meta.stderr === 'error-line' ? `${errorLine(host.stderr)}\n` : host.stderr;
+    let stderr = host.stderr;
+    if (meta.stderr === 'error-line') stderr = `${errorLine(host.stderr)}\n`;
+    else if (meta.stderr === 'no-frames') stderr = noFrames(host.stderr);
     writeFileSync(join(dir, 'stderr.bin'), stderr);
     writeFileSync(join(dir, 'status.txt'), `${host.status}\n`);
     console.log(`recorded ${name}: status=${host.status} out=${host.stdout.length}B err=${host.stderr.length}B`);

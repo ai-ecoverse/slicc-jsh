@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "$CASE/main.jsh:1\n(async function (process, console, require, module, exports, fetch, __dirname, __filename) {const p = Promise.reject(new Error('handled late'));\n                                                                                                                     ^\n\nError: handled late\n    at $CASE/main.jsh:1:118\n    at <internal>\n\nNode.js v22.22.0\n"
+  "stderr": "$CASE/main.jsh:1\nconst p = Promise.reject(new Error('handled late'));\n                         ^\n\nError: handled late\n    at $CASE/main.jsh:1:26\n    at <internal>\n\nNode.js v22.22.0\n"
 }

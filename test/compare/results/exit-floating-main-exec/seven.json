@@ -1,5 +1,5 @@
 {
   "status": 0,
-  "stdout": "body returned\n",
+  "stdout": "body returned\nexec \"slept\\n\"\n",
   "stderr": ""
 }

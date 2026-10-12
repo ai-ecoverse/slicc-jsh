@@ -8,6 +8,7 @@
  */
 export function createNextTick() {
   const queue = [];
+  let stopped = false;
 
   return {
     nextTick(fn, ...args) {
@@ -24,7 +25,12 @@ export function createNextTick() {
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
       }
-      queue.push(() => fn(...args));
+      if (!stopped) queue.push(() => fn(...args));
+    },
+    /** process.exit(): drop what is queued and ignore new ticks. */
+    stop() {
+      stopped = true;
+      queue.length = 0;
     },
     /** Run queued ticks synchronously. */
     flushSync() {

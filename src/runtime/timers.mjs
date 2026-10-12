@@ -14,6 +14,11 @@ export function createTimers(handles, { onCallbackError } = {}) {
   const nativeClearInterval = globalThis.clearInterval.bind(globalThis);
 
   const byId = new Map();
+  // Once the program is ending (process.exit(), a fatal error) no timer of
+  // the program fires. Timers set after that are the kernel's own (it ends
+  // the process on a timer) or the unwinding script's: they go straight to
+  // the platform, untracked, so stopping can never cancel the kernel's.
+  let stopped = false;
 
   const runMethod = (handle, method, args) => {
     try {
@@ -50,6 +55,9 @@ export function createTimers(handles, { onCallbackError } = {}) {
   };
 
   const makeTimeout = (fn, delay, args, repeating) => {
+    if (stopped) {
+      return repeating ? nativeSetInterval(fn, delay, ...args) : nativeSetTimeout(fn, delay, ...args);
+    }
     const state = {
       refed: true,
       id: null,
@@ -60,6 +68,7 @@ export function createTimers(handles, { onCallbackError } = {}) {
     attachRefApi(handle, state);
 
     const fire = () => {
+      if (stopped) return;
       if (!state.repeating) {
         byId.delete(state.id);
         handles.delete(state);
@@ -73,6 +82,7 @@ export function createTimers(handles, { onCallbackError } = {}) {
   };
 
   const makeImmediate = (fn, args) => {
+    if (stopped) return nativeSetTimeout(fn, 0, ...args);
     const state = {
       refed: true,
       id: null,
@@ -83,6 +93,7 @@ export function createTimers(handles, { onCallbackError } = {}) {
     attachRefApi(handle, state);
 
     const fire = () => {
+      if (stopped) return;
       byId.delete(state.id);
       handles.delete(state);
       runMethod(handle, '_onImmediate', args);
@@ -130,6 +141,11 @@ export function createTimers(handles, { onCallbackError } = {}) {
       }
       byId.clear();
       handles.notify();
+    },
+    /** The program is ending: clear its timers; later ones bypass the table. */
+    stop() {
+      stopped = true;
+      this.clearPending();
     },
   };
 }

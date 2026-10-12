@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "$CASE/main.jsh:1\n(async function (process, console, require, module, exports, fetch, __dirname, __filename) {Promise.reject(new Error('unhandled'));\n                                                                                                           ^\n\nError: unhandled\n    at $CASE/main.jsh:1:108\n    at <internal>\n\nNode.js v22.22.0\n"
+  "stderr": "$CASE/main.jsh:1\nPromise.reject(new Error('unhandled'));\n               ^\n\nError: unhandled\n    at $CASE/main.jsh:1:16\n    at <internal>\n\nNode.js v22.22.0\n"
 }

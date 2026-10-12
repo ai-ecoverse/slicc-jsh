@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "SyntaxError: Unexpected token ';'\n    at <internal>\n"
+  "stderr": "SyntaxError: Unexpected token ';'\n    at <internal>\n\nNode.js v22.22.0\n"
 }

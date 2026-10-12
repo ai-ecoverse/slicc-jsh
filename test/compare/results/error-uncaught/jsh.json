@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "before\n",
-  "stderr": "Error: boom\n    at $CASE/main.jsh:2:7\n    at <internal>\n"
+  "stderr": "$CASE/main.jsh:2\nthrow new Error('boom');\n      ^\n\nError: boom\n    at $CASE/main.jsh:2:7\n    at <internal>\n\nNode.js v22.22.0\n"
 }

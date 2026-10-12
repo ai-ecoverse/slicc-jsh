@@ -1,5 +1,5 @@
 {
   "status": 3,
-  "stdout": "caught NodeExitError Process exited with code 3\nfinally ran\nafter exit\n",
+  "stdout": "",
   "stderr": ""
 }

@@ -1,0 +1,5 @@
+{
+  "description": "A body that throws an Error with a code and a cause: printed as Node prints an unhandled rejection (excerpt, message, props, cause), status 1",
+  "args": [],
+  "stderr": "no-frames"
+}

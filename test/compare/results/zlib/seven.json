@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "Error: slicc-jsh: 'zlib' is not supported yet\n    at Object.<anonymous> ($CASE/main.jsh:2:14)\n"
+  "stderr": "$CASE/main.jsh:2\nconst zlib = require('zlib');\n             ^\n\nError: slicc-jsh: 'zlib' is not supported yet\n    at Object.<anonymous> ($CASE/main.jsh:2:14) {\n  code: 'ERR_NOT_SUPPORTED'\n}\n\nNode.js v22.22.0\n"
 }

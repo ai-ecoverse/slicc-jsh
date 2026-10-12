@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "Error: outer\n    at Object.<anonymous> ($CASE/main.jsh:1:7)\n"
+  "stderr": "$CASE/main.jsh:1\nthrow new Error('outer', { cause: new Error('inner') });\n      ^\n\nError: outer\n    at Object.<anonymous> ($CASE/main.jsh:1:7)\n    ... 5 lines matching cause stack trace ... {\n  [cause]: Error: inner\n      at Object.<anonymous> ($CASE/main.jsh:1:35)\n}\n\nNode.js v22.22.0\n"
 }

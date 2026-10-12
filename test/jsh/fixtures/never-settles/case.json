@@ -1,0 +1,4 @@
+{
+  "description": "A body awaiting a promise that never settles ends like an empty Node event loop: status 0 (process.exitCode honoured)",
+  "args": []
+}

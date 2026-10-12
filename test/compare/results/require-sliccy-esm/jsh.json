@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "Error [ERR_UNSUPPORTED_ESM_URL_SCHEME]: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol 'sliccy:'\n    at <internal>\n"
+  "stderr": "node:internal/modules/esm/load:187\n    throw new ERR_UNSUPPORTED_ESM_URL_SCHEME(parsed, schemes);\n          ^\n\nError [ERR_UNSUPPORTED_ESM_URL_SCHEME]: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol 'sliccy:'\n    at <internal>\n  code: 'ERR_UNSUPPORTED_ESM_URL_SCHEME'\n}\n\nNode.js v22.22.0\n"
 }

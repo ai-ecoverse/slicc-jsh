@@ -1,0 +1,4 @@
+{
+  "description": "process.exit(3) runs exit listeners (their output kept) and nothing after; exitCode can no longer change",
+  "args": []
+}

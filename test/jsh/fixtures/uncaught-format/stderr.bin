@@ -1,0 +1,11 @@
+/os/main.jsh:2
+const err = new Error('outer', { cause: new Error('inner') });
+            ^
+
+Error: outer
+{
+  code: 'E_JSH',
+  [cause]: Error: inner
+}
+
+Node.js v22.22.0

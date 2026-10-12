@@ -1,0 +1,6 @@
+{
+  "description": "an ES module's nextTick runs while its top-level await is pending",
+  "argv": ["main.mjs"],
+  "shim": true,
+  "files": [{ "path": "/os/main.mjs", "from": "main.mjs" }]
+}

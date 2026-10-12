@@ -46,12 +46,35 @@ async function checkpoint(nextTick) {
   }
 }
 
+// Captured before the runtime installs its own (handle-counting) timers.
+const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
+
+/**
+ * Macrotask turns the loop waits, with no ref'd handle left, for a pending
+ * entry promise (`weakPending`) to make progress. Node knows every request it
+ * has in flight; we only know the ones we track (timers, ctx I/O, fetch,
+ * WebCrypto, WebAssembly). This covers the few platform promises that settle
+ * on a task of their own (Blob reads, a constructed Response's body).
+ */
+const ENTRY_GRACE_TURNS = 8;
+
+function macrotask() {
+  return new Promise((resolve) => {
+    nativeSetTimeout(resolve, 0);
+  });
+}
+
 /**
  * Drain microtasks then nextTick. Whenever a handle wakes us (I/O, timer,
  * tracked promise), checkpoint again so nextTicks queued by that work — e.g.
  * readable-stream's deferred 'data'/'end' — run before we wait or exit.
+ *
+ * `weakPending()` says whether the entry (a `.jsh` body, an ES module's
+ * top-level await) is still pending. As in Node, a pending promise by itself
+ * does not keep the program alive: the loop ends once nothing is ref'd, after
+ * the short grace above.
  */
-export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop } = {}) {
+export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, weakPending } = {}) {
   for (;;) {
     await checkpoint(nextTick);
     // process.exit() from a timer must unwind even while a server is listening.
@@ -63,6 +86,15 @@ export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop } 
       // queue nextTicks; drain those before waiting again.
       await checkpoint(nextTick);
       continue;
+    }
+    if (weakPending?.()) {
+      for (let i = 0; i < ENTRY_GRACE_TURNS; i++) {
+        await macrotask();
+        await checkpoint(nextTick);
+        if (shouldStop?.() || handles.refCount > 0 || !weakPending()) break;
+      }
+      if (shouldStop?.()) return;
+      if (handles.refCount > 0 || !weakPending()) continue;
     }
     if (onBeforeExit) {
       onBeforeExit();

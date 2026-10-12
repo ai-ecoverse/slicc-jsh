@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "Error: with props\n    at $CASE/main.jsh:1:103\n    at <internal>\n"
+  "stderr": "$CASE/main.jsh:1\nconst e = new Error('with props');\n          ^\n\nError: with props\n    at $CASE/main.jsh:1:11\n    at <internal> {\n  code: 'E_COMPARE',\n  detail: { n: 1 }\n}\n\nNode.js v22.22.0\n"
 }

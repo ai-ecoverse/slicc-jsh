@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "error: failed inside main\njsh: Process exited with code 1\n"
+  "stderr": "error: failed inside main\n"
 }

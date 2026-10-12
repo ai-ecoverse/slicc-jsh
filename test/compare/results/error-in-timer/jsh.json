@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "body done\n",
-  "stderr": "$CASE/main.jsh:1\n(async function (process, console, require, module, exports, fetch, __dirname, __filename) {setTimeout(() => { throw new Error('late boom'); }, 20);\n                                                                                                               ^\n\nError: late boom\n    at Timeout._onTimeout ($CASE/main.jsh:1:118)\n    at <internal>\n\nNode.js v22.22.0\n"
+  "stderr": "$CASE/main.jsh:1\nsetTimeout(() => { throw new Error('late boom'); }, 20);\n                   ^\n\nError: late boom\n    at Timeout._onTimeout ($CASE/main.jsh:1:26)\n    at <internal>\n\nNode.js v22.22.0\n"
 }
