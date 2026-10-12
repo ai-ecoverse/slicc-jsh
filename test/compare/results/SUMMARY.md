@@ -9,7 +9,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 
 | case | area | six | seven | node | auto | status six/seven/jsh/node |
 |---|---|---|---|---|---|---|
-| [buffer](buffer) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
+| [buffer](buffer) | builtins | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [child-process-async](child-process-async) | builtins | = | ≠ | = | seven≠node | 0 / 0 / 0 / 0 |
 | [child-process-floating](child-process-floating) | builtins | = | = | = | same | 0 / 0 / 0 / 0 |
 | [child-process-sync](child-process-sync) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
@@ -65,7 +65,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [path](path) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [process-argv](process-argv) | process | ≠ | ≠ | ≠ | all differ | 0 / 0 / 0 / 0 |
 | [process-cwd-chdir](process-cwd-chdir) | process | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
-| [process-env](process-env) | process | ≠ | ≠ | = | six=seven≠node | 0 / 0 / 0 / 0 |
+| [process-env](process-env) | process | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [process-env-to-child](process-env-to-child) | process | ≠ | ≠ | = | all differ | 1 / 1 / 0 / 0 |
 | [process-exit-catchable](process-exit-catchable) | exit | ≠ | = | = | six≠node | 3 / 3 / 3 / 3 |
 | [process-exit-code](process-exit-code) | exit | = | = | = | same | 4 / 4 / 4 / 4 |

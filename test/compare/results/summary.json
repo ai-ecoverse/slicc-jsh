@@ -25,9 +25,9 @@
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "child-process-async",
@@ -1036,9 +1036,9 @@
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "six=seven≠node"
+      "auto": "six≠node"
     },
     {
       "name": "process-env-to-child",

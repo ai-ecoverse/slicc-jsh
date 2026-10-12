@@ -70,6 +70,100 @@ function notSupported(id) {
 /**
  * Builtins available to require() in M1.
  */
+/** Node's "Received …" tail of an ERR_INVALID_ARG_TYPE message. */
+function describeReceived(value) {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'string') return `type string ('${value}')`;
+  if (typeof value === 'function') return `function ${value.name || '<anonymous>'}`;
+  if (typeof value === 'object') return `an instance of ${value.constructor?.name || 'Object'}`;
+  return `type ${typeof value} (${String(value)})`;
+}
+
+function invalidArgType(name, expected, value) {
+  const err = new TypeError(
+    `The "${name}" argument must be ${expected}. Received ${describeReceived(value)}`
+  );
+  err.code = 'ERR_INVALID_ARG_TYPE';
+  return err;
+}
+
+const TRANSCODE_ENCODINGS = {
+  ascii: 'ascii',
+  latin1: 'latin1',
+  binary: 'latin1',
+  ucs2: 'utf16le',
+  'ucs-2': 'utf16le',
+  utf16le: 'utf16le',
+  'utf-16le': 'utf16le',
+  utf8: 'utf8',
+  'utf-8': 'utf8',
+};
+
+/** require('buffer'): Node 22's exports around our Buffer. */
+function bufferModule(Buffer) {
+  const MAX_LENGTH = 2 ** 53 - 1;
+  const MAX_STRING_LENGTH = 536870888;
+  const fatal = new TextDecoder('utf-8', { fatal: true });
+  const bytesOf = (input) => {
+    if (input instanceof ArrayBuffer) return new Uint8Array(input);
+    if (typeof SharedArrayBuffer === 'function' && input instanceof SharedArrayBuffer) {
+      return new Uint8Array(input);
+    }
+    if (ArrayBuffer.isView(input)) return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+    throw invalidArgType('input', 'an instance of ArrayBuffer, Buffer, or TypedArray', input);
+  };
+  function SlowBuffer(size) {
+    return Buffer.allocUnsafeSlow(size);
+  }
+  return {
+    Buffer,
+    SlowBuffer,
+    /**
+     * Node's transcode (ICU): text a target cannot hold becomes '?', as ICU's
+     * substitution does; invalid UTF-8 decodes to U+FFFD first.
+     */
+    transcode(source, fromEnc, toEnc) {
+      if (!(source instanceof Uint8Array)) {
+        throw invalidArgType('source', 'an instance of Buffer or Uint8Array', source);
+      }
+      const from = TRANSCODE_ENCODINGS[String(fromEnc).toLowerCase()];
+      const to = TRANSCODE_ENCODINGS[String(toEnc).toLowerCase()];
+      if (!from || !to) {
+        const err = new Error('Unable to transcode Buffer [U_ILLEGAL_ARGUMENT_ERROR]');
+        err.code = 'U_ILLEGAL_ARGUMENT_ERROR';
+        err.errno = 1;
+        throw err;
+      }
+      let text = Buffer.from(source).toString(from);
+      if (to === 'latin1') text = text.replace(/[^\u0000-\u00ff]/gu, '?');
+      else if (to === 'ascii') text = text.replace(/[^\u0000-\u007f]/gu, '?');
+      return Buffer.from(text, to);
+    },
+    isUtf8(input) {
+      const bytes = bytesOf(input);
+      try {
+        fatal.decode(bytes);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    isAscii(input) {
+      return bytesOf(input).every((b) => b < 0x80);
+    },
+    kMaxLength: MAX_LENGTH,
+    kStringMaxLength: MAX_STRING_LENGTH,
+    btoa: globalThis.btoa,
+    atob: globalThis.atob,
+    constants: { MAX_LENGTH, MAX_STRING_LENGTH },
+    INSPECT_MAX_BYTES: 50,
+    Blob: globalThis.Blob,
+    File: globalThis.File,
+    resolveObjectURL: () => undefined,
+  };
+}
+
 export function createBuiltins({ ctx, process, Buffer, console, path, handles, timers }) {
   const util = createUtil();
   const events = createEvents();
@@ -119,12 +213,14 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     return childProcess;
   };
 
+  let bufferExports;
+
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
 
   const implemented = {
     process: () => process,
-    buffer: () => ({ Buffer, kMaxLength: 0x7fffffff, INSPECT_MAX_BYTES: 50 }),
+    buffer: () => (bufferExports ??= bufferModule(Buffer)),
     console: () => console,
     path: () => path,
     'path/posix': () => path,

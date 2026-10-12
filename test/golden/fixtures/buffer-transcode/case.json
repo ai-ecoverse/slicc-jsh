@@ -1,0 +1,5 @@
+{
+  "description": "buffer.transcode substitutes '?' for what the target cannot hold; isUtf8/isAscii validate their input and read SharedArrayBuffers",
+  "argv": ["-e", "const b = require('buffer'); const t = (f) => { try { const v = f(); console.log(v instanceof Uint8Array ? [...v] : v); } catch (e) { console.log(e.name, e.code, e.message); } }; t(() => b.transcode(Buffer.from('€é'), 'utf8', 'latin1')); t(() => b.transcode(Buffer.from('€é😀'), 'utf8', 'ascii')); t(() => b.transcode(Buffer.from('€é'), 'utf8', 'ucs2')); t(() => b.transcode(Buffer.from('é', 'latin1'), 'latin1', 'utf8')); t(() => b.transcode(Buffer.from([0xff]), 'utf8', 'latin1')); t(() => b.transcode(Buffer.from('x'), 'utf8', 'hex')); t(() => b.transcode('x', 'utf8', 'latin1')); t(() => b.isUtf8('x')); t(() => b.isUtf8(null)); t(() => b.isAscii({})); t(() => b.isUtf8(new SharedArrayBuffer(2))); t(() => b.isAscii(new SharedArrayBuffer(2))); t(() => b.isUtf8(new Uint16Array([0x41, 0x42])));"],
+  "shim": true
+}

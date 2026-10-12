@@ -14,6 +14,37 @@ function toBytes(value) {
   return String(value);
 }
 
+/**
+ * process.env: like Node's, every value assigned is stored as a string
+ * (`process.env.N = 42` reads back '42'), and a symbol value is a TypeError.
+ */
+function createEnv(initial) {
+  const target = { ...initial };
+  const coerce = (value) => {
+    if (typeof value === 'symbol') {
+      throw new TypeError('Cannot convert a Symbol value to a string');
+    }
+    return String(value);
+  };
+  return new Proxy(target, {
+    set(t, key, value) {
+      if (typeof key === 'symbol') {
+        t[key] = value;
+        return true;
+      }
+      t[key] = coerce(value);
+      return true;
+    },
+    defineProperty(t, key, desc) {
+      if (typeof key !== 'symbol' && 'value' in desc) {
+        t[key] = coerce(desc.value);
+        return true;
+      }
+      return Reflect.defineProperty(t, key, desc);
+    },
+  });
+}
+
 function writableStream(fd, writeSync, isTTY) {
   const ee = new EventEmitter();
   return {
@@ -330,7 +361,7 @@ class Process extends EventEmitter {
 
     this.argv = argv.slice();
     this.argv0 = argv[0] ?? 'node';
-    this.env = { ...ctx.env };
+    this.env = createEnv(ctx.env);
     this.versions = { node: NODE_SHIM_VERSION };
     this.version = `v${NODE_SHIM_VERSION}`;
     this.platform = 'linux';

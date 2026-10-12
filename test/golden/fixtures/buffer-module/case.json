@@ -1,0 +1,5 @@
+{
+  "description": "require('buffer'): Node 22's exports (constants, kMaxLength, isUtf8, isAscii, transcode, SlowBuffer, Blob, File, atob/btoa)",
+  "argv": ["-e", "const b = require('buffer'); console.log(Object.keys(b).sort().join(' ')); console.log(JSON.stringify(b.constants), b.kMaxLength, b.kStringMaxLength, b.INSPECT_MAX_BYTES); console.log(b.isUtf8(Buffer.from('é')), b.isUtf8(Buffer.from([0xc3])), b.isAscii(Buffer.from('a')), b.isAscii(Buffer.from('é'))); console.log([...b.transcode(Buffer.from('é'), 'utf8', 'latin1')], b.SlowBuffer(3).length, b.Blob === Blob, b.File === File, b.atob === atob, b.Buffer === Buffer, require('buffer') === require('node:buffer'));"],
+  "shim": true
+}

@@ -1,0 +1,13 @@
+[ 63, 233 ]
+[ 63, 63, 63 ]
+[ 172, 32, 233, 0 ]
+[ 195, 169 ]
+[ 63 ]
+Error U_ILLEGAL_ARGUMENT_ERROR Unable to transcode Buffer [U_ILLEGAL_ARGUMENT_ERROR]
+TypeError ERR_INVALID_ARG_TYPE The "source" argument must be an instance of Buffer or Uint8Array. Received type string ('x')
+TypeError ERR_INVALID_ARG_TYPE The "input" argument must be an instance of ArrayBuffer, Buffer, or TypedArray. Received type string ('x')
+TypeError ERR_INVALID_ARG_TYPE The "input" argument must be an instance of ArrayBuffer, Buffer, or TypedArray. Received null
+TypeError ERR_INVALID_ARG_TYPE The "input" argument must be an instance of ArrayBuffer, Buffer, or TypedArray. Received an instance of Object
+true
+true
+true

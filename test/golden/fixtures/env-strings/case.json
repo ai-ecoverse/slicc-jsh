@@ -1,0 +1,5 @@
+{
+  "description": "process.env stores every assigned value as a string; a child sees it",
+  "argv": ["-e", "process.env.N = 42; process.env.U = undefined; process.env.B = true; console.log(typeof process.env.N, process.env.N, process.env.U, process.env.B, Object.keys(process.env).every((k) => typeof process.env[k] === 'string'), process.env.hasOwnProperty('N')); delete process.env.N; console.log('N' in process.env); try { process.env.S = Symbol('s'); } catch (e) { console.log(e.name, e.message); }"],
+  "shim": true
+}

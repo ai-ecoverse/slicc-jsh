@@ -1,0 +1,3 @@
+string 42 undefined true true true
+false
+TypeError Cannot convert a Symbol value to a string
