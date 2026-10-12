@@ -1,0 +1,6 @@
+{
+  "description": "child_process.execSync / execFileSync on ctx.sync.run: return types, throw shape on failure, stderr passthrough, input, shell, stdio inherit, signals while blocked (Node 22; /bin/sh from wasm-bash in the shim)",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-bash"]
+}

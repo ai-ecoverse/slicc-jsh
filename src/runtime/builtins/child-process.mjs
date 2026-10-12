@@ -1,9 +1,20 @@
 /**
- * Minimal `child_process`: spawn / execFile / exec on top of ctx.spawn.
- * Sync forms and fork stay ERR_NOT_SUPPORTED.
+ * Minimal `child_process`: spawn / execFile / exec on top of ctx.spawn, and
+ * spawnSync / execSync / execFileSync on ctx.sync.run (slicc-kernel 1.65.0+).
+ * fork stays ERR_NOT_SUPPORTED.
  */
 import { trackPromise } from '../async-handles.mjs';
+import {
+  ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ARG_VALUE,
+  ERR_OUT_OF_RANGE,
+  nodeError,
+  validateBoolean,
+  validateObject,
+  validateString,
+} from '../node-errors.mjs';
 import { createPath } from '../path.mjs';
+import { SIGNALS } from '../process.mjs';
 import { EventEmitter } from './events.mjs';
 
 /** Same symbol util.promisify reads (`nodejs.util.promisify.custom`). */
@@ -94,6 +105,117 @@ function notSupported(name) {
   const err = new Error(`slicc-jsh: child_process.${name} is not supported yet`);
   err.code = 'ERR_NOT_SUPPORTED';
   throw err;
+}
+
+/** The kernel that first has ctx.sync.run (slicc-kernel #401, #403). */
+export const SYNC_RUN_KERNEL = '1.65.0';
+
+function syncNotSupported(name) {
+  const err = new Error(
+    `slicc-jsh: child_process.${name} needs slicc-kernel ${SYNC_RUN_KERNEL} or later (ctx.sync.run); this kernel has none`
+  );
+  err.code = 'ERR_NOT_SUPPORTED';
+  throw err;
+}
+
+// --- sync forms: Node 22's lib/child_process.js on ctx.sync.run -------------
+
+const MAX_BUFFER = 1024 * 1024;
+
+/** Linux errnos (process.platform is 'linux') for what ctx.sync.run reports. */
+const ERRNO = {
+  EPERM: -1,
+  ENOENT: -2,
+  EIO: -5,
+  E2BIG: -7,
+  ENOEXEC: -8,
+  EBADF: -9,
+  EAGAIN: -11,
+  ENOMEM: -12,
+  EACCES: -13,
+  ENOTDIR: -20,
+  EISDIR: -21,
+  EINVAL: -22,
+  EMFILE: -24,
+  ENOSYS: -38,
+  ELOOP: -40,
+  ENOBUFS: -105,
+  ETIMEDOUT: -110,
+};
+
+/** Signal number → name, first name wins (SIGABRT over SIGIOT, as libuv). */
+const SIGNAL_BY_NUMBER = {};
+for (const [name, num] of Object.entries(SIGNALS)) SIGNAL_BY_NUMBER[num] ??= name;
+
+const ERR_UNKNOWN_ENCODING = (enc) => nodeError(TypeError, 'ERR_UNKNOWN_ENCODING', `Unknown encoding: ${enc}`);
+
+const ERR_UNKNOWN_SIGNAL = (signal) => nodeError(TypeError, 'ERR_UNKNOWN_SIGNAL', `Unknown signal: ${signal}`);
+
+/** internal/util convertToValidSignal. */
+function convertToValidSignal(signal) {
+  if (typeof signal === 'number' && SIGNAL_BY_NUMBER[signal]) return signal;
+  if (typeof signal === 'string') {
+    const num = SIGNALS[signal.toUpperCase()];
+    if (num) return num;
+  }
+  throw ERR_UNKNOWN_SIGNAL(signal);
+}
+
+function validateArgumentNullCheck(arg, propName) {
+  if (typeof arg === 'string' && arg.includes('\u0000')) {
+    throw ERR_INVALID_ARG_VALUE(propName, arg, 'must be a string without null bytes');
+  }
+}
+
+function validateArgumentsNullCheck(args, propName) {
+  for (let i = 0; i < args.length; ++i) validateArgumentNullCheck(args[i], `${propName}[${i}]`);
+}
+
+function validateTimeout(timeout) {
+  if (timeout != null && !(Number.isInteger(timeout) && timeout >= 0)) {
+    throw ERR_OUT_OF_RANGE('timeout', 'an unsigned integer', timeout);
+  }
+}
+
+function validateMaxBuffer(maxBuffer) {
+  if (maxBuffer != null && !(typeof maxBuffer === 'number' && maxBuffer >= 0)) {
+    throw ERR_OUT_OF_RANGE('options.maxBuffer', 'a positive number', maxBuffer);
+  }
+}
+
+function sanitizeKillSignal(killSignal) {
+  if (typeof killSignal === 'string' || typeof killSignal === 'number') {
+    return convertToValidSignal(killSignal);
+  } else if (killSignal != null) {
+    throw ERR_INVALID_ARG_TYPE('options.killSignal', ['string', 'number'], killSignal);
+  }
+  return undefined;
+}
+
+function isArrayBufferView(value) {
+  return ArrayBuffer.isView(value);
+}
+
+/** internal/fs/utils getValidatedPath for options.cwd (string, Buffer, URL). */
+function validatedCwd(cwd) {
+  let path = cwd;
+  if (path != null && typeof path === 'object' && typeof path.href === 'string' && path.protocol !== undefined) {
+    if (path.protocol !== 'file:') {
+      throw nodeError(TypeError, 'ERR_INVALID_URL_SCHEME', 'The URL must be of scheme file');
+    }
+    if (path.hostname !== '' && path.hostname !== 'localhost') {
+      throw nodeError(TypeError, 'ERR_INVALID_FILE_URL_HOST', 'File URL host must be "localhost" or empty on linux');
+    }
+    path = decodeURIComponent(path.pathname);
+  } else if (isArrayBufferView(path)) {
+    path = new TextDecoder().decode(path);
+  } else if (typeof path !== 'string') {
+    throw ERR_INVALID_ARG_TYPE('options.cwd', ['string', 'Buffer', 'URL'], cwd);
+  }
+  if (path.includes('\u0000')) {
+    throw ERR_INVALID_ARG_VALUE('options.cwd', path, 'must be a string or Uint8Array without null bytes');
+  }
+  return path;
 }
 
 function isExitError(err) {
@@ -707,6 +829,338 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     return execFile(shell, ['-c', cmd], { ...opts, shell: false, _execCmd: cmd }, cb);
   }
 
+  // --- sync forms -----------------------------------------------------------
+
+  /** lib/child_process.js normalizeSpawnArguments (the Unix half). */
+  function normalizeSpawnArguments(file, args, options) {
+    validateString(file, 'file');
+    validateArgumentNullCheck(file, 'file');
+    if (file.length === 0) throw ERR_INVALID_ARG_VALUE('file', file, 'cannot be empty');
+
+    if (Array.isArray(args)) {
+      args = args.slice();
+    } else if (args == null) {
+      args = [];
+    } else if (typeof args !== 'object') {
+      throw ERR_INVALID_ARG_TYPE('args', 'object', args);
+    } else {
+      options = args;
+      args = [];
+    }
+    validateArgumentsNullCheck(args, 'args');
+
+    if (options === undefined) options = {};
+    else validateObject(options, 'options');
+    options = { __proto__: null, ...options };
+
+    let cwd = options.cwd;
+    if (cwd != null) cwd = validatedCwd(cwd);
+    if (options.detached != null) validateBoolean(options.detached, 'options.detached');
+    for (const id of ['uid', 'gid']) {
+      const v = options[id];
+      if (v != null && !(Number.isInteger(v) && v >= -2147483648 && v <= 2147483647)) {
+        throw ERR_INVALID_ARG_TYPE(`options.${id}`, 'int32', v);
+      }
+    }
+    if (options.shell != null && typeof options.shell !== 'boolean' && typeof options.shell !== 'string') {
+      throw ERR_INVALID_ARG_TYPE('options.shell', ['boolean', 'string'], options.shell);
+    }
+    if (options.argv0 != null) {
+      validateString(options.argv0, 'options.argv0');
+      validateArgumentNullCheck(options.argv0, 'options.argv0');
+    }
+    if (options.windowsHide != null) validateBoolean(options.windowsHide, 'options.windowsHide');
+    if (options.windowsVerbatimArguments != null) {
+      validateBoolean(options.windowsVerbatimArguments, 'options.windowsVerbatimArguments');
+    }
+
+    if (options.shell) {
+      validateArgumentNullCheck(options.shell, 'options.shell');
+      const command = args.length > 0 ? `${file} ${args.join(' ')}` : file;
+      file = typeof options.shell === 'string' ? options.shell : '/bin/sh';
+      args = ['-c', command];
+    }
+    args.unshift(typeof options.argv0 === 'string' ? options.argv0 : file);
+
+    // Node passes every key `for…in` sees (prototype included), skips
+    // undefined values and stringifies the rest.
+    const envSource = options.env || { ...process.env };
+    const env = {};
+    for (const key in envSource) {
+      const value = envSource[key];
+      if (value === undefined) continue;
+      validateArgumentNullCheck(key, `options.env['${key}']`);
+      validateArgumentNullCheck(value, `options.env['${key}']`);
+      env[key] = `${value}`;
+    }
+
+    return { ...options, args, cwd, env, file };
+  }
+
+  /**
+   * internal/child_process getValidStdio(stdio, sync=true), then mapped onto
+   * ctx.sync.run's 'pipe' | 'ignore' | 'inherit'. An fd other than the slot's
+   * own is emulated: output is captured and written to it after the run, and
+   * an input fd is read to its end first.
+   */
+  function syncStdio(stdio) {
+    if (typeof stdio === 'string') {
+      if (stdio === 'ignore' || stdio === 'pipe' || stdio === 'inherit' || stdio === 'overlapped') {
+        stdio = [stdio, stdio, stdio];
+      } else {
+        throw ERR_INVALID_ARG_VALUE('stdio', stdio);
+      }
+    } else if (!Array.isArray(stdio)) {
+      throw ERR_INVALID_ARG_VALUE('stdio', stdio);
+    } else {
+      stdio = stdio.slice();
+    }
+    while (stdio.length < 3) stdio.push(undefined);
+
+    const out = [];
+    stdio.forEach((s, i) => {
+      s ??= i < 3 ? 'pipe' : 'ignore';
+      if (s === 'ignore') out.push({ type: 'ignore' });
+      else if (s === 'pipe' || s === 'overlapped' || (typeof s === 'number' && s < 0)) out.push({ type: 'pipe' });
+      else if (s === 'ipc') {
+        throw nodeError(Error, 'ERR_IPC_SYNC_FORK', 'IPC cannot be used with synchronous forks');
+      } else if (s === 'inherit') out.push({ type: 'inherit', fd: i });
+      else if (typeof s === 'number' || typeof s?.fd === 'number') {
+        out.push({ type: 'fd', fd: typeof s === 'number' ? s : s.fd });
+      } else if (isArrayBufferView(s) || typeof s === 'string') {
+        // Node's sync path skips these without a slot.
+      } else {
+        throw ERR_INVALID_ARG_VALUE('stdio', s);
+      }
+    });
+    return out;
+  }
+
+  function kernelSlot(slot, i) {
+    if (!slot) return 'ignore';
+    if (slot.type === 'pipe') return 'pipe';
+    if (slot.type === 'ignore') return 'ignore';
+    if (slot.fd === i) return 'inherit';
+    // Another descriptor: capture (or feed) here, see syncStdio.
+    return 'pipe';
+  }
+
+  /** Read a descriptor to its end (stdin redirected from another fd). */
+  function readFdToEnd(fd) {
+    const chunks = [];
+    for (;;) {
+      const c = ctx.sync.read(fd);
+      if (!c || c.length === 0) break;
+      chunks.push(Buffer.from(c));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  function syncErrno(code, file, args) {
+    const err = new Error(`spawnSync ${file} ${code}`);
+    err.errno = ERRNO[code];
+    err.code = code;
+    err.syscall = `spawnSync ${file}`;
+    err.path = file;
+    err.spawnargs = args.slice(1);
+    return err;
+  }
+
+  /** internal/child_process spawnSync on ctx.sync.run. */
+  function runSync(options) {
+    const { file, args } = options;
+    const stdio = options.stdio;
+
+    let failed;
+    let raw;
+    let remapped = false;
+    if (options.cwd === '') {
+      // Node's sync path passes '' to uv_spawn, whose chdir('') is ENOENT.
+      failed = 'ENOENT';
+    } else if (options.cwd != null) {
+      const bad = checkSpawnCwd(ctx, resolveSpawnCwd(path, options.cwd));
+      if (bad) failed = bad;
+    }
+    if (!failed) {
+      const how = [0, 1, 2].map((i) => kernelSlot(stdio[i], i));
+      remapped = [1, 2].some((i) => stdio[i]?.type === 'fd' && stdio[i].fd !== i);
+      let input = stdio[0]?.input;
+      if (stdio[0]?.type === 'fd' && stdio[0].fd !== 0) input = readFdToEnd(stdio[0].fd);
+      const req = {
+        // Node's native layer stringifies each argument (null → 'null').
+        argv: [file, ...args.slice(1).map((a) => `${a}`)],
+        env: options.env,
+        cwd: resolveSpawnCwd(path, options.cwd),
+        stdin: how[0],
+        stdout: how[1],
+        stderr: how[2],
+        // Output remapped to another fd is captured here and written after
+        // the run; Node writes it straight through with no maxBuffer, so lift
+        // the kernel's limit (it keeps 64 MiB at most) and apply maxBuffer to
+        // the real pipes below.
+        maxBuffer: remapped ? Infinity : options.maxBuffer,
+        killSignal: options.killSignal ?? SIGNALS.SIGTERM,
+      };
+      if (how[0] === 'pipe' && input != null) {
+        req.input = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+      }
+      if (options.timeout > 0) req.timeout = options.timeout;
+      raw = ctx.sync.run(req);
+      if (raw.error && raw.pid === 0 && raw.status === null) failed = raw.error.code ?? 'ENOENT';
+    }
+
+    if (failed && !raw?.pid) {
+      return {
+        error: syncErrno(failed, file, args),
+        status: null,
+        signal: null,
+        output: null,
+        pid: 0,
+        stdout: undefined,
+        stderr: undefined,
+      };
+    }
+
+    const output = stdio.map(() => null);
+    let overflow = false;
+    for (const i of [1, 2]) {
+      const slot = stdio[i];
+      if (!slot) continue;
+      let bytes = i === 1 ? raw.stdout : raw.stderr;
+      if (slot.type === 'pipe') {
+        bytes ??= new Uint8Array(0);
+        // With the kernel's limit lifted (remapped fds), keep maxBuffer here;
+        // the child has run to its end, so this can only truncate.
+        if (remapped && bytes.length > options.maxBuffer) {
+          bytes = bytes.subarray(0, options.maxBuffer);
+          overflow = true;
+        }
+        output[i] = Buffer.from(bytes);
+      } else if (slot.type === 'fd' && slot.fd !== i && bytes?.length) ctx.sync.write(slot.fd, bytes);
+    }
+    if (overflow && !raw.error) raw = { ...raw, error: { code: 'ENOBUFS' } };
+    // Extra pipes (fd 3+) have no kernel counterpart: empty, as if unused.
+    for (let i = 3; i < stdio.length; i++) if (stdio[i].type === 'pipe') output[i] = Buffer.alloc(0);
+
+    if (options.encoding && options.encoding !== 'buffer') {
+      for (let i = 0; i < output.length; i++) {
+        if (!output[i]) continue;
+        // Node's Buffer#toString: '' for no bytes, else an unknown encoding throws.
+        if (output[i].length > 0 && !Buffer.isEncoding(options.encoding)) throw ERR_UNKNOWN_ENCODING(options.encoding);
+        output[i] = output[i].toString(options.encoding);
+      }
+    }
+
+    const signal = raw.signal != null ? (SIGNAL_BY_NUMBER[raw.signal] ?? String(raw.signal)) : null;
+    const result = {};
+    if (raw.error) result.error = syncErrno(raw.error.code, file, args);
+    result.status = raw.status ?? null;
+    result.signal = signal;
+    result.output = output;
+    result.pid = raw.pid;
+    result.stdout = output[1];
+    result.stderr = output[2];
+    return result;
+  }
+
+  /** lib/child_process.js spawnSync. */
+  function spawnSync(file, args, options) {
+    if (typeof ctx.sync?.run !== 'function') syncNotSupported('spawnSync');
+    return spawnSyncImpl(file, args, options);
+  }
+
+  function spawnSyncImpl(file, args, options) {
+    options = {
+      __proto__: null,
+      maxBuffer: MAX_BUFFER,
+      ...normalizeSpawnArguments(file, args, options),
+    };
+    validateTimeout(options.timeout);
+    validateMaxBuffer(options.maxBuffer);
+    options.killSignal = sanitizeKillSignal(options.killSignal);
+    options.stdio = syncStdio(options.stdio || 'pipe');
+
+    if (options.input) {
+      const stdin = (options.stdio[0] = { ...options.stdio[0] });
+      stdin.input = options.input;
+    }
+    for (let i = 0; i < options.stdio.length; i++) {
+      const input = options.stdio[i]?.input;
+      if (input != null) {
+        const pipe = (options.stdio[i] = { ...options.stdio[i] });
+        if (isArrayBufferView(input)) {
+          pipe.input = input;
+        } else if (typeof input === 'string') {
+          const enc = options.encoding;
+          if (typeof enc === 'string' && enc.length > 0 && !Buffer.isEncoding(enc)) throw ERR_UNKNOWN_ENCODING(enc);
+          pipe.input = Buffer.from(input, enc);
+        } else {
+          throw ERR_INVALID_ARG_TYPE(`options.stdio[${i}]`, ['Buffer', 'TypedArray', 'DataView', 'string'], input);
+        }
+      }
+    }
+    return runSync(options);
+  }
+
+  function checkExecSyncError(ret, args, cmd) {
+    let err;
+    if (ret.error) {
+      err = ret.error;
+      Object.assign(err, ret);
+    } else if (ret.status !== 0) {
+      let msg = 'Command failed: ';
+      msg += cmd || args.join(' ');
+      if (ret.stderr && ret.stderr.length > 0) msg += `\n${ret.stderr.toString()}`;
+      err = new Error(msg);
+      Object.assign(err, ret);
+    }
+    return err;
+  }
+
+  /** lib/child_process.js normalizeExecFileArgs (no callback). */
+  function normalizeExecFileArgs(file, args, options) {
+    if (Array.isArray(args)) {
+      args = args.slice();
+    } else if (args != null && typeof args === 'object') {
+      options = args;
+      args = null;
+    }
+    args ??= [];
+    if (options != null) validateObject(options, 'options');
+    options ??= {};
+    if (options.argv0 != null) {
+      validateString(options.argv0, 'options.argv0');
+      validateArgumentNullCheck(options.argv0, 'options.argv0');
+    }
+    return { file, args, options };
+  }
+
+  function execFileSync(file, args, options) {
+    if (typeof ctx.sync?.run !== 'function') syncNotSupported('execFileSync');
+    ({ file, args, options } = normalizeExecFileArgs(file, args, options));
+    const inheritStderr = !options.stdio;
+    const ret = spawnSyncImpl(file, args, options);
+    if (inheritStderr && ret.stderr) process.stderr.write(ret.stderr);
+    const errArgs = [options.argv0 || file, ...args];
+    const err = checkExecSyncError(ret, errArgs);
+    if (err) throw err;
+    return ret.stdout;
+  }
+
+  function execSync(command, options) {
+    if (typeof ctx.sync?.run !== 'function') syncNotSupported('execSync');
+    validateString(command, 'command');
+    validateArgumentNullCheck(command, 'command');
+    const opts = { __proto__: null, ...options };
+    opts.shell = typeof opts.shell === 'string' ? opts.shell : true;
+    const inheritStderr = !opts.stdio;
+    const ret = spawnSyncImpl(command, opts);
+    if (inheritStderr && ret.stderr) process.stderr.write(ret.stderr);
+    const err = checkExecSyncError(ret, undefined, command);
+    if (err) throw err;
+    return ret.stdout;
+  }
+
   Object.defineProperty(exec, PROMISIFY_CUSTOM, {
     enumerable: false,
     value: customPromiseExecFunction(exec),
@@ -720,15 +1174,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     spawn,
     execFile,
     exec,
-    spawnSync() {
-      notSupported('spawnSync');
-    },
-    execSync() {
-      notSupported('execSync');
-    },
-    execFileSync() {
-      notSupported('execFileSync');
-    },
+    spawnSync,
+    execSync,
+    execFileSync,
     fork() {
       notSupported('fork');
     },

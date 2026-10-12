@@ -23,7 +23,7 @@ import {
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
-import { packageFiles } from '../test/integration/helpers.mjs';
+import { devPackageFiles, packageFiles } from '../test/integration/helpers.mjs';
 
 const SKIP_NAMES = new Set([
   'case.json',
@@ -195,6 +195,11 @@ async function main() {
     if (meta.shim) {
       const files = [
         ...fixtureTree(dir),
+        // case.json `packages`: devDependencies to install in the kernel
+        // (e.g. @ai-ecoverse/wasm-bash for /bin/sh).
+        ...(meta.packages ?? []).flatMap((name) =>
+          devPackageFiles(name).map(([path, data]) => ({ path, data }))
+        ),
         ...(meta.files ?? []).map((f) => ({
           path: f.path,
           data: readFileSync(join(dir, f.from)),
