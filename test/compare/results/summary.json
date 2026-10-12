@@ -909,9 +909,9 @@
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "misc-builtins",
@@ -1500,14 +1500,14 @@
       ],
       "status": {
         "six": 0,
-        "seven": 1,
-        "jsh": 1,
+        "seven": 0,
+        "jsh": 0,
         "node": null
       },
-      "six": "≠",
-      "seven": "≠",
+      "six": "=",
+      "seven": "=",
       "node": "–",
-      "auto": "all differ"
+      "auto": "same"
     },
     {
       "name": "require-sliccy-unknown",

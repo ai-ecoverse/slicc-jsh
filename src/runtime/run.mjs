@@ -125,12 +125,15 @@ export async function runNode(ctx, options = {}) {
   let removeJshHandoff = () => {};
   const removeCtxHooks = [];
   const util = createUtil();
+  // Set while the error being reported comes from an ES module entry.
+  let uncaughtFromEsm = false;
   const printUncaught = (err) => {
     const { body } = formatUncaughtError(err, {
       ctx,
       util,
       version: NODE_SHIM_VERSION,
       evalCode: lastEvalCode,
+      esmEntry: uncaughtFromEsm,
     });
     writeStderr(body);
   };
@@ -432,7 +435,14 @@ export async function runNode(ctx, options = {}) {
       (err) => {
         current.pending = false;
         if (kind === 'jsh') rejectionHandler(err, promise);
-        else exceptionHandler(err);
+        else {
+          uncaughtFromEsm = kind === 'esm';
+          try {
+            exceptionHandler(err);
+          } finally {
+            uncaughtFromEsm = false;
+          }
+        }
         handles.notify();
       }
     );
@@ -512,7 +522,9 @@ export async function runNode(ctx, options = {}) {
       const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(source);
       try {
         if (asEsm) {
-          const result = esm.runEsmEval(source, '[stdin]');
+          uncaughtFromEsm = true;
+          const result = esm.runEsmEval(source, `${process.cwd().replace(/\/$/, '')}/[eval1]`);
+          uncaughtFromEsm = false;
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
         } else {
           // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
@@ -542,10 +554,13 @@ export async function runNode(ctx, options = {}) {
           throw nodeError(Error, 'ERR_EVAL_ESM_CANNOT_PRINT', '--print cannot be used with ESM input');
         }
         if (asEsm) {
+          // Node: ES module input is the module <cwd>/[eval1].
+          uncaughtFromEsm = true;
           const result = esm.runEsmEval(
             parsed.print ? `console.log(${parsed.code}\n)` : parsed.code,
-            '[eval]'
+            `${process.cwd().replace(/\/$/, '')}/[eval1]`
           );
+          uncaughtFromEsm = false;
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
           nextTick.flushSync();
         } else {
@@ -613,16 +628,19 @@ export async function runNode(ctx, options = {}) {
         // isEsmFilename covers .mjs, "type":"module", and detect-module for
         // ambiguous .js (not explicit "type":"commonjs").
         const useEsm = esm.isEsmFilename(mainPath, source);
+        uncaughtFromEsm = useEsm;
         if (useEsm) {
           const result = esm.runMain(mainPath, source);
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
         } else {
           cjs.runMain(mainPath, source);
         }
+        uncaughtFromEsm = false;
         nextTick.flushSync();
       } catch (err) {
         if (isExitError(err)) throw err;
         if (process.listenerCount('uncaughtException') > 0) {
+          uncaughtFromEsm = false;
           process.emit(
             'uncaughtException',
             err instanceof Error ? err : new Error(String(err)),

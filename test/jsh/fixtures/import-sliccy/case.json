@@ -1,0 +1,3 @@
+{
+  "description": "import('sliccy:x') in a .jsh body: the namespace of what require('sliccy:x') returns (default + its own keys, sorted), the same in both engines; an unknown name rejects with require's error"
+}

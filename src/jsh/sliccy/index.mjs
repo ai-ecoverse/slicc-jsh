@@ -19,6 +19,31 @@ function isNotFound(err, request) {
   return err?.code === 'MODULE_NOT_FOUND' && String(err.message).includes(`'${request}'`);
 }
 
+/**
+ * The names `import('sliccy:x')` exports, in both engines: `default` (the
+ * module's value, as `require` returns it) and each own enumerable key of it.
+ * Sorted, as a module namespace's are.
+ */
+export function sliccyExportNames(value) {
+  const names = value !== null && (typeof value === 'object' || typeof value === 'function') ? Object.keys(value) : [];
+  return ['default', ...names.filter((k) => k !== 'default')].sort();
+}
+
+/** A module namespace for a sliccy: module (the kernel engine's import()). */
+export function sliccyNamespace(value) {
+  const ns = Object.create(null);
+  for (const name of sliccyExportNames(value)) {
+    Object.defineProperty(ns, name, {
+      value: name === 'default' ? value : value[name],
+      enumerable: true,
+      writable: true,
+      configurable: false,
+    });
+  }
+  Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
+  return Object.preventExtensions(ns);
+}
+
 export function createSliccyResolver({ engine, process, require }) {
   let color;
   let exec;

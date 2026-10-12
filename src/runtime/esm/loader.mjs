@@ -7,6 +7,7 @@ import { createPath } from '../path.mjs';
 import { preserveSymlinks } from '../cjs/loader.mjs';
 import { createResolver } from '../cjs/resolve.mjs';
 import { nodeError } from '../node-errors.mjs';
+import { registerEsmFrames } from '../stack.mjs';
 import { shouldRunAsEsm, transformEsm } from './transform.mjs';
 
 const decoder = new TextDecoder();
@@ -91,6 +92,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     conditions: IMPORT_CONDITIONS,
     extensions: ['.js', '.mjs', '.cjs', '.json'],
     preserveSymlinks: preserveSymlinks(process),
+    esm: true,
     // node --expose-internals: import 'internal/…', as require() has it.
     exposeInternals: () => process.execArgv.includes('--expose-internals'),
   });
@@ -140,19 +142,146 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
 
   // Static imports and import.meta.resolve fail as Node's ESM resolver does.
+  /** What Node names the importing module in its errors. */
+  const parentLabel = (parentFilename) =>
+    !parentFilename || parentFilename.startsWith('[') || parentFilename.endsWith('/')
+      ? `${process.cwd().replace(/\/$/, '')}/[eval1]`
+      : parentFilename;
+
+  /**
+   * Node's ESM resolve: URL specifiers (node:, file:, data:; any other scheme
+   * is ERR_UNSUPPORTED_ESM_URL_SCHEME), relative ones resolved as URLs
+   * against the importer (%-escapes decoded, query and fragment dropped),
+   * exact files only, and Node's ERR_MODULE_NOT_FOUND /
+   * ERR_UNSUPPORTED_DIR_IMPORT messages.
+   */
   function esmResolve(specifier, parentFilename) {
+    let spec = String(specifier);
+    const scheme = /^([a-zA-Z][a-zA-Z\d+.-]*):/.exec(spec)?.[1]?.toLowerCase();
+    if (scheme === 'data') return { type: 'data', url: spec };
+    if (scheme && scheme !== 'node' && scheme !== 'file') {
+      const schemes = scheme === 'http' || scheme === 'https' ? 'file and data' : 'file, data, and node';
+      const err = nodeError(
+        Error,
+        'ERR_UNSUPPORTED_ESM_URL_SCHEME',
+        `Only URLs with a scheme in: ${schemes} are supported by the default ESM loader. Received protocol '${scheme}:'`
+      );
+      throw err;
+    }
+    if (scheme === 'file' || spec.startsWith('/') || spec.startsWith('./') || spec.startsWith('../')) {
+      try {
+        const base = parentFilename && !parentFilename.startsWith('[') ? parentFilename : `${process.cwd().replace(/\/$/, '')}/`;
+        const url = new URL(spec, `file://${encodeFilePath(base)}`);
+        spec = decodeURIComponent(url.pathname);
+      } catch {
+        /* left as is */
+      }
+    }
     try {
-      return resolver.resolve(String(specifier), parentFilename, [parentFilename]);
+      return resolver.resolve(spec, parentFilename, [parentFilename]);
     } catch (err) {
+      const why = err?.esmResolveError;
+      const from = parentLabel(parentFilename);
+      if (why) {
+        let e;
+        if (why.kind === 'package') {
+          e = nodeError(Error, 'ERR_MODULE_NOT_FOUND', `Cannot find package '${why.value}' imported from ${from}`);
+        } else {
+          const where = why.kind === 'dir' && spec.endsWith('/') ? `${why.value}/` : why.value;
+          e =
+            why.kind === 'dir'
+              ? nodeError(
+                  Error,
+                  'ERR_UNSUPPORTED_DIR_IMPORT',
+                  `Directory import '${where}' is not supported resolving ES modules imported from ${from}`
+                )
+              : nodeError(Error, 'ERR_MODULE_NOT_FOUND', `Cannot find module '${where}' imported from ${from}`);
+          e.url = pathToFileURL(where);
+        }
+        commonJsHint(e, spec, parentFilename);
+        throw e;
+      }
+      if (err?.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED') {
+        throw nodeError(Error, 'ERR_PACKAGE_PATH_NOT_EXPORTED', `${err.message} imported from ${from}`);
+      }
       if (err && err.code === 'MODULE_NOT_FOUND') err.code = 'ERR_MODULE_NOT_FOUND';
       throw err;
     }
   }
 
+  /**
+   * Node's decorateErrorWithCommonJSHints: when require() would have found
+   * the module, say so ("Did you mean to import "pkg/sub.js"?").
+   */
+  function commonJsHint(err, specifier, parentFilename) {
+    if (!parentFilename || parentFilename.startsWith('[') || parentFilename.startsWith('data:')) return;
+    let found;
+    try {
+      found = cjs.makeRequire(parentFilename).resolve(specifier);
+    } catch {
+      return;
+    }
+    if (typeof found !== 'string' || !found.startsWith('/')) return;
+    if (/^\.{1,2}\//.test(specifier)) {
+      found = path.relative(path.dirname(parentFilename), found);
+      if (!found.startsWith('../')) found = `./${found}`;
+    } else if (!specifier.startsWith('/')) {
+      const i = specifier.indexOf('/');
+      const pkg = i === -1 ? specifier : specifier.slice(0, i);
+      const needle = `/node_modules/${pkg}/`;
+      const index = found.lastIndexOf(needle);
+      found =
+        index !== -1
+          ? `${pkg}/${found.slice(index + needle.length).split('/').map(encodeURIComponent).join('/')}`
+          : pathToFileURL(found);
+    }
+    if (found === specifier) return;
+    const hint = `Did you mean to import ${JSON.stringify(found)}?`;
+    const nl = err.stack.indexOf('\n');
+    err.stack = nl === -1 ? `${err.stack}\n${hint}` : `${err.stack.slice(0, nl)}\n${hint}${err.stack.slice(nl)}`;
+    err.message += `\n${hint}`;
+  }
+
+  /** A data: URL module (text/javascript or application/json), as Node loads it. */
+  const dataModules = new Map();
+  function loadDataModule(url) {
+    if (dataModules.has(url)) return dataModules.get(url);
+    const m = /^data:([^,]*?)(;base64)?,(.*)$/s.exec(url);
+    const mime = (m?.[1] ?? '').split(';')[0].trim().toLowerCase();
+    let source = '';
+    if (m) {
+      source = m[2] ? decoder.decode(Uint8Array.from(atob(m[3]), (c) => c.charCodeAt(0))) : decodeURIComponent(m[3]);
+    }
+    let ns;
+    if (!m) throw nodeError(TypeError, 'ERR_INVALID_URL', 'Invalid URL');
+    if (mime === 'application/json') {
+      ns = Object.create(null);
+      Object.defineProperty(ns, 'default', { value: JSON.parse(source), enumerable: true, writable: true });
+      Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
+    } else if (mime === 'text/javascript' || mime === 'application/javascript') {
+      ns = undefined;
+    } else {
+      throw nodeError(TypeError, 'ERR_UNKNOWN_MODULE_FORMAT', `Unknown module format: ${mime || 'data'} for URL ${url}`);
+    }
+    const out = { source, ns };
+    dataModules.set(url, out);
+    return out;
+  }
+
   function makeImportMeta(filename) {
     // Node: ES module input from -e or stdin is `<cwd>/[eval1]` (a file URL,
     // with filename and dirname) — its import.meta and relative imports.
-    const evalInput = filename.startsWith('[');
+    if (filename.startsWith('data:')) {
+      // Node: a data: module's import.meta has only its url (and resolve).
+      return {
+        url: filename,
+        resolve: (specifier) => {
+          const r = esmResolve(specifier, filename);
+          return r.type === 'builtin' ? `node:${r.id}` : r.type === 'data' ? r.url : pathToFileURL(r.filename);
+        },
+      };
+    }
+    const evalInput = filename.startsWith('[') || filename.endsWith('/[eval1]');
     if (evalInput) filename = `${process.cwd().replace(/\/$/, '')}/[eval1]`;
     // Node's URL for it keeps the brackets (pathToFileURL would encode them).
     const url = evalInput ? `${pathToFileURL(path.dirname(filename))}/[eval1]`.replace(':////', ':///') : pathToFileURL(filename);
@@ -166,14 +295,24 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
           // Node: a missing file (or a directory) still resolves to its URL;
           // only a package that can't be found throws.
           const spec = String(specifier);
-          if (err?.code === 'ERR_MODULE_NOT_FOUND' && /^(\.{1,2}\/|\/|file:)/.test(spec)) {
+          if (
+            (err?.code === 'ERR_MODULE_NOT_FOUND' || err?.code === 'ERR_UNSUPPORTED_DIR_IMPORT') &&
+            /^(\.{1,2}\/|\/|file:)/.test(spec)
+          ) {
             // URL resolution, as Node's: a query or fragment stays one.
             return new URL(spec, pathToFileURL(filename)).href;
           }
           throw err;
         }
         if (resolved.type === 'builtin') return `node:${resolved.id}`;
-        return pathToFileURL(resolved.filename);
+        if (resolved.type === 'data') return resolved.url;
+        // A file URL specifier's query and fragment stay on the result.
+        let tail = '';
+        if (/^(\.{1,2}\/|\/|file:)/.test(String(specifier))) {
+          const u = new URL(String(specifier), pathToFileURL(filename));
+          tail = u.search + u.hash;
+        }
+        return pathToFileURL(resolved.filename) + tail;
       },
     };
     // Node 22+: import.meta.dirname / import.meta.filename.
@@ -184,6 +323,10 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
   function resolveAndLoadSync(specifier, parentFilename) {
     const resolved = esmResolve(specifier, parentFilename);
+    if (resolved.type === 'data') {
+      const { source, ns } = loadDataModule(resolved.url);
+      return ns ?? evaluateEsm(resolved.url, source);
+    }
     if (resolved.type === 'builtin') {
       return builtinNamespace(resolved.id);
     }
@@ -195,7 +338,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     if (cached?.namespace) return cached.namespace;
     if (cached?.evaluating) return cached.exportsObj;
 
-    const { code, hasTopLevelAwait } = transformEsm(source, filename);
+    const { code, hasTopLevelAwait, preambleLines } = transformEsm(source, filename);
     if (hasTopLevelAwait) {
       const err = requireAsyncModule();
       deepAsync.add(err);
@@ -215,6 +358,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       return p;
     };
 
+    // Its frames: the file's own lines, as a file: URL (see stack.mjs).
+    registerEsmFrames(filename, 1 + preambleLines);
     try {
       const fn = new Function(
         '__meta',
@@ -265,7 +410,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       const __preload = async () => {
         for (const spec of staticSpecs) {
           const resolved = esmResolve(spec, filename);
-          if (resolved.type === 'builtin') continue;
+          if (resolved.type === 'builtin' || resolved.type === 'data') continue;
           const dep = cache.get(resolved.filename);
           if (dep?.namespace) continue;
           // Cycle partner already on our stack — link via live exportsObj later.
@@ -280,13 +425,9 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       };
 
       const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-      const parts = [
-        ...exportSetup,
-        'await __preload();',
-        ...hoistImports,
-        bodyCode,
-        `//# sourceURL=${filename}`,
-      ];
+      const prefix = [...exportSetup, 'await __preload();', ...hoistImports].join('\n');
+      const parts = [prefix, bodyCode, `//# sourceURL=${filename}`];
+      registerEsmFrames(filename, 1 + (prefix.match(/\n/g) || []).length + 1);
       const fn = new AsyncFunction(
         '__meta',
         '__importSync',
@@ -346,14 +487,10 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
 
   async function importModule(specifier, parentFilename = `${process.cwd()}/`) {
-    let resolved;
-    try {
-      resolved = resolver.resolve(String(specifier), parentFilename, [parentFilename]);
-    } catch (err) {
-      // Node ESM resolve failures use ERR_MODULE_NOT_FOUND; leave evaluation-time
-      // MODULE_NOT_FOUND from nested CJS require() unchanged.
-      if (err && err.code === 'MODULE_NOT_FOUND') err.code = 'ERR_MODULE_NOT_FOUND';
-      throw err;
+    const resolved = esmResolve(specifier, parentFilename);
+    if (resolved.type === 'data') {
+      const { source, ns } = loadDataModule(resolved.url);
+      return ns ?? evaluateEsmAsync(resolved.url, source);
     }
     if (resolved.type === 'builtin') {
       return builtinNamespace(resolved.id);

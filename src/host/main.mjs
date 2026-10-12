@@ -6,10 +6,10 @@
  */
 import { spawn as spawnChild } from 'node:child_process';
 import { accessSync, constants as fsConstants, readFileSync, realpathSync, writeSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import * as nodeModule from 'node:module';
 import { constants as osConstants } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 import {
   JSH_USAGE,
@@ -19,6 +19,7 @@ import {
   WRAPPER_LINE_OFFSET,
   wrapSource,
 } from '../jsh/run.mjs';
+import { sliccyExportNames } from '../jsh/sliccy/index.mjs';
 
 const writeFd = (fd, text) => {
   const bytes = Buffer.from(String(text));
@@ -100,20 +101,64 @@ function spawn(argv, { stdin } = {}) {
 
 let selfRequire = null;
 try {
-  selfRequire = createRequire(fileURLToPath(import.meta.url));
+  selfRequire = nodeModule.createRequire(fileURLToPath(import.meta.url));
 } catch {
   selfRequire = null;
 }
 
+/**
+ * `import('sliccy:x')` in a `.jsh` body, as the kernel engine has it: Node's
+ * in-thread module hooks (module.registerHooks, Node 22.15+) resolve a
+ * sliccy: specifier imported by a body (only there, as `require('sliccy:x')`)
+ * to a module whose exports are its value's (see sliccyExportNames). On an
+ * older Node, Node's own ERR_UNSUPPORTED_ESM_URL_SCHEME stays.
+ */
+const SLICCY_REGISTRY = Symbol.for('slicc-jsh.host-sliccy');
+const sliccyBodies = new Map(); // body file URL -> requireSliccy
+globalThis[SLICCY_REGISTRY] = (bodyUrl, id) => sliccyBodies.get(bodyUrl)(id);
+let sliccyHooks = false;
+function installSliccyHooks() {
+  if (sliccyHooks || typeof nodeModule.registerHooks !== 'function') return;
+  sliccyHooks = true;
+  nodeModule.registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (specifier.startsWith('sliccy:') && sliccyBodies.has(context.parentURL)) {
+        // One module per body and name: the body's own requireSliccy.
+        const url = `${specifier}?jsh=${encodeURIComponent(context.parentURL)}`;
+        return { url, format: 'module', shortCircuit: true };
+      }
+      return nextResolve(specifier, context);
+    },
+    load(url, context, nextLoad) {
+      if (!url.startsWith('sliccy:')) return nextLoad(url, context);
+      const q = url.indexOf('?jsh=');
+      const id = url.slice(0, q);
+      const bodyUrl = decodeURIComponent(url.slice(q + 5));
+      const value = sliccyBodies.get(bodyUrl)(id);
+      const get = `globalThis[Symbol.for('slicc-jsh.host-sliccy')](${JSON.stringify(bodyUrl)}, ${JSON.stringify(id)})`;
+      const lines = [`const m = ${get};`];
+      sliccyExportNames(value).forEach((name, i) => {
+        lines.push(name === 'default' ? 'export default m;' : `const v${i} = m[${JSON.stringify(name)}];\nexport { v${i} as ${JSON.stringify(name)} };`);
+      });
+      return { format: 'module', source: lines.join('\n'), shortCircuit: true };
+    },
+  });
+}
+
 const engine = {
   readSource: (filename) => readFileSync(filename, 'utf8'),
-  compile: (body, filename) =>
-    vm.runInThisContext(wrapSource(body), {
+  compile: (body, filename, { requireSliccy } = {}) => {
+    if (requireSliccy) {
+      installSliccyHooks();
+      sliccyBodies.set(pathToFileURL(filename).href, requireSliccy);
+    }
+    return vm.runInThisContext(wrapSource(body), {
       filename,
       lineOffset: WRAPPER_LINE_OFFSET,
       importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
-    }),
-  createRequire: (filename) => createRequire(filename),
+    });
+  },
+  createRequire: (filename) => nodeModule.createRequire(filename),
   selfRequire,
   writeStdout: (s) => writeFd(1, s),
   writeStderr: (s) => writeFd(2, s),

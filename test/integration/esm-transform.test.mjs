@@ -95,7 +95,7 @@ console.log(msg, import.meta.url, typeof fs);
     const { code } = transformEsm(src, '/os/main.mjs');
     assert.match(code, /"call import\(fs\) and import\.meta\.url"/);
     assert.match(code, /\/\/ mention import\( and import\.meta here/);
-    assert.match(code, /__meta\.url/);
+    assert.match(code, /__meta\s*\.url/);
   });
 
   it('hoists imports before body and registers export getters first', () => {

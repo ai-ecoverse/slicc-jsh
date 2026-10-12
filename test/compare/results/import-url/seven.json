@@ -1,5 +1,5 @@
 {
   "status": 0,
-  "stdout": "import http URL: THROW Error ERR_MODULE_NOT_FOUND: Cannot find module 'http://$HTTP/mod.mjs'\n",
+  "stdout": "import http URL: THROW Error ERR_UNSUPPORTED_ESM_URL_SCHEME: Only URLs with a scheme in: file and data are supported by the default ESM loader. Received protocol 'http:'\n",
   "stderr": ""
 }

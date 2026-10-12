@@ -7,6 +7,8 @@
  * module; those CallSites are filtered as kernel frames.
  */
 
+import { encodeFilePath } from './builtins/url.mjs';
+
 const KERNEL_HINT =
   /node-process-worker|runJsProcess|createNodeKernel|data:text\/javascript|@ai-ecoverse\/slicc-kernel|\/slicc-kernel\/|slicc-jsh\/dist\/|at new Function\b/i;
 
@@ -33,6 +35,20 @@ function isKernelFrame(frame) {
   if (text.includes('node:internal')) return true;
   return false;
 }
+
+/**
+ * ES modules run as Function bodies after some lines of the loader's own
+ * (export getters, hoisted imports): filename → those lines, so their frames
+ * name the file's own lines — and, as Node's, its file: URL and no
+ * `Object.` receiver (a module's `this` is undefined).
+ */
+const esmFrames = new Map();
+export function registerEsmFrames(filename, extraLines) {
+  if (typeof filename === 'string' && filename.startsWith('/')) esmFrames.set(filename, extraLines);
+}
+// Node keeps [eval1]'s brackets in its URL.
+const fileUrl = (p) =>
+  p.endsWith('/[eval1]') ? `file://${encodeFilePath(p.slice(0, -8))}/[eval1]` : `file://${encodeFilePath(p)}`;
 
 /** V8 reports Function-body lines 2 higher than the sourceURL file. */
 function adjustLine(n) {
@@ -94,8 +110,11 @@ function resolveFile(frame, parsed) {
 /** Wrap a V8 CallSite so getters match err.stack remapping. */
 export function wrapCallSite(frame) {
   const parsed = parseSite(frame);
-  const file = resolveFile(frame, parsed);
+  const resolved = resolveFile(frame, parsed);
   const rawLine = frame.getLineNumber?.() ?? parsed?.line;
+  const esmExtra = resolved ? esmFrames.get(resolved) : undefined;
+  if (esmExtra !== undefined) return wrapEsmCallSite(frame, resolved, adjustLine(rawLine) - esmExtra);
+  const file = resolved;
   const line = adjustLine(rawLine);
   const col = frame.getColumnNumber?.() ?? parsed?.column ?? 0;
 
@@ -184,6 +203,51 @@ export function wrapCallSite(frame) {
     },
   };
 }
+/** A frame in an ES module: Node's shape (file: URL, no receiver, top level unnamed). */
+function wrapEsmCallSite(frame, path, line) {
+  const url = fileUrl(path);
+  const col = frame.getColumnNumber?.() ?? 0;
+  const ctor = typeof frame.isConstructor === 'function' ? frame.isConstructor() : false;
+  let fn = frame.getFunctionName?.() || null;
+  if (fn === 'eval' || fn === 'anonymous' || fn === '<anonymous>') fn = null;
+  const method = frame.getMethodName?.();
+  const typeName = frame.getTypeName?.();
+  // V8's method-call form: `Type.name [as method]` when there is a receiver.
+  const top = typeof frame.isToplevel === 'function' ? frame.isToplevel() : !typeName;
+  if (!top && typeName && !ctor) {
+    let name = fn ?? '<anonymous>';
+    if (!name.startsWith(`${typeName}.`)) name = `${typeName}.${name}`;
+    if (method && fn !== method && !(fn ?? '').endsWith(`.${method}`)) name += ` [as ${method}]`;
+    fn = name;
+  }
+  const isAsync = frame.isAsync?.() ?? false;
+  return {
+    getThis: () => undefined,
+    getTypeName: () => (ctor ? null : typeName),
+    getFunction: () => undefined,
+    getFunctionName: () => frame.getFunctionName?.() && fn ? frame.getFunctionName() : null,
+    getMethodName: () => method,
+    getFileName: () => url,
+    getLineNumber: () => line,
+    getColumnNumber: () => col,
+    getEvalOrigin: () => undefined,
+    getScriptId: () => frame.getScriptId?.(),
+    isToplevel: () => !fn,
+    isEval: () => false,
+    isNative: () => false,
+    isConstructor: () => !!ctor,
+    isAsync: () => isAsync,
+    isPromiseAll: () => frame.isPromiseAll?.() ?? false,
+    getPromiseIndex: () => frame.getPromiseIndex?.(),
+    toString() {
+      const pos = `${url}:${line}:${col}`;
+      const prefix = isAsync ? 'async ' : '';
+      if (!fn) return `${prefix}${pos}`;
+      return `${prefix}${ctor ? 'new ' : ''}${fn} (${pos})`;
+    },
+  };
+}
+
 function formatFrame(frame) {
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
   if (/^\[eval\]:\d+:\d+$/.test(text)) return `    at ${text}`;

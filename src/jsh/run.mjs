@@ -91,7 +91,9 @@ function wrapRequire(baseRequire, requireSliccy, module) {
  * the host:
  *
  * - `readSource(filename) → string`
- * - `compile(body, filename) → async function` taking JSH_PARAMS, sloppy
+ * - `compile(body, filename, { requireSliccy }) → async function` taking
+ *   JSH_PARAMS, sloppy; the body's `import('sliccy:x')` gives the namespace of
+ *   `requireSliccy('sliccy:x')` (see sliccyExportNames)
  * - `createRequire(filename)`, `selfRequire` (or null)
  * - `writeStdout(s)`, `writeStderr(s)` (synchronous), `stdoutIsTTY`
  * - `spawn(argv, { stdin }) → { kill(sig), done }`, `shell` (argv prefix)
@@ -136,7 +138,8 @@ export async function runJsh({ filename, engine, process, console }) {
   const require = wrapRequire(baseRequire, requireSliccy, module);
 
   const body = (async () => {
-    const fn = engine.compile(prepareSource(source), filename);
+    // requireSliccy: the body's import('sliccy:x') loads what require('sliccy:x') does.
+    const fn = engine.compile(prepareSource(source), filename, { requireSliccy });
     await fn(process, console, require, module, module.exports, engine.fetch, dirname, filename);
     module.loaded = true;
   })();

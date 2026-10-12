@@ -61,7 +61,8 @@ function walk(node, visitor, parent = null) {
  * }}
  */
 export function transformEsm(source, filename) {
-  const body = stripHashbang(source);
+  // A hashbang line goes, its newline stays (lines keep their numbers).
+  const body = source.startsWith('#!') ? (source.includes('\n') ? source.slice(source.indexOf('\n')) : '') : source;
   let ast;
   try {
     ast = acorn.parse(body, {
@@ -278,14 +279,28 @@ export function transformEsm(source, filename) {
     hoistImports.unshift('const __live = Object.create(null);');
   }
 
-  let code = applyReplacements(body, replacements);
-  // Drop leftover empty lines from removed imports (cosmetic)
-  code = code.replace(/\n{3,}/g, '\n\n');
+  // Keep every line where it was, so stack frames name the file's own lines:
+  // a removed or rewritten statement leaves its newlines behind.
+  // Shorter replacements are padded with spaces, so what follows on the line
+  // keeps its column too.
+  const newlines = (t) => (t.match(/\n/g) || []).length;
+  for (const r of replacements) {
+    const span = body.slice(r.start, r.end);
+    const lost = newlines(span) - newlines(r.text);
+    if (lost > 0) r.text += '\n'.repeat(lost);
+    const tailOf = (t, startCol) => (t.includes('\n') ? t.length - t.lastIndexOf('\n') - 1 : startCol + t.length);
+    const startCol = r.start - (body.lastIndexOf('\n', r.start - 1) + 1);
+    const pad = tailOf(span, startCol) - tailOf(r.text, startCol);
+    if (pad > 0) r.text += ' '.repeat(pad);
+  }
+  const code = applyReplacements(body, replacements);
 
   const preamble = [...exportSetup, ...hoistImports].join('\n');
   const out = `${preamble ? preamble + '\n' : ''}${code}\n//# sourceURL=${filename}\n`;
   return {
     code: out,
+    // Lines `code` puts before the module's own first line.
+    preambleLines: preamble ? newlines(preamble) + 1 : 0,
     bodyCode: code,
     staticSpecs,
     hasTopLevelAwait,
@@ -373,10 +388,16 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
         !shadows.has(node.name) &&
         isValueReference(node, parent)
       ) {
+        // A call of an imported function has no receiver (its `this` is
+        // undefined, as in Node), not the live-bindings object.
+        const called =
+          (parent?.type === 'CallExpression' && parent.callee === node) ||
+          (parent?.type === 'TaggedTemplateExpression' && parent.tag === node);
+        const ref = `__live[${JSON.stringify(node.name)}]`;
         replacements.push({
           start: node.start,
           end: node.end,
-          text: `__live[${JSON.stringify(node.name)}]`,
+          text: called ? `(0, ${ref})` : ref,
         });
       }
       return;

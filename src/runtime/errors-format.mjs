@@ -22,6 +22,18 @@ function sanitizeStack(stack) {
 
 function frameLocation(stack) {
   if (!stack) return null;
+  // An ES module's frame: its file: URL (Node prints the URL as the label).
+  const esm = /at (?:[^\n]*?\()?(file:\/\/[^\s:)]+):(\d+):(\d+)/.exec(stack);
+  const plain = /at [^\n]*?(?:\[eval\]|(\/[^:\n\)]+)):(\d+):(\d+)/.exec(stack);
+  if (esm && (!plain || esm.index <= plain.index)) {
+    let file = esm[1].slice('file://'.length);
+    try {
+      file = decodeURIComponent(file);
+    } catch {
+      /* keep */
+    }
+    return { file, url: esm[1], line: Number(esm[2]), column: Number(esm[3]), esm: true };
+  }
   const m =
     /at [^\n]*?(?:\[eval\]|(\/[^:\n\)]+)):(\d+):(\d+)/.exec(stack) ||
     /at (\[eval\]):(\d+):(\d+)/.exec(stack);
@@ -33,7 +45,7 @@ function frameLocation(stack) {
 function snippetFor(ctx, loc, evalCode, fromPromise = false) {
   if (!loc) return null;
   let source;
-  if (loc.file === '[eval]') source = evalCode;
+  if (loc.file === '[eval]' || loc.file.endsWith('/[eval1]')) source = evalCode;
   else {
     try {
       source = new TextDecoder().decode(ctx.sync.fs.readFile(loc.file));
@@ -50,7 +62,10 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false) {
   let col = loc.column;
   const throwAt = text.search(/\bthrow\b/);
   const isAsyncLine = /\basync\b/.test(text);
-  if (fromPromise && loc.column >= 1) {
+  if (loc.esm && loc.column >= 1) {
+    // ES modules: V8's own position (Node prints it as is).
+    col = loc.column;
+  } else if (fromPromise && loc.column >= 1) {
     // A rejection: Node points at the frame's own column (the error's
     // construction in an async function), not at the `throw`.
     col = loc.column;
@@ -64,7 +79,7 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false) {
     col = 1;
   }
   col = Math.min(Math.max(1, col), Math.max(1, text.length + 1));
-  return { file: loc.file, lineNo: n, text, caret: `${' '.repeat(col - 1)}^` };
+  return { file: loc.url ?? loc.file, lineNo: n, text, caret: `${' '.repeat(col - 1)}^` };
 }
 
 function assertionHeader(err) {
@@ -139,7 +154,7 @@ function glueStackAndProps(stack, props) {
   return `${frames} ${finalizeProps(props)}`;
 }
 
-export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPromise } = {}) {
+export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPromise, esmEntry } = {}) {
   const trailer = `\nNode.js v${version}\n`;
   if (err instanceof Error && err._fsPretty) {
     let body = err._fsPretty;
@@ -150,6 +165,16 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPro
     let body = sanitizeInspected(util.inspect(err, { depth: 10, breakLength: 80, compact: false }));
     if (!body.includes('Node.js v')) body += trailer;
     return { body };
+  }
+  if (!(err instanceof Error) && esmEntry) {
+    // Node: a primitive thrown by an ES module entry has no location of its own.
+    const shown = util.inspect(err);
+    return {
+      body:
+        `\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n${shown}\n` +
+        `(Use \`node --trace-uncaught ...\` to show where the exception was thrown)\n` +
+        trailer,
+    };
   }
   if (!(err instanceof Error)) {
     const shown = util.inspect(err);

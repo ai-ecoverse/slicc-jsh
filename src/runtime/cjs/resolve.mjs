@@ -20,7 +20,15 @@ export function createResolver({
   conditions = REQUIRE_CONDITIONS,
   extensions = DEFAULT_EXTENSIONS,
   preserveSymlinks = false,
+  esm = false,
 } = {}) {
+  /**
+   * ESM mode (Node's ESM resolver): relative and absolute specifiers, export
+   * targets and package subpaths name the exact file — no extensions, no
+   * directory index. Failures throw an `esmResolveError` the ESM loader
+   * words as Node does (it knows the importing module's URL).
+   */
+  const esmFail = (kind, value) => Object.assign(new Error(`${kind}: ${value}`), { esmResolveError: { kind, value } });
   // Node resolves a module to its real path (pnpm's node_modules/dep ->
   // .pnpm/dep@1/node_modules/dep), so its own requires resolve from where
   // it really lives; --preserve-symlinks / NODE_PRESERVE_SYMLINKS keep the
@@ -77,7 +85,16 @@ export function createResolver({
     return tryExtensions(path.join(dir, 'index'));
   };
 
+  /** ESM: the exact file, else ERR_UNSUPPORTED_DIR_IMPORT / ERR_MODULE_NOT_FOUND. */
+  const exactFile = (p) => {
+    const st = tryStat(p);
+    if (st?.isFile) return p;
+    if (st?.isDirectory) throw esmFail('dir', p);
+    throw esmFail('module', p);
+  };
+
   const loadAsFileOrDir = (p) => {
+    if (esm) return exactFile(p);
     const asFile = tryExtensions(p);
     if (asFile) return asFile;
     const st = tryStat(p);
@@ -241,6 +258,7 @@ export function createResolver({
       if (subpath === '.') {
         const hit = loadAsDirectory(pkgDir);
         if (hit) return hit;
+        if (esm) throw esmFail('module', pkgDir);
       } else {
         const hit = loadAsFileOrDir(path.resolve(pkgDir, subpath));
         if (hit) return hit;
@@ -293,10 +311,17 @@ export function createResolver({
     const nm = loadNodeModules(request, fromDir);
     if (nm) return { type: 'file', filename: real(nm) };
 
+    if (esm) throw esmFail('package', packageNameOf(request));
     throw moduleNotFound(request, stack);
   }
 
   return { resolve, tryFile, loadAsDirectory };
+}
+
+/** A bare specifier's package name (`@scope/name` or `name`). */
+function packageNameOf(request) {
+  const parts = request.split('/');
+  return request.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
 const BUILTIN_NAMES = new Set([

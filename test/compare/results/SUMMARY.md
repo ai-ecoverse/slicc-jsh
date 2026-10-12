@@ -58,7 +58,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [import-in-function-ctor](import-in-function-ctor) | wrapper | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [import-package](import-package) | wrapper | = | = | = | same | 0 / 0 / 0 / 0 |
 | [import-relative](import-relative) | wrapper | ≠ | ≠ | = | six=seven≠node | 0 / 0 / 0 / 0 |
-| [import-url](import-url) | wrapper | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
+| [import-url](import-url) | wrapper | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [misc-builtins](misc-builtins) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [net](net) | builtins | ≠ | = | = | six≠node | 1 / 0 / 0 / 0 |
 | [os](os) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
@@ -91,7 +91,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [require-relative](require-relative) | require | = | = | = | same | 0 / 0 / 0 / 0 |
 | [require-resolve](require-resolve) | require | ≠ | = | ≠ | six≠node | 0 / 0 / 0 / 0 |
 | [require-shadow-builtin](require-shadow-builtin) | require | = | = | ≠ | same | 0 / 0 / 0 / 0 |
-| [require-sliccy-esm](require-sliccy-esm) | sliccy | ≠ | ≠ | – | all differ | 0 / 1 / 1 / – |
+| [require-sliccy-esm](require-sliccy-esm) | sliccy | = | = | – | same | 0 / 0 / 0 / – |
 | [require-sliccy-unknown](require-sliccy-unknown) | sliccy | ≠ | = | ≠ | six≠node | 0 / 0 / 0 / 0 |
 | [sliccy-browser](sliccy-browser) | sliccy | ≠ | = | – | six≠node | 0 / 0 / 0 / – |
 | [sliccy-cli](sliccy-cli) | sliccy | ≠ | = | – | six≠node | 0 / 3 / 3 / – |
