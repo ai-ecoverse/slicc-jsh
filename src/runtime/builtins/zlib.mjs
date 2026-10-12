@@ -181,7 +181,7 @@ export function createZlib({ ctx, process, Buffer, getStream, util, assert }) {
   });
   const zlib = {};
   for (const [key, value] of Object.entries(port)) {
-    // Node 22 keeps the Z_* names on `constants` only.
+    // browserify-zlib's own constants are replaced by Node 22's below.
     if (/^[A-Z][A-Z0-9_]+$/.test(key) && key !== 'Zlib') continue;
     zlib[key] = value;
   }
@@ -190,5 +190,11 @@ export function createZlib({ ctx, process, Buffer, getStream, util, assert }) {
   zlib.codes = ZLIB_CODES;
   zlib.crc32 = crc32;
   for (const name of UNAVAILABLE) zlib[name] = unavailable(name);
+  // Node 22's deprecated top-level copies of the constants (all but
+  // BROTLI_*): read-only and non-enumerable.
+  for (const [key, value] of Object.entries(ZLIB_CONSTANTS)) {
+    if (key.startsWith('BROTLI')) continue;
+    Object.defineProperty(zlib, key, { enumerable: false, value, writable: false });
+  }
   return zlib;
 }

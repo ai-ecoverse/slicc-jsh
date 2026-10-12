@@ -87,4 +87,35 @@ show('classes', () => ['Deflate', 'Inflate', 'Gzip', 'Gunzip', 'DeflateRaw', 'In
   const g = zlib.createGunzip();
   g.on('error', (e) => console.log('stream error', e.code, e.errno, e.message));
   g.end(Buffer.from('not gzip'));
+  const bw = async (stream, chunks) => {
+    const before = stream.bytesWritten;
+    stream.on('data', () => {});
+    for (const c of chunks) stream.write(c);
+    stream.end();
+    await new Promise((r) => stream.on('end', r));
+    return [before, stream.bytesWritten, stream._bytesWritten];
+  };
+  console.log('bytesWritten deflate', await bw(zlib.createDeflate(), ['hello ', 'world', '!']));
+  const gz = zlib.gzipSync(text);
+  console.log('bytesWritten gunzip', gz.length, await bw(zlib.createGunzip(), [gz.subarray(0, 10), gz.subarray(10)]));
+  for (const [label, end] of [
+    ['destroy', (s) => s.destroy()],
+    ['close', (s) => s.close()],
+  ]) {
+    const s = zlib.createDeflate();
+    s.on('error', () => {});
+    s.write(Buffer.alloc(1000, 1));
+    end(s);
+    await new Promise((r) => setTimeout(r, 30));
+    console.log(`bytesWritten after write + ${label}`, s.bytesWritten);
+  }
+  console.log('bytesWritten inflateRaw', await bw(zlib.createInflateRaw({ chunkSize: 64 }), [zlib.deflateRawSync(text)]));
 })();
+const legacy = ['Z_NO_FLUSH', 'Z_SYNC_FLUSH', 'Z_FINISH', 'Z_OK', 'Z_BUF_ERROR', 'Z_BEST_SPEED', 'Z_BEST_COMPRESSION',
+  'Z_DEFAULT_COMPRESSION', 'Z_RLE', 'ZLIB_VERNUM', 'DEFLATE', 'UNZIP', 'Z_MIN_WINDOWBITS', 'Z_DEFAULT_CHUNK', 'Z_MAX_CHUNK',
+  'ZSTD_CLEVEL_DEFAULT', 'BROTLI_OPERATION_FLUSH'];
+console.log('legacy constants', legacy.map((k) => zlib[k]));
+console.log('legacy enumerable', legacy.filter((k) => Object.keys(zlib).includes(k)));
+console.log('legacy descriptor', Object.getOwnPropertyDescriptor(zlib, 'Z_BEST_SPEED'));
+const names = Object.getOwnPropertyNames(zlib).filter((k) => /^(Z_|ZLIB_|ZSTD_|DEFLATE|INFLATE|GZIP|GUNZIP|UNZIP)/.test(k));
+console.log('legacy count', names.length);
