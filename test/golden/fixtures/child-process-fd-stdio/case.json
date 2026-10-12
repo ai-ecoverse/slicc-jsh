@@ -1,0 +1,6 @@
+{
+  "description": "child_process stdio fds from fs.openSync (sync and async; output, input, shared offset), stream objects, spawnfile/spawnargs at spawn() (Node 22; /bin/sh from wasm-bash in the shim)",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-bash"]
+}

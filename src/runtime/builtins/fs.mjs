@@ -1599,7 +1599,29 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   }
   Object.defineProperty(WriteStream, Symbol.hasInstance, { value: (x) => !!x?.[FS_WRITE_STREAM] });
 
-  return {
+  /**
+   * For child_process: the open file behind a jsh fd, kept as a child keeps
+   * a dup'd descriptor. It shares the fd's position while the fd is open and
+   * outlives a closeSync() of it. null when jsh has no such fd.
+   */
+  function openFileOf(fd) {
+    const ent = fdTable.get(fd);
+    if (!ent) return null;
+    return {
+      write(bytes) {
+        if (bytes?.length) writeBytesAtPath(ent, bytes, null);
+      },
+      /** The rest of the file from the position on (the position moves to its end). */
+      readRest() {
+        const bytes = syncFs.readFile(ent.path);
+        const rest = bytes.subarray(Math.min(ent.pos, bytes.length));
+        ent.pos += rest.length;
+        return rest;
+      },
+    };
+  }
+
+  const fsModule = {
     ...syncApi,
     promises,
     Dirent,
@@ -1729,4 +1751,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       COPYFILE_FICLONE_FORCE: 4,
     },
   };
+  // Not enumerable: require('fs') lists only Node's names.
+  Object.defineProperty(fsModule, '_sliccOpenFile', { value: openFileOf });
+  return fsModule;
 }

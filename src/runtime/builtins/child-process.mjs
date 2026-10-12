@@ -243,7 +243,9 @@ function normalizeStdio(stdio) {
   if (stdio === undefined) return ['pipe', 'pipe', 'pipe'];
   if (typeof stdio === 'string') return [stdio, stdio, stdio];
   if (Array.isArray(stdio)) {
-    return [stdio[0] ?? 'pipe', stdio[1] ?? 'pipe', stdio[2] ?? 'pipe'];
+    // A stream with a descriptor (process.stdout, an fs stream) is that fd.
+    const fdOf = (s) => (s != null && typeof s === 'object' && typeof s.fd === 'number' ? s.fd : s);
+    return [fdOf(stdio[0] ?? 'pipe'), fdOf(stdio[1] ?? 'pipe'), fdOf(stdio[2] ?? 'pipe')];
   }
   return ['pipe', 'pipe', 'pipe'];
 }
@@ -318,8 +320,26 @@ function failSpawnEnoent(child, process, handles, file, argv) {
 /**
  * @param {{ ctx: object, process: object, Buffer: object, handles: object, getStream: () => object }} deps
  */
-export function createChildProcess({ ctx, process, Buffer, handles, getStream }) {
+export function createChildProcess({ ctx, process, Buffer, handles, getStream, getFs }) {
   const path = createPath(() => process.cwd());
+
+  /**
+   * The open file behind a descriptor jsh's fs opened itself (fs.openSync),
+   * or null. Such an fd has no kernel fd behind it, so the kernel can't hand
+   * it to a child: it is fed and drained here, through fs, which keeps the
+   * fd's position as Node's shared file offset does. Taken when spawn() is
+   * called, so closing the fd right after doesn't take it from the child.
+   */
+  function jshOpenFile(fd) {
+    if (typeof fd !== 'number' || fd < 3 || !getFs) return null;
+    return getFs()._sliccOpenFile?.(fd) ?? null;
+  }
+
+  /** Kernel stdio for a slot: a jsh fd becomes a pipe that jsh serves. */
+  function kernelStdio(mode, file) {
+    if (file) return 'pipe';
+    return toKernelStdio(mode);
+  }
 
   class ChildProcess extends EventEmitter {
     constructor() {
@@ -481,11 +501,43 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     if (toKernelStdio(errMode) === 'pipe') child.stderr = createPipeReadable();
   }
 
-  function connectStdio(child, kernelChild) {
+  function connectStdio(child, kernelChild, files) {
     child.stdin?._sliccAttach?.(kernelChild.stdin);
     const pumps = [];
     if (child.stdout?._sliccPump) pumps.push(child.stdout._sliccPump(kernelChild.stdout));
     if (child.stderr?._sliccPump) pumps.push(child.stderr._sliccPump(kernelChild.stderr));
+    // jsh fds (fs.openSync): stdin gets the file from the fd's position on,
+    // and output goes through fs.writeSync as it arrives.
+    if (files[0] && kernelChild.stdin) {
+      const feed = (async () => {
+        const writer = kernelChild.stdin.getWriter();
+        try {
+          const data = files[0].readRest();
+          if (data.length) await writer.write(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+          await writer.close();
+        } catch {
+          writer.abort().catch(() => {});
+        }
+      })();
+      trackPromise(handles, feed);
+    }
+    for (const [i, web] of [
+      [1, kernelChild.stdout],
+      [2, kernelChild.stderr],
+    ]) {
+      const file = files[i];
+      if (!file || !web) continue;
+      pumps.push(
+        (async () => {
+          const reader = web.getReader();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            file.write(value);
+          }
+        })().catch(() => {})
+      );
+    }
     child._stdioPumps = Promise.all(pumps);
   }
 
@@ -525,7 +577,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
   function decodeWait(status) {
     const sigNum = status?.signal;
     if (sigNum != null && sigNum !== 0) {
-      return { code: null, signal: SIGNAL_NAMES[sigNum] ?? String(sigNum) };
+      return { code: null, signal: SIGNAL_BY_NUMBER[sigNum] ?? String(sigNum) };
     }
     const code = typeof status?.status === 'number' ? status.status : 0;
     // Kernel may report 128+n without a signal field (WIFSIGNALED).
@@ -535,7 +587,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     return { code, signal: null };
   }
 
-  function startSpawn(child, file, args, options, stdio) {
+  function startSpawn(child, file, args, options, stdio, files) {
     // spawn / exec / execFile / (future sync) all go through here.
     const cwd = resolveSpawnCwd(path, options.cwd);
     const env = options.env ? { ...options.env } : { ...process.env };
@@ -566,16 +618,16 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
       argv,
       cwd,
       env,
-      stdin: toKernelStdio(stdio[0]),
-      stdout: toKernelStdio(stdio[1]),
-      stderr: toKernelStdio(stdio[2]),
+      stdin: kernelStdio(stdio[0], files[0]),
+      stdout: kernelStdio(stdio[1], files[1]),
+      stderr: kernelStdio(stdio[2], files[2]),
     });
     trackPromise(handles, spawnPromise);
 
     spawnPromise.then(
       (kernelChild) => {
         child._bindKernel(kernelChild);
-        connectStdio(child, kernelChild);
+        connectStdio(child, kernelChild, files);
         const spawnErr = safeEmit(child, 'spawn');
         if (spawnErr) return;
         const waitP = kernelChild.wait();
@@ -657,6 +709,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
 
     const stdio = normalizeStdio(opts.stdio);
     const child = new ChildProcess();
+    // Node sets these in spawn() itself, before the process starts.
+    child.spawnfile = file;
+    child.spawnargs = [file, ...argv];
 
     // Node: missing cwd → async ENOENT on 'error'; file-as-cwd → throw ENOTDIR.
     if (opts.cwd != null) {
@@ -698,7 +753,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
       });
       return child;
     }
-    process.nextTick(() => startSpawn(child, file, argv, opts, stdio));
+    // jsh fds are taken now: a closeSync() right after spawn() must not
+    // take them from the child (Node's child has them already).
+    const files = stdio.map((mode) => jshOpenFile(mode));
+    process.nextTick(() => startSpawn(child, file, argv, opts, stdio, files));
     return child;
   }
 
@@ -985,7 +1043,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
       const how = [0, 1, 2].map((i) => kernelSlot(stdio[i], i));
       remapped = [1, 2].some((i) => stdio[i]?.type === 'fd' && stdio[i].fd !== i);
       let input = stdio[0]?.input;
-      if (stdio[0]?.type === 'fd' && stdio[0].fd !== 0) input = readFdToEnd(stdio[0].fd);
+      if (stdio[0]?.type === 'fd' && stdio[0].fd !== 0) {
+        const file = jshOpenFile(stdio[0].fd);
+        input = file ? Buffer.from(file.readRest()) : readFdToEnd(stdio[0].fd);
+      }
       const req = {
         // Node's native layer stringifies each argument (null → 'null').
         argv: [file, ...args.slice(1).map((a) => `${a}`)],
@@ -1036,7 +1097,13 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
           overflow = true;
         }
         output[i] = Buffer.from(bytes);
-      } else if (slot.type === 'fd' && slot.fd !== i && bytes?.length) ctx.sync.write(slot.fd, bytes);
+      } else if (slot.type === 'fd' && slot.fd !== i && bytes?.length) {
+        // stdout and stderr captured apart: one after the other, even to the
+        // same fd (ctx.sync.run can't merge them in the child's write order).
+        const file = jshOpenFile(slot.fd);
+        if (file) file.write(bytes);
+        else ctx.sync.write(slot.fd, bytes);
+      }
     }
     if (overflow && !raw.error) raw = { ...raw, error: { code: 'ENOBUFS' } };
     // Extra pipes (fd 3+) have no kernel counterpart: empty, as if unused.
