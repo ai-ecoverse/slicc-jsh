@@ -14,13 +14,22 @@ export function isExitError(err) {
 }
 
 /**
- * End the program now. `ctx.exit` tells the kernel the status at once (the
+ * End the program now. On a kernel with `ctx.sync.exit` (slicc-kernel
+ * 1.65+) that is all: the call never returns, so no `catch`, `finally`,
+ * microtask or timer of the program runs after it — Node's process.exit().
+ * The kernel first delivers the program's writes and puts terminal modes back.
+ *
+ * Older kernels: `ctx.exit` tells the kernel the status at once (the
  * kernel then ends the process as soon as this turn unwinds, whatever the
  * script's promises do) and throws the kernel's `JsExit` to unwind. That
  * error is what we throw: the kernel recognises it, so nothing reports it as
  * an error. Without `ctx.exit` (an old kernel) a NodeExitError unwinds.
  */
 export function hardExitError(ctx, code) {
+  if (typeof ctx?.sync?.exit === 'function') {
+    ctx.sync.exit(code);
+    // Not reached on a kernel that implements it; else unwind as below.
+  }
   if (typeof ctx?.exit === 'function') {
     try {
       ctx.exit(code);
