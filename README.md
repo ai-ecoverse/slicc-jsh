@@ -53,7 +53,7 @@ Outputs and errors match Node 22.22.0 (golden `crypto-node22`). That includes No
 - **Paused stdin:** reading stdin keeps the program alive only while something consumes it, so a paused stdin lets the program end.
 - **`tty.isatty(fd)`:** answers for fds 0–2, which the runtime asks the kernel about before the program starts. Any other fd is `false`.
 - **Signals:** a `process.on('SIGINT' | 'SIGTERM' | 'SIGWINCH' | …)` listener installs a kernel signal handler. Removing the last listener puts the default action back. `SIGKILL`/`SIGSTOP` throw `uv_signal_start EINVAL`.
-- **Install timing:** the kernel installs a handler a moment after `process.on` returns, whereas Node does it synchronously.
+- **Install timing:** the kernel installs a handler a moment after `process.on` returns, whereas Node does it synchronously. `setRawMode` likewise takes effect a moment after it returns (a key typed in between is still echoed).
 
 **Still later:** `readline` / `tls` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
 

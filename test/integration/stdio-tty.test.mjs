@@ -68,7 +68,8 @@ describe('stdio on a terminal (kernel)', () => {
         'process.stdin.setRawMode(true);',
         "console.log('raw', process.stdin.isRaw);",
         "process.stdout.cursorTo(4); process.stdout.clearLine(1); process.stdout.write('|\\n');",
-        "console.log('ready');",
+        // The kernel applies raw mode asynchronously (Node: synchronously).
+        "setTimeout(() => console.log('ready'), 300);",
         "process.stdin.once('data', (d) => {",
         "  console.log('key', JSON.stringify(d.toString()));",
         '  process.stdin.setRawMode(false);',
