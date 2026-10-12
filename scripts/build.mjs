@@ -185,7 +185,16 @@ const zlib = await esbuild.build({
             'Zlib.prototype.close = function (callback) {\n  _close(this, callback);\n  process.nextTick(emitCloseNT, this);\n};',
             "Zlib.prototype.close = function (callback) {\n  if (callback) require('stream').finished(this, callback);\n  this.destroy();\n};"
           );
-          // params() validates as Node 22 does.
+          // maxOutputLength (Node 22): ERR_BUFFER_TOO_LARGE past the limit.
+          patch(
+            '    if (nread >= kMaxLength) {\n      err = new RangeError(kRangeErrorMessage);',
+            "    if (nread > engine._opts.maxOutputLength) {\n      err = require('__jsh/zlib-options').tooLarge(engine._opts.maxOutputLength);"
+          );
+          patch(
+            '    if (nread >= kMaxLength) {\n      _close(this);\n      throw new RangeError(kRangeErrorMessage);',
+            "    if (nread > this._opts.maxOutputLength) {\n      _close(this);\n      throw require('__jsh/zlib-options').tooLarge(this._opts.maxOutputLength);"
+          );
+                    // params() validates as Node 22 does.
           patch(
             'Zlib.prototype.params = function (level, strategy, callback) {',
             "Zlib.prototype.params = function (level, strategy, callback) {\n  require('__jsh/zlib-options').params(level, strategy);"

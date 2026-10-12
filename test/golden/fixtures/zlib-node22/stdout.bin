@@ -28,11 +28,23 @@ bad input type: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"buffer\" a
 bad level: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.level\" is out of range. It must be >= -1 and <= 9. Received 11"
 bad windowBits: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"options.windowBits\" property must be of type number. Received type string ('w')"
 bad chunkSize: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.chunkSize\" is out of range. It must be >= 64. Received 10"
+level NaN is the default: 9
+maxOutputLength: THROW RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 10 bytes"
+bad maxOutputLength: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.maxOutputLength\" is out of range. It must be >= 1 and <= 9007199254740991. Received 0"
+crc32 seed 1.5: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"value\" is out of range. It must be an integer. Received 1.5"
+crc32 seed -1: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"value\" is out of range. It must be >= 0 && <= 4294967295. Received -1"
+crc32 seed 2**32: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"value\" is out of range. It must be >= 0 && <= 4294967295. Received 4294967296"
+crc32 seed string: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"value\" argument must be of type number. Received type string ('x')"
+crc32 data number: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"data\" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (1)"
 crc32: [907060870,222957957,0]
 constants: [9,2,16384,null]
 codes: [-3,"Z_DATA_ERROR"]
 classes: ["function","function","function","function","function","function","function"]
 callback [ null, true ]
+callback maxOutputLength [
+  'ERR_BUFFER_TOO_LARGE',
+  'Cannot create a Buffer larger than 5 bytes'
+]
 promisify eJwrAAAAcQBx
 callback error [ 'Z_DATA_ERROR', -3, 'incorrect header check' ]
 stream pipeline true

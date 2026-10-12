@@ -26,13 +26,12 @@ function crc32(data, value = 0) {
   if (typeof data === 'string') bytes = new TextEncoder().encode(data);
   else if (ArrayBuffer.isView(data)) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
   else {
-    const err = new TypeError(
-      `The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView.`
-    );
-    err.code = 'ERR_INVALID_ARG_TYPE';
-    throw err;
+    throw typeError('data', 'of type string or an instance of Buffer, TypedArray, or DataView', data);
   }
+  // Node's validateUint32(value, 'value').
   if (typeof value !== 'number') throw typeError('value', 'of type number', value);
+  if (!Number.isInteger(value)) throw rangeError('value', 'an integer', value);
+  if (value < 0 || value > 0xffffffff) throw rangeError('value', '>= 0 && <= 4294967295', value);
   let crc = (value ^ 0xffffffff) >>> 0;
   for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
@@ -66,6 +65,8 @@ function rangeError(name, range, value) {
 function checkFiniteNumber(number, name) {
   if (number === undefined) return false;
   if (Number.isFinite(number)) return true;
+  // Node 22's validateFiniteNumber: NaN means "use the default".
+  if (Number.isNaN(number)) return false;
   if (typeof number !== 'number') throw typeError(name, 'of type number', number);
   throw rangeError(name, 'a finite number', number);
 }
@@ -75,6 +76,9 @@ function checkRanges(number, name, lower, upper, def) {
   if (number < lower || number > upper) throw rangeError(name, `>= ${lower} and <= ${upper}`, number);
   return number;
 }
+
+// buffer.kMaxLength in Node 22.
+const K_MAX_LENGTH = 2 ** 53 - 1;
 
 // browserify-zlib's binding modes.
 const INFLATE = 2;
@@ -116,7 +120,13 @@ function zlibOptionsHelpers(Buffer) {
           throw typeError('options.dictionary', 'an instance of Buffer, TypedArray, DataView, or ArrayBuffer', dictionary);
         }
       }
-      return { ...opts, chunkSize, windowBits, level, memLevel, strategy, dictionary };
+      const maxOutputLength = checkRanges(opts.maxOutputLength, 'options.maxOutputLength', 1, K_MAX_LENGTH, K_MAX_LENGTH);
+      return { ...opts, chunkSize, windowBits, level, memLevel, strategy, dictionary, maxOutputLength };
+    },
+    tooLarge(limit) {
+      const err = new RangeError(`Cannot create a Buffer larger than ${limit} bytes`);
+      err.code = 'ERR_BUFFER_TOO_LARGE';
+      return err;
     },
     params(level, strategy) {
       const c = ZLIB_CONSTANTS;
