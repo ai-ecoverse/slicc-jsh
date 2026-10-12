@@ -2,7 +2,6 @@ import { EventEmitter } from './builtins/events.mjs';
 import { assignProcessExitCode, hardExitError, numericExitCode } from './exit.mjs';
 import { createStdio } from './stdio.mjs';
 import { loadNodeLib } from './node-lib.mjs';
-import { createOs } from './builtins/os.mjs';
 import { nodeError } from './node-errors.mjs';
 
 /** Node version reported by the shim (M1 target). */
@@ -165,6 +164,9 @@ class Process extends EventEmitter {
   constructor({ ctx, argv, nextTick, onExit, handles, Buffer, stdio }) {
     super();
     this._signals = new Set();
+    // As Node's bootstrap: a listener for a signal name installs a handler.
+    this.on('newListener', (event) => this._watchSignal(event));
+    this.on('removeListener', (event) => this._unwatchSignal(event));
     this._startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     this._cwd = ctx.cwd;
     this._assignedExitCode = undefined;
@@ -232,18 +234,7 @@ class Process extends EventEmitter {
     this._writeStdout = writeStdout;
     this._writeStderr = writeStderr;
 
-    // Node's own lib files (src/node-lib), loaded on first use.
-    let nodeLib;
-    this._nodeLib = () => {
-      nodeLib ??= loadNodeLib({
-        ctx,
-        process: this,
-        Buffer,
-        os: () => createOs(this.env),
-        builtin: (id) => this._builtin(id),
-      });
-      return nodeLib;
-    };
+    this._nodeLib = () => loadNodeLib({ ctx });
 
     // process.stdin / stdout / stderr: Node's streams, made on first access.
     const io = createStdio({ ctx, process: this, Buffer, handles, info: stdio });
@@ -367,27 +358,6 @@ class Process extends EventEmitter {
     if (!this._signals.has(event) || this.listenerCount(event) > 0) return;
     this._signals.delete(event);
     Promise.resolve(this._ctx.signals?.reset?.(event)).catch(() => {});
-  }
-
-  on(event, fn) {
-    this._watchSignal(event);
-    return super.on(event, fn);
-  }
-
-  addListener(event, fn) {
-    return this.on(event, fn);
-  }
-
-  off(event, fn) {
-    super.off(event, fn);
-    this._unwatchSignal(event);
-    return this;
-  }
-
-  removeAllListeners(event) {
-    super.removeAllListeners(event);
-    for (const sig of [...this._signals]) this._unwatchSignal(sig);
-    return this;
   }
 
   get title() {

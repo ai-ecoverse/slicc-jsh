@@ -83,6 +83,20 @@ function findOnDisk(ctx, packageRoot, name, process) {
 }
 
 /**
+ * Unbundled (tests importing src/ under host Node, where the embedded map is
+ * the placeholder): the build's dist/vendor/<name>.cjs next to this file.
+ */
+function fromBuildTree(name) {
+  const fs = globalThis.process?.getBuiltinModule?.('node:fs');
+  if (!fs || !import.meta.url.startsWith('file:')) return null;
+  try {
+    return fs.readFileSync(new URL(`../../dist/vendor/${name}.cjs`, import.meta.url), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @param {object} opts
  * @param {object} [opts.ctx] kernel ctx with sync.fs (fallback only)
  * @param {string} [opts.packageRoot] e.g. /node_modules/@ai-ecoverse/slicc-jsh
@@ -97,6 +111,7 @@ export function loadVendorCjs({ ctx, packageRoot, name, globals = {}, process, r
 
   let source = VENDOR[name];
   let path = `embedded:${name}`;
+  if (source == null) source = fromBuildTree(name);
   if (source == null) {
     const found = findOnDisk(ctx, packageRoot, name, process ?? globals.process);
     if (!found) {
