@@ -9,6 +9,8 @@ export function parseNodeArgv(argv) {
   let print = false;
   let script;
   const userArgs = [];
+  // Options that only set behaviour; kept in execArgv as Node does.
+  const flags = [];
   let i = 0;
 
   while (i < args.length) {
@@ -57,6 +59,11 @@ export function parseNodeArgv(argv) {
       userArgs.push(...args.slice(i));
       break;
     }
+    if (arg === '--preserve-symlinks' || arg === '--preserve-symlinks-main') {
+      flags.push(arg);
+      i += 1;
+      continue;
+    }
     if (arg.startsWith('-')) {
       if (arg === '-c' || arg === '--check') {
         i += 1;
@@ -76,7 +83,7 @@ export function parseNodeArgv(argv) {
       code: evalCode,
       print,
       processArgv: [argv0, ...userArgs],
-      execArgv: [flag, evalCode],
+      execArgv: [...flags, flag, evalCode],
     };
   }
 
@@ -85,13 +92,13 @@ export function parseNodeArgv(argv) {
       mode: 'file',
       script,
       processArgv: [argv0, script, ...userArgs],
-      execArgv: [],
+      execArgv: [...flags],
     };
   }
 
   return {
     mode: 'empty',
     processArgv: [argv0],
-    execArgv: [],
+    execArgv: [...flags],
   };
 }

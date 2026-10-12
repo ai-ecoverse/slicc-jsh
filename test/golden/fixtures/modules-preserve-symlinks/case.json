@@ -1,0 +1,6 @@
+{
+  "description": "--preserve-symlinks keeps the link path for require and import (and dep's own require then fails, as in Node)",
+  "argv": ["--preserve-symlinks", "script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

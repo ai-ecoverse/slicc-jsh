@@ -6,6 +6,7 @@
  * runtime advertises to the host CLI (dist/host/jsh.mjs), so `jsh` run
  * through pnpm's global bin inside the kernel is still the kernel jsh.
  */
+import { realMainPath } from '../runtime/realpath.mjs';
 import { JSH_PARAMS, JSH_USAGE, JSH_VERSION, parseJshArgv, runJsh } from './run.mjs';
 
 /** The global the `node` runtime sets for the host CLI to hand off to. */
@@ -103,8 +104,11 @@ function compiler(rt) {
 }
 
 /** Run one `.jsh` file on the kernel engine. */
-export async function runKernelJsh(ctx, rt, filename) {
+export async function runKernelJsh(ctx, rt, givenFilename) {
   const { process, console } = rt;
+  // As Node runs a main module: __filename is the real path (links resolved),
+  // process.argv[1] the path as given.
+  const filename = realMainPath(ctx, givenFilename);
   let stdoutIsTTY = false;
   try {
     stdoutIsTTY = !!(await rt.track(Promise.resolve(ctx.isatty?.(1))));

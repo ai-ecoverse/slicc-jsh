@@ -1,0 +1,6 @@
+{
+  "description": "require, require.resolve, import and import.meta.resolve of a symlinked package (pnpm's layout) give its real path, so its own dependencies resolve from the store",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

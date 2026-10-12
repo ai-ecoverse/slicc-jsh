@@ -5,7 +5,7 @@
  * docs/design/run-outside-slicc.md.
  */
 import { spawn as spawnChild } from 'node:child_process';
-import { accessSync, constants as fsConstants, readFileSync, writeSync } from 'node:fs';
+import { accessSync, constants as fsConstants, readFileSync, realpathSync, writeSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { constants as osConstants } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -144,9 +144,16 @@ async function main() {
     writeFd(2, `${parsed.message}\n${JSH_USAGE}`);
     process.exit(parsed.status);
   }
-  const filename = resolve(parsed.script);
-  process.argv = [process.execPath, filename, ...parsed.args];
+  const given = resolve(parsed.script);
+  process.argv = [process.execPath, given, ...parsed.args];
   silenceLoaderWarning();
+  // Node's main module: __filename is the real path, argv[1] as given.
+  let filename = given;
+  try {
+    filename = realpathSync(given);
+  } catch {
+    /* runJsh reports a missing file */
+  }
   await runJsh({ filename, engine, process, console });
 }
 
