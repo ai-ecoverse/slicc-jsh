@@ -1,0 +1,6 @@
+{
+  "description": "crypto (Node 22's JS layer over @noble/hashes and browserify-aes/-des): digests, HMAC, AES/3DES modes, GCM, PBKDF2, HKDF, scrypt, secret KeyObjects, random APIs, streams, and Node 22's errors",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

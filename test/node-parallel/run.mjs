@@ -37,7 +37,7 @@ await k.run(
   [
     'node',
     '-e',
-    "require('fs').mkdirSync('/os/test/common',{recursive:true}); require('fs').mkdirSync('/os/test/parallel',{recursive:true})",
+    "require('fs').mkdirSync('/os/test/common',{recursive:true}); require('fs').mkdirSync('/os/test/parallel',{recursive:true}); require('fs').mkdirSync('/os/test/fixtures',{recursive:true})",
   ],
   { cwd: '/' }
 );
@@ -55,7 +55,12 @@ function patchCommonRequires(text) {
   return text
     .replace(/require\(['"]net['"]\)/g, "require('./net-stub')")
     .replace(/require\(['"]worker_threads['"]\)/g, "require('./worker_threads-stub')")
-    .replace(/require\(['"]child_process['"]\)/g, "require('./child_process-stub')");
+    .replace(/require\(['"]child_process['"]\)/g, "require('./child_process-stub')")
+    // slicc-jsh has crypto but no OpenSSL (no process.versions.openssl): run
+    // the crypto tests as if on Node's OpenSSL 3.0.
+    .replace('Boolean(process.versions.openssl)', 'true')
+    .replace("require('cluster').isPrimary &&", '')
+    .replace('process.versions.openssl.match(regexp)', "'3.0.15+quic'.match(regexp)");
 }
 
 for (const name of readdirSync(nodeCommonDir)) {
@@ -63,14 +68,22 @@ for (const name of readdirSync(nodeCommonDir)) {
   if (!statSync(hp).isFile()) continue;
   if (name.endsWith('.mjs')) continue;
   let data = readFileSync(hp);
-  if (name === 'index.js' || name === 'tmpdir.js') {
+  if (name === 'index.js' || name === 'tmpdir.js' || name === 'crypto.js') {
     data = Buffer.from(patchCommonRequires(data.toString('utf8')));
   }
   await k.writeFile(`/os/test/common/${name}`, data);
 }
 
+// The few Node v22.22.0 test/fixtures files the fixtures read.
+const nodeFixturesDir = join(here, 'node-fixtures');
+for (const name of readdirSync(nodeFixturesDir)) {
+  await k.writeFile(`/os/test/fixtures/${name}`, readFileSync(join(nodeFixturesDir, name)));
+}
+
 const files = readdirSync(fixturesDir)
   .filter((f) => f.startsWith('test-') && f.endsWith('.js'))
+  // ONLY=<regex> runs a subset (e.g. ONLY=crypto).
+  .filter((f) => !process.env.ONLY || new RegExp(process.env.ONLY).test(f))
   .sort();
 
 const results = [];

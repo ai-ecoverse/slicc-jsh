@@ -397,52 +397,59 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
     }
   }
 
+  // Node 22's expectedException (lib/assert.js).
   function validateThrown(err, error, operator = 'throws') {
     if (error == null) return;
-    if (typeof error === 'function') {
-      if (error === RegExp) return;
-      if (!(err instanceof error)) {
-        const name = error.name || String(error);
-        throw new AssertionError({
-          message:
-            `The error is expected to be an instance of "${name}". Received "${err?.constructor?.name ?? typeof err}"\n\n` +
-            `Error message:\n\n${err?.message ?? ''}`,
-          actual: err,
-          expected: error,
-          operator,
-          generatedMessage: true,
-        });
+    const fail = (message) => {
+      throw new AssertionError({ message, actual: err, expected: error, operator, generatedMessage: true });
+    };
+    if (typeof error !== 'function') {
+      if (error instanceof RegExp) {
+        const str = String(err);
+        if (error.exec(str) !== null) return;
+        fail(`The input did not match the regular expression ${inspect(error)}. Input:\n\n${inspect(str)}\n`);
       }
-      return;
-    }
-    if (error instanceof RegExp) {
-      const input = err instanceof Error ? String(err) : inspect(err);
-      if (!error.test(input)) {
-        throw new AssertionError({
-          message:
-            `The input did not match the regular expression ${error}. Input:\n\n${inspect(input)}\n`,
-          actual: err,
-          expected: error,
-          operator,
-          generatedMessage: true,
-        });
+      if (typeof err !== 'object' || err === null) {
+        throw new AssertionError({ actual: err, expected: error, operator });
       }
-      return;
-    }
-    if (typeof error === 'object') {
-      const actual = {};
-      for (const key of Object.keys(error)) actual[key] = err?.[key];
-      for (const key of Object.keys(error)) {
-        if (!deepEq(actual[key], error[key], true)) {
-          throw new AssertionError({
-            message: comparisonDeepEqualMessage(actual, error),
-            actual: err,
-            expected: error,
-            operator,
-            generatedMessage: true,
-          });
+      const keys = Object.keys(error);
+      if (error instanceof Error) keys.push('name', 'message');
+      for (const key of keys) {
+        if (typeof err[key] === 'string' && error[key] instanceof RegExp && error[key].exec(err[key]) !== null) {
+          continue;
+        }
+        if (!(key in err) || !deepEq(err[key], error[key], true)) {
+          const actual = {};
+          const expected = {};
+          for (const k of keys) {
+            if (k in err) actual[k] = err[k];
+            expected[k] = error[k];
+          }
+          fail(comparisonDeepEqualMessage(actual, expected));
         }
       }
+      return;
+    }
+    // Guard instanceof against arrow functions as they don't have a prototype.
+    if (error.prototype !== undefined && err instanceof error) return;
+    if (Object.prototype.isPrototypeOf.call(Error, error)) {
+      let message = `The error is expected to be an instance of "${error.name}". Received `;
+      if (err instanceof Error) {
+        const name = err.constructor?.name || err.name;
+        message += error.name === name ? 'an error with identical name but a different prototype.' : `"${name}"`;
+        if (err.message) message += `\n\nError message:\n\n${err.message}`;
+      } else {
+        message += `"${inspect(err, { depth: -1 })}"`;
+      }
+      fail(message);
+    }
+    // A validation function.
+    const res = Reflect.apply(error, {}, [err]);
+    if (res !== true) {
+      const name = error.name ? `"${error.name}" ` : '';
+      let message = `The ${name}validation function is expected to return "true". Received ${inspect(res)}`;
+      if (err instanceof Error) message += `\n\nCaught error:\n\n${err}`;
+      fail(message);
     }
   }
 
@@ -465,7 +472,8 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
         operator: 'throws',
       });
     }
-    return thrown;
+    // Node's assert.throws returns undefined.
+    return undefined;
   }
 
   function doesNotThrow(fn, error, message) {
@@ -496,7 +504,7 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
         promise = block();
       } catch (err) {
         validateThrown(err, error, 'rejects');
-        return err;
+        return undefined;
       }
     } else {
       promise = block;
@@ -518,7 +526,7 @@ function createApi({ equalFn, deepEqualFn, ctx, process }) {
     } catch (err) {
       if (err instanceof AssertionError && err.operator === 'rejects') throw err;
       validateThrown(err, error, 'rejects');
-      return err;
+      return undefined;
     }
   }
 

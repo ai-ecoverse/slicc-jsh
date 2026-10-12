@@ -1,0 +1,6 @@
+{
+  "description": "require('stream') is the legacy Stream (not Readable); assert.throws with RegExp properties and validation functions; util.getCallSites; restoring a saved Error.prepareStackTrace; base64url StringDecoder",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

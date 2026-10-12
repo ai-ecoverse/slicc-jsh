@@ -17,12 +17,10 @@ function getStreamApi({ ctx, process, Buffer }) {
     globals: { process, Buffer },
     process,
   });
-  try {
-    delete mod.default;
-  } catch {
-    /* ignore */
-  }
-  cached = mod;
+  // readable-stream's browser entry exports Readable; Node's `stream` is the
+  // legacy Stream constructor carrying Readable, Writable, …, pipeline (which
+  // lib/stream.js builds and the entry re-exports as .Stream).
+  cached = mod.Stream ?? mod;
   return cached;
 }
 

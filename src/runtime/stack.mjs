@@ -164,6 +164,7 @@ export function wrapCallSite(frame) {
     getLineNumber: () => line,
     getColumnNumber: () => col,
     getEvalOrigin: () => frame.getEvalOrigin?.(),
+    getScriptId: () => frame.getScriptId?.(),
     isToplevel: () => !!isToplevel,
     isEval: () => frame.isEval?.() ?? false,
     isNative: () => frame.isNative?.() ?? false,
@@ -207,21 +208,40 @@ function defaultPrepare(err, frames) {
 export function installStackPrepare() {
   let userPrepare = null;
 
-  function wrapper(err, frames) {
-    if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
-    const kept = frames.filter((f) => !isKernelFrame(f)).map(wrapCallSite);
-    if (typeof userPrepare === 'function') return userPrepare(err, kept);
-    return defaultPrepare(err, frames);
+  function prepareWith(user) {
+    return function prepare(err, frames) {
+      if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
+      if (typeof user === 'function') return user(err, frames.filter((f) => !isKernelFrame(f)).map(wrapCallSite));
+      return defaultPrepare(err, frames);
+    };
+  }
+  const wrapper = prepareWith(null);
+  // V8 reads the property to format every stack, so the getter hands back a
+  // runtime formatter: the default one, or one per user function (which
+  // remaps CallSites, then calls it). Setting a formatter we handed out
+  // restores its state, so `const p = Error.prepareStackTrace; …;
+  // Error.prepareStackTrace = p` keeps a user's formatter and never recurses.
+  const formatters = new WeakMap();
+  const userOf = new WeakMap();
+  function formatterFor(fn) {
+    let f = formatters.get(fn);
+    if (!f) {
+      f = prepareWith(fn);
+      formatters.set(fn, f);
+      userOf.set(f, fn);
+    }
+    return f;
   }
 
   Object.defineProperty(Error, 'prepareStackTrace', {
     configurable: true,
     enumerable: true,
     get() {
-      return wrapper;
+      return userPrepare ? formatterFor(userPrepare) : wrapper;
     },
     set(fn) {
-      userPrepare = typeof fn === 'function' ? fn : null;
+      if (typeof fn !== 'function' || fn === wrapper) userPrepare = null;
+      else userPrepare = userOf.get(fn) ?? fn;
     },
   });
 }

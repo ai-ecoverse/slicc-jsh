@@ -1,0 +1,211 @@
+createHash md5: "900150983cd24fb0d6963f7d28e17f72"
+createHash sha1: "a9993e364706816aba3e25717850c26c9cd0d89d"
+createHash sha224: "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7"
+createHash sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+createHash sha384: "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7"
+createHash sha512: "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+createHash sha512-224: "4634270f707b6a54daae7530460842e20e37ed265ceee9a43e8924aa"
+createHash sha512-256: "53048e2681941ef99b2e29b76b4c7dabe4c2d0c634fc6d46e0e2f13107e7af23"
+createHash sha3-224: "e642824c3f8cf24ad09234ee7d3c766fc9a3a5168d0c94ad73b46fdf"
+createHash sha3-256: "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"
+createHash sha3-384: "ec01498288516fc926459f58e2c6ad8df9b473cb0fc08c2596da7cf0e49be4b298d88cea927ac7f539f1edf228376d25"
+createHash sha3-512: "b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e10e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0"
+createHash shake128: "5881092dd818bf5cf8a3ddb793fbcba7"
+createHash shake256: "483366601360a8771c6863080cc4114d8db44530f8f1e1ee4f94ea37e78b5739"
+createHash ripemd160: "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc"
+createHash blake2b512: "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"
+createHash blake2s256: "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982"
+createHash md5-sha1: "900150983cd24fb0d6963f7d28e17f72a9993e364706816aba3e25717850c26c9cd0d89d"
+createHash RSA-SHA256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+createHash SHA256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+createHash sha-256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+createHash rmd160: "8eb208f7e05d987a9b044a8e98c6b087f15a0bfc"
+createHash sha256WithRSAEncryption: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+createHmac md5: "0v6YBj+HawMZOvtJtJeVkQ=="
+createHmac sha1: "T9CyFSdu8S8rPkyOysKBFJi2Vvw="
+createHmac sha256: "nBluMtwBdfhvSxy4konWYZ3mvuaZ5MN45oMJ7Zehpqs="
+createHmac sha512: "OSaiB8jEKwxBeSy9PhoaqvX3olcE9i38k5xJh9184GAAnFuxwkRzVbMhbxC1N+mvp7ZKTlORsNYxFy0Hk54Ieg=="
+createHmac sha3-256: "Cbbbq40ReVynyNgvHPkWggE8fLmAq7slRzvkrn97VoM="
+createHmac ripemd160: "Z/3Oc46/xzcrzTjwPAI7V0ZyTRg="
+createHmac blake2b512: "BcxIFUONXP5o//RGuN9XgozJYYneS06Sjj8G2BXWTlvBUSSgL/05hZs+JHbaA7wCNcqG32I68qVjF3mAnp/QSg=="
+hash update chunks + encodings: "jKjukmwYmPBll7jU3qxLDP2n0H4laBBn9UgU8YsmltU"
+digest latin1: "Ôäa&4õÈVN\u0015\\g¦"
+digest buffer: "<16> 9dd4e461268c8034f5c8564e155c67a6"
+digest unknown encoding: "<16> 9dd4e461268c8034f5c8564e155c67a6"
+shake256 outputLength 5: "867e2cb04f"
+shake128 outputLength 0: ""
+sha256 outputLength 16: THROW Error ERR_OSSL_EVP_NOT_XOF_OR_INVALID_LENGTH "error:030000B2:digital envelope routines::not XOF or invalid length" digital envelope routines/not XOF or invalid length | Error: error:030000B2:digital envelope routines::not XOF or invalid length
+copy: ["86f7e437faa5a7fce15d1ddcb9eaeaea377667b8","da23614e02469a0d7c7bd1bdab5c9c474b1904dc"]
+hash digest twice: THROW Error ERR_CRYPTO_HASH_FINALIZED "Digest already called" | Error [ERR_CRYPTO_HASH_FINALIZED]: Digest already called
+hash update after digest: THROW Error ERR_CRYPTO_HASH_FINALIZED "Digest already called" | Error [ERR_CRYPTO_HASH_FINALIZED]: Digest already called
+hmac digest twice: ["",0]
+createHash unknown: THROW Error undefined "Digest method not supported" | Error: Digest method not supported
+createHash number: THROW TypeError ERR_INVALID_ARG_TYPE "The \"algorithm\" argument must be of type string. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "algorithm" argument must be of type string. Received type number (1)
+update number: THROW TypeError ERR_INVALID_ARG_TYPE "The \"data\" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (1)
+update odd hex: THROW TypeError ERR_INVALID_ARG_VALUE "The argument 'encoding' is invalid for data of length 3. Received 'hex'" | TypeError [ERR_INVALID_ARG_VALUE]: The argument 'encoding' is invalid for data of length 3. Received 'hex'
+createHmac unknown: THROW TypeError ERR_CRYPTO_INVALID_DIGEST "Invalid digest: nope" | TypeError: Invalid digest: nope
+createHmac key null: THROW TypeError ERR_INVALID_ARG_TYPE "The \"key\" argument must be of type string or an instance of ArrayBuffer, Buffer, TypedArray, DataView, KeyObject, or CryptoKey. Received null" | TypeError [ERR_INVALID_ARG_TYPE]: The "key" argument must be of type string or an instance of ArrayBuffer, Buffer, TypedArray, DataView, KeyObject, or CryptoKey. Received null
+Hash instances: [true,"deprecated",2]
+Hmac instances: [true,"deprecated"]
+hash(): ["a9993e364706816aba3e25717850c26c9cd0d89d","kAFQmDzST7DWlj99KOF/cg==",32]
+hash() bad encoding: THROW TypeError ERR_INVALID_ARG_VALUE "The argument 'outputEncoding' is invalid. Received 'nope'" | TypeError [ERR_INVALID_ARG_VALUE]: The argument 'outputEncoding' is invalid. Received 'nope'
+hash() bad algorithm: THROW Error undefined "Digest method nope is not supported" | Error: Digest method nope is not supported
+hash() bad input: THROW TypeError ERR_INVALID_ARG_TYPE "The \"input\" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "input" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (1)
+getHashes: 49
+aes-128-ecb: ["f7021c01de43c8147cd2477a7eba55b3698dc29f6db0d5eda4eec682b3393abb021cf4d15412037af882263fd186b880",true]
+aes-128-cbc: ["9bbb360da006de2611736ac3aad9a40c95ec3a0691c3de276b5ca14042a08c95a3bd38b00d68319edf333640915712c9",true]
+aes-128-cfb: ["236a99bb00b35445c9d0ff87ab327e0a02fa12b6597c24dd69ea3a7b63557a3d975265fc8b84f9fef7c9e2",true]
+aes-128-cfb8: ["23c4ffcc22bdb59dbe257ab10d15ea9c956712b5095044241860db35767be6d15fb4e46adcbe2b908c3a5a",true]
+aes-128-cfb1: ["601ecb0aee8cd23547f6f5201cf184b04df9893a2554f4d831db6a357099d2943bc93471951810ad34e023",true]
+aes-128-ofb: ["236a99bb00b35445c9d0ff87ab327e0aca4650d6cbc586185100eaf986da957cc2edfd96692d307f657005",true]
+aes-128-ctr: ["236a99bb00b35445c9d0ff87ab327e0a2efb3888c5b96557889a2a8dff0e0ab593ee80455103698e1ff5e0",true]
+aes-192-ecb: ["e332b26526c774658d0e49fd1a3fa755e2cf263d1c3238b1ddca3315debe0b42953ae4f15b5d20594c8238381dec20f7",true]
+aes-192-cbc: ["f5045509bc12fbf7b5e73b7c4529e94e57cec91ba3c064e589a58cdb198f6bd66afa2a6973c4670ac3dfc2dc465a5dcd",true]
+aes-192-cfb: ["ada1016432632546f732a170f4e0e173160de28bdde67e32edbf2e1929d59d497d915e2b9964ac372fcda7",true]
+aes-192-cfb8: ["ad7cb9cda6fc1231342f218a228704c7a02bb43190cf14312fdca026127f3d3b826212a806472f7be41c75",true]
+aes-192-cfb1: ["d5c4952601480e15035699bbe7d0f2556e03b1a1b5b19c3aa9acf7b191b5c1f59e2c911177df7113210e5c",true]
+aes-192-ofb: ["ada1016432632546f732a170f4e0e1731fbd73e3abbbbc93d2a2d5eda87e7ff6970a26859612dff195c315",true]
+aes-192-ctr: ["ada1016432632546f732a170f4e0e1730a46fed6e2eec99575643c4b2a2d90497332aff91f6bd5ec1c203d",true]
+aes-256-ecb: ["73fddc2882b3edce4fdbe0446310efb2075bfb0b02eb8d05fcf63d28cccf7657ffe22a37aebd010b7d2fc3d986e028fa",true]
+aes-256-cbc: ["95f8c38096d9ee398083cef5ad9970711e9843e786792241cc079d87fe10bea0e17931e6da74ff3009a33ade2cc3b5b9",true]
+aes-256-cfb: ["8aa62bf1f059f93729c87e69af5977b86c33e2b6e6f0e7e9e83562b9c2717a2c2bdc06089dfaeb51c576ef",true]
+aes-256-cfb8: ["8a48bd100cffc3c47a9d2026626a8b8fe94178d1b8ba315b0d57a4e103612158b330f1cc62c99d575a3c46",true]
+aes-256-cfb1: ["cb208af57e0ba29500e6ff10daefee323d3595f8e8f9ef8ad36d99923d30b97363ab684e64f21b677af37e",true]
+aes-256-ofb: ["8aa62bf1f059f93729c87e69af5977b818e927cdb28088c44229f4f73e14c1364e02ca0cb574e428ae14a1",true]
+aes-256-ctr: ["8aa62bf1f059f93729c87e69af5977b8009e4fe61d5be6cfa6aba1ebb01a60c96845254951ee22f8c6fb87",true]
+aes256 alias: ["95f8c38096d9ee398083cef5ad9970711e9843e786792241cc079d87fe10bea0e17931e6da74ff3009a33ade2cc3b5b9",true]
+AES-128-CBC upper: ["9bbb360da006de2611736ac3aad9a40c95ec3a0691c3de276b5ca14042a08c95a3bd38b00d68319edf333640915712c9",true]
+des-ede3-cbc: ["907e5ecd0d6c714a162465a8ad9fc919ed2d14716de6276e2e47c405a84f06632117df80993377f9881912d24b2c7fd2",true]
+des3: ["907e5ecd0d6c714a162465a8ad9fc919ed2d14716de6276e2e47c405a84f06632117df80993377f9881912d24b2c7fd2",true]
+des-ede3 (ecb): ["7de606c921c30163b0777326f15fc739fd47864611a66f14f6cebac5b299a504d86e081ec0a8313106c45c2dda504f5c",true]
+des-ede-cbc: ["645a46a0666a83c468fbd21ef575420b6c4a23e58f21292d6a265fb76f5653b0c30f40669c2ed2d3cf2a0e3342be6fc1",true]
+update/final encodings: ["m7s2DaAG3iYRc2rDqtmkDJXsOgaRw94na1yhQEKgjJWjvTiwDWgxnt8zNkCRVxLJ","The quick brown fox jumps over the lazy dog"]
+string key and iv: ["edba03fe193e35946bf5215234d3f84759e7bf360a4b89e541f541c6e84fbb9c24d652004bf731d822d7530bd3844457",true]
+KeyObject key: ["9bbb360da006de2611736ac3aad9a40c95ec3a0691c3de276b5ca14042a08c95a3bd38b00d68319edf333640915712c9",true]
+no padding, aligned: "<32> c352805754237f311ac0fff4e3e03e78c352805754237f311ac0fff4e3e03e78"
+no padding, partial: THROW Error ERR_OSSL_WRONG_FINAL_BLOCK_LENGTH "error:1C80006B:Provider routines::wrong final block length" Provider routines/wrong final block length | Error: error:1C80006B:Provider routines::wrong final block length
+decrypt bad padding: THROW Error ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" Provider routines/bad decrypt | Error: error:1C800064:Provider routines::bad decrypt
+decrypt partial block: THROW Error ERR_OSSL_WRONG_FINAL_BLOCK_LENGTH "error:1C80006B:Provider routines::wrong final block length" Provider routines/wrong final block length | Error: error:1C80006B:Provider routines::wrong final block length
+decrypt empty: THROW Error ERR_OSSL_WRONG_FINAL_BLOCK_LENGTH "error:1C80006B:Provider routines::wrong final block length" Provider routines/wrong final block length | Error: error:1C80006B:Provider routines::wrong final block length
+decrypt empty no padding: "<0> "
+final twice: THROW Error ERR_CRYPTO_INVALID_STATE "Invalid state" | Error: Invalid state
+update after final: THROW Error undefined "Trying to add data in unsupported state" | Error: Trying to add data in unsupported state
+setAutoPadding after final: THROW Error ERR_CRYPTO_INVALID_STATE "Invalid state for operation setAutoPadding" | Error [ERR_CRYPTO_INVALID_STATE]: Invalid state for operation setAutoPadding
+unknown cipher: THROW Error ERR_CRYPTO_UNKNOWN_CIPHER "Unknown cipher" | Error: Unknown cipher
+legacy cipher: THROW Error ERR_OSSL_EVP_UNSUPPORTED "error:0308010C:digital envelope routines::unsupported" digital envelope routines/unsupported | Error: error:0308010C:digital envelope routines::unsupported
+bad key length: THROW RangeError ERR_CRYPTO_INVALID_KEYLEN "Invalid key length" | RangeError: Invalid key length
+bad iv length: THROW TypeError ERR_CRYPTO_INVALID_IV "Invalid initialization vector" | TypeError: Invalid initialization vector
+null iv for cbc: THROW TypeError ERR_CRYPTO_INVALID_IV "Invalid initialization vector" | TypeError: Invalid initialization vector
+iv for ecb: THROW TypeError ERR_CRYPTO_INVALID_IV "Invalid initialization vector" | TypeError: Invalid initialization vector
+cipher name number: THROW TypeError ERR_INVALID_ARG_TYPE "The \"cipher\" argument must be of type string. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "cipher" argument must be of type string. Received type number (1)
+key number: THROW TypeError ERR_INVALID_ARG_TYPE "The \"key\" argument must be of type string or an instance of ArrayBuffer, Buffer, TypedArray, DataView, KeyObject, or CryptoKey. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "key" argument must be of type string or an instance of ArrayBuffer, Buffer, TypedArray, DataView, KeyObject, or CryptoKey. Received type number (1)
+iv number: THROW TypeError ERR_INVALID_ARG_TYPE "The \"iv\" argument must be of type string or an instance of ArrayBuffer, Buffer, TypedArray, or DataView. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "iv" argument must be of type string or an instance of ArrayBuffer, Buffer, TypedArray, or DataView. Received type number (1)
+change output encoding: THROW Error ERR_INTERNAL_ASSERTION "Cannot change encoding\nThis is caused by either a bug in Node.js or incorrect usage of Node.js internals.\nPlease open an issue with this stack trace at https://github.com/nodejs/node/issues\n" | Error [ERR_INTERNAL_ASSERTION]: Cannot change encoding
+unknown output encoding: THROW TypeError ERR_UNKNOWN_ENCODING "Unknown encoding: nope" | TypeError [ERR_UNKNOWN_ENCODING]: Unknown encoding: nope
+aes-128-gcm: ["289d75b7173b3af1661a01811c1d24d896592e9ee85ef6a560b368f8c752e11253e18a4d154a09d5d57a9a","2be9be2c87e11de21c6dab3e17879bd6",true]
+aes-192-gcm: ["bf46699cfa19f5bce95cce739c834fb3208a9a86c69263332a99528fbb8ea1ba36f31511559dc123b8b6e5","6cc9edcdd2f79bd62db43ee28939f372",true]
+aes-256-gcm iv16: ["1875c37c95bc55408cbae4b3c58646efc3cb9b71d80cd1b9f51756314416dd4d0af51430d98e43d4d46806","2184c8cd1c9e788b220957595ba35cbe",true]
+id-aes128-GCM: ["289d75b7173b3af1661a01811c1d24d896592e9ee85ef6a560b368f8c752e11253e18a4d154a09d5d57a9a","2be9be2c87e11de21c6dab3e17879bd6",true]
+gcm authTagLength 8: ["289d75b7173b3af1661a01811c1d24d896592e9ee85ef6a560b368f8c752e11253e18a4d154a09d5d57a9a","2be9be2c87e11de2",true]
+gcm decipher short tag: ["289d75b7173b3af1661a01811c1d24d896592e9ee85ef6a560b368f8c752e11253e18a4d154a09d5d57a9a","2be9be2c87e11de21c6dab3e17879bd6",true]
+gcm bad tag: THROW Error undefined "Unsupported state or unable to authenticate data" | Error: Unsupported state or unable to authenticate data
+gcm no tag: THROW Error undefined "Unsupported state or unable to authenticate data" | Error: Unsupported state or unable to authenticate data
+gcm bad tag length: THROW TypeError ERR_CRYPTO_INVALID_AUTH_TAG "Invalid authentication tag length: 3" | TypeError: Invalid authentication tag length: 3
+gcm bad authTagLength: THROW TypeError ERR_CRYPTO_INVALID_AUTH_TAG "Invalid authentication tag length: 3" | TypeError: Invalid authentication tag length: 3
+gcm tag/authTagLength mismatch: THROW TypeError ERR_CRYPTO_INVALID_AUTH_TAG "Invalid authentication tag length: 8" | TypeError: Invalid authentication tag length: 8
+gcm setAuthTag twice: THROW Error ERR_CRYPTO_INVALID_STATE "Invalid state for operation setAuthTag" | Error [ERR_CRYPTO_INVALID_STATE]: Invalid state for operation setAuthTag
+gcm setAAD after update: THROW Error ERR_CRYPTO_INVALID_STATE "Invalid state for operation setAAD" | Error [ERR_CRYPTO_INVALID_STATE]: Invalid state for operation setAAD
+gcm getAuthTag before final: THROW Error ERR_CRYPTO_INVALID_STATE "Invalid state for operation getAuthTag" | Error [ERR_CRYPTO_INVALID_STATE]: Invalid state for operation getAuthTag
+cbc setAAD: THROW Error ERR_CRYPTO_INVALID_STATE "Invalid state for operation setAAD" | Error [ERR_CRYPTO_INVALID_STATE]: Invalid state for operation setAAD
+cbc getAuthTag: THROW Error ERR_CRYPTO_INVALID_STATE "Invalid state for operation getAuthTag" | Error [ERR_CRYPTO_INVALID_STATE]: Invalid state for operation getAuthTag
+gcm empty iv: THROW TypeError ERR_CRYPTO_INVALID_IV "Invalid initialization vector" | TypeError: Invalid initialization vector
+decipher has no getAuthTag: "undefined"
+cipher has no setAuthTag: "undefined"
+getCiphers: [true,true,true,true,true,true]
+getCipherInfo: [{"mode":"cbc","name":"aes-128-cbc","nid":419,"blockSize":16,"ivLength":16,"keyLength":16},{"mode":"gcm","name":"id-aes128-gcm","nid":895,"blockSize":1,"ivLength":16,"keyLength":16},null,null,null,{"mode":"gcm","name":"id-aes128-gcm","nid":895,"blockSize":1,"ivLength":12,"keyLength":16},{"mode":"ecb","name":"des-ede3","nid":33,"blockSize":8,"keyLength":24}]
+pbkdf2Sync sha1: "<20> ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957"
+pbkdf2Sync sha512: "<64> afe6c5530785b6cc6b1c6453384731bd5ee432ee549fd42fb6695779ad8a1c5bf59de69c48f774efc4007d5298f9033c0241d5ab69305e7b64eceeb8d834cfec"
+pbkdf2Sync sha3-256: "<8> 3e563c4db77236f6"
+pbkdf2Sync keylen 0: THROW Error undefined "Deriving bits failed" | Error: Deriving bits failed
+pbkdf2Sync iterations 0: THROW RangeError ERR_OUT_OF_RANGE "The value of \"iterations\" is out of range. It must be >= 1 && <= 2147483647. Received 0" | RangeError [ERR_OUT_OF_RANGE]: The value of "iterations" is out of range. It must be >= 1 && <= 2147483647. Received 0
+pbkdf2Sync digest unknown: THROW TypeError ERR_CRYPTO_INVALID_DIGEST "Invalid digest: nope" | TypeError: Invalid digest: nope
+pbkdf2Sync digest missing: THROW TypeError ERR_INVALID_ARG_TYPE "The \"digest\" argument must be of type string. Received undefined" | TypeError [ERR_INVALID_ARG_TYPE]: The "digest" argument must be of type string. Received undefined
+pbkdf2Sync password number: THROW TypeError ERR_INVALID_ARG_TYPE "The \"password\" argument must be of type string or an instance of ArrayBuffer, Buffer, TypedArray, or DataView. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "password" argument must be of type string or an instance of ArrayBuffer, Buffer, TypedArray, or DataView. Received type number (1)
+pbkdf2 no callback: THROW TypeError ERR_INVALID_ARG_TYPE "The \"callback\" argument must be of type function. Received undefined" | TypeError [ERR_INVALID_ARG_TYPE]: The "callback" argument must be of type function. Received undefined
+hkdfSync: "ArrayBuffer 9ca0d662557439e3b83365f2da4626d35da195c6d9d1779f09838cf9e408966ece99106e2585ace6f083"
+hkdfSync empty salt: "ArrayBuffer ce60ef584b8b0861f0c101a92d935b7f"
+hkdfSync KeyObject: "ArrayBuffer 9ca0d662557439e3"
+hkdfSync length 0: THROW Error undefined "Deriving bits failed" | Error: Deriving bits failed
+scryptSync keylen 0: "<0> "
+hkdfSync too long: THROW RangeError ERR_CRYPTO_INVALID_KEYLEN "Invalid key length" | RangeError: Invalid key length
+hkdfSync info > 1024: THROW RangeError ERR_OUT_OF_RANGE "The value of \"info\" is out of range. It must be must not contain more than 1024 bytes. Received 1025" | RangeError [ERR_OUT_OF_RANGE]: The value of "info" is out of range. It must be must not contain more than 1024 bytes. Received 1025
+hkdfSync digest unknown: THROW TypeError ERR_CRYPTO_INVALID_DIGEST "Invalid digest: nope" | TypeError: Invalid digest: nope
+hkdfSync ikm number: THROW TypeError ERR_INVALID_ARG_TYPE "The \"ikm\" argument must be of type string or an instance of SecretKeyObject, ArrayBuffer, TypedArray, DataView, or Buffer. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "ikm" argument must be of type string or an instance of SecretKeyObject, ArrayBuffer, TypedArray, DataView, or Buffer. Received type number (1)
+hkdf digest unknown (sync throw): THROW TypeError ERR_CRYPTO_INVALID_DIGEST "Invalid digest: nope" | TypeError: Invalid digest: nope
+scryptSync: "<16> 745731af4484f323968969eda289aeee"
+scryptSync N=1024 r=4 p=2: "<32> 8f9617fd1528a97ce91c337e5589e4aa188ed10081adb1e0c589e5467f4b933c"
+scryptSync cost/blockSize/parallelization: "<8> 3669a00a2f0a650f"
+scryptSync N not power of 2: THROW RangeError ERR_CRYPTO_INVALID_SCRYPT_PARAMS "Invalid scrypt params" | RangeError: Invalid scrypt params
+scryptSync memory: THROW RangeError ERR_CRYPTO_INVALID_SCRYPT_PARAMS "Invalid scrypt params: error:030000AC:digital envelope routines::memory limit exceeded" | RangeError: Invalid scrypt params: error:030000AC:digital envelope routines::memory limit exceeded
+scryptSync N and cost: THROW Error ERR_CRYPTO_SCRYPT_INVALID_PARAMETER "Invalid scrypt parameter" | Error [ERR_CRYPTO_SCRYPT_INVALID_PARAMETER]: Invalid scrypt parameter
+scryptSync keylen -1: THROW RangeError ERR_OUT_OF_RANGE "The value of \"keylen\" is out of range. It must be >= 0 && <= 2147483647. Received -1" | RangeError [ERR_OUT_OF_RANGE]: The value of "keylen" is out of range. It must be >= 0 && <= 2147483647. Received -1
+createSecretKey: ["secret",3,"abc",{"kty":"oct","k":"YWJj"},true,true,"[object KeyObject]","SecretKeyObject",null]
+createSecretKey number: THROW TypeError ERR_INVALID_ARG_TYPE "The \"key\" argument must be an instance of ArrayBuffer, Buffer, TypedArray, or DataView. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "key" argument must be an instance of ArrayBuffer, Buffer, TypedArray, or DataView. Received type number (1)
+createSecretKey encoding: "abc"
+createSecretKey unknown encoding: THROW TypeError ERR_UNKNOWN_ENCODING "Unknown encoding: nope" | TypeError [ERR_UNKNOWN_ENCODING]: Unknown encoding: nope
+createHmac unknown key encoding: THROW TypeError ERR_UNKNOWN_ENCODING "Unknown encoding: nope" | TypeError [ERR_UNKNOWN_ENCODING]: Unknown encoding: nope
+setAuthTag unknown encoding: THROW TypeError ERR_UNKNOWN_ENCODING "Unknown encoding: nope" | TypeError [ERR_UNKNOWN_ENCODING]: Unknown encoding: nope
+update unknown encoding (utf8): "11f6ad8ec52a2984abaafd7c3b516503785c2072"
+new KeyObject: THROW TypeError ERR_INVALID_ARG_TYPE "The \"handle\" argument must be of type object. Received an instance of Object" | TypeError [ERR_INVALID_ARG_TYPE]: The "handle" argument must be of type object. Received an instance of Object
+new KeyObject bad type: THROW TypeError ERR_INVALID_ARG_VALUE "The argument 'type' is invalid. Received 'nope'" | TypeError [ERR_INVALID_ARG_VALUE]: The argument 'type' is invalid. Received 'nope'
+generateKeySync hmac: 15
+generateKeySync aes: 32
+generateKeySync aes 100: THROW TypeError ERR_INVALID_ARG_VALUE "The property 'options.length' must be one of: 128, 192, 256. Received 100" | TypeError [ERR_INVALID_ARG_VALUE]: The property 'options.length' must be one of: 128, 192, 256. Received 100
+generateKeySync unknown: THROW TypeError ERR_INVALID_ARG_VALUE "The argument 'type' must be a supported key type. Received 'nope'" | TypeError [ERR_INVALID_ARG_VALUE]: The argument 'type' must be a supported key type. Received 'nope'
+hmac with KeyObject: "9c196e32dc0175f86f4b1cb89289d6619de6bee699e4c378e68309ed97a1a6ab"
+randomBytes: [0,70000]
+randomBytes string: THROW TypeError ERR_INVALID_ARG_TYPE "The \"size\" argument must be of type number. Received type string ('x')" | TypeError [ERR_INVALID_ARG_TYPE]: The "size" argument must be of type number. Received type string ('x')
+randomBytes -1: THROW RangeError ERR_OUT_OF_RANGE "The value of \"size\" is out of range. It must be >= 0 && <= 2147483647. Received -1" | RangeError [ERR_OUT_OF_RANGE]: The value of "size" is out of range. It must be >= 0 && <= 2147483647. Received -1
+randomBytes bad callback: THROW TypeError ERR_INVALID_ARG_TYPE "The \"callback\" argument must be of type function. Received type string ('x')" | TypeError [ERR_INVALID_ARG_TYPE]: The "callback" argument must be of type function. Received type string ('x')
+randomFillSync: "00000000"
+randomFillSync Uint32Array offset: [0,0,0]
+randomFillSync ArrayBuffer: 4
+randomFillSync offset too big: THROW RangeError ERR_OUT_OF_RANGE "The value of \"offset\" is out of range. It must be >= 0 && <= 4. Received 5" | RangeError [ERR_OUT_OF_RANGE]: The value of "offset" is out of range. It must be >= 0 && <= 4. Received 5
+randomFillSync size too big: THROW RangeError ERR_OUT_OF_RANGE "The value of \"size + offset\" is out of range. It must be <= 4. Received 5" | RangeError [ERR_OUT_OF_RANGE]: The value of "size + offset" is out of range. It must be <= 4. Received 5
+randomFillSync string: THROW TypeError ERR_INVALID_ARG_TYPE "The \"buf\" argument must be an instance of ArrayBuffer or ArrayBufferView. Received type string ('x')" | TypeError [ERR_INVALID_ARG_TYPE]: The "buf" argument must be an instance of ArrayBuffer or ArrayBufferView. Received type string ('x')
+randomInt range: "ok"
+randomInt 1.5: THROW TypeError ERR_INVALID_ARG_TYPE "The \"max\" argument must be a safe integer. Received type number (1.5)" | TypeError [ERR_INVALID_ARG_TYPE]: The "max" argument must be a safe integer. Received type number (1.5)
+randomInt max <= min: THROW RangeError ERR_OUT_OF_RANGE "The value of \"max\" is out of range. It must be greater than the value of \"min\" (5). Received 1" | RangeError [ERR_OUT_OF_RANGE]: The value of "max" is out of range. It must be greater than the value of "min" (5). Received 1
+randomInt range too big: THROW RangeError ERR_OUT_OF_RANGE "The value of \"max - min\" is out of range. It must be <= 281474976710655. Received 281_474_976_710_657" | RangeError [ERR_OUT_OF_RANGE]: The value of "max - min" is out of range. It must be <= 281474976710655. Received 281_474_976_710_657
+randomUUID: true
+randomUUID bad option: THROW TypeError ERR_INVALID_ARG_TYPE "The \"options.disableEntropyCache\" property must be of type boolean. Received type number (1)" | TypeError [ERR_INVALID_ARG_TYPE]: The "options.disableEntropyCache" property must be of type boolean. Received type number (1)
+getRandomValues: 4
+timingSafeEqual: [true,false,true]
+timingSafeEqual lengths: THROW RangeError ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH "Input buffers must have the same byte length" | RangeError: Input buffers must have the same byte length
+timingSafeEqual string: THROW TypeError ERR_INVALID_ARG_TYPE "The \"buf1\" argument must be an instance of ArrayBuffer, Buffer, TypedArray, or DataView." | TypeError: The "buf1" argument must be an instance of ArrayBuffer, Buffer, TypedArray, or DataView.
+constants: [1,2,"string"]
+webcrypto: [true,true]
+getFips: 0
+secureHeapUsed: {"total":0,"used":0,"utilization":0,"min":0}
+setEngine: THROW Error ERR_CRYPTO_ENGINE_UNKNOWN "Engine \"x\" was not found" | Error [ERR_CRYPTO_ENGINE_UNKNOWN]: Engine "x" was not found
+exports: ["function","undefined","function","function","function","function","function","function","function","function","function","object","object"]
+require node:crypto: true
+pbkdf2 dba2956d5d8f05e6f06dc9732ca6037d
+pbkdf2 keylen 0 ERR undefined Deriving bits failed
+hkdf 9ca0d662557439e3b83365f2da4626d3
+scrypt 4c367f271c389fd3613349feffb95eff
+scrypt default options c0b515908e61334c
+randomBytes cb 12
+randomFill cb 6
+randomInt cb number
+generateKey 8
+callback order [ 'nextTick', 'randomBytes' ]
+hash stream 072e61241ebf17f37fd33dbe578b6819619f17cd56144512a070999cfb4bdd40
+hash read a9993e364706816aba3e25717850c26c9cd0d89d a9993e364706816aba3e25717850c26c9cd0d89d
+cipher stream 04768efe10ab1d45cb80f590b6
+decipher stream error ERR_OSSL_BAD_DECRYPT error:1C800064:Provider routines::bad decrypt
+createSign: thrown
+createECDH: thrown
+generateKeyPairSync: thrown
+publicEncrypt: thrown
+createPrivateKey: thrown

@@ -72,8 +72,11 @@
   "devDependencies": {
     "@ai-ecoverse/slicc-kernel": "1.64.0",
     "@ai-ecoverse/wasi-pnpm": "12.9.1-8",
+    "@noble/hashes": "1.8.0",
     "abort-controller": "3.0.0",
     "acorn": "8.19.0",
+    "browserify-aes": "1.2.0",
+    "browserify-des": "1.0.2",
     "browserify-zlib": "0.2.0",
     "esbuild": "0.28.2",
     "node-inspect-extracted": "3.3.4",

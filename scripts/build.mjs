@@ -127,6 +127,55 @@ const decoder = await esbuild.build({
   ],
 });
 
+// crypto: @noble/hashes (digests, HMAC, PBKDF2, HKDF, scrypt) and
+// browserify-aes / browserify-des (block ciphers); Node's API over them is
+// src/runtime/builtins/crypto.mjs. cipher-base's stream and string_decoder are
+// the runtime's.
+const crypto = await esbuild.build({
+  entryPoints: [join(root, 'src/vendor-shims/crypto-entry.cjs')],
+  outfile: join(dist, 'vendor/crypto.cjs'),
+  bundle: true,
+  format: 'cjs',
+  platform: 'browser',
+  target: ['es2022'],
+  mainFields: ['browser', 'main', 'module'],
+  logLevel: 'info',
+  metafile: true,
+  external: ['stream', 'readable-stream', 'util', 'events', 'string_decoder'],
+  alias: {
+    ...vendorBufferAlias,
+    evp_bytestokey: join(root, 'src/vendor-shims/evp-bytestokey.cjs'),
+    'to-buffer': join(root, 'src/vendor-shims/to-buffer.cjs'),
+  },
+  minify: true,
+  keepNames: true,
+  legalComments: 'inline',
+  plugins: [
+    {
+      // GCM: a decipher's tag may be 4–16 bytes (Node's authTagLength); compare
+      // the computed tag's prefix rather than requiring all 16.
+      name: 'crypto-gcm',
+      setup(b) {
+        b.onLoad({ filter: /browserify-aes[\\/]authCipher\.js$/ }, (args) => {
+          let src = readFileSync(args.path, 'utf8');
+          const patch = (from, to) => {
+            if (!src.includes(from)) throw new Error(`crypto-gcm: authCipher.js changed (${from})`);
+            src = src.replace(from, to);
+          };
+          patch(
+            'if (this._decrypt && xorTest(tag, this._authTag))',
+            'if (this._decrypt && xorTest(tag.slice(0, this._authTag.length), this._authTag))'
+          );
+          // A non-96-bit IV's length block: Buffer#writeUIntBE takes at most 6
+          // bytes, so write the bit count into the low 6 of the zeroed 8.
+          patch('tail.writeUIntBE(ivBits, 0, 8)', 'tail.writeUIntBE(ivBits, 2, 6)');
+          return { contents: src, loader: 'js' };
+        });
+      },
+    },
+  ],
+});
+
 // zlib: browserify-zlib (Node's zlib.js over pako 1.x). stream, util and
 // assert stay external: the runtime hands its own to the bundle's require().
 const zlib = await esbuild.build({
@@ -245,7 +294,7 @@ function writeVendorEmbedded(full) {
     writeFileSync(vendorEmbeddedPath, vendorEmbeddedPlaceholder);
     return;
   }
-  const names = ['readable-stream', 'string_decoder', 'zlib'];
+  const names = ['readable-stream', 'string_decoder', 'zlib', 'crypto'];
   const entries = names.map((name) => {
     const text = readFileSync(join(dist, 'vendor', `${name}.cjs`), 'utf8');
     return `  ${JSON.stringify(name)}: ${JSON.stringify(text)}`;
@@ -285,8 +334,9 @@ writeFileSync(join(dist, 'meta-main.json'), JSON.stringify(main.metafile));
 writeFileSync(join(dist, 'meta-stream.json'), JSON.stringify(stream.metafile));
 writeFileSync(join(dist, 'meta-decoder.json'), JSON.stringify(decoder.metafile));
 writeFileSync(join(dist, 'meta-zlib.json'), JSON.stringify(zlib.metafile));
+writeFileSync(join(dist, 'meta-crypto.json'), JSON.stringify(crypto.metafile));
 
-const pkgRoots = packagesFromMetafiles([main.metafile, stream.metafile, decoder.metafile, zlib.metafile]);
+const pkgRoots = packagesFromMetafiles([main.metafile, stream.metafile, decoder.metafile, zlib.metafile, crypto.metafile]);
 const notice = renderNotice(pkgRoots);
 writeFileSync(join(root, 'NOTICE'), notice);
 console.log(`NOTICE: ${pkgRoots.size} bundled package(s)`);

@@ -13,6 +13,7 @@ import { createTimersModule, createTimersPromises } from '../builtins/timers-mod
 import { createUrl } from '../builtins/url.mjs';
 import { createUtil } from '../builtins/util.mjs';
 import { createZlib } from '../builtins/zlib.mjs';
+import { createCrypto } from '../builtins/crypto.mjs';
 
 const BUILTIN_LIST = [
   'assert',
@@ -20,6 +21,7 @@ const BUILTIN_LIST = [
   'buffer',
   'child_process',
   'console',
+  'crypto',
   'events',
   'fs',
   'fs/promises',
@@ -45,7 +47,6 @@ const BUILTIN_LIST = [
 
 const NOT_YET = [
   'http2',
-  'crypto',
   'readline',
   'tty',
   'worker_threads',
@@ -206,6 +207,11 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles });
     return https;
   };
+  let crypto;
+  const getCrypto = () => {
+    crypto ??= createCrypto({ ctx, process, Buffer, getStream, stringDecoder, handles, timers });
+    return crypto;
+  };
   let zlib;
   const getZlib = () => {
     zlib ??= createZlib({ ctx, process, Buffer, getStream, util, assert });
@@ -233,6 +239,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     module: () => ModuleExport,
     fs: () => fs,
     zlib: getZlib,
+    crypto: getCrypto,
     'fs/promises': () => fs.promises,
     events: () => events,
     assert: () => assert,
