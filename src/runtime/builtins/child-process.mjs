@@ -526,7 +526,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
     file = String(file);
 
     if (opts.shell) {
-      const shell = typeof opts.shell === 'string' ? opts.shell : 'sh';
+      // Node on Unix defaults shell:true to /bin/sh (errors say `spawn /bin/sh`).
+      const shell = typeof opts.shell === 'string' ? opts.shell : '/bin/sh';
       const line = argv.length ? [file, ...argv].join(' ') : file;
       file = shell;
       argv = ['-c', line];
@@ -699,7 +700,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
       opts = {};
     }
     opts = opts && typeof opts === 'object' ? opts : {};
-    const shell = typeof opts.shell === 'string' ? opts.shell : 'sh';
+    // Node's exec uses /bin/sh on Unix; ENOENT message/path/spawnargs carry that path.
+    const shell = typeof opts.shell === 'string' ? opts.shell : '/bin/sh';
     const cmd = String(command);
     // Node's exec sets err.cmd to the original command, not `sh -c …`.
     return execFile(shell, ['-c', cmd], { ...opts, shell: false, _execCmd: cmd }, cb);
