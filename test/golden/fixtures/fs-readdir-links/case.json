@@ -1,0 +1,6 @@
+{
+  "description": "readdir({ recursive }) and a symlinked directory (d/ln -> ../outside), as Node 22.22 does it: readdirSync follows it (names and dirents), promises.readdir follows it for names but not for dirents, opendir({ recursive }) does not",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

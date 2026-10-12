@@ -1,0 +1,5 @@
+readdirSync names [ 'fl', 'ln', 'ln/f', 'own', 'sub', 'sub/deep' ]
+readdirSync dirents [ 'd/ln|f', 'd/sub|deep', 'd|fl', 'd|ln', 'd|own', 'd|sub' ]
+opendirSync [ 'd/sub|deep', 'd|fl', 'd|ln', 'd|own', 'd|sub' ]
+promises names [ 'fl', 'ln', 'ln/f', 'own', 'sub', 'sub/deep' ]
+promises dirents [ 'd/sub|deep', 'd|fl', 'd|ln', 'd|own', 'd|sub' ]

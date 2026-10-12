@@ -1055,15 +1055,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       return createDir(String(p), entries);
     },
     linkSync(existingPath, newPath) {
-      // The kernel's JS fs has no hard links. EXDEV is what tools that link
-      // (pnpm, npm) already handle by copying.
-      let st;
+      // The kernel decides: tmpfs links (one inode, nlink 2), the root file
+      // system and fsa refuse (EPERM), across mounts it's EXDEV.
       try {
-        st = syncFs.lstat(abs(existingPath));
+        syncFs.link(abs(existingPath), abs(newPath));
       } catch (err) {
-        throw nodeFsError(err?.code || 'ENOENT', 'link', existingPath, err, newPath);
+        throw nodeFsError(err?.code || 'EIO', 'link', existingPath, err, newPath);
       }
-      throw nodeFsError(st.isDirectory ? 'EPERM' : 'EXDEV', 'link', existingPath, undefined, newPath);
     },
   };
 
