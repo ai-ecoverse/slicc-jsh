@@ -182,4 +182,40 @@ c.on('exit', (code) => { process.exitCode = code ?? 1; });
       close();
     }
   });
+
+  it('pipe stdio works when dist/vendor is absent (embedded vendor; pnpm global)', async () => {
+    // Seven: package lives under $PNPM_HOME/global/v11/<hash>/, not
+    // /node_modules/@ai-ecoverse/slicc-jsh. getStream() must not sync-read the
+    // hardcoded /node_modules/.../dist/vendor/readable-stream.cjs path.
+    const { createNodeKernel, nodeTransport } = await import('@ai-ecoverse/slicc-kernel/node');
+    const { packageFiles } = await import('./helpers.mjs');
+    const kernel = await createNodeKernel({ network: { transport: nodeTransport() } });
+    const base = '/node_modules/@ai-ecoverse/slicc-jsh';
+    try {
+      for (const [rel, data] of packageFiles()) {
+        if (rel.startsWith('dist/vendor/')) continue;
+        await kernel.writeFile(`${base}/${rel}`, data);
+      }
+      const r = await kernel.run(
+        [
+          'node',
+          '-e',
+          `
+const { execFile } = require('child_process');
+execFile('node', ['-e', 'process.exit(7)'], (e) => {
+  console.log('cb', e && e.code);
+  process.exit(0);
+});
+setTimeout(() => {}, 5000);
+`,
+        ],
+        { cwd: '/os' }
+      );
+      assert.equal(r.status, 0, r.stderr || r.stdout);
+      assert.equal(r.stdout.trim(), 'cb 7');
+      assert.equal(r.stderr, '');
+    } finally {
+      kernel.terminate();
+    }
+  });
 });

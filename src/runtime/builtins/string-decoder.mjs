@@ -46,6 +46,7 @@ export function createStringDecoder({ ctx, process, Buffer } = {}) {
         packageRoot: PACKAGE_ROOT,
         name: 'string_decoder',
         globals: { process, Buffer },
+        process,
       });
       const Base = mod.StringDecoder;
       const baseWrite = Base.prototype.write;

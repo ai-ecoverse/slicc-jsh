@@ -415,7 +415,28 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
 
     const stdio = normalizeStdio(opts.stdio);
     const child = new ChildProcess();
-    prepareStdio(child, stdio);
+    // prepareStdio may sync-load readable-stream; never let that throw out of
+    // spawn() (seven: missing /node_modules/.../vendor → uncaught, no callback).
+    try {
+      prepareStdio(child, stdio);
+    } catch (err) {
+      const code = err?.code === 'ENOENT' || /\bENOENT\b/.test(err?.message ?? '') ? 'ENOENT' : err?.code ?? 'ERR_SPAWN_FAILED';
+      const error =
+        code === 'ENOENT'
+          ? spawnError(file, argv, 'ENOENT', `spawn ${file} ENOENT`)
+          : spawnError(file, argv, code, err?.message ?? String(err));
+      process.nextTick(() => {
+        safeEmit(child, 'error', error);
+        if (code === 'ENOENT') {
+          child.exitCode = -2;
+          child._markClosing();
+          safeEmit(child, 'close', -2, null);
+        } else {
+          finish(child, 1, null);
+        }
+      });
+      return child;
+    }
     process.nextTick(() => startSpawn(child, file, argv, opts, stdio));
     return child;
   }
