@@ -253,11 +253,12 @@ const zlib = await esbuild.build({
             '  this._handle.onerror = function (message, errno) {',
             '  this._handle.onerror = function (message, errno) {\n    if (self.destroyed) return;'
           );
-          // bytesWritten: the input bytes the engine has consumed, as Node counts them.
+          // bytesWritten: the input bytes the engine has consumed, as Node counts
+          // them (processCallback stops for a destroyed stream first).
           patch('  Transform.call(this, opts);\n', '  Transform.call(this, opts);\n  this.bytesWritten = 0;\n');
           patch(
             '    if (self._hadError) return;\n\n    var have = availOutBefore - availOutAfter;',
-            '    if (self._hadError) return;\n\n    self.bytesWritten += availInBefore - availInAfter;\n    var have = availOutBefore - availOutAfter;'
+            '    if (self._hadError || self.destroyed) return;\n\n    self.bytesWritten += availInBefore - availInAfter;\n    var have = availOutBefore - availOutAfter;'
           );
           return { contents: text, loader: 'js' };
         });

@@ -64,4 +64,6 @@ closed null
 stream error Z_DATA_ERROR -3 incorrect header check
 bytesWritten deflate [ 0, 12, undefined ]
 bytesWritten gunzip 43 [ 0, 43, undefined ]
+bytesWritten after write + destroy 0
+bytesWritten after write + close 0
 bytesWritten inflateRaw [ 0, 25, undefined ]

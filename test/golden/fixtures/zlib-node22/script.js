@@ -98,6 +98,17 @@ show('classes', () => ['Deflate', 'Inflate', 'Gzip', 'Gunzip', 'DeflateRaw', 'In
   console.log('bytesWritten deflate', await bw(zlib.createDeflate(), ['hello ', 'world', '!']));
   const gz = zlib.gzipSync(text);
   console.log('bytesWritten gunzip', gz.length, await bw(zlib.createGunzip(), [gz.subarray(0, 10), gz.subarray(10)]));
+  for (const [label, end] of [
+    ['destroy', (s) => s.destroy()],
+    ['close', (s) => s.close()],
+  ]) {
+    const s = zlib.createDeflate();
+    s.on('error', () => {});
+    s.write(Buffer.alloc(1000, 1));
+    end(s);
+    await new Promise((r) => setTimeout(r, 30));
+    console.log(`bytesWritten after write + ${label}`, s.bytesWritten);
+  }
   console.log('bytesWritten inflateRaw', await bw(zlib.createInflateRaw({ chunkSize: 64 }), [zlib.deflateRawSync(text)]));
 })();
 const legacy = ['Z_NO_FLUSH', 'Z_SYNC_FLUSH', 'Z_FINISH', 'Z_OK', 'Z_BUF_ERROR', 'Z_BEST_SPEED', 'Z_BEST_COMPRESSION',
