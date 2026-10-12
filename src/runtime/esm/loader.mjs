@@ -6,6 +6,7 @@ import { encodeFilePath } from '../builtins/url.mjs';
 import { createPath } from '../path.mjs';
 import { preserveSymlinks } from '../cjs/loader.mjs';
 import { createResolver } from '../cjs/resolve.mjs';
+import { nodeError } from '../node-errors.mjs';
 import { shouldRunAsEsm, transformEsm } from './transform.mjs';
 
 const decoder = new TextDecoder();
@@ -52,6 +53,18 @@ function finalizeNamespace(exportsObj) {
   }
   Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
   return ns;
+}
+
+/** ERR_REQUIRE_ASYNC_MODULEs from inside a graph, renamed by requireEsm(). */
+const deepAsync = new WeakSet();
+
+/** Node 22.22's ERR_REQUIRE_ASYNC_MODULE (require() of an ES module graph with top-level await). */
+function requireAsyncModule(filename, parentFilename) {
+  let message =
+    'require() cannot be used on an ESM graph with top-level await. Use import() instead. To see where the top-level await comes from, use --experimental-print-required-tla.';
+  if (parentFilename) message += `\n  From ${parentFilename} `;
+  if (filename) message += `\n  Requiring ${filename} `;
+  return nodeError(Error, 'ERR_REQUIRE_ASYNC_MODULE', message);
 }
 
 export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise } = {}) {
@@ -137,20 +150,35 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
 
   function makeImportMeta(filename) {
-    const url = filename.startsWith('[') ? filename : pathToFileURL(filename);
+    // Node: ES module input from -e or stdin is `<cwd>/[eval1]` (a file URL,
+    // with filename and dirname) — its import.meta and relative imports.
+    const evalInput = filename.startsWith('[');
+    if (evalInput) filename = `${process.cwd().replace(/\/$/, '')}/[eval1]`;
+    // Node's URL for it keeps the brackets (pathToFileURL would encode them).
+    const url = evalInput ? `${pathToFileURL(path.dirname(filename))}/[eval1]`.replace(':////', ':///') : pathToFileURL(filename);
     const meta = {
       url,
       resolve(specifier) {
-        const resolved = esmResolve(specifier, filename);
+        let resolved;
+        try {
+          resolved = esmResolve(specifier, filename);
+        } catch (err) {
+          // Node: a missing file (or a directory) still resolves to its URL;
+          // only a package that can't be found throws.
+          const spec = String(specifier);
+          if (err?.code === 'ERR_MODULE_NOT_FOUND' && /^(\.{1,2}\/|\/|file:)/.test(spec)) {
+            if (spec.startsWith('file:')) return new URL(spec).href;
+            return pathToFileURL(path.resolve(path.dirname(filename), spec));
+          }
+          throw err;
+        }
         if (resolved.type === 'builtin') return `node:${resolved.id}`;
         return pathToFileURL(resolved.filename);
       },
     };
-    // Node 22+: import.meta.dirname / import.meta.filename for file modules.
-    if (!filename.startsWith('[')) {
-      meta.filename = filename;
-      meta.dirname = path.dirname(filename);
-    }
+    // Node 22+: import.meta.dirname / import.meta.filename.
+    meta.filename = filename;
+    meta.dirname = path.dirname(filename);
     return meta;
   }
 
@@ -169,10 +197,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
     const { code, hasTopLevelAwait } = transformEsm(source, filename);
     if (hasTopLevelAwait) {
-      const err = new Error(
-        `Cannot require() ES Module ${filename} because it uses top-level await.`
-      );
-      err.code = 'ERR_REQUIRE_ASYNC_MODULE';
+      const err = requireAsyncModule();
+      deepAsync.add(err);
       throw err;
     }
 
@@ -373,20 +399,21 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
    * redeclare retry). Must not fall back to cjs.loadFile — the module may
    * already be in the CJS cache mid-compile.
    */
-  function requireEsm(filename) {
+  function requireEsm(filename, parentFilename) {
     const cached = cache.get(filename);
     if (cached?.namespace) return cached.namespace;
     if (cached?.evaluating) return cached.exportsObj;
     const source = decoder.decode(fs.readFile(filename));
     const { hasTopLevelAwait } = transformEsm(source, filename);
-    if (hasTopLevelAwait) {
-      const err = new Error(
-        `Cannot require() ES Module ${filename} because it uses top-level await.`
-      );
-      err.code = 'ERR_REQUIRE_ASYNC_MODULE';
+    // Node names the required module and its requirer, wherever in the
+    // graph the top-level await is.
+    if (hasTopLevelAwait) throw requireAsyncModule(filename, parentFilename);
+    try {
+      return evaluateEsm(filename, source);
+    } catch (err) {
+      if (deepAsync.has(err)) throw requireAsyncModule(filename, parentFilename);
       throw err;
     }
-    return evaluateEsm(filename, source);
   }
 
   return {

@@ -19,7 +19,8 @@ describe('readline on a terminal (kernel)', () => {
     const term = await jsh.kernel.openTerminal(['node', 'rl-case.js'], {
       cwd: '/os',
       onData: (d) => {
-        out += decoder.decode(d);
+        // console colours a terminal's output, as Node: tests read it plain.
+        out += decoder.decode(d).replace(/\x1b\[[0-9;]*m/g, '');
       },
     });
     for (const [after, key] of keys) {

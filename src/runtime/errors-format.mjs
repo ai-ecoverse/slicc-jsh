@@ -153,9 +153,17 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPro
   }
   if (!(err instanceof Error)) {
     const shown = util.inspect(err);
+    // A thrown primitive has no stack: in -e code, point at its first
+    // `throw` (V8 gives Node the exact spot); else Node's shape for line 1.
+    let where = `[eval]:1\nthrow ${shown}\n^`;
+    if (typeof evalCode === 'string') {
+      const lines = evalCode.split('\n');
+      const n = lines.findIndex((l) => /\bthrow\b/.test(l));
+      if (n >= 0) where = `[eval]:${n + 1}\n${lines[n]}\n${' '.repeat(lines[n].search(/\bthrow\b/))}^`;
+    }
     return {
       body:
-        `\n[eval]:1\nthrow ${shown}\n^\n${shown}\n` +
+        `\n${where}\n${shown}\n` +
         `(Use \`node --trace-uncaught ...\` to show where the exception was thrown)\n` +
         trailer,
     };

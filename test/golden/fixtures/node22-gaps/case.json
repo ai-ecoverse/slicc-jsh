@@ -1,0 +1,6 @@
+{
+  "description": "fix 13's Node 22 gaps: chdir and kill errors, kill(self) to a handler, versions/ppid, require(esm)'s __esModule facade, console formatting, sm3 and the legacy digests, callback-form validation",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

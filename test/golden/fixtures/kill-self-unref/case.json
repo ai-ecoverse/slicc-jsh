@@ -1,0 +1,8 @@
+{
+  "description": "a signal to itself with a handler, nothing else pending: the loop ends first and the handler never runs (signal handles are unref'd)",
+  "argv": [
+    "-e",
+    "process.on('SIGTERM', () => console.log('handler')); console.log(process.kill(process.pid, 'SIGTERM')); console.log('after')"
+  ],
+  "shim": true
+}

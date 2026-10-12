@@ -1,5 +1,5 @@
 {
-  "status": 143,
-  "stdout": "on SIGINT: \"registered\"\n",
+  "status": 0,
+  "stdout": "on SIGINT: \"registered\"\nkill self SIGTERM: \"handler ran\"\n",
   "stderr": ""
 }

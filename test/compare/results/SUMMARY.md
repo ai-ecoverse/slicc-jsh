@@ -14,7 +14,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [child-process-floating](child-process-floating) | builtins | = | = | = | same | 0 / 0 / 0 / 0 |
 | [child-process-sync](child-process-sync) | builtins | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [console-format](console-format) | console | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
-| [console-methods](console-methods) | console | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
+| [console-methods](console-methods) | console | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [crypto](crypto) | builtins | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [env-paths](env-paths) | environment | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [error-cause](error-cause) | exit | ≠ | = | ≠ | six≠node | 1 / 1 / 1 / 1 |
@@ -55,7 +55,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [globals-crypto](globals-crypto) | globals | = | = | = | same | 0 / 0 / 0 / 0 |
 | [http-module](http-module) | builtins | ≠ | ≠ | = | all differ | 1 / 0 / 0 / 0 |
 | [import-builtin](import-builtin) | wrapper | = | = | = | same | 0 / 0 / 0 / 0 |
-| [import-in-function-ctor](import-in-function-ctor) | wrapper | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
+| [import-in-function-ctor](import-in-function-ctor) | wrapper | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [import-package](import-package) | wrapper | = | = | = | same | 0 / 0 / 0 / 0 |
 | [import-relative](import-relative) | wrapper | ≠ | ≠ | = | six=seven≠node | 0 / 0 / 0 / 0 |
 | [import-url](import-url) | wrapper | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
@@ -64,7 +64,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [os](os) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [path](path) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [process-argv](process-argv) | process | ≠ | ≠ | ≠ | all differ | 0 / 0 / 0 / 0 |
-| [process-cwd-chdir](process-cwd-chdir) | process | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
+| [process-cwd-chdir](process-cwd-chdir) | process | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [process-env](process-env) | process | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [process-env-to-child](process-env-to-child) | process | ≠ | = | = | six≠node | 1 / 0 / 0 / 0 |
 | [process-exit-catchable](process-exit-catchable) | exit | ≠ | = | = | six≠node | 3 / 3 / 3 / 3 |
@@ -77,13 +77,13 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [process-exit-noarg](process-exit-noarg) | exit | = | = | = | same | 6 / 6 / 6 / 6 |
 | [process-parse-flags](process-parse-flags) | process | = | = | ≠ | same | 0 / 0 / 0 / 1 |
 | [process-props](process-props) | process | ≠ | ≠ | ≠ | all differ | 0 / 0 / 0 / 0 |
-| [process-signals](process-signals) | process | ≠ | ≠ | = | all differ | 0 / 143 / 0 / 0 |
+| [process-signals](process-signals) | process | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [process-stdout](process-stdout) | process | ≠ | = | = | six≠node | timeout / 0 / 0 / 0 |
 | [process-stdout-istty](process-stdout-istty) | process | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [process-stdout-write-cb](process-stdout-write-cb) | process | ≠ | = | = | six≠node | timeout / 0 / 0 / 0 |
 | [require-absolute](require-absolute) | require | ≠ | = | = | six≠node | 1 / 0 / 0 / 0 |
 | [require-builtins](require-builtins) | require | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
-| [require-esm](require-esm) | require | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
+| [require-esm](require-esm) | require | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [require-missing](require-missing) | require | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [require-native](require-native) | require | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [require-node-modules](require-node-modules) | require | = | ≠ | = | seven≠node | 0 / 0 / 0 / 0 |
@@ -98,7 +98,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [sliccy-cli-die-object](sliccy-cli-die-object) | sliccy | = | = | – | same | 4 / 4 / 4 / – |
 | [sliccy-cli-help](sliccy-cli-help) | sliccy | = | = | – | same | 0 / 0 / 0 / – |
 | [sliccy-cli-help-in-main-catch](sliccy-cli-help-in-main-catch) | exit | ≠ | = | – | six≠node | 1 / 0 / 0 / – |
-| [sliccy-color-force](sliccy-color-force) | sliccy | ≠ | ≠ | – | six=seven≠node | 0 / 0 / 0 / – |
+| [sliccy-color-force](sliccy-color-force) | sliccy | ≠ | = | – | six≠node | 0 / 0 / 0 / – |
 | [sliccy-color-no-color](sliccy-color-no-color) | sliccy | = | = | – | same | 0 / 0 / 0 / – |
 | [sliccy-color-pipe](sliccy-color-pipe) | sliccy | ≠ | = | – | six≠node | 0 / 0 / 0 / – |
 | [sliccy-exec](sliccy-exec) | sliccy | ≠ | = | – | six≠node | 0 / 0 / 0 / – |
@@ -115,7 +115,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [stdin-read-empty](stdin-read-empty) | process.stdin | = | = | = | same | 0 / 0 / 0 / 0 |
 | [stdin-readline](stdin-readline) | process.stdin | = | = | = | same | 0 / 0 / 0 / 0 |
 | [stdin-text-helper](stdin-text-helper) | process.stdin | = | = | = | same | 0 / 0 / 0 / 0 |
-| [stdout-isatty-color](stdout-isatty-color) | process | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
+| [stdout-isatty-color](stdout-isatty-color) | process | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [stream](stream) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [timers](timers) | globals | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [timers-immediate](timers-immediate) | globals | = | = | = | same | 0 / 0 / 0 / 0 |

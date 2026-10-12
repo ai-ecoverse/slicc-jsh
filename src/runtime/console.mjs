@@ -8,13 +8,9 @@ function nowMs() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-function formatArgs(util, args) {
-  if (args.length === 0) return '';
-  const first = args[0];
-  if (typeof first === 'string' && /%[sdjifoOc%]/.test(first)) {
-    return util.format(...args);
-  }
-  return args.map((a) => (typeof a === 'string' ? a : util.inspect(a, { colors: false }))).join(' ');
+// Node's console formats with util.formatWithOptions, colored or not.
+function formatArgs(util, args, colors = false) {
+  return util.formatWithOptions(colors ? { colors: true } : {}, ...args);
 }
 
 function tableCell(value, util) {
@@ -65,13 +61,17 @@ function renderTable(tabularData, util) {
   ].join('\n');
 }
 
-export function createConsole(writeStdout, writeStderr, util) {
+/**
+ * @param {(fd: 1 | 2) => boolean} [colorFor] Node's shouldColorize for that
+ *   stream (FORCE_COLOR, or a terminal with more than 2 bits of color)
+ */
+export function createConsole(writeStdout, writeStderr, util, colorFor = () => false) {
   const counts = new Map();
   const times = new Map();
   const group = { depth: 0 };
 
   const write = (sink, args) => {
-    const body = formatArgs(util, args);
+    const body = formatArgs(util, args, colorFor(sink === writeStdout ? 1 : 2));
     const line = `${body}\n`;
     sink(group.depth > 0 ? `${'  '.repeat(group.depth)}${line}` : line);
   };
@@ -87,7 +87,13 @@ export function createConsole(writeStdout, writeStderr, util) {
     warn: error,
     error,
     dir(obj, options) {
-      writeStdout(`${util.inspect(obj, { customInspect: true, ...options })}\n`);
+      const colors = colorFor(1) ? { colors: true } : {};
+      writeStdout(`${util.inspect(obj, { customInspect: false, ...colors, ...options })}\n`);
+    },
+    trace: function trace(...args) {
+      const err = { name: 'Trace', message: formatArgs(util, args, colorFor(2)) };
+      Error.captureStackTrace(err, trace);
+      error(err.stack);
     },
     table(tabularData) {
       writeStdout(`${renderTable(tabularData, util)}\n`);
@@ -107,7 +113,8 @@ export function createConsole(writeStdout, writeStderr, util) {
     assert: (condition, ...args) => {
       if (condition) return;
       if (args.length === 0) error('Assertion failed');
-      else error(`Assertion failed: ${formatArgs(util, args)}`);
+      else if (typeof args[0] === 'string') error(`Assertion failed: ${args[0]}`, ...args.slice(1));
+      else error('Assertion failed', ...args);
     },
     time: (label) => {
       const key = labelOf(label);

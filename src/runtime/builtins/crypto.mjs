@@ -89,10 +89,31 @@ const DIGEST_ALIASES = (() => {
   add('blake2b512');
   add('blake2s256');
   add('md5-sha1');
+  add('sm3', 'rsa-sm3', 'sm3withrsaencryption');
   return a;
 })();
 
 const digestOf = (name) => (typeof name === 'string' ? DIGEST_ALIASES[name.toLowerCase()] : undefined);
+
+// Digests in OpenSSL 3's legacy provider, which Node 22 doesn't load: known
+// names that fail "unsupported" rather than "Digest method not supported".
+const LEGACY_DIGEST = new Set([
+  'md4', 'rsa-md4', 'md4withrsaencryption',
+  'mdc2', 'rsa-mdc2', 'mdc2withrsa',
+  'whirlpool',
+]);
+const isLegacyDigest = (name) => typeof name === 'string' && LEGACY_DIGEST.has(name.toLowerCase());
+const INIT_ERROR = 'error:03000086:digital envelope routines::initialization error';
+const UNSUPPORTED = 'error:0308010C:digital envelope routines::unsupported';
+/** Node 22's error for one (its key order; a Hash's stack has both lines). */
+function evpUnsupported(forHash) {
+  const err = new Error(UNSUPPORTED);
+  err.opensslErrorStack = forHash ? [INIT_ERROR, UNSUPPORTED] : [INIT_ERROR];
+  err.library = 'digital envelope routines';
+  err.reason = 'unsupported';
+  err.code = 'ERR_OSSL_EVP_UNSUPPORTED';
+  return err;
+}
 
 // --- ciphers -----------------------------------------------------------------
 
@@ -351,6 +372,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
         this.h = algorithm.h.clone();
       } else {
         const canon = digestOf(algorithm);
+        if (!canon && isLegacyDigest(algorithm)) throw evpUnsupported(true);
         if (!canon) throw nativeError(Error, undefined, 'Digest method not supported');
         this.canon = canon;
         this.h = canon === 'md5-sha1' ? md5sha1() : lib.hashes[canon].create();
@@ -448,6 +470,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
   class HmacHandle {
     init(hmac, key) {
       const canon = digestOf(hmac);
+      if (!canon && isLegacyDigest(hmac)) throw evpUnsupported(false);
       if (!canon || canon === 'md5-sha1' || canon.startsWith('shake')) throw invalidDigest(hmac);
       this.h = lib.hmac.create(lib.hashes[canon], key);
     }
@@ -499,6 +522,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
         else throw ERR_INVALID_ARG_VALUE('outputEncoding', outputEncoding);
       }
     }
+    if (!digestOf(algorithm) && isLegacyDigest(algorithm)) throw evpUnsupported(true);
     if (!digestOf(algorithm)) throw nativeError(Error, undefined, `Digest method ${algorithm} is not supported`);
     return new Hash(algorithm).update(input).digest(normalized);
   }
@@ -778,6 +802,8 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     validateInt32(iterations, 'iterations', 1);
     validateInt32(keylen, 'keylen', 0);
     const canon = digestOf(digest);
+    // A legacy-provider digest is known, so the job starts and then fails.
+    if (!canon && isLegacyDigest(digest)) return { failed: true };
     if (!canon || canon === 'md5-sha1' || canon.startsWith('shake')) throw invalidDigest(digest);
     return { password: toU8(password), salt: toU8(salt), iterations, keylen, fn: lib.hashes[canon] };
   }
@@ -785,7 +811,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
   const derivingBitsFailed = () => nativeError(Error, undefined, 'Deriving bits failed');
   function pbkdf2Sync(password, salt, iterations, keylen, digest) {
     const o = pbkdf2Check(password, salt, iterations, keylen, digest);
-    if (o.keylen === 0) throw derivingBitsFailed();
+    if (o.failed || o.keylen === 0) throw derivingBitsFailed();
     return toBuffer(lib.pbkdf2(o.fn, o.password, o.salt, { c: o.iterations, dkLen: o.keylen }));
   }
   function pbkdf2(password, salt, iterations, keylen, digest, callback) {
@@ -796,7 +822,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     const o = pbkdf2Check(password, salt, iterations, keylen, digest);
     validateFunction(callback, 'callback');
     const job =
-      o.keylen === 0
+      o.failed || o.keylen === 0
         ? Promise.reject(derivingBitsFailed())
         : lib.pbkdf2Async(o.fn, o.password, o.salt, { c: o.iterations, dkLen: o.keylen });
     settle(job, callback, (u8) => Buffer.from(u8));
@@ -824,14 +850,15 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
       throw ERR_OUT_OF_RANGE('info', 'must not contain more than 1024 bytes', info.byteLength);
     }
     const canon = digestOf(digest);
+    if (!canon && isLegacyDigest(digest)) return { failed: true };
     if (!canon || canon === 'md5-sha1' || canon.startsWith('shake')) throw invalidDigest(digest);
     const fn = lib.hashes[canon];
     if (length > 255 * fn.outputLen) throw nativeError(RangeError, 'ERR_CRYPTO_INVALID_KEYLEN', 'Invalid key length');
     return { fn, key, salt, info, length };
   }
-  function hkdfRun({ fn, key, salt, info, length }) {
+  function hkdfRun({ failed, fn, key, salt, info, length }) {
     // As pbkdf2: Node 22.22's HKDFJob fails a zero length.
-    if (length === 0) throw derivingBitsFailed();
+    if (failed || length === 0) throw derivingBitsFailed();
     const out = new ArrayBuffer(length);
     new Uint8Array(out).set(lib.hkdf(fn, prepareSecretKey(key), toU8(salt), toU8(info), length));
     return out;
@@ -1081,7 +1108,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
 
   const crypto = {
     // Node 22's enumerable exports, in its order.
-    checkPrime: notHere('crypto.checkPrime'),
+    checkPrime: notHereCallback('crypto.checkPrime'),
     checkPrimeSync: notHere('crypto.checkPrimeSync'),
     createCipheriv: (cipher, key, iv, options) => new Cipheriv(cipher, key, iv, options),
     createDecipheriv: (cipher, key, iv, options) => new Decipheriv(cipher, key, iv, options),
@@ -1096,7 +1123,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     createSign: notHere('crypto.createSign'),
     createVerify: notHere('crypto.createVerify'),
     diffieHellman: notHere('crypto.diffieHellman'),
-    generatePrime: notHere('crypto.generatePrime'),
+    generatePrime: notHereCallback('crypto.generatePrime'),
     generatePrimeSync: notHere('crypto.generatePrimeSync'),
     getCiphers,
     getCipherInfo,
@@ -1107,7 +1134,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     hkdfSync,
     pbkdf2,
     pbkdf2Sync,
-    generateKeyPair: notHere('crypto.generateKeyPair'),
+    generateKeyPair: notHereCallback('crypto.generateKeyPair'),
     generateKeyPairSync: notHere('crypto.generateKeyPairSync'),
     generateKey,
     generateKeySync,
@@ -1170,6 +1197,24 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     configurable: true,
   });
   return crypto;
+}
+
+/**
+ * The callback forms (generateKeyPair(type, options, callback), …): the
+ * callback is checked first, as Node's, and gets the error on a later turn,
+ * as a failed job reports.
+ */
+function notHereCallback(name) {
+  return function notAvailable(...args) {
+    const callback = typeof args[1] === 'function' ? args[1] : args[2];
+    validateFunction(callback, 'callback');
+    const err = nativeError(
+      Error,
+      'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM',
+      `${name} is not available in slicc-jsh (no pure-JS implementation); use crypto.subtle where it applies`
+    );
+    setImmediate(() => callback(err));
+  };
 }
 
 function notHere(name) {

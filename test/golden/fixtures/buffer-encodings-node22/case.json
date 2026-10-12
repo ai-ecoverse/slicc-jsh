@@ -1,0 +1,13 @@
+{
+  "description": "Buffer encodings as Node 22's lib/buffer.js: ERR_UNKNOWN_ENCODING where Node throws it (from, toString, write, fill, indexOf), forgiving base64, ascii's high bit, byteLength per encoding, whole characters on write, fill/indexOf/lastIndexOf argument handling",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

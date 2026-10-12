@@ -1,0 +1,69 @@
+chdir missing THROWS Error ENOENT: no such file or directory, chdir 'CWD' -> 'no-such-dir' {"code":"ENOENT","errno":-2,"syscall":"chdir","path":"CWD","dest":"no-such-dir"}
+chdir file THROWS Error ENOTDIR: not a directory, chdir 'CWD' -> 'WORK/file' {"code":"ENOTDIR","errno":-20,"syscall":"chdir","path":"CWD","dest":"WORK/file"}
+chdir under file THROWS Error ENOTDIR: not a directory, chdir 'CWD' -> 'WORK/file/x' {"code":"ENOTDIR","errno":-20,"syscall":"chdir","path":"CWD","dest":"WORK/file/x"}
+chdir number THROWS TypeError The "directory" argument must be of type string. Received type number (1) {"code":"ERR_INVALID_ARG_TYPE"}
+chdir ok true
+kill other THROWS Error kill ESRCH {"code":"ESRCH","errno":-3,"syscall":"kill"}
+kill bad signal THROWS TypeError Unknown signal: SIGNOPE {"code":"ERR_UNKNOWN_SIGNAL"}
+kill bad number THROWS Error kill EINVAL {"code":"EINVAL","errno":-22,"syscall":"kill"}
+kill bad pid THROWS TypeError The "pid" argument must be of type number. Received type string ('abc') {"code":"ERR_INVALID_ARG_TYPE"}
+kill INT name THROWS TypeError Unknown signal: INT {"code":"ERR_UNKNOWN_SIGNAL"}
+kill 0 true
+kill SIGWINCH true
+versions 22.22.0 127 1.3.1-470d3a2 1.51.0 12.4.254.21-node.33
+release node number true
+esm facade [ '__esModule', 'a', 'bump', 'default' ] true 2 1 [object Module] false
+esm live 2
+esm named [ 'b' ] undefined
+esm own [ '__esModule', 'default' ] false
+esm module.exports 1
+esm tla THROWS Error require() cannot be used on an ESM graph with top-level await. Use import() instead. To see where the top-level await comes from, use --experimental-print-required-tla.
+  From CWD/script.js 
+  Requiring WORK/esm/tla.mjs  {"code":"ERR_REQUIRE_ASYNC_MODULE"}
+x is 42 and { y: [ 1, [length]: 1 ] }
+100% 5 %s!
+{
+  a: 1,
+  [Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]]
+}
+custom!
+sm3 66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0
+RSA-SM3 GrIdg1XPoX+OYRlIMegajyK+yMco/vt0ftA161CCqis=
+hmac sm3 28e63256e7c5a087b1f073265dc53092163f7b82729735d06f28f10af9d52393
+hash sm3 66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0
+hkdf sm3 c1acb9f18a105a79
+pbkdf2 sm3 8f3d91c57f70b75a
+getHashes sm3 [ 'RSA-SM3', 'sm3', 'sm3WithRSAEncryption' ]
+createHash md4 error:0308010C:digital envelope routines::unsupported ERR_OSSL_EVP_UNSUPPORTED [ 'opensslErrorStack', 'library', 'reason', 'code' ] [
+  'error:03000086:digital envelope routines::initialization error',
+  'error:0308010C:digital envelope routines::unsupported'
+]
+createHash RSA-MD4 error:0308010C:digital envelope routines::unsupported ERR_OSSL_EVP_UNSUPPORTED [ 'opensslErrorStack', 'library', 'reason', 'code' ] [
+  'error:03000086:digital envelope routines::initialization error',
+  'error:0308010C:digital envelope routines::unsupported'
+]
+createHash whirlpool error:0308010C:digital envelope routines::unsupported ERR_OSSL_EVP_UNSUPPORTED [ 'opensslErrorStack', 'library', 'reason', 'code' ] [
+  'error:03000086:digital envelope routines::initialization error',
+  'error:0308010C:digital envelope routines::unsupported'
+]
+createHash mdc2 error:0308010C:digital envelope routines::unsupported ERR_OSSL_EVP_UNSUPPORTED [ 'opensslErrorStack', 'library', 'reason', 'code' ] [
+  'error:03000086:digital envelope routines::initialization error',
+  'error:0308010C:digital envelope routines::unsupported'
+]
+createHash md2 Digest method not supported undefined [] undefined
+createHash nope Digest method not supported undefined [] undefined
+hmac md4 THROWS Error error:0308010C:digital envelope routines::unsupported {"code":"ERR_OSSL_EVP_UNSUPPORTED"}
+hash md4 THROWS Error error:0308010C:digital envelope routines::unsupported {"code":"ERR_OSSL_EVP_UNSUPPORTED"}
+pbkdf2Sync md4 THROWS Error Deriving bits failed {}
+hkdfSync md4 THROWS Error Deriving bits failed {}
+brotliCompress no cb THROWS TypeError The "callback" argument must be of type function. Received undefined {"code":"ERR_INVALID_ARG_TYPE"}
+brotliCompress bad chunk THROWS TypeError The "chunk" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (5) {"code":"ERR_INVALID_ARG_TYPE"}
+zstdDecompress no cb THROWS TypeError The "callback" argument must be of type function. Received undefined {"code":"ERR_INVALID_ARG_TYPE"}
+generateKeyPair no cb THROWS TypeError The "callback" argument must be of type function. Received undefined {"code":"ERR_INVALID_ARG_TYPE"}
+generatePrime no cb THROWS TypeError The "callback" argument must be of type function. Received undefined {"code":"ERR_INVALID_ARG_TYPE"}
+checkPrime no cb THROWS TypeError The "callback" argument must be of type function. Received undefined {"code":"ERR_INVALID_ARG_TYPE"}
+pbkdf2 md4 async Deriving bits failed undefined
+kill self true
+after kill
+handler SIGTERM 15
+timer after the handler

@@ -1,0 +1,4 @@
+a [33m1[39m { b: [ [33mtrue[39m, [32m'x'[39m ] } [1mnull[22m [90mundefined[39m [33m1n[39m [32mSymbol(s)[39m
+{ n: [33m2[39m }
+{ a: [33m1[39m } and { b: [33m2[39m } and 3
+Map(1) { [33m1[39m => [32m'one'[39m }

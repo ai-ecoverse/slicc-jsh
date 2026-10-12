@@ -193,6 +193,31 @@ export function createCjs({
     return source;
   }
 
+  /**
+   * What require(esm) returns (Node's loadESMFromCJS): its 'module.exports'
+   * export if it has one; else the namespace, unless it has a default export
+   * and no __esModule of its own — then a facade with the same live exports
+   * and __esModule: true, so transpiled code takes .default.
+   */
+  function requiredEsmExports(namespace) {
+    if (namespace == null || typeof namespace !== 'object') return namespace;
+    const has = (k) => Object.prototype.hasOwnProperty.call(namespace, k);
+    if (has('module.exports')) return namespace['module.exports'];
+    if (!has('default') || has('__esModule')) return namespace;
+    const facade = Object.create(null);
+    for (const key of [...Object.keys(namespace), '__esModule'].sort()) {
+      Object.defineProperty(
+        facade,
+        key,
+        key === '__esModule'
+          ? { value: true, enumerable: true, writable: true, configurable: false }
+          : { get: () => namespace[key], enumerable: true, configurable: false }
+      );
+    }
+    Object.defineProperty(facade, Symbol.toStringTag, { value: 'Module' });
+    return Object.preventExtensions(facade);
+  }
+
   /** Set by run.mjs once the ESM loader exists — sync require() of ESM. */
   let requireEsmHook = null;
   function setRequireEsmHook(fn) {
@@ -211,7 +236,7 @@ export function createCjs({
       (filename.endsWith('.js') && findPackageType(dirname)?.type === 'module');
     if (wantsEsm) {
       if (typeof requireEsmHook === 'function') {
-        mod.exports = requireEsmHook(filename);
+        mod.exports = requiredEsmExports(requireEsmHook(filename, mod.parent?.filename));
         return;
       }
       const err = new Error(`Must use import to load ES Module: ${filename}`);
@@ -262,7 +287,7 @@ export function createCjs({
         if (wrapperRedeclare) {
           const pkgType = findPackageType(dirname)?.type;
           if (pkgType !== 'commonjs' && typeof requireEsmHook === 'function') {
-            mod.exports = requireEsmHook(filename);
+            mod.exports = requiredEsmExports(requireEsmHook(filename, mod.parent?.filename));
             return;
           }
           if (pkgType !== 'commonjs') {
@@ -372,7 +397,7 @@ export function createCjs({
     // .mjs always goes through the ESM hook when present.
     if (filename.endsWith('.mjs') && typeof requireEsmHook === 'function') {
       try {
-        mod.exports = requireEsmHook(filename);
+        mod.exports = requiredEsmExports(requireEsmHook(filename, mod.parent?.filename));
         mod.loaded = true;
         return mod.exports;
       } catch (err) {

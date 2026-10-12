@@ -13,7 +13,7 @@ describe('stdio on a terminal (kernel)', () => {
   after(() => jsh?.close());
 
   const decoder = new TextDecoder();
-  async function onTerminal(script, { cols = 100, rows = 30, steps = [] } = {}) {
+  async function onTerminal(script, { cols = 100, rows = 30, steps = [], raw = false } = {}) {
     await jsh.kernel.writeFile('/os/tty-case.js', script);
     let out = '';
     const term = await jsh.kernel.openTerminal(['node', 'tty-case.js'], {
@@ -21,7 +21,9 @@ describe('stdio on a terminal (kernel)', () => {
       cols,
       rows,
       onData: (d) => {
-        out += decoder.decode(d);
+        // console colours a terminal's output, as Node: tests read it plain.
+        const text = decoder.decode(d);
+        out += raw ? text : text.replace(/\x1b\[[0-9;]*m/g, '');
       },
     });
     const until = async (re) => {
@@ -35,6 +37,13 @@ describe('stdio on a terminal (kernel)', () => {
     if (status === 'timeout') term.close();
     return { out: out.replace(/\r\n/g, '\n'), status };
   }
+
+  it('console colours its output on a terminal (Node: more than 2 bits of colour), unless NO_COLOR', async () => {
+    const { out } = await onTerminal("console.log(true, 'x', 1, null); console.log({ a: 'b' });", { raw: true });
+    assert.equal(out, '\x1b[33mtrue\x1b[39m x \x1b[33m1\x1b[39m \x1b[1mnull\x1b[22m\n{ a: \x1b[32m\'b\'\x1b[39m }\n');
+    const plain = await onTerminal("process.env.NO_COLOR = '1'; console.log(true, { a: 'b' });", { raw: true });
+    assert.equal(plain.out, "true { a: 'b' }\n");
+  });
 
   it('is a tty.ReadStream / tty.WriteStream with the terminal size and colors', async () => {
     const { out, status } = await onTerminal(

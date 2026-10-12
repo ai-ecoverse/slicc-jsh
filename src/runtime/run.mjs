@@ -3,7 +3,8 @@ import { drainLoop, trackPromise } from './async-handles.mjs';
 import { createBuffer } from './buffer.mjs';
 import { createUtil } from './builtins/util.mjs';
 import { createCjs } from './cjs/loader.mjs';
-import { parseNodeArgv } from './cli.mjs';
+import { inputTypeOf, parseNodeArgv } from './cli.mjs';
+import { nodeError } from './node-errors.mjs';
 import { createConsole } from './console.mjs';
 import { createEsm } from './esm/loader.mjs';
 import { rewriteDynamicImports, shouldRunAsEsm } from './esm/transform.mjs';
@@ -14,6 +15,7 @@ import { createHandleTable } from './handles.mjs';
 import { createNextTick } from './next-tick.mjs';
 import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
 import { probeStdio } from './stdio.mjs';
+import { installFunctionImport } from './function-import.mjs';
 import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
@@ -132,6 +134,22 @@ export async function runNode(ctx, options = {}) {
     });
     writeStderr(body);
   };
+  /**
+   * The program ends on an uncaught error (Node's triggerUncaughtException):
+   * the 'exit' listeners run first, with 1, then the report prints — not at
+   * all if a listener called process.exit(), whose silence covers it.
+   * Returns the status the listeners leave.
+   */
+  let finishExitRef;
+  const dieUncaught = (report) => {
+    const code = finishExitRef(1);
+    try {
+      report();
+    } catch {
+      /* ignore */
+    }
+    return code;
+  };
 
   const parsed = parseNodeArgv([...ctx.argv]);
   if (parsed.error) {
@@ -155,7 +173,10 @@ export async function runNode(ctx, options = {}) {
   const Buffer = createBuffer();
   // Terminal, file or pipe, for process.stdin/stdout/stderr (Node knows it
   // synchronously; the kernel answers asynchronously, so ask up front).
-  const stdio = await probeStdio(ctx);
+  const [stdio, ppid] = await Promise.all([
+    probeStdio(ctx),
+    Promise.resolve(typeof ctx.ppid === 'function' ? ctx.ppid() : ctx.ppid).catch(() => undefined),
+  ]);
 
   const {
     process,
@@ -164,7 +185,7 @@ export async function runNode(ctx, options = {}) {
     getExitCode,
     getDidExit,
     emitBeforeExit,
-    emitExit,
+    finishExit,
   } = createProcess({
     ctx,
     argv: parsed.processArgv,
@@ -172,6 +193,7 @@ export async function runNode(ctx, options = {}) {
     handles,
     Buffer,
     stdio,
+    ppid,
     onExit: (code) => {
       exitStatus = code;
     },
@@ -182,6 +204,7 @@ export async function runNode(ctx, options = {}) {
       handles.notify();
     },
   });
+  finishExitRef = finishExit;
   process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
   process._setupWarnings();
   if (parsed.mode === 'eval') {
@@ -189,7 +212,13 @@ export async function runNode(ctx, options = {}) {
     lastEvalCode = parsed.code;
   }
 
-  const console = createConsole(writeStdout, writeStderr, util);
+  // Node's shouldColorize (internal/util/colors): FORCE_COLOR decides, else a
+  // terminal with more than 2 bits of color.
+  const colorFor = (fd) => {
+    if (process.env.FORCE_COLOR === undefined && stdio[fd]?.type !== 'tty') return false;
+    return process._nodeLib().tty.getColorDepth(process.env) > 2;
+  };
+  const console = createConsole(writeStdout, writeStderr, util, colorFor);
   const fetch = createFetch(ctx, { handles });
   const restorePlatform = trackPlatformAsync(handles);
   const WebSocket = createWebSocket(ctx, { handles, trackPromise });
@@ -219,18 +248,21 @@ export async function runNode(ctx, options = {}) {
           /* fall through */
         }
       }
-      try {
-        printUncaught(err);
-      } catch {
-        /* ignore */
-      }
-      exitStatus = 1;
+      exitStatus = dieUncaught(() => printUncaught(err));
       timers.clearPending();
     },
   });
   // A signal handler runs from the loop, as an immediate (its throw is an
   // uncaught exception, handled as a timer callback's).
-  process._dispatchSignal = (fn) => timers.setImmediate(fn);
+  // Like Node's signal handles it doesn't keep the loop alive: a signal
+  // still pending when nothing else is left goes unhandled, as there.
+  let loopEnded = false;
+  process._dispatchSignal = (fn) =>
+    timers
+      .setImmediate(() => {
+        if (!loopEnded) fn();
+      })
+      .unref();
 
   // Pre-#297 fallback: host process may still exist before we overwrite globalThis.
   const hostProcess = globalThis.process;
@@ -252,16 +284,11 @@ export async function runNode(ctx, options = {}) {
   });
 
   const fatal = (err) => {
-    try {
-      printUncaught(err);
-    } catch {
-      /* ignore */
-    }
-    exitStatus = 1;
+    exitStatus = dieUncaught(() => printUncaught(err));
     // Before ctx.exit: the kernel ends the process on a timer of its own.
     timers.stop();
     try {
-      ctx.exit?.(1);
+      ctx.exit?.(exitStatus);
     } catch {
       /* JsExit unwinds */
     }
@@ -290,11 +317,10 @@ export async function runNode(ctx, options = {}) {
       version: NODE_SHIM_VERSION,
       evalCode: lastEvalCode,
     });
-    writeStderr(body);
-    exitStatus = 1;
+    exitStatus = dieUncaught(() => writeStderr(body));
     timers.stop();
     try {
-      ctx.exit?.(1);
+      ctx.exit?.(exitStatus);
     } catch {
       /* JsExit */
     }
@@ -378,9 +404,14 @@ export async function runNode(ctx, options = {}) {
     trackPromise,
   });
   // Sync require() of .mjs / "type":"module" — returns the ESM namespace object.
-  cjs.setRequireEsmHook((filename) => esm.requireEsm(filename));
+  cjs.setRequireEsmHook((filename, parentFilename) => esm.requireEsm(filename, parentFilename));
   // Dynamic import() inside CommonJS files — resolve relative to the CJS file.
   cjs.setImportModuleHook((specifier, parent) => esm.importModule(specifier, parent));
+  // import() inside new Function / AsyncFunction bodies (see function-import.mjs).
+  const restoreFunctionImport = installFunctionImport({
+    importFrom: (specifier, referrer) => trackPromise(handles, esm.importModule(specifier, referrer)),
+    cwd: () => process.cwd(),
+  });
 
   /**
    * The entry promise: a `.jsh` body or an ES module's top-level await. It
@@ -440,8 +471,7 @@ export async function runNode(ctx, options = {}) {
             'uncaughtException'
           );
         } else {
-          printUncaught(err);
-          return 1;
+          return dieUncaught(() => printUncaught(err));
         }
       }
     } else if (parsed.mode === 'empty') {
@@ -478,9 +508,16 @@ export async function runNode(ctx, options = {}) {
       lastEvalCode = source;
       process._evalCode = source;
       process.argv[1] = '[stdin]';
+      const inputType = inputTypeOf(process.execArgv);
+      const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(source);
       try {
-        // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
-        cjs.runMain('[stdin]', source, { setMain: false });
+        if (asEsm) {
+          const result = esm.runEsmEval(source, '[stdin]');
+          if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
+        } else {
+          // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
+          cjs.runMain('[stdin]', source, { setMain: false });
+        }
         nextTick.flushSync();
       } catch (err) {
         if (isExitError(err)) throw err;
@@ -491,15 +528,19 @@ export async function runNode(ctx, options = {}) {
             'uncaughtException'
           );
         } else {
-          printUncaught(err);
-          return 1;
+          return dieUncaught(() => printUncaught(err));
         }
       }
     } else if (parsed.mode === 'eval') {
       lastEvalCode = parsed.code;
-      // Node detect-module: CJS unless ESM-only syntax (not mere import()).
-      const asEsm = shouldRunAsEsm(parsed.code);
+      // --input-type, else Node's detect-module: CJS unless ESM-only syntax
+      // (not mere import()).
+      const inputType = inputTypeOf(process.execArgv);
+      const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(parsed.code);
       try {
+        if (asEsm && parsed.print) {
+          throw nodeError(Error, 'ERR_EVAL_ESM_CANNOT_PRINT', '--print cannot be used with ESM input');
+        }
         if (asEsm) {
           const result = esm.runEsmEval(
             parsed.print ? `console.log(${parsed.code}\n)` : parsed.code,
@@ -550,8 +591,7 @@ export async function runNode(ctx, options = {}) {
             'uncaughtException'
           );
         } else {
-          printUncaught(err);
-          return 1;
+          return dieUncaught(() => printUncaught(err));
         }
       }
     } else if (parsed.mode === 'file') {
@@ -589,8 +629,7 @@ export async function runNode(ctx, options = {}) {
             'uncaughtException'
           );
         } else {
-          printUncaught(err);
-          return 1;
+          return dieUncaught(() => printUncaught(err));
         }
       }
     }
@@ -607,10 +646,12 @@ export async function runNode(ctx, options = {}) {
       shouldStop: () => getDidExit() || exitStatus !== undefined,
       weakPending: () => entry?.pending === true,
     });
+    loopEnded = true;
 
     if (entry?.pending && entry.kind === 'esm' && exitStatus === undefined && !getDidExit()) {
       // Node: `Warning: Detected unsettled top-level await at <url>`, exit 13.
-      const where = parsed.mode === 'file' ? `file://${process.argv[1]}` : '[eval1]';
+      const where =
+        parsed.mode === 'file' ? `file://${process.argv[1]}` : `file://${process.cwd().replace(/\/$/, '')}/[eval1]`;
       writeStderr(`Warning: Detected unsettled top-level await at ${where}\n\n\n`);
       exitStatus = 13;
     }
@@ -626,24 +667,11 @@ export async function runNode(ctx, options = {}) {
       nextTick.flushSync();
     }
 
-    if (exitStatus !== undefined) {
-      try {
-        emitExit(exitStatus);
-      } catch {
-        /* ignore */
-      }
-      return exitStatus;
-    }
+    if (exitStatus !== undefined) return finishExit(exitStatus);
     if (getDidExit()) {
       return getExitCode();
     }
-    const code = getExitCode();
-    try {
-      emitExit(code);
-    } catch {
-      /* ignore */
-    }
-    return code;
+    return finishExit(getExitCode());
   } catch (err) {
     if (isExitError(err)) {
       timers.clearPending();
@@ -654,7 +682,7 @@ export async function runNode(ctx, options = {}) {
     } catch {
       await ctx.write(2, `${err}\n`);
     }
-    return 1;
+    return finishExit(1);
   } finally {
     timers.clearPending();
     // Drop hooks only after the turn above; worker teardown follows. After
@@ -669,6 +697,7 @@ export async function runNode(ctx, options = {}) {
     }
     try {
       restoreGlobals();
+      restoreFunctionImport();
       restorePlatform();
       removeJshHandoff();
     } catch {

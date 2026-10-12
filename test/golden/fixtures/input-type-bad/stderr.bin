@@ -1,0 +1,1 @@
+node: --input-type must be "module","commonjs", "module-typescript" or "commonjs-typescript"

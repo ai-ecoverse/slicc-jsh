@@ -31,16 +31,16 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 - `realpathSync` resolves every link.
 - `linkSync` is the kernel's: it works on `tmpfs`, and fails with `EPERM` on the root file system and `fsa`, and with `EXDEV` across mounts.
 
-**`zlib`:** browserify-zlib 0.2.0 (Node's own `zlib.js` port) over pako 1.0.11. The vendor bundle is minified and only evaluated by the first `require('zlib')`. It's patched to Node 22: option validation and its errors, ArrayBuffer and TypedArray input, `{ info: true }`, `destroy`/`close`, `params`, and raw-inflate dictionaries. Also `constants`/`codes` from Node 22 and `crc32`. Deflate output is byte-identical to Node's (golden `zlib-node22`). Brotli and Zstd have no implementation here: they throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`.
+**`zlib`:** browserify-zlib 0.2.0 (Node's own `zlib.js` port) over pako 1.0.11. The vendor bundle is minified and only evaluated by the first `require('zlib')`. It's patched to Node 22: option validation and its errors, ArrayBuffer and TypedArray input, `{ info: true }`, `destroy`/`close`, `params`, and raw-inflate dictionaries. Also `constants`/`codes` from Node 22 and `crc32`. Deflate output is byte-identical to Node's (golden `zlib-node22`). Brotli and Zstd have no implementation here: they throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`, and their callback forms (`brotliCompress(buf, cb)`, …) pass it to the callback.
 
 **`crypto`:** Node 22's own JS layer (`lib/internal/crypto/{hash,cipher,keys,pbkdf2,hkdf,scrypt,random}.js`, ported) over pure-JS primitives in a minified vendor bundle that's only evaluated by the first `require('crypto')`. The primitives are @noble/hashes 1.8.0 (digests, HMAC, PBKDF2, HKDF, scrypt) and browserify-aes 1.2.0 / browserify-des 1.0.2 (block ciphers). Random numbers, `webcrypto` and `subtle` come from the platform's WebCrypto. Available:
-- `createHash`/`hash` for md5, sha1, sha2, sha3, shake, ripemd160, blake2 and md5-sha1, under OpenSSL's names and aliases;
+- `createHash`/`hash` for md5, sha1, sha2, sha3, shake, ripemd160, blake2, sm3 (on noble's Merkle–Damgård base) and md5-sha1, under OpenSSL's names and aliases; md4, mdc2 and whirlpool (OpenSSL's legacy provider) fail with `ERR_OSSL_EVP_UNSUPPORTED`, as in Node 22;
 - `createHmac`, `pbkdf2`, `hkdf` and `scrypt`, each sync and async;
 - `createCipheriv`/`createDecipheriv` for AES ECB/CBC/CFB/CFB8/CFB1/OFB/CTR/GCM and 3DES;
 - secret `KeyObject`s (`createSecretKey`, `generateKey`);
 - the `random*` family, `timingSafeEqual`, `getCiphers`/`getCipherInfo`/`getHashes`, and `constants`.
 
-Outputs and errors match Node 22.22.0 (golden `crypto-node22`). That includes Node's quirks, such as "Deriving bits failed" for a zero-length PBKDF2 or HKDF key. DES (single), Blowfish and the other ciphers in OpenSSL's legacy provider fail as `unsupported`, as in Node 22. Asymmetric keys, sign/verify, DH/ECDH, RSA encryption, primes, X509, and the CCM/OCB/XTS/ChaCha20/wrap ciphers have no implementation here: they throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` (`crypto.subtle` covers much of it).
+Outputs and errors match Node 22.22.0 (golden `crypto-node22`). That includes Node's quirks, such as "Deriving bits failed" for a zero-length PBKDF2 or HKDF key. DES (single), Blowfish and the other ciphers in OpenSSL's legacy provider fail as `unsupported`, as in Node 22. Asymmetric keys, sign/verify, DH/ECDH, RSA encryption, primes, X509, and the CCM/OCB/XTS/ChaCha20/wrap ciphers have no implementation here: they throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` (`crypto.subtle` covers much of it). The callback forms (`generateKeyPair`, `generatePrime`, `checkPrime`) check their callback as Node does and pass that error to it.
 
 **stdio and `tty`:** `process.stdin`, `process.stdout` and `process.stderr` are Node's streams, made on first access: a `stream.Readable` and `stream.Writable`s, so `pipe`, `stream.pipeline`, async iteration, `'data'`/`'end'`, `setEncoding` and `pause`/`resume` work.
 - On a terminal they're `tty.ReadStream` and `tty.WriteStream`:
@@ -56,6 +56,18 @@ Outputs and errors match Node 22.22.0 (golden `crypto-node22`). That includes No
 - **Install timing:** the kernel installs a handler a moment after `process.on` returns, whereas Node does it synchronously. `setRawMode` likewise takes effect a moment after it returns (a key typed in between is still echoed).
 
 **`events`:** Node v22.22.0's own `lib/events.js` (in `src/node-lib`). It is the EventEmitter of `require('events')` and of every emitter in the runtime: `process`, streams (readable-stream uses it, so `new Stream()` is an EventEmitter), child processes, servers and agents. That brings `newListener`/`removeListener`, `prependListener`, `errorMonitor`, `captureRejections`, `setMaxListeners` and the `MaxListenersExceededWarning`, `events.once`/`events.on` with `AbortSignal`, `getEventListeners`, `listenerCount` and `EventEmitter.call(this)` for old-style subclasses. The platform's own `EventTarget`/`AbortSignal` have none of Node's internals, so `getEventListeners` and `getMaxListeners` don't accept them.
+
+**`process` and the program's end (Node 22):**
+- `'exit'` listeners run first on every way out (the end of the loop, `process.exit()`, an uncaught error, an unhandled rejection), and the `process.exitCode` they leave is the status. On an uncaught error they run before its report, and a `process.exit()` in one ends the program without it.
+- `process.kill(process.pid, sig)` delivers to `process.on(sig)` listeners on a later turn (like Node's signal handles it doesn't keep the program alive); with none, the program ends at once with 128 + n and no `'exit'`. Its argument errors (`ESRCH`, `EINVAL`, `ERR_UNKNOWN_SIGNAL`) are Node's.
+- `process.chdir` throws Node's `ENOENT`/`ENOTDIR` errors; `process.ppid` comes from the kernel; `process.versions` lists what the runtime has or mirrors (no openssl, brotli, …).
+- `node --input-type=module|commonjs` for `-e` and piped input. ES module input is `<cwd>/[eval1]`, as in Node (`import.meta.url`, `filename`, `dirname`); `import.meta.resolve` gives a missing file's URL rather than throwing.
+- `require()` of an ES module with a default export returns Node's facade with `__esModule: true` (live bindings), or its `'module.exports'` export.
+- `import()` inside `new Function`/`AsyncFunction` bodies loads through the runtime, resolved against the calling script.
+
+**`console` and `util.format`:** Node's `formatWithOptions` (so `util.inspect`'s output, symbol keys in brackets), colours on a terminal with more than 2 bits of colour or under `FORCE_COLOR` (Node's `shouldColorize`; `NO_COLOR` turns them off), `console.trace`, `console.dir` without custom inspectors, and `console.assert`'s formatting.
+
+**`Buffer` encodings:** as in Node 22's `lib/buffer.js`. `from`, `toString`, `write`, `fill` and `indexOf`/`lastIndexOf`/`includes` throw `ERR_UNKNOWN_ENCODING` for an encoding Node doesn't know (`byteLength` counts it as UTF-8, as Node does). base64 decoding is forgiving, `ascii` drops the high bit, and `write` never writes part of a character.
 
 **Warnings:** `process.emitWarning` is Node's own `internal/process/warning.js`. It prints `(node:PID) [CODE] Name: message`, the first time with its `--trace-…` hint, and emits `'warning'`. `util.deprecate` warns once per code, as Node's does. `--no-warnings`, `--no-deprecation`, `--trace-warnings`, `--trace-deprecation`, `--throw-deprecation`, `--disable-warning=CODE`, `--redirect-warnings=FILE` and `NODE_NO_WARNINGS=1` work as in Node.
 

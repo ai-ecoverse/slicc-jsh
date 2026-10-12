@@ -1,0 +1,8 @@
+
+[eval]:1
+process.on('exit', (c) => { console.log('exit', c, process.exitCode); process.exitCode = 5; }); throw 1
+                                                                                                ^
+1
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0

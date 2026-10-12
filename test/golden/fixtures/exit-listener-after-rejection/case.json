@@ -1,0 +1,8 @@
+{
+  "description": "after an unhandled rejection, 'exit' runs with 1 and may change the status",
+  "argv": [
+    "-e",
+    "process.on('exit', (c) => { console.log('exit', c, process.exitCode); process.exitCode = 4; }); Promise.reject(1)"
+  ],
+  "shim": true
+}
