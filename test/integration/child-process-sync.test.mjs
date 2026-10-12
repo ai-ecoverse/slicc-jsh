@@ -63,12 +63,14 @@ describe('child_process sync forms (kernel)', () => {
       cols: 100,
       rows: 30,
       onData: (d) => {
-        // console colours a terminal's output, as Node: read it plain.
-        out += decoder.decode(d).replace(/\x1b\[[0-9;]*m/g, '');
+        out += decoder.decode(d);
       },
     });
+    // console colours a terminal's output, as Node: read it plain (stripped
+    // whole, so a sequence split across chunks goes too).
+    const plain = () => out.replace(/\x1b\[[0-9;]*m/g, '');
     const until = async (re) => {
-      for (let i = 0; i < 400 && !re.test(out); i++) await new Promise((r) => setTimeout(r, 25));
+      for (let i = 0; i < 400 && !re.test(plain()); i++) await new Promise((r) => setTimeout(r, 25));
     };
     for (const step of steps) {
       await until(step.after);
@@ -76,7 +78,7 @@ describe('child_process sync forms (kernel)', () => {
     }
     const status = await Promise.race([term.exited, new Promise((r) => setTimeout(() => r('timeout'), 30000))]);
     if (status === 'timeout') term.close();
-    return { out: out.replace(/\r\n/g, '\n'), status };
+    return { out: plain().replace(/\r\n/g, '\n'), status };
   }
 
   it("stdio: 'inherit' reaches the program's terminal", async () => {

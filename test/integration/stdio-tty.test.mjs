@@ -21,13 +21,14 @@ describe('stdio on a terminal (kernel)', () => {
       cols,
       rows,
       onData: (d) => {
-        // console colours a terminal's output, as Node: tests read it plain.
-        const text = decoder.decode(d);
-        out += raw ? text : text.replace(/\x1b\[[0-9;]*m/g, '');
+        out += decoder.decode(d);
       },
     });
+    // console colours a terminal's output, as Node: tests read it plain
+    // (stripped whole, so a sequence split across chunks goes too).
+    const plain = () => (raw ? out : out.replace(/\x1b\[[0-9;]*m/g, ''));
     const until = async (re) => {
-      for (let i = 0; i < 200 && !re.test(out); i++) await new Promise((r) => setTimeout(r, 25));
+      for (let i = 0; i < 200 && !re.test(plain()); i++) await new Promise((r) => setTimeout(r, 25));
     };
     for (const step of steps) {
       await until(step.after);
@@ -35,7 +36,7 @@ describe('stdio on a terminal (kernel)', () => {
     }
     const status = await Promise.race([term.exited, new Promise((r) => setTimeout(() => r('timeout'), 20000))]);
     if (status === 'timeout') term.close();
-    return { out: out.replace(/\r\n/g, '\n'), status };
+    return { out: plain().replace(/\r\n/g, '\n'), status };
   }
 
   it('console colours its output on a terminal (Node: more than 2 bits of colour), unless NO_COLOR', async () => {
