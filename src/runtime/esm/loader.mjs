@@ -2,7 +2,9 @@
  * ESM loader over ctx.sync.fs — static import/export, dynamic import(),
  * import.meta, and CJS interop.
  */
+import { encodeFilePath } from '../builtins/url.mjs';
 import { createPath } from '../path.mjs';
+import { preserveSymlinks } from '../cjs/loader.mjs';
 import { createResolver } from '../cjs/resolve.mjs';
 import { shouldRunAsEsm, transformEsm } from './transform.mjs';
 
@@ -13,12 +15,7 @@ const IMPORT_CONDITIONS = ['slicc', 'import', 'node', 'default'];
 function pathToFileURL(filename) {
   if (filename.startsWith('file:')) return filename;
   const p = filename.startsWith('/') ? filename : `/${filename}`;
-  // Encode path segments so `#`, `?`, spaces, etc. are not URL syntax.
-  const encoded = p
-    .split('/')
-    .map((seg) => encodeURIComponent(seg))
-    .join('/');
-  return `file://${encoded}`;
+  return `file://${encodeFilePath(p)}`;
 }
 
 function cjsToNamespace(exports) {
@@ -80,6 +77,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     readPackageJson,
     conditions: IMPORT_CONDITIONS,
     extensions: ['.js', '.mjs', '.cjs', '.json'],
+    preserveSymlinks: preserveSymlinks(process),
   });
 
   /** @type {Map<string, { namespace?: object, exportsObj?: object, evaluating?: boolean, promise?: Promise<object> }>} */
@@ -113,12 +111,22 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     return false;
   }
 
+  // Static imports and import.meta.resolve fail as Node's ESM resolver does.
+  function esmResolve(specifier, parentFilename) {
+    try {
+      return resolver.resolve(String(specifier), parentFilename, [parentFilename]);
+    } catch (err) {
+      if (err && err.code === 'MODULE_NOT_FOUND') err.code = 'ERR_MODULE_NOT_FOUND';
+      throw err;
+    }
+  }
+
   function makeImportMeta(filename) {
     const url = filename.startsWith('[') ? filename : pathToFileURL(filename);
     const meta = {
       url,
       resolve(specifier) {
-        const resolved = resolver.resolve(String(specifier), filename, [filename]);
+        const resolved = esmResolve(specifier, filename);
         if (resolved.type === 'builtin') return `node:${resolved.id}`;
         return pathToFileURL(resolved.filename);
       },
@@ -132,7 +140,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
 
   function resolveAndLoadSync(specifier, parentFilename) {
-    const resolved = resolver.resolve(specifier, parentFilename, [parentFilename]);
+    const resolved = esmResolve(specifier, parentFilename);
     if (resolved.type === 'builtin') {
       return cjsToNamespace(builtins.load(resolved.id));
     }
@@ -215,7 +223,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       // preload static deps so TLA graphs and cycles link under import().
       const __preload = async () => {
         for (const spec of staticSpecs) {
-          const resolved = resolver.resolve(spec, filename, [filename]);
+          const resolved = esmResolve(spec, filename);
           if (resolved.type === 'builtin') continue;
           const dep = cache.get(resolved.filename);
           if (dep?.namespace) continue;

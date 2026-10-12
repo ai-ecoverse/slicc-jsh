@@ -15,6 +15,8 @@
  * and nothing outside the source tree is read or written through a link.
  */
 
+import { realpathWith } from '../realpath.mjs';
+
 const ERRNO = { EEXIST: 17, ENOTDIR: 20, EISDIR: 21, EINVAL: 22 };
 
 const SYSTEM_ERROR_PREFIX = {
@@ -95,37 +97,7 @@ export function createCp({ path, ops, abs, fsError, copyFileSync, mkdirpSync }) 
 
   // ---- realpath (lib/fs.js realpathSync) -----------------------------------
 
-  const MAX_LINKS = 40;
-  function realpathSync(p) {
-    let resolved = path.resolve(String(p));
-    const knownHard = new Set();
-    let hops = 0;
-    let current = '/';
-    let pos = 1;
-    while (pos < resolved.length) {
-      const next = resolved.indexOf('/', pos);
-      const part = next === -1 ? resolved.slice(pos) : resolved.slice(pos, next);
-      pos = next === -1 ? resolved.length : next + 1;
-      if (!part) continue;
-      const previous = current;
-      const base = current === '/' ? `/${part}` : `${current}/${part}`;
-      current = base;
-      if (knownHard.has(base)) continue;
-      const st = call(() => ops.lstat(base), 'lstat', base);
-      if (!st.isSymbolicLink) {
-        knownHard.add(base);
-        continue;
-      }
-      if (++hops > MAX_LINKS) throw fsError('ELOOP', 'stat', base);
-      // Node stats the link first, so a dangling or looping one fails here.
-      call(() => ops.stat(base), 'stat', base);
-      const target = call(() => ops.readlink(base), 'readlink', base);
-      resolved = path.resolve(previous, target, resolved.slice(pos));
-      current = '/';
-      pos = 1;
-    }
-    return resolved;
-  }
+  const realpathSync = (p) => realpathWith(ops, path, p, (code, syscall, at, err) => fsError(code, syscall, at, err));
 
   // std::filesystem::weakly_canonical: the existing prefix made canonical,
   // the rest appended as is.

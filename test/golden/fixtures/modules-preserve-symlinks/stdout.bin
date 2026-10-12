@@ -1,0 +1,4 @@
+require W/node_modules/dep/i.js MODULE_NOT_FOUND
+require.resolve W/node_modules/dep/i.js
+module.paths of dep W/node_modules/dep/node_modules
+import ERR_MODULE_NOT_FOUND

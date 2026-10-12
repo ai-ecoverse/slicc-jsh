@@ -3,6 +3,7 @@
  * Covers relative paths, node_modules, package.json main/exports/imports,
  * .js/.cjs/.json, and directory index files.
  */
+import { realpathWith } from '../realpath.mjs';
 import { moduleNotFound, packagePathNotExported } from './errors.mjs';
 
 // `slicc` first: a package can ship a build for slicc-kernel (for example a
@@ -17,7 +18,22 @@ export function createResolver({
   readPackageJson,
   conditions = REQUIRE_CONDITIONS,
   extensions = DEFAULT_EXTENSIONS,
+  preserveSymlinks = false,
 } = {}) {
+  // Node resolves a module to its real path (pnpm's node_modules/dep ->
+  // .pnpm/dep@1/node_modules/dep), so its own requires resolve from where
+  // it really lives; --preserve-symlinks / NODE_PRESERVE_SYMLINKS keep the
+  // link path.
+  const real = (filename) => {
+    if (preserveSymlinks || typeof fs.lstat !== 'function' || typeof fs.readlink !== 'function') {
+      return filename;
+    }
+    try {
+      return realpathWith(fs, path, filename, (code) => Object.assign(new Error(code), { code }));
+    } catch {
+      return filename;
+    }
+  };
   const tryStat = (p) => {
     try {
       if (!fs.exists(p)) return null;
@@ -258,19 +274,19 @@ export function createResolver({
 
     if (request.startsWith('#')) {
       const hit = packageImportsResolve(request, parentFilename);
-      if (hit) return { type: 'file', filename: hit };
+      if (hit) return { type: 'file', filename: real(hit) };
       throw moduleNotFound(request, stack);
     }
 
     if (request.startsWith('/') || request.startsWith('./') || request.startsWith('../')) {
       const abs = path.resolve(fromDir, request);
       const hit = loadAsFileOrDir(abs);
-      if (hit) return { type: 'file', filename: hit };
+      if (hit) return { type: 'file', filename: real(hit) };
       throw moduleNotFound(request, stack);
     }
 
     const nm = loadNodeModules(request, fromDir);
-    if (nm) return { type: 'file', filename: nm };
+    if (nm) return { type: 'file', filename: real(nm) };
 
     throw moduleNotFound(request, stack);
   }

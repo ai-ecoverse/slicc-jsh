@@ -1,0 +1,5 @@
+require W/node_modules/.pnpm/dep@1.0.0/node_modules/dep/i.js peer-ok
+require.resolve W/node_modules/.pnpm/dep@1.0.0/node_modules/dep/i.js
+module.paths of dep W/node_modules/.pnpm/dep@1.0.0/node_modules/dep/node_modules
+import file://W/node_modules/.pnpm/dep@1.0.0/node_modules/dep/i.mjs peer-ok
+import.meta.resolve file://W/node_modules/.pnpm/dep@1.0.0/node_modules/dep/i.mjs

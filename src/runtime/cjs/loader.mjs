@@ -8,6 +8,25 @@ const decoder = new TextDecoder();
 /**
  * Synchronous CJS module system over ctx.sync.
  */
+/** Node's Module._nodeModulePaths: node_modules from `dir` up to the root. */
+function nodeModulePaths(dir) {
+  const parts = dir.split('/').filter(Boolean);
+  const out = [];
+  for (let i = parts.length; i >= 0; i--) {
+    if (parts[i - 1] === 'node_modules') continue;
+    out.push(`/${[...parts.slice(0, i), 'node_modules'].join('/')}`);
+  }
+  return out;
+}
+
+/** Node: `--preserve-symlinks` or NODE_PRESERVE_SYMLINKS=1 keeps link paths. */
+export function preserveSymlinks(process) {
+  return (
+    (process?.execArgv ?? []).includes('--preserve-symlinks') ||
+    process?.env?.NODE_PRESERVE_SYMLINKS === '1'
+  );
+}
+
 export function createCjs({
   ctx,
   process,
@@ -35,7 +54,7 @@ export function createCjs({
     }
   };
 
-  const resolver = createResolver({ fs, path, readPackageJson });
+  const resolver = createResolver({ fs, path, readPackageJson, preserveSymlinks: preserveSymlinks(process) });
   const builtins = createBuiltins({ ctx, process, Buffer, console, path, handles, timers });
   const cache = Object.create(null);
 
@@ -47,9 +66,10 @@ export function createCjs({
     this.parent = parent ?? null;
     this.loaded = false;
     this.children = [];
-    this.paths = [];
+    this.paths = id.startsWith('/') ? nodeModulePaths(path.dirname(id)) : [];
   }
   Module._cache = cache;
+  Module._nodeModulePaths = nodeModulePaths;
   Module.builtinModules = [
     'assert',
     'assert/strict',
@@ -404,6 +424,7 @@ export function createCjs({
     mod.filename = filename;
     mod.id = filename === '[stdin]' || filename === '[eval]' ? filename : '.';
     mod.path = filename.startsWith('[') ? '.' : path.dirname(filename);
+    mod.paths = nodeModulePaths(filename.startsWith('[') ? process.cwd() : path.dirname(filename));
     cache[filename] = mod;
     // Node leaves require.main unset for piped [stdin] scripts (typeof → 'undefined').
     mainModule = setMain ? mod : undefined;
