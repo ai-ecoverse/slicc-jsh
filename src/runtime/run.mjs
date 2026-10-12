@@ -409,10 +409,10 @@ export async function runNode(ctx, options = {}) {
   // Sync require() of .mjs / "type":"module" — returns the ESM namespace object.
   cjs.setRequireEsmHook((filename, parentFilename) => esm.requireEsm(filename, parentFilename));
   // Dynamic import() inside CommonJS files — resolve relative to the CJS file.
-  cjs.setImportModuleHook((specifier, parent) => esm.importModule(specifier, parent));
+  cjs.setImportModuleHook((specifier, parent, options) => esm.importDynamic(specifier, parent, options));
   // import() inside new Function / AsyncFunction bodies (see function-import.mjs).
   const restoreFunctionImport = installFunctionImport({
-    importFrom: (specifier, referrer) => trackPromise(handles, esm.importModule(specifier, referrer)),
+    importFrom: (specifier, referrer, options) => trackPromise(handles, esm.importDynamic(specifier, referrer, options)),
     cwd: () => process.cwd(),
   });
 
@@ -458,7 +458,7 @@ export async function runNode(ctx, options = {}) {
       Buffer,
       fetch,
       createRequire: cjs.createRequire,
-      importModule: (specifier, parent) => esm.importModule(specifier, parent),
+      importModule: (specifier, parent, options) => esm.importDynamic(specifier, parent, options),
       rewriteDynamicImports,
     };
     removeJshHandoff = installJshHandoff(ctx, rt);
@@ -575,7 +575,7 @@ export async function runNode(ctx, options = {}) {
             changed: hasImport,
             binding: importBinding = '__import',
           } = rewriteDynamicImports(parsed.code);
-          const dynImport = (spec) => esm.importModule(spec, evalParent);
+          const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
           const body = parsed.print
             ? `return (${cjsCode}\n)\n//# sourceURL=[eval]`
             : `${cjsCode}\n//# sourceURL=[eval]`;

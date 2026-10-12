@@ -1,0 +1,17 @@
+static json {"a":1}
+json no attr TypeError ERR_IMPORT_ATTRIBUTE_MISSING Module "BASE/j.json" needs an import attribute of "type: json"
+json attr OK {"a":1} ["default"]
+json bad type TypeError ERR_IMPORT_ATTRIBUTE_UNSUPPORTED Import attribute "type" with value "css" is not supported in BASE/j.json
+js with json TypeError ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE Module "BASE/jsm.mjs" is not of type "json"
+other key OK {"a":1} ["default"]
+data json TypeError ERR_IMPORT_ATTRIBUTE_MISSING Module "data:application/json,{"b":2}" needs an import attribute of "type: json"
+data json attr OK {"b":2} ["default"]
+data rel TypeError ERR_UNSUPPORTED_RESOLVE_REQUEST Failed to resolve module specifier "./x.mjs" from "data:text/javascript,import "./x.mjs"": Invalid relative URL or base scheme is not hierarchical.
+file host TypeError ERR_INVALID_FILE_URL_HOST File URL host must be "localhost" or empty on PLATFORM
+file localhost OK "jsm.mjs" ["default"]
+enc slash TypeError ERR_INVALID_MODULE_SPECIFIER Invalid module "DIR/a%2Fb.mjs" must not include encoded "/" or "\" characters imported from DIR/script.mjs
+opts not object TypeError undefined The second argument to import() must be an object
+with not object TypeError undefined The 'assert' option must be an object
+query a OK "jsm.mjs?a=1#f" ["default"]
+distinct by query true 1 0 true
+meta.resolve BASE/jsm.mjs?q#h

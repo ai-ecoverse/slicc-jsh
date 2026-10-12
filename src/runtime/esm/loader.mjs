@@ -141,6 +141,57 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     return false;
   }
 
+  /**
+   * A module's id: its path, plus its URL's query and fragment when it has
+   * them (`./x.mjs?a` and `./x.mjs?b` are two modules, as in Node). The cache
+   * is keyed by id; reading and resolving use the path.
+   */
+  const idParts = new Map();
+  function idOf(filename, suffix) {
+    if (!suffix) return filename;
+    const id = `${filename}\u0000${suffix}`;
+    idParts.set(id, { path: filename, suffix });
+    return id;
+  }
+  const pathOf = (id) => idParts.get(id)?.path ?? id;
+  const suffixOf = (id) => idParts.get(id)?.suffix ?? '';
+
+  /**
+   * Node's import attributes (validateAttributes): a JSON module needs
+   * `type: 'json'`, a JavaScript one mustn't have it, and `type` takes no
+   * other value.
+   */
+  function checkAttributes(url, isJson, attributes) {
+    const type = attributes?.type;
+    if (type !== undefined && type !== 'json') {
+      throw nodeError(TypeError, 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED', `Import attribute "type" with value "${type}" is not supported in ${url}`);
+    }
+    if (isJson && type !== 'json') {
+      throw nodeError(TypeError, 'ERR_IMPORT_ATTRIBUTE_MISSING', `Module "${url}" needs an import attribute of "type: json"`);
+    }
+    if (!isJson && type === 'json') {
+      throw nodeError(TypeError, 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE', `Module "${url}" is not of type "json"`);
+    }
+  }
+  const urlOfResolved = (r) =>
+    r.type === 'data' ? r.url : r.type === 'builtin' ? `node:${r.id}` : pathToFileURL(pathOf(r.filename)) + suffixOf(r.filename);
+  const isJsonResolved = (r) =>
+    r.type === 'data'
+      ? /^data:application\/json[;,]/i.test(r.url)
+      : r.type === 'file' && pathOf(r.filename).endsWith('.json');
+
+  /** import()'s second argument, as V8 checks it; its `with` attributes. */
+  function attributesOf(options) {
+    if (options === undefined) return undefined;
+    if (options === null || typeof options !== 'object') {
+      throw new TypeError('The second argument to import() must be an object');
+    }
+    const attrs = options.with ?? options.assert;
+    if (attrs === undefined) return undefined;
+    if (attrs === null || typeof attrs !== 'object') throw new TypeError("The 'assert' option must be an object");
+    return attrs;
+  }
+
   // Static imports and import.meta.resolve fail as Node's ESM resolver does.
   /** What Node names the importing module in its errors. */
   const parentLabel = (parentFilename) =>
@@ -168,17 +219,43 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       );
       throw err;
     }
+    let suffix = '';
     if (scheme === 'file' || spec.startsWith('/') || spec.startsWith('./') || spec.startsWith('../')) {
+      // A data: module is no base for a relative URL (Node).
+      if (scheme !== 'file' && parentFilename?.startsWith('data:')) {
+        throw nodeError(
+          TypeError,
+          'ERR_UNSUPPORTED_RESOLVE_REQUEST',
+          `Failed to resolve module specifier "${spec}" from "${parentFilename}": Invalid relative URL or base scheme is not hierarchical.`
+        );
+      }
+      let url;
       try {
-        const base = parentFilename && !parentFilename.startsWith('[') ? parentFilename : `${process.cwd().replace(/\/$/, '')}/`;
-        const url = new URL(spec, `file://${encodeFilePath(base)}`);
-        spec = decodeURIComponent(url.pathname);
+        const base = parentFilename && !parentFilename.startsWith('[') ? pathOf(parentFilename) : `${process.cwd().replace(/\/$/, '')}/`;
+        url = new URL(spec, `file://${encodeFilePath(base)}`);
       } catch {
-        /* left as is */
+        url = undefined;
+      }
+      if (url) {
+        if (url.hostname !== '') {
+          throw nodeError(TypeError, 'ERR_INVALID_FILE_URL_HOST', 'File URL host must be "localhost" or empty on linux');
+        }
+        if (/%2f|%5c/i.test(url.pathname)) {
+          throw nodeError(
+            TypeError,
+            'ERR_INVALID_MODULE_SPECIFIER',
+            `Invalid module "${url.pathname}" must not include encoded "/" or "\\" characters imported from ${parentLabel(parentFilename)}`
+          );
+        }
+        spec = decodeURIComponent(url.pathname);
+        // The query and fragment are part of the module's identity (Node).
+        suffix = url.search + url.hash;
       }
     }
     try {
-      return resolver.resolve(spec, parentFilename, [parentFilename]);
+      const resolved = resolver.resolve(spec, parentFilename && pathOf(parentFilename), [parentFilename]);
+      if (suffix && resolved.type === 'file') resolved.filename = idOf(resolved.filename, suffix);
+      return resolved;
     } catch (err) {
       const why = err?.esmResolveError;
       const from = parentLabel(parentFilename);
@@ -281,10 +358,14 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
         },
       };
     }
+    const suffix = suffixOf(filename);
+    filename = pathOf(filename);
     const evalInput = filename.startsWith('[') || filename.endsWith('/[eval1]');
     if (evalInput) filename = `${process.cwd().replace(/\/$/, '')}/[eval1]`;
     // Node's URL for it keeps the brackets (pathToFileURL would encode them).
-    const url = evalInput ? `${pathToFileURL(path.dirname(filename))}/[eval1]`.replace(':////', ':///') : pathToFileURL(filename);
+    const url = evalInput
+      ? `${pathToFileURL(path.dirname(filename))}/[eval1]`.replace(':////', ':///')
+      : pathToFileURL(filename) + suffix;
     const meta = {
       url,
       resolve(specifier) {
@@ -304,15 +385,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
           }
           throw err;
         }
-        if (resolved.type === 'builtin') return `node:${resolved.id}`;
-        if (resolved.type === 'data') return resolved.url;
-        // A file URL specifier's query and fragment stay on the result.
-        let tail = '';
-        if (/^(\.{1,2}\/|\/|file:)/.test(String(specifier))) {
-          const u = new URL(String(specifier), pathToFileURL(filename));
-          tail = u.search + u.hash;
-        }
-        return pathToFileURL(resolved.filename) + tail;
+        return urlOfResolved(resolved);
       },
     };
     // Node 22+: import.meta.dirname / import.meta.filename.
@@ -321,8 +394,9 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     return meta;
   }
 
-  function resolveAndLoadSync(specifier, parentFilename) {
+  function resolveAndLoadSync(specifier, parentFilename, attributes) {
     const resolved = esmResolve(specifier, parentFilename);
+    if (resolved.type !== 'builtin') checkAttributes(urlOfResolved(resolved), isJsonResolved(resolved), attributes);
     if (resolved.type === 'data') {
       const { source, ns } = loadDataModule(resolved.url);
       return ns ?? evaluateEsm(resolved.url, source);
@@ -338,7 +412,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     if (cached?.namespace) return cached.namespace;
     if (cached?.evaluating) return cached.exportsObj;
 
-    const { code, hasTopLevelAwait, preambleLines } = transformEsm(source, filename);
+    const { code, hasTopLevelAwait, preambleLines } = transformEsm(source, pathOf(filename));
     if (hasTopLevelAwait) {
       const err = requireAsyncModule();
       deepAsync.add(err);
@@ -350,16 +424,16 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     cache.set(filename, entry);
 
     const __meta = makeImportMeta(filename);
-    const __importSync = (spec) => resolveAndLoadSync(spec, filename);
-    const __import = (spec) => {
+    const __importSync = (spec, attributes) => resolveAndLoadSync(spec, filename, attributes);
+    const __import = (spec, options) => {
       // Dynamic import must support TLA modules (async evaluation).
-      const p = importModule(String(spec), filename);
+      const p = Promise.resolve().then(() => importModule(String(spec), filename, attributesOf(options)));
       if (trackPromise && handles) return trackPromise(handles, p);
       return p;
     };
 
     // Its frames: the file's own lines, as a file: URL (see stack.mjs).
-    registerEsmFrames(filename, 1 + preambleLines);
+    registerEsmFrames(pathOf(filename), 1 + preambleLines);
     try {
       const fn = new Function(
         '__meta',
@@ -388,9 +462,9 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     if (cached?.evaluating && cached.promise) return cached.promise;
     if (cached?.evaluating) return cached.exportsObj;
 
-    const { bodyCode, staticSpecs, exportSetup, hoistImports } = transformEsm(
+    const { bodyCode, staticSpecs, staticAttributes, exportSetup, hoistImports } = transformEsm(
       source,
-      filename
+      pathOf(filename)
     );
     const exportsObj = Object.create(null);
     const entry = { evaluating: true, exportsObj };
@@ -399,9 +473,9 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
     try {
       const __meta = makeImportMeta(filename);
-      const __importSync = (spec) => resolveAndLoadSync(spec, filename);
-      const __import = (spec) => {
-        const p = importModule(String(spec), filename);
+      const __importSync = (spec, attributes) => resolveAndLoadSync(spec, filename, attributes);
+      const __import = (spec, options) => {
+        const p = Promise.resolve().then(() => importModule(String(spec), filename, attributesOf(options)));
         if (trackPromise && handles) return trackPromise(handles, p);
         return p;
       };
@@ -420,14 +494,14 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
             await dep.promise;
             continue;
           }
-          await importModule(spec, filename);
+          await importModule(spec, filename, staticAttributes?.[spec]);
         }
       };
 
       const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
       const prefix = [...exportSetup, 'await __preload();', ...hoistImports].join('\n');
-      const parts = [prefix, bodyCode, `//# sourceURL=${filename}`];
-      registerEsmFrames(filename, 1 + (prefix.match(/\n/g) || []).length + 1);
+      const parts = [prefix, bodyCode, `//# sourceURL=${pathOf(filename)}`];
+      registerEsmFrames(pathOf(filename), 1 + (prefix.match(/\n/g) || []).length + 1);
       const fn = new AsyncFunction(
         '__meta',
         '__importSync',
@@ -447,17 +521,15 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
 
   function loadFileSync(filename) {
-    if (filename.endsWith('.json')) {
-      const data = JSON.parse(decoder.decode(fs.readFile(filename)));
-      return cjsToNamespace(data);
-    }
+    const file = pathOf(filename);
+    if (file.endsWith('.json')) return jsonNamespace(filename);
     const cached = cache.get(filename);
     if (cached?.namespace) return cached.namespace;
     if (cached?.evaluating) return cached.exportsObj;
 
-    const source = decoder.decode(fs.readFile(filename));
-    if (!isEsmFilename(filename, source)) {
-      const exports = cjs.loadFile(filename);
+    const source = decoder.decode(fs.readFile(file));
+    if (!isEsmFilename(file, source)) {
+      const exports = cjs.loadFile(file);
       const ns = cjsToNamespace(exports);
       cache.set(filename, { namespace: ns });
       return ns;
@@ -465,19 +537,32 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     return evaluateEsm(filename, source);
   }
 
+  /** A JSON module: its default export is the parsed file, once per id. */
+  function jsonNamespace(filename) {
+    const cached = cache.get(filename);
+    if (cached?.namespace) return cached.namespace;
+    const ns = Object.create(null);
+    Object.defineProperty(ns, 'default', {
+      value: JSON.parse(decoder.decode(fs.readFile(pathOf(filename)))),
+      enumerable: true,
+      writable: true,
+    });
+    Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
+    cache.set(filename, { namespace: ns });
+    return ns;
+  }
+
   async function loadFileAsync(filename) {
-    if (filename.endsWith('.json')) {
-      const data = JSON.parse(decoder.decode(fs.readFile(filename)));
-      return cjsToNamespace(data);
-    }
+    const file = pathOf(filename);
+    if (file.endsWith('.json')) return jsonNamespace(filename);
     const cached = cache.get(filename);
     if (cached?.namespace) return cached.namespace;
     if (cached?.evaluating && evaluatingStack.has(filename)) return cached.exportsObj;
     if (cached?.promise) return cached.promise;
 
-    const source = decoder.decode(fs.readFile(filename));
-    if (!isEsmFilename(filename, source)) {
-      const exports = cjs.loadFile(filename);
+    const source = decoder.decode(fs.readFile(file));
+    if (!isEsmFilename(file, source)) {
+      const exports = cjs.loadFile(file);
       const ns = cjsToNamespace(exports);
       cache.set(filename, { namespace: ns });
       return ns;
@@ -486,8 +571,9 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     return evaluateEsmAsync(filename, source);
   }
 
-  async function importModule(specifier, parentFilename = `${process.cwd()}/`) {
+  async function importModule(specifier, parentFilename = `${process.cwd()}/`, attributes) {
     const resolved = esmResolve(specifier, parentFilename);
+    if (resolved.type !== 'builtin') checkAttributes(urlOfResolved(resolved), isJsonResolved(resolved), attributes);
     if (resolved.type === 'data') {
       const { source, ns } = loadDataModule(resolved.url);
       return ns ?? evaluateEsmAsync(resolved.url, source);
@@ -553,8 +639,14 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     }
   }
 
+  /** import(specifier, options) from outside a module (CommonJS, .jsh, new Function). */
+  function importDynamic(specifier, parentFilename, options) {
+    return Promise.resolve().then(() => importModule(String(specifier), parentFilename, attributesOf(options)));
+  }
+
   return {
     importModule,
+    importDynamic,
     runMain,
     runEsmEval,
     requireEsm,

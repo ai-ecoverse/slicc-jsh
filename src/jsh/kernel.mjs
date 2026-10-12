@@ -105,11 +105,11 @@ function compiler(rt) {
       if (!sliccyNamespaces.has(id)) sliccyNamespaces.set(id, sliccyNamespace(requireSliccy(id)));
       return sliccyNamespaces.get(id);
     };
-    const importFrom = (specifier) => {
+    const importFrom = (specifier, options) => {
       if (requireSliccy && String(specifier).startsWith('sliccy:')) {
         return Promise.resolve().then(() => importSliccy(String(specifier)));
       }
-      return rt.importModule(specifier, filename);
+      return rt.importModule(specifier, filename, options);
     };
     return (...args) => fn(...args.slice(0, JSH_PARAMS.length), importFrom);
   };

@@ -54,7 +54,9 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false) {
     }
   }
   if (source == null) return null;
-  const display = source.replace(/^#![^\n]*\n/, '');
+  // An ES module's lines are the file's own (its hashbang included); a
+  // CommonJS frame's lines start after the hashbang.
+  const display = loc.esm ? source : source.replace(/^#![^\n]*\n/, '');
   const lines = display.split('\n');
   const n = loc.line >= 1 && loc.line <= lines.length ? loc.line : 1;
   const text = lines[n - 1];

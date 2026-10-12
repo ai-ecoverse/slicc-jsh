@@ -232,7 +232,7 @@ function wrapEsmCallSite(frame, path, line) {
     getColumnNumber: () => col,
     getEvalOrigin: () => undefined,
     getScriptId: () => frame.getScriptId?.(),
-    isToplevel: () => !fn,
+    isToplevel: () => !!top,
     isEval: () => false,
     isNative: () => false,
     isConstructor: () => !!ctor,

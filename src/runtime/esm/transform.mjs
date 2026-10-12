@@ -77,6 +77,20 @@ export function transformEsm(source, filename) {
   }
 
   const staticSpecs = [];
+  // A static import's `with { … }` attributes, by specifier.
+  const staticAttributes = Object.create(null);
+  const attributesOf = (stmt) => {
+    const list = stmt.attributes ?? stmt.assertions;
+    if (!list?.length) return undefined;
+    const out = {};
+    for (const a of list) out[a.key.type === 'Identifier' ? a.key.name : a.key.value] = a.value.value;
+    return out;
+  };
+  const importSyncCall = (spec, stmt) => {
+    const attrs = attributesOf(stmt);
+    if (attrs) staticAttributes[spec] = attrs;
+    return `__importSync(${JSON.stringify(spec)}${attrs ? `, ${JSON.stringify(attrs)}` : ''})`;
+  };
   const noteSpec = (spec) => {
     if (typeof spec === 'string' && !staticSpecs.includes(spec)) staticSpecs.push(spec);
   };
@@ -118,7 +132,7 @@ export function transformEsm(source, filename) {
     const spec = stmt.source.value;
     noteSpec(spec);
     const ns = freshNs();
-    hoistImports.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
+    hoistImports.push(`const ${ns} = ${importSyncCall(spec, stmt)};`);
     for (const s of stmt.specifiers) {
       if (s.type === 'ImportDefaultSpecifier') {
         // Live binding — do not snapshot (TDZ / import cycles).
@@ -149,7 +163,7 @@ export function transformEsm(source, filename) {
       noteSpec(spec);
       const ns = freshNs();
       // Load during import phase (after getters for *local* exports exist).
-      hoistImports.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
+      hoistImports.push(`const ${ns} = ${importSyncCall(spec, stmt)};`);
       if (stmt.exported) {
         // export * as ns from 'x'
         const name = stmt.exported.name;
@@ -175,21 +189,17 @@ export function transformEsm(source, filename) {
         bindExport('default', d.id.name);
       } else if (d.type === 'FunctionDeclaration' || d.type === 'ClassDeclaration') {
         // anonymous default — expression form (handles async function / class).
+        // Only the `export default` and the end are rewritten, so what is
+        // inside (import.meta, import(), live bindings) is rewritten as anywhere.
         const syn = `__default_${exportSetup.length}`;
-        replacements.push({
-          start: stmt.start,
-          end: stmt.end,
-          text: `const ${syn} = (${expandLiveShorthandSlice(body, d, liveLocals)});`,
-        });
+        replacements.push({ start: stmt.start, end: d.start, text: `const ${syn} = (` });
+        replacements.push({ start: d.end, end: stmt.end, text: ');' });
         bindExport('default', syn);
       } else {
         // export default expr;
         const syn = `__default_${exportSetup.length}`;
-        replacements.push({
-          start: stmt.start,
-          end: stmt.end,
-          text: `var ${syn} = (${expandLiveShorthandSlice(body, d, liveLocals)});`,
-        });
+        replacements.push({ start: stmt.start, end: d.start, text: `var ${syn} = (` });
+        replacements.push({ start: d.end, end: stmt.end, text: ');' });
         bindExport('default', syn);
       }
       continue;
@@ -201,7 +211,7 @@ export function transformEsm(source, filename) {
         const spec = stmt.source.value;
         noteSpec(spec);
         const ns = freshNs();
-        hoistImports.push(`const ${ns} = __importSync(${JSON.stringify(spec)});`);
+        hoistImports.push(`const ${ns} = ${importSyncCall(spec, stmt)};`);
         for (const s of stmt.specifiers) {
           const exported =
             s.exported.type === 'Identifier' ? s.exported.name : s.exported.value;
@@ -303,6 +313,7 @@ export function transformEsm(source, filename) {
     preambleLines: preamble ? newlines(preamble) + 1 : 0,
     bodyCode: code,
     staticSpecs,
+    staticAttributes,
     hasTopLevelAwait,
     exportSetup,
     hoistImports,
@@ -484,114 +495,20 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
       stmt.type === 'ExportNamedDeclaration' ||
       stmt.type === 'ExportDefaultDeclaration'
     ) {
-      // Walk export declaration bodies that remain in the source (strip "export " only).
-      // Expression-form `export default { x }` is fully replaced in pass 1 — do not
-      // rewrite its AST positions (would collide with the replacement text).
+      // Walk export declaration bodies that remain in the source (pass 1
+      // rewrites only the `export …` around them).
       if (stmt.type === 'ExportNamedDeclaration' && stmt.declaration) {
         visit(stmt.declaration, stmt, topShadows);
-      } else if (
-        stmt.type === 'ExportDefaultDeclaration' &&
-        (stmt.declaration.type === 'FunctionDeclaration' ||
-          stmt.declaration.type === 'ClassDeclaration') &&
-        stmt.declaration.id
-      ) {
-        visit(stmt.declaration, stmt, topShadows);
+      } else if (stmt.type === 'ExportDefaultDeclaration') {
+        // A bare `export default x` is an expression: its parent for
+        // isValueReference is an expression statement's.
+        const d = stmt.declaration;
+        visit(d, d.type === 'Identifier' ? { type: 'ExpressionStatement', expression: d } : stmt, topShadows);
       }
       continue;
     }
     visit(stmt, ast, topShadows);
   }
-}
-
-/**
- * Rewrite live bindings inside an AST node for replacement text (export default expr).
- * Expands `{ x }` → `{ x: __live["x"] }` and free refs → `__live["x"]`.
- */
-function expandLiveShorthandSlice(source, node, liveLocals) {
-  // `export default lodash` — whole declaration is one Identifier (no parent).
-  if (node.type === 'Identifier' && liveLocals.has(node.name)) {
-    return `__live[${JSON.stringify(node.name)}]`;
-  }
-  const reps = [];
-  const visit = (n, parent, shadows) => {
-    if (!n || typeof n !== 'object') return;
-    if (n.type === 'Property' && n.shorthand && n.key?.type === 'Identifier') {
-      const name = n.key.name;
-      if (
-        liveLocals.has(name) &&
-        !shadows.has(name) &&
-        parent?.type !== 'ObjectPattern'
-      ) {
-        reps.push({
-          start: n.start - node.start,
-          end: n.end - node.start,
-          text: `${name}: __live[${JSON.stringify(name)}]`,
-        });
-        return;
-      }
-    }
-    if (n.type === 'Identifier') {
-      if (
-        liveLocals.has(n.name) &&
-        !shadows.has(n.name) &&
-        isValueReference(n, parent)
-      ) {
-        reps.push({
-          start: n.start - node.start,
-          end: n.end - node.start,
-          text: `__live[${JSON.stringify(n.name)}]`,
-        });
-      }
-      return;
-    }
-    if (
-      n.type === 'FunctionDeclaration' ||
-      n.type === 'FunctionExpression' ||
-      n.type === 'ArrowFunctionExpression'
-    ) {
-      const inner = new Set(shadows);
-      if (n.id?.name) inner.add(n.id.name);
-      for (const p of n.params) collectBoundNames(p, (nm) => inner.add(nm));
-      if (n.id) visit(n.id, n, inner);
-      for (const p of n.params) visit(p, n, inner);
-      visit(n.body, n, inner);
-      return;
-    }
-    if (n.type === 'BlockStatement') {
-      const inner = new Set(shadows);
-      for (const stmt of n.body) {
-        if (stmt.type === 'VariableDeclaration') {
-          for (const d of stmt.declarations) collectBoundNames(d.id, (nm) => inner.add(nm));
-        } else if (stmt.type === 'FunctionDeclaration' && stmt.id) {
-          inner.add(stmt.id.name);
-        }
-      }
-      for (const stmt of n.body) visit(stmt, n, inner);
-      return;
-    }
-    if (n.type === 'CatchClause') {
-      const inner = new Set(shadows);
-      if (n.param) collectBoundNames(n.param, (nm) => inner.add(nm));
-      if (n.param) visit(n.param, n, inner);
-      visit(n.body, n, inner);
-      return;
-    }
-    for (const key of Object.keys(n)) {
-      if (key === 'start' || key === 'end' || key === 'loc' || key === 'range') continue;
-      const val = n[key];
-      if (Array.isArray(val)) {
-        for (const child of val) {
-          if (child && typeof child.type === 'string') visit(child, n, shadows);
-        }
-      } else if (val && typeof val.type === 'string') {
-        visit(val, n, shadows);
-      }
-    }
-  };
-  visit(node, null, new Set());
-  const slice = source.slice(node.start, node.end);
-  if (!reps.length) return slice;
-  return applyReplacements(slice, reps);
 }
 
 function collectBoundNames(pattern, onName) {
