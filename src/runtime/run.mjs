@@ -21,6 +21,8 @@ import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
 import { createWebSocket } from './web/websocket.mjs';
 
+const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
+
 const decoder = new TextDecoder();
 
 /**
@@ -720,6 +722,13 @@ export async function runNode(ctx, options = {}) {
       removeJshHandoff();
     } catch {
       /* ignore */
+    }
+    // process.kill(self) with the default action: the kernel ends the
+    // process with the signal on a turn of its own; give it the time
+    // (else the program ends with 128 + n, as before).
+    if (process._signalDeath) {
+      await process._signalDeath;
+      await new Promise((resolve) => nativeSetTimeout(resolve, 1000));
     }
   }
 }
