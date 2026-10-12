@@ -31,7 +31,9 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 - `realpathSync` resolves every link.
 - `linkSync` is the kernel's: it works on `tmpfs`, and fails with `EPERM` on the root file system and `fsa`, and with `EXDEV` across mounts.
 
-**Still later:** `crypto` / `zlib` / `readline` / `tty` / `tls` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
+**`zlib`:** browserify-zlib 0.2.0 (Node's own `zlib.js` port) over pako 1.0.11. The vendor bundle is minified and only evaluated by the first `require('zlib')`. It's patched to Node 22: option validation and its errors, ArrayBuffer and TypedArray input, `{ info: true }`, `destroy`/`close`, `params`, and raw-inflate dictionaries. Also `constants`/`codes` from Node 22 and `crc32`. Deflate output is byte-identical to Node's (golden `zlib-node22`). Brotli and Zstd have no implementation here: they throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`.
+
+**Still later:** `crypto` / `readline` / `tty` / `tls` / `worker_threads` / TLS `https.createServer` throw `ERR_NOT_SUPPORTED` until their milestone.
 
 JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `dist/jsh.mjs`) because the kernel loads `abi: "js"` modules via `data:` URLs (relative imports do not resolve).
 

@@ -12,9 +12,15 @@ import { VENDOR } from './vendor-embedded.mjs';
 const decoder = new TextDecoder();
 const cache = new Map();
 
-function evalCjs(source, filename) {
+function evalCjs(source, filename, requires = {}) {
   const module = { exports: {} };
+  // Builtins a bundle leaves external (stream, util, …) come from the runtime.
   const require = (id) => {
+    const bare = id.startsWith('node:') ? id.slice(5) : id;
+    if (Object.prototype.hasOwnProperty.call(requires, bare)) {
+      const value = requires[bare];
+      return typeof value === 'function' && value.lazyRequire ? value() : value;
+    }
     throw new Error(`vendor bundle unexpected require(${JSON.stringify(id)}) in ${filename}`);
   };
   const fn = new Function('exports', 'module', 'require', '__filename', '__dirname', source);
@@ -83,8 +89,9 @@ function findOnDisk(ctx, packageRoot, name, process) {
  * @param {string} opts.name file under dist/vendor/ without extension
  * @param {object} [opts.globals] set on globalThis during eval (process, Buffer)
  * @param {object} [opts.process] for PNPM_HOME / HOME discovery
+ * @param {object} [opts.requires] modules the bundle's require() gets, by id
  */
-export function loadVendorCjs({ ctx, packageRoot, name, globals = {}, process } = {}) {
+export function loadVendorCjs({ ctx, packageRoot, name, globals = {}, process, requires } = {}) {
   const key = name;
   if (cache.has(key)) return cache.get(key);
 
@@ -109,7 +116,7 @@ export function loadVendorCjs({ ctx, packageRoot, name, globals = {}, process } 
     globalThis[k] = v;
   }
   try {
-    const exports = evalCjs(source, path);
+    const exports = evalCjs(source, path, requires);
     cache.set(key, exports);
     return exports;
   } finally {

@@ -1,0 +1,6 @@
+{
+  "description": "zlib (browserify-zlib over pako): byte-identical deflate/gzip/raw output at several levels, inflate/gunzip/unzip, streams, callbacks, promisify, { info }, dictionaries, crc32, constants and Node 22's errors",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}
