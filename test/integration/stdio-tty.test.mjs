@@ -124,6 +124,28 @@ describe('stdio on a terminal (kernel)', () => {
     assert.equal(status, 130, out);
   });
 
+  // Node 22.22.0 wires signals through process's own newListener /
+  // removeListener listeners: process.removeAllListeners() removes them too,
+  // so a later process.on('SIGINT') installs nothing and ^C kills (130).
+  // (Host Node: the same script dies of the signal.)
+  it('after process.removeAllListeners(), a new SIGINT listener installs nothing, as in Node', async () => {
+    const { out, status } = await onTerminal(
+      [
+        "process.on('SIGINT', () => console.log('first'));",
+        'process.removeAllListeners();',
+        "console.log('hooks', process.listenerCount('newListener'), process.listenerCount('removeListener'));",
+        "process.on('SIGINT', () => console.log('caught'));",
+        "setTimeout(() => console.log('ready'), 300);",
+        'setTimeout(() => {}, 10000);',
+        '',
+      ].join('\n'),
+      { steps: [{ after: /ready/, do: (t) => t.signal('SIGINT') }] }
+    );
+    assert.match(out, /^hooks 0 0$/m);
+    assert.doesNotMatch(out, /caught|first/);
+    assert.equal(status, 130, out);
+  });
+
   it('reads lines typed in canonical mode until ^D', async () => {
     const { out, status } = await onTerminal(
       [
