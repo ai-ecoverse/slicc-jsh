@@ -252,17 +252,21 @@ Promise.allSettled([pFile, pExec]).then(([f, e]) => {
     }
   });
 
-  it('exec: is sh -c via spawn (ENOENT without a shell is fine)', async () => {
+  it('exec: uses /bin/sh; ENOENT message/path match Node', async () => {
+    // Cert: Node says `spawn /bin/sh`, not `spawn sh`.
     const { run, close } = await withJsh();
     try {
       const r = await cp(
         run,
         `
 const { exec } = require('child_process');
-exec('true', { encoding: 'utf8' }, (err, stdout) => {
+exec('true', { encoding: 'utf8', cwd: '/nonexistent-zz-exec-shell' }, (err, stdout) => {
   console.log(JSON.stringify({
     code: err && err.code,
     path: err && err.path,
+    syscall: err && err.syscall,
+    message: err && err.message,
+    spawnargs: err && err.spawnargs,
     stdout: stdout == null ? null : String(stdout),
   }));
 });
@@ -270,11 +274,11 @@ exec('true', { encoding: 'utf8' }, (err, stdout) => {
       );
       assert.equal(r.status, 0, r.stderr);
       const j = JSON.parse(r.stdout.trim());
-      // Memory root has no sh → ENOENT on path 'sh'; with a shell, success.
-      if (j.code != null) {
-        assert.equal(j.path, 'sh');
-        assert.equal(j.code, 'ENOENT');
-      }
+      assert.equal(j.code, 'ENOENT');
+      assert.equal(j.path, '/bin/sh');
+      assert.equal(j.syscall, 'spawn /bin/sh');
+      assert.equal(j.message, 'spawn /bin/sh ENOENT');
+      assert.deepEqual(j.spawnargs, ['-c', 'true']);
     } finally {
       close();
     }
