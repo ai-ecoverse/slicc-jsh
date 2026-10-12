@@ -324,41 +324,20 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
   const path = createPath(() => process.cwd());
 
   /**
-   * A descriptor jsh's fs opened itself (fs.openSync): it has no kernel fd
-   * behind it, so the kernel can't hand it to a child. Such fds are fed and
-   * drained here, through fs, which also keeps the fd's position as Node's
-   * shared file offset would.
+   * The open file behind a descriptor jsh's fs opened itself (fs.openSync),
+   * or null. Such an fd has no kernel fd behind it, so the kernel can't hand
+   * it to a child: it is fed and drained here, through fs, which keeps the
+   * fd's position as Node's shared file offset does. Taken when spawn() is
+   * called, so closing the fd right after doesn't take it from the child.
    */
-  function isJshFd(fd) {
-    if (typeof fd !== 'number' || fd < 3 || !getFs) return false;
-    try {
-      getFs().fstatSync(fd);
-      return true;
-    } catch (err) {
-      return err?.code !== 'EBADF';
-    }
-  }
-
-  /** Read a jsh fd from its position to the end. */
-  function readJshFd(fd) {
-    const fs = getFs();
-    const chunks = [];
-    for (;;) {
-      const buf = Buffer.alloc(64 * 1024);
-      const n = fs.readSync(fd, buf, 0, buf.length, null);
-      if (!n) break;
-      chunks.push(buf.subarray(0, n));
-    }
-    return Buffer.concat(chunks);
-  }
-
-  function writeJshFd(fd, bytes) {
-    if (bytes?.length) getFs().writeSync(fd, bytes);
+  function jshOpenFile(fd) {
+    if (typeof fd !== 'number' || fd < 3 || !getFs) return null;
+    return getFs()._sliccOpenFile?.(fd) ?? null;
   }
 
   /** Kernel stdio for a slot: a jsh fd becomes a pipe that jsh serves. */
-  function kernelStdio(mode) {
-    if (isJshFd(mode)) return 'pipe';
+  function kernelStdio(mode, file) {
+    if (file) return 'pipe';
     return toKernelStdio(mode);
   }
 
@@ -522,18 +501,18 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     if (toKernelStdio(errMode) === 'pipe') child.stderr = createPipeReadable();
   }
 
-  function connectStdio(child, kernelChild, stdio) {
+  function connectStdio(child, kernelChild, files) {
     child.stdin?._sliccAttach?.(kernelChild.stdin);
     const pumps = [];
     if (child.stdout?._sliccPump) pumps.push(child.stdout._sliccPump(kernelChild.stdout));
     if (child.stderr?._sliccPump) pumps.push(child.stderr._sliccPump(kernelChild.stderr));
     // jsh fds (fs.openSync): stdin gets the file from the fd's position on,
     // and output goes through fs.writeSync as it arrives.
-    if (isJshFd(stdio[0]) && kernelChild.stdin) {
+    if (files[0] && kernelChild.stdin) {
       const feed = (async () => {
         const writer = kernelChild.stdin.getWriter();
         try {
-          const data = readJshFd(stdio[0]);
+          const data = files[0].readRest();
           if (data.length) await writer.write(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
           await writer.close();
         } catch {
@@ -546,15 +525,15 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       [1, kernelChild.stdout],
       [2, kernelChild.stderr],
     ]) {
-      if (!isJshFd(stdio[i]) || !web) continue;
-      const fd = stdio[i];
+      const file = files[i];
+      if (!file || !web) continue;
       pumps.push(
         (async () => {
           const reader = web.getReader();
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
-            writeJshFd(fd, value);
+            file.write(value);
           }
         })().catch(() => {})
       );
@@ -608,7 +587,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     return { code, signal: null };
   }
 
-  function startSpawn(child, file, args, options, stdio) {
+  function startSpawn(child, file, args, options, stdio, files) {
     // spawn / exec / execFile / (future sync) all go through here.
     const cwd = resolveSpawnCwd(path, options.cwd);
     const env = options.env ? { ...options.env } : { ...process.env };
@@ -639,16 +618,16 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       argv,
       cwd,
       env,
-      stdin: kernelStdio(stdio[0]),
-      stdout: kernelStdio(stdio[1]),
-      stderr: kernelStdio(stdio[2]),
+      stdin: kernelStdio(stdio[0], files[0]),
+      stdout: kernelStdio(stdio[1], files[1]),
+      stderr: kernelStdio(stdio[2], files[2]),
     });
     trackPromise(handles, spawnPromise);
 
     spawnPromise.then(
       (kernelChild) => {
         child._bindKernel(kernelChild);
-        connectStdio(child, kernelChild, stdio);
+        connectStdio(child, kernelChild, files);
         const spawnErr = safeEmit(child, 'spawn');
         if (spawnErr) return;
         const waitP = kernelChild.wait();
@@ -774,7 +753,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       });
       return child;
     }
-    process.nextTick(() => startSpawn(child, file, argv, opts, stdio));
+    // jsh fds are taken now: a closeSync() right after spawn() must not
+    // take them from the child (Node's child has them already).
+    const files = stdio.map((mode) => jshOpenFile(mode));
+    process.nextTick(() => startSpawn(child, file, argv, opts, stdio, files));
     return child;
   }
 
@@ -1062,7 +1044,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       remapped = [1, 2].some((i) => stdio[i]?.type === 'fd' && stdio[i].fd !== i);
       let input = stdio[0]?.input;
       if (stdio[0]?.type === 'fd' && stdio[0].fd !== 0) {
-        input = isJshFd(stdio[0].fd) ? readJshFd(stdio[0].fd) : readFdToEnd(stdio[0].fd);
+        const file = jshOpenFile(stdio[0].fd);
+        input = file ? Buffer.from(file.readRest()) : readFdToEnd(stdio[0].fd);
       }
       const req = {
         // Node's native layer stringifies each argument (null → 'null').
@@ -1115,7 +1098,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         }
         output[i] = Buffer.from(bytes);
       } else if (slot.type === 'fd' && slot.fd !== i && bytes?.length) {
-        if (isJshFd(slot.fd)) writeJshFd(slot.fd, bytes);
+        // stdout and stderr captured apart: one after the other, even to the
+        // same fd (ctx.sync.run can't merge them in the child's write order).
+        const file = jshOpenFile(slot.fd);
+        if (file) file.write(bytes);
         else ctx.sync.write(slot.fd, bytes);
       }
     }

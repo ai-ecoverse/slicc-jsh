@@ -64,11 +64,21 @@ c.on('close', (code, sig) => {
     const s = cp.spawn('node', ['-e', 'console.log("async via streams")'], { stdio: [process.stdin, process.stdout, process.stderr] });
     s.on('close', (code3) => {
       console.log('spawn streams', code3);
+      // The parent closes its fds right after spawn(): the child keeps them.
+      let ofd = fs.openSync(out, 'w');
+      let ifd2 = fs.openSync(inp, 'r');
+      const c3 = cp.spawn('node', ['-e', 'process.stdin.pipe(process.stdout)'], { stdio: [ifd2, ofd, 'inherit'] });
+      fs.closeSync(ofd);
+      fs.closeSync(ifd2);
+      c3.on('error', (err) => console.log('closed fds error', err.code));
+      c3.on('close', (code6) => {
+      console.log('closed fds after spawn', code6, JSON.stringify(fs.readFileSync(out, 'utf8')));
       const e = cp.exec('true');
       console.log('exec props', e.spawnfile, JSON.stringify(e.spawnargs));
       e.on('exit', () => {
         fs.rmSync(out, { force: true });
         fs.rmSync(inp, { force: true });
+      });
       });
     });
   });

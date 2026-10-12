@@ -10,4 +10,5 @@ spawn fd out 0 null 3000021 "head\nx" "\ntail\nerr\nafter\n"
 spawn fd in 0 "line one\nline two\n"
 async via streams
 spawn streams 0
+closed fds after spawn 0 "skip\nline one\nline two\n"
 exec props /bin/sh ["/bin/sh","-c","true"]
