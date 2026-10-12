@@ -30,6 +30,8 @@ t('url.format URL', () => url.format(new URL('https://u:p@xn--espaol-zwa.com/x?y
 t('url.format str', () => url.format('http://a.com/x'));
 t('url.resolve', () => [url.resolve('http://a.com/b/c', '../d'), url.resolve('/one/two/three', 'four'), url.resolve('http://example.com/', '/one'), url.resolve('http://example.com/one', '/two')]);
 t('domain', () => [url.domainToASCII('español.com'), url.domainToUnicode('xn--espaol-zwa.com'), url.domainToASCII('xn--iñvalid.com')]);
+t('domain edge', () => ['example.com/x', 'example.com:80', 'a b', 'EXAMPLE.com', 'x?y', 'user@host', '[::1]', '1.2.3', '999.1.1.1', 'ex%41mple.com', 'exa#mple', ''].map((d) => [url.domainToASCII(d), url.domainToUnicode(d)]));
+t('domain no arg', () => url.domainToASCII());
 t('fileURLToPath', () => [url.fileURLToPath('file:///a%20b/c'), url.fileURLToPath(new URL('file:///x/y')), url.fileURLToPath('file:///C:/x', { windows: true })]);
 t('fileURLToPath bad', () => url.fileURLToPath('http://x/y'));
 t('fileURLToPath host', () => { try { url.fileURLToPath('file://host/y'); } catch (e) { return [e.code, e.message.startsWith('File URL host must be "localhost" or empty on ')]; } });

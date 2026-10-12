@@ -12,6 +12,8 @@ url.format URL https://español.com/x
 url.format str http://a.com/x
 url.resolve ["http://a.com/d","/one/two/four","http://example.com/one","http://example.com/two"]
 domain ["xn--espaol-zwa.com","español.com",""]
+domain edge [["example.com","example.com"],["",""],["",""],["example.com","example.com"],["x","x"],["",""],["[::1]","[::1]"],["1.2.0.3","1.2.0.3"],["",""],["example.com","example.com"],["exa","exa"],["",""]]
+domain no arg THROWS TypeError ERR_MISSING_ARGS The "domain" argument must be specified
 fileURLToPath ["/a b/c","/x/y","C:\\x"]
 fileURLToPath bad THROWS TypeError ERR_INVALID_URL_SCHEME The URL must be of scheme file
 fileURLToPath host ["ERR_INVALID_FILE_URL_HOST",true]

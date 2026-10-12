@@ -23,17 +23,19 @@ const slashedProtocol = new Set([
   'http', 'http:', 'https', 'https:', 'ftp', 'ftp:', 'gopher', 'gopher:', 'file', 'file:', 'ws', 'ws:', 'wss', 'wss:',
 ]);
 
-/** ada::idna::to_ascii as the URL parser does it; '' when it fails. */
+/**
+ * Node's domainToASCII (node_url.cc): a URL's hostname setter given the
+ * domain (it stops at '/', '?', '#'; a port, credentials or a bad host make
+ * it fail, leaving the host as it was), '' when that fails.
+ */
+const SENTINEL = 'slicc-jsh-domain-sentinel.invalid';
 function toASCII(domain) {
   domain = `${domain}`;
   if (domain === '') return '';
-  try {
-    const u = new URL(`http://${domain}/`);
-    if (u.port !== '' || u.username !== '' || u.password !== '' || u.pathname !== '/') return '';
-    return u.hostname;
-  } catch {
-    return '';
-  }
+  const u = new URL(`ws://${SENTINEL}/`);
+  u.hostname = domain;
+  if (u.hostname === SENTINEL && domain.toLowerCase() !== SENTINEL) return '';
+  return u.hostname;
 }
 
 // RFC 3492 decoding (Bootstring for IDNA).
