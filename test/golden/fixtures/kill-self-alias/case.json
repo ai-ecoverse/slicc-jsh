@@ -1,0 +1,8 @@
+{
+  "description": "a signal to itself reaches listeners under any name of its number (SIGABRT/SIGIOT), each under its own name",
+  "argv": [
+    "-e",
+    "process.on('SIGIOT', (n, num) => console.log('IOT', n, num)); process.on('SIGABRT', (n, num) => console.log('ABRT', n, num)); console.log(process.kill(process.pid, 'SIGABRT'), process.kill(process.pid, 6)); setTimeout(() => {}, 30)"
+  ],
+  "shim": true
+}

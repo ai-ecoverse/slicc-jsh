@@ -484,10 +484,16 @@ class Process extends EventEmitter {
     }
     if (Number(pid) !== this.pid) throw uvError('ESRCH', -3, 'kill');
     if (num === 0) return true;
-    if (this.listenerCount(name) > 0) {
+    // Node: a listener under any name of that number (SIGIO/SIGPOLL,
+    // SIGABRT/SIGIOT) handles it, each emitted under its own name.
+    // In the order the listeners' names were first added, as Node's wraps.
+    const handled = this.eventNames().filter(
+      (k) => typeof k === 'string' && SIGNALS[k] === num && this.listenerCount(k) > 0
+    );
+    if (handled.length > 0) {
       const dispatch = this._dispatchSignal ?? ((fn) => queueMicrotask(fn));
       dispatch(() => {
-        if (this.listenerCount(name) > 0) this.emit(name, name, num);
+        for (const k of handled) if (this.listenerCount(k) > 0) this.emit(k, k, num);
       });
       return true;
     }

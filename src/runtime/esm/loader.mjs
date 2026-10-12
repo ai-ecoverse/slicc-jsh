@@ -167,8 +167,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
           // only a package that can't be found throws.
           const spec = String(specifier);
           if (err?.code === 'ERR_MODULE_NOT_FOUND' && /^(\.{1,2}\/|\/|file:)/.test(spec)) {
-            if (spec.startsWith('file:')) return new URL(spec).href;
-            return pathToFileURL(path.resolve(path.dirname(filename), spec));
+            // URL resolution, as Node's: a query or fragment stays one.
+            return new URL(spec, pathToFileURL(filename)).href;
           }
           throw err;
         }

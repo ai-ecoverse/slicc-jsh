@@ -33,7 +33,16 @@ describe('smaller Node 22 gaps (kernel)', () => {
     assert.equal(r.stdout, 'after\nhandler SIGUSR2 12\n');
   });
 
-  it('console.trace prints Trace: and the caller frames to stderr', async () => {
+  it('SIGIO / 29 reach a SIGPOLL listener (same Linux number), as in Node', async () => {
+    const r = await node(
+      '-e',
+      "process.on('SIGPOLL', (n, num) => console.log('poll', n, num)); process.kill(process.pid, 'SIGIO'); process.kill(process.pid, 29); setTimeout(() => {}, 20)"
+    );
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'poll SIGPOLL 29\npoll SIGPOLL 29\n');
+  });
+
+    it('console.trace prints Trace: and the caller frames to stderr', async () => {
     const r = await node('-e', "function f() { console.trace('here %d', 1); } f()");
     assert.equal(r.status, 0);
     assert.match(r.stderr, /^Trace: here 1\n {4}at f \(\[eval\]:1:24\)\n/);
