@@ -1,0 +1,5 @@
+{
+  "description": "child_process.execFile relative cwd resolves against process.cwd(), not / (Node 22)",
+  "argv": ["main.js"],
+  "shim": true
+}

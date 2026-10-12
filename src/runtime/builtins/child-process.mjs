@@ -3,10 +3,20 @@
  * Sync forms and fork stay ERR_NOT_SUPPORTED.
  */
 import { trackPromise } from '../async-handles.mjs';
+import { createPath } from '../path.mjs';
 import { EventEmitter } from './events.mjs';
 
 /** Same symbol util.promisify reads (`nodejs.util.promisify.custom`). */
 const PROMISIFY_CUSTOM = Symbol.for('nodejs.util.promisify.custom');
+
+/**
+ * Resolve spawn/exec cwd like Node: relative paths are against process.cwd(),
+ * not `/` (cert fx/m9/relcwd.js).
+ */
+function resolveSpawnCwd(path, cwd) {
+  if (cwd == null) return path.resolve();
+  return path.resolve(String(cwd));
+}
 
 /**
  * Node's util.promisify(exec|execFile) resolves to `{ stdout, stderr }`, not
@@ -129,6 +139,8 @@ function spawnError(command, args, code, message) {
  * @param {{ ctx: object, process: object, Buffer: object, handles: object, getStream: () => object }} deps
  */
 export function createChildProcess({ ctx, process, Buffer, handles, getStream }) {
+  const path = createPath(() => process.cwd());
+
   class ChildProcess extends EventEmitter {
     constructor() {
       super();
@@ -344,7 +356,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream })
   }
 
   function startSpawn(child, file, args, options, stdio) {
-    const cwd = options.cwd != null ? String(options.cwd) : process.cwd();
+    // spawn / exec / execFile / (future sync) all go through here.
+    const cwd = resolveSpawnCwd(path, options.cwd);
     const env = options.env ? { ...options.env } : { ...process.env };
     const argv = [file, ...args];
     child.spawnfile = file;
