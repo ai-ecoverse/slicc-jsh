@@ -40,6 +40,17 @@ crc32: [907060870,222957957,0]
 constants: [9,2,16384,null]
 codes: [-3,"Z_DATA_ERROR"]
 classes: ["function","function","function","function","function","function","function"]
+legacy constants [
+  0,    2,         4,
+  0,    -5,        1,
+  9,    -1,        3,
+  4880, 1,         7,
+  8,    16384,     Infinity,
+  3,    undefined
+]
+legacy enumerable []
+legacy descriptor { value: 1, writable: false, enumerable: false, configurable: false }
+legacy count 107
 callback [ null, true ]
 callback maxOutputLength [
   'ERR_BUFFER_TOO_LARGE',
@@ -51,3 +62,6 @@ stream pipeline true
 flush eJxKyyktzkhNAQAAAP//
 closed null
 stream error Z_DATA_ERROR -3 incorrect header check
+bytesWritten deflate [ 0, 12, undefined ]
+bytesWritten gunzip 43 [ 0, 43, undefined ]
+bytesWritten inflateRaw [ 0, 25, undefined ]

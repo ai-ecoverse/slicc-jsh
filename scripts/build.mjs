@@ -243,15 +243,21 @@ const zlib = await esbuild.build({
             '    if (nread >= kMaxLength) {\n      _close(this);\n      throw new RangeError(kRangeErrorMessage);',
             "    if (nread > this._opts.maxOutputLength) {\n      _close(this);\n      throw require('__jsh/zlib-options').tooLarge(this._opts.maxOutputLength);"
           );
-                    // params() validates as Node 22 does.
+          // params() validates as Node 22 does.
           patch(
             'Zlib.prototype.params = function (level, strategy, callback) {',
             "Zlib.prototype.params = function (level, strategy, callback) {\n  require('__jsh/zlib-options').params(level, strategy);"
           );
-                    // A destroyed stream reports nothing more (a write still in flight).
+          // A destroyed stream reports nothing more (a write still in flight).
           patch(
             '  this._handle.onerror = function (message, errno) {',
             '  this._handle.onerror = function (message, errno) {\n    if (self.destroyed) return;'
+          );
+          // bytesWritten: the input bytes the engine has consumed, as Node counts them.
+          patch('  Transform.call(this, opts);\n', '  Transform.call(this, opts);\n  this.bytesWritten = 0;\n');
+          patch(
+            '    if (self._hadError) return;\n\n    var have = availOutBefore - availOutAfter;',
+            '    if (self._hadError) return;\n\n    self.bytesWritten += availInBefore - availInAfter;\n    var have = availOutBefore - availOutAfter;'
           );
           return { contents: text, loader: 'js' };
         });
