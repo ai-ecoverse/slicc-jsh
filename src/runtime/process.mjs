@@ -1,6 +1,6 @@
 import { EventEmitter } from './builtins/events.mjs';
 import { SIGNALS } from './signals.mjs';
-import { assignProcessExitCode, hardExitError, numericExitCode } from './exit.mjs';
+import { assignProcessExitCode, hardExitError, NodeExitError, numericExitCode } from './exit.mjs';
 import { createStdio } from './stdio.mjs';
 import { loadNodeLib } from './node-lib.mjs';
 import { ERR_INVALID_ARG_TYPE, nodeError } from './node-errors.mjs';
@@ -492,7 +492,8 @@ class Process extends EventEmitter {
       return true;
     }
     if (name === 'SIGWINCH' || name === 'SIGCHLD' || name === 'SIGURG' || name === 'SIGCONT') return true;
-    // Default action: the program ends now, killed (128 + n); nothing more runs.
+    // Default action: the program dies of the signal now, as Node's does
+    // (its parent sees the signal, not a status); nothing more runs.
     const code = 128 + num;
     this._recordExit(code);
     this._silenced = true;
@@ -501,8 +502,26 @@ class Process extends EventEmitter {
     } catch {
       /* ignore */
     }
-    this._exitError = hardExitError(this._ctx, code);
+    this._exitError = this._startSignalDeath(name) ? new NodeExitError(code) : hardExitError(this._ctx, code);
     throw this._exitError;
+  }
+
+  /**
+   * Have the kernel deliver `name` to this process, so it dies of it as
+   * Node's does (its parent sees the signal). A JS program's default action
+   * happens on an event-loop turn, so the program unwinds (silenced, with
+   * timers and ticks stopped) and run.mjs waits for it (`_signalDeath`).
+   * False on a kernel that can't signal.
+   */
+  _startSignalDeath(name) {
+    const ctx = this._ctx;
+    if (typeof ctx?.kill !== 'function') return false;
+    try {
+      this._signalDeath = Promise.resolve(ctx.kill(ctx.pid ?? this.pid, name)).catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   chdir(directory) {

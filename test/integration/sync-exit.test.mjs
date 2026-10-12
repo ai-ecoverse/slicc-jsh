@@ -54,10 +54,16 @@ describe('process.exit on ctx.sync.exit (kernel)', () => {
     assert.ok(r.ms < SPIN * 0.75, `took ${r.ms} ms`);
   });
 
-  it('kill(self) with no handler: no finally either, status 128 + n', async () => {
-    const r = await timed(['node', '-e', `try { process.kill(process.pid, 'SIGTERM'); } finally ${spin}`]);
-    assert.equal(r.status, 143);
-    assert.ok(r.ms < SPIN * 0.75, `took ${r.ms} ms`);
+  it('kill(self) with no handler dies of the signal: its parent sees the signal, not a status', async () => {
+    // The kernel delivers a JS program's default action on a turn of its
+    // own, so the program unwinds first (silenced): ai-ecoverse/slicc-kernel#431.
+    await jsh.kernel.writeFile('/os/self-kill.js', "process.on('exit', () => console.log('exit ran')); process.kill(process.pid, 'SIGTERM'); console.log('after');");
+    const r = await jsh.run([
+      'node',
+      '-e',
+      "const r = require('child_process').spawnSync('node', ['/os/self-kill.js']); console.log(JSON.stringify([r.status, r.signal, String(r.stdout)]))",
+    ]);
+    assert.equal(r.stdout, '[null,"SIGTERM",""]\n');
   });
 });
 
