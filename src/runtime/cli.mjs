@@ -2,6 +2,19 @@
  * Parse `node` argv the way Node 22 does for -e / -p / -v / -h / script.js.
  * `argv` is ctx.argv: [argv0, ...args].
  */
+// Options that only set behaviour; kept in execArgv as Node does.
+const BOOLEAN_FLAGS = new Set([
+  '--preserve-symlinks',
+  '--preserve-symlinks-main',
+  '--no-warnings',
+  '--no-deprecation',
+  '--trace-warnings',
+  '--trace-deprecation',
+  '--throw-deprecation',
+  '--pending-deprecation',
+]);
+const VALUED_FLAGS = ['--disable-warning', '--redirect-warnings'];
+
 export function parseNodeArgv(argv) {
   const argv0 = argv[0] ?? 'node';
   const args = argv.slice(1);
@@ -59,9 +72,21 @@ export function parseNodeArgv(argv) {
       userArgs.push(...args.slice(i));
       break;
     }
-    if (arg === '--preserve-symlinks' || arg === '--preserve-symlinks-main') {
+    if (BOOLEAN_FLAGS.has(arg)) {
       flags.push(arg);
       i += 1;
+      continue;
+    }
+    const valued = VALUED_FLAGS.find((f) => arg === f || arg.startsWith(`${f}=`));
+    if (valued) {
+      if (arg === valued) {
+        if (i + 1 >= args.length) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+        flags.push(arg, args[i + 1]);
+        i += 2;
+      } else {
+        flags.push(arg);
+        i += 1;
+      }
       continue;
     }
     if (arg.startsWith('-')) {

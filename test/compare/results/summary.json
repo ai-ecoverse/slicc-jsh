@@ -1278,9 +1278,9 @@
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "process-stdout-istty",
@@ -1296,9 +1296,9 @@
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "process-stdout-write-cb",
@@ -2014,14 +2014,14 @@
       ],
       "status": {
         "six": 0,
-        "seven": 1,
+        "seven": 0,
         "jsh": 0,
         "node": 0
       },
       "six": "=",
-      "seven": "≠",
+      "seven": "=",
       "node": "=",
-      "auto": "seven≠node"
+      "auto": "same"
     },
     {
       "name": "url",

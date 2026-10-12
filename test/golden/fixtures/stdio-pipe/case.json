@@ -1,0 +1,7 @@
+{
+  "description": "process.stdin is a stream.Readable and process.stdout a stream.Writable: stdin.pipe(stdout), their shapes off a terminal, tty.isatty",
+  "argv": ["script.js"],
+  "stdin": "line one\nline two\n",
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

@@ -78,8 +78,8 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [process-parse-flags](process-parse-flags) | process | = | = | ≠ | same | 0 / 0 / 0 / 1 |
 | [process-props](process-props) | process | ≠ | ≠ | ≠ | all differ | 0 / 0 / 0 / 0 |
 | [process-signals](process-signals) | process | ≠ | ≠ | = | all differ | 0 / 143 / 0 / 0 |
-| [process-stdout](process-stdout) | process | ≠ | ≠ | = | all differ | timeout / 0 / 0 / 0 |
-| [process-stdout-istty](process-stdout-istty) | process | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
+| [process-stdout](process-stdout) | process | ≠ | = | = | six≠node | timeout / 0 / 0 / 0 |
+| [process-stdout-istty](process-stdout-istty) | process | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [process-stdout-write-cb](process-stdout-write-cb) | process | ≠ | = | = | six≠node | timeout / 0 / 0 / 0 |
 | [require-absolute](require-absolute) | require | ≠ | = | = | six≠node | 1 / 0 / 0 / 0 |
 | [require-builtins](require-builtins) | require | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
@@ -119,7 +119,7 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [stream](stream) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [timers](timers) | globals | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [timers-immediate](timers-immediate) | globals | = | = | = | same | 0 / 0 / 0 / 0 |
-| [tty](tty) | builtins | = | ≠ | = | seven≠node | 0 / 1 / 0 / 0 |
+| [tty](tty) | builtins | = | = | = | same | 0 / 0 / 0 / 0 |
 | [url](url) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [util](util) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |
 | [websocket](websocket) | globals | = | = | = | same | 0 / 0 / 0 / 0 |

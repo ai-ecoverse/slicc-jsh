@@ -96,6 +96,11 @@ Version 2.0.
 
 Ported components originate from ai-ecoverse/slicc and remain under Apache-2.0.
 See LICENSE for the full license text.
+
+It also includes code from Node.js (https://github.com/nodejs/node): files of
+its lib/ in src/node-lib/lib, and ports of others in src/runtime, under the
+Node.js license reproduced in the node-inspect-extracted section below
+("This project contains parts of Node.js").
 `;
 
   const missing = [];

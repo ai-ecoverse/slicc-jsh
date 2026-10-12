@@ -74,9 +74,11 @@ function loadCase(name) {
   return { name, dir, meta };
 }
 
-function runNode22(argv, { cwd, timeoutMs = 30_000 } = {}) {
+function runNode22(argv, { cwd, stdin, timeoutMs = 30_000 } = {}) {
   const result = spawnSync('npx', ['-y', 'node@22.22.0', ...argv], {
     cwd: cwd ?? root,
+    // case.json `stdin`: a pipe with that text (else none, as before).
+    ...(stdin !== undefined ? { input: Buffer.from(stdin) } : {}),
     encoding: 'buffer',
     timeout: timeoutMs,
     maxBuffer: 4 * 1024 * 1024,
@@ -90,7 +92,7 @@ function runNode22(argv, { cwd, timeoutMs = 30_000 } = {}) {
   };
 }
 
-async function runShim(argv, { files = [], env = {}, timeoutMs = 30_000 } = {}) {
+async function runShim(argv, { files = [], env = {}, stdin, timeoutMs = 30_000 } = {}) {
   const kernel = await createNodeKernel();
   const base = '/node_modules/@ai-ecoverse/slicc-jsh';
   try {
@@ -100,7 +102,7 @@ async function runShim(argv, { files = [], env = {}, timeoutMs = 30_000 } = {}) 
     for (const { path, data } of files) {
       await kernel.writeFile(path, data);
     }
-    const work = kernel.run(['node', ...argv], { cwd: '/os', env: { ...env } });
+    const work = kernel.run(['node', ...argv], { cwd: '/os', env: { ...env }, ...(stdin !== undefined ? { stdin } : {}) });
     const result = await Promise.race([
       work,
       new Promise((_, reject) =>
@@ -172,7 +174,7 @@ async function main() {
     const shimArgv = meta.shimArgv ?? argv;
 
     if (mode === 'record') {
-      const out = runNode22(hostArgv, { cwd });
+      const out = runNode22(hostArgv, { cwd, stdin: meta.stdin });
       writeGolden(dir, out);
       console.log(`recorded ${name}: status=${out.status} out=${out.stdout.length}B err=${out.stderr.length}B`);
       ran++;
@@ -186,7 +188,7 @@ async function main() {
       }
     }
     const expected = readGolden(dir);
-    const host = runNode22(hostArgv, { cwd });
+    const host = runNode22(hostArgv, { cwd, stdin: meta.stdin });
     compare(name, 'host', host, expected);
 
     if (meta.shim) {
@@ -197,7 +199,7 @@ async function main() {
           data: readFileSync(join(dir, f.from)),
         })),
       ];
-      const shim = await runShim(shimArgv, { files, env: meta.env ?? {} });
+      const shim = await runShim(shimArgv, { files, env: meta.env ?? {}, stdin: meta.stdin });
       compare(name, 'shim', shim, expected);
     }
 

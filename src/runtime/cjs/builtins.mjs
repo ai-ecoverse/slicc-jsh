@@ -14,6 +14,7 @@ import { createUrl } from '../builtins/url.mjs';
 import { createUtil } from '../builtins/util.mjs';
 import { createZlib } from '../builtins/zlib.mjs';
 import { createCrypto } from '../builtins/crypto.mjs';
+import { createTty } from '../builtins/tty.mjs';
 
 const BUILTIN_LIST = [
   'assert',
@@ -39,6 +40,7 @@ const BUILTIN_LIST = [
   'string_decoder',
   'timers',
   'timers/promises',
+  'tty',
   'url',
   'util',
   'util/types',
@@ -48,7 +50,6 @@ const BUILTIN_LIST = [
 const NOT_YET = [
   'http2',
   'readline',
-  'tty',
   'worker_threads',
   'dgram',
   'dns',
@@ -207,6 +208,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles });
     return https;
   };
+  let tty;
   let crypto;
   const getCrypto = () => {
     crypto ??= createCrypto({ ctx, process, Buffer, getStream, stringDecoder, handles, timers });
@@ -240,6 +242,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     fs: () => fs,
     zlib: getZlib,
     crypto: getCrypto,
+    tty: () => (tty ??= createTty({ process })),
     'fs/promises': () => fs.promises,
     events: () => events,
     assert: () => assert,

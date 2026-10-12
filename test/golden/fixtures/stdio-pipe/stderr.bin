@@ -1,0 +1,4 @@
+{"stdin":{"readable":true,"writable":true,"fd":0,"pipe":"function"},"stdout":{"readable":true,"writable":true,"fd":1,"type":"pipe","stdio":true,"pipe":"function"},"stderr":{"readable":true,"writable":true,"fd":2,"type":"pipe","stdio":true,"pipe":"function"}}
+[false,false,false,false,false,false]
+function function false
+stdin end

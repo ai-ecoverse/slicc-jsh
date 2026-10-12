@@ -1,10 +1,23 @@
 import { EventEmitter } from './builtins/events.mjs';
 import { assignProcessExitCode, hardExitError, numericExitCode } from './exit.mjs';
+import { createStdio } from './stdio.mjs';
+import { loadNodeLib } from './node-lib.mjs';
+import { createOs } from './builtins/os.mjs';
+import { nodeError } from './node-errors.mjs';
 
 /** Node version reported by the shim (M1 target). */
 export const NODE_SHIM_VERSION = '22.22.0';
 
 const SIGNAL_EXIT_CODES = { SIGTERM: 143, SIGINT: 130, SIGHUP: 129, SIGKILL: 137 };
+
+/** Linux signal numbers (Node's os.constants.signals). */
+export const SIGNALS = {
+  SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGILL: 4, SIGTRAP: 5, SIGABRT: 6, SIGIOT: 6, SIGBUS: 7,
+  SIGFPE: 8, SIGKILL: 9, SIGUSR1: 10, SIGSEGV: 11, SIGUSR2: 12, SIGPIPE: 13, SIGALRM: 14,
+  SIGTERM: 15, SIGCHLD: 17, SIGSTKFLT: 16, SIGCONT: 18, SIGSTOP: 19, SIGTSTP: 20, SIGTTIN: 21,
+  SIGTTOU: 22, SIGURG: 23, SIGXCPU: 24, SIGXFSZ: 25, SIGVTALRM: 26, SIGPROF: 27, SIGWINCH: 28,
+  SIGIO: 29, SIGPOLL: 29, SIGPWR: 30, SIGSYS: 31,
+};
 const SIGNAL_BY_NUMBER = { 1: 'SIGHUP', 2: 'SIGINT', 9: 'SIGKILL', 15: 'SIGTERM' };
 
 function toBytes(value) {
@@ -43,205 +56,6 @@ function createEnv(initial) {
       return Reflect.defineProperty(t, key, desc);
     },
   });
-}
-
-function writableStream(fd, writeSync, isTTY) {
-  const ee = new EventEmitter();
-  return {
-    fd,
-    isTTY,
-    write(chunk, encoding, cb) {
-      const callback = typeof encoding === 'function' ? encoding : cb;
-      try {
-        writeSync(toBytes(chunk));
-        if (typeof callback === 'function') queueMicrotask(() => callback());
-        return true;
-      } catch (err) {
-        if (typeof callback === 'function') queueMicrotask(() => callback(err));
-        else throw err;
-        return false;
-      }
-    },
-    end(chunk, encoding, cb) {
-      if (chunk !== undefined && typeof chunk !== 'function') this.write(chunk, encoding);
-      const callback = typeof chunk === 'function' ? chunk : typeof encoding === 'function' ? encoding : cb;
-      if (typeof callback === 'function') queueMicrotask(() => callback());
-      return this;
-    },
-    on(event, fn) {
-      ee.on(event, fn);
-      return this;
-    },
-    once(event, fn) {
-      ee.once(event, fn);
-      return this;
-    },
-    emit(event, ...args) {
-      return ee.emit(event, ...args);
-    },
-    off(event, fn) {
-      ee.off(event, fn);
-      return this;
-    },
-  };
-}
-
-function createStdin(ctx, handles, Buffer) {
-  const ee = new EventEmitter();
-  let encoding = null;
-  let ended = false;
-  let started = false;
-  const decoder = new TextDecoder();
-  /** Accumulated stdin bytes for fs.readFileSync(0). */
-  const collected = [];
-  let collectDone = false;
-
-  const emitChunk = (bytes) => {
-    if (bytes == null || bytes.byteLength === 0) return;
-    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    collected.push(u8);
-    const chunk = Buffer ? Buffer.from(u8) : u8;
-    const data =
-      encoding === 'utf8' || encoding === 'utf-8'
-        ? decoder.decode(chunk)
-        : encoding
-          ? chunk.toString?.(encoding) ?? decoder.decode(chunk)
-          : chunk;
-    ee.emit('data', data);
-  };
-
-  const finish = () => {
-    if (ended) return;
-    ended = true;
-    collectDone = true;
-    ee.emit('end');
-    ee.emit('close');
-  };
-
-  const pump = async () => {
-    if (started) return;
-    started = true;
-    const handle = { kind: 'stdin' };
-    handles.add(handle);
-    try {
-      if (ctx.stdin && typeof ctx.stdin.getReader === 'function') {
-        const reader = ctx.stdin.getReader();
-        for (;;) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value) emitChunk(value instanceof Uint8Array ? value : new Uint8Array(value));
-        }
-      } else if (typeof ctx.read === 'function') {
-        for (;;) {
-          const chunk = await ctx.read(0);
-          if (!chunk || chunk.byteLength === 0) break;
-          emitChunk(chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk));
-        }
-      }
-    } catch {
-      /* EOF */
-    } finally {
-      handles.delete(handle);
-      finish();
-    }
-  };
-
-  return {
-    fd: 0,
-    isTTY: false,
-    readable: true,
-    /** Sync drain for fs.readFileSync(0|/dev/stdin); consumes like a real fd read. */
-    _readAllSync() {
-      if (!collectDone && typeof ctx.sync?.read === 'function') {
-        try {
-          for (;;) {
-            const c = ctx.sync.read(0);
-            if (!c || c.byteLength === 0) break;
-            emitChunk(c);
-          }
-          collectDone = true;
-        } catch {
-          collectDone = true;
-        }
-      }
-      let total = 0;
-      for (const c of collected) total += c.byteLength;
-      const out = new Uint8Array(total);
-      let at = 0;
-      for (const c of collected) {
-        out.set(c, at);
-        at += c.byteLength;
-      }
-      // Node: a second readFileSync(0) after draining stdin sees EOF (empty).
-      collected.length = 0;
-      return out;
-    },
-    setEncoding(enc) {
-      encoding = enc;
-      return this;
-    },
-    on(event, fn) {
-      ee.on(event, fn);
-      if (event === 'data' || event === 'end' || event === 'close' || event === 'readable') {
-        queueMicrotask(() => pump());
-      }
-      return this;
-    },
-    once(event, fn) {
-      ee.once(event, fn);
-      if (event === 'data' || event === 'end' || event === 'close') queueMicrotask(() => pump());
-      return this;
-    },
-    off(event, fn) {
-      ee.off(event, fn);
-      return this;
-    },
-    removeListener(event, fn) {
-      return this.off(event, fn);
-    },
-    resume() {
-      queueMicrotask(() => pump());
-      return this;
-    },
-    pause() {
-      return this;
-    },
-    read() {
-      return null;
-    },
-    async *[Symbol.asyncIterator]() {
-      const queue = [];
-      let wait = null;
-      let done = false;
-      this.on('data', (c) => {
-        if (wait) {
-          const r = wait;
-          wait = null;
-          r({ value: c, done: false });
-        } else queue.push(c);
-      });
-      this.on('end', () => {
-        done = true;
-        if (wait) {
-          const r = wait;
-          wait = null;
-          r({ value: undefined, done: true });
-        }
-      });
-      for (;;) {
-        if (queue.length) {
-          yield queue.shift();
-          continue;
-        }
-        if (done) return;
-        const next = await new Promise((resolve) => {
-          wait = resolve;
-        });
-        if (next.done) return;
-        yield next.value;
-      }
-    },
-  };
 }
 
 /**
@@ -348,8 +162,9 @@ function resolveNodeExecPath(ctx) {
 }
 
 class Process extends EventEmitter {
-  constructor({ ctx, argv, nextTick, onExit, handles, Buffer }) {
+  constructor({ ctx, argv, nextTick, onExit, handles, Buffer, stdio }) {
     super();
+    this._signals = new Set();
     this._startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
     this._cwd = ctx.cwd;
     this._assignedExitCode = undefined;
@@ -364,6 +179,12 @@ class Process extends EventEmitter {
     this.env = createEnv(ctx.env);
     this.versions = { node: NODE_SHIM_VERSION };
     this.version = `v${NODE_SHIM_VERSION}`;
+    this.release = {
+      name: 'node',
+      lts: 'Jod',
+      sourceUrl: `https://nodejs.org/download/release/v${NODE_SHIM_VERSION}/node-v${NODE_SHIM_VERSION}.tar.gz`,
+      headersUrl: `https://nodejs.org/download/release/v${NODE_SHIM_VERSION}/node-v${NODE_SHIM_VERSION}-headers.tar.gz`,
+    };
     this.platform = 'linux';
     this.arch = 'x64';
     this.pid = ctx.pid;
@@ -411,9 +232,45 @@ class Process extends EventEmitter {
     this._writeStdout = writeStdout;
     this._writeStderr = writeStderr;
 
-    this.stdout = writableStream(1, writeStdout, false);
-    this.stderr = writableStream(2, writeStderr, false);
-    this.stdin = createStdin(ctx, handles, Buffer);
+    // Node's own lib files (src/node-lib), loaded on first use.
+    let nodeLib;
+    this._nodeLib = () => {
+      nodeLib ??= loadNodeLib({
+        ctx,
+        process: this,
+        Buffer,
+        os: () => createOs(this.env),
+        builtin: (id) => this._builtin(id),
+      });
+      return nodeLib;
+    };
+
+    // process.stdin / stdout / stderr: Node's streams, made on first access.
+    const io = createStdio({ ctx, process: this, Buffer, handles, info: stdio });
+    this._stdio = io;
+    for (const [name, get] of [
+      ['stdin', io.stdin],
+      ['stdout', io.stdout],
+      ['stderr', io.stderr],
+    ]) {
+      Object.defineProperty(this, name, { configurable: true, enumerable: false, get });
+    }
+    // console and the runtime: through the stream once a program has it (so a
+    // replaced process.stdout.write sees console.log), else straight to the fd.
+    this._stdoutWrite = (value) => {
+      const stream = io.made(1);
+      // Node's console ignores a stream that can no longer be written.
+      if (stream && (stream.writableEnded || stream.destroyed)) return;
+      if (stream) stream.write(typeof value === 'string' || value instanceof Uint8Array ? value : String(value));
+      else writeStdout(value);
+    };
+    this._stderrWrite = (value) => {
+      const stream = io.made(2);
+      // Node's console ignores a stream that can no longer be written.
+      if (stream && (stream.writableEnded || stream.destroyed)) return;
+      if (stream) stream.write(typeof value === 'string' || value instanceof Uint8Array ? value : String(value));
+      else writeStderr(value);
+    };
 
     const hrtime = (prev) => {
       const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -430,6 +287,107 @@ class Process extends EventEmitter {
       return BigInt(Math.floor(now * 1e6));
     };
     this.hrtime = hrtime;
+  }
+
+  /** A builtin module by id (set by the CJS loader once it has them). */
+  _builtin(id) {
+    if (typeof this._builtinLoader !== 'function') throw new Error(`slicc-jsh: builtin ${id} not ready`);
+    return this._builtinLoader(id);
+  }
+
+  /**
+   * Node's warning options, from execArgv and NODE_NO_WARNINGS (bootstrap/
+   * node.js): noDeprecation & co., and the default 'warning' listener that
+   * prints `(node:PID) [CODE] Name: message`.
+   */
+  _setupWarnings() {
+    const has = (flag) => this.execArgv.includes(flag);
+    if (has('--no-deprecation')) this.noDeprecation = true;
+    if (has('--throw-deprecation')) this.throwDeprecation = true;
+    if (has('--trace-deprecation')) this.traceDeprecation = true;
+    if (has('--trace-warnings')) this.traceProcessWarnings = true;
+    if (!has('--no-warnings') && this.env.NODE_NO_WARNINGS !== '1') {
+      const process = this;
+      this.on('warning', function onWarning(warning) {
+        return process._nodeLib().warning.onWarning(warning);
+      });
+    }
+  }
+
+  emitWarning(warning, type, code, ctor) {
+    return this._nodeLib().warning.emitWarning(warning, type, code, ctor ?? this.emitWarning);
+  }
+
+  /** fs.readFileSync(0 | '/dev/stdin'): what fd 0 has left, read synchronously. */
+  _readStdinSync() {
+    const chunks = [];
+    if (typeof this._ctx.sync?.read === 'function') {
+      for (;;) {
+        const c = this._ctx.sync.read(0);
+        if (!c || c.byteLength === 0) break;
+        chunks.push(c instanceof Uint8Array ? c : new Uint8Array(c));
+      }
+    }
+    let total = 0;
+    for (const c of chunks) total += c.byteLength;
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const c of chunks) {
+      out.set(c, at);
+      at += c.byteLength;
+    }
+    return out;
+  }
+
+  // --- signals: a listener for 'SIGINT', 'SIGWINCH', … installs a kernel
+  // handler (ctx.signals); the last one removed puts the default back.
+  _watchSignal(event) {
+    if (typeof event !== 'string' || !(event in SIGNALS) || this._signals.has(event)) return;
+    if (event === 'SIGKILL' || event === 'SIGSTOP') {
+      const err = nodeError(Error, 'EINVAL', 'uv_signal_start EINVAL');
+      err.errno = -22;
+      err.syscall = 'uv_signal_start';
+      err.stack = `Error: uv_signal_start EINVAL${err.stack.slice(err.stack.indexOf('\n'))}`;
+      throw err;
+    }
+    const signals = this._ctx.signals;
+    if (typeof signals?.on !== 'function') return;
+    this._signals.add(event);
+    const deliver = () => {
+      const dispatch = this._dispatchSignal ?? ((fn) => queueMicrotask(fn));
+      dispatch(() => {
+        if (this.listenerCount(event) > 0) this.emit(event, event, SIGNALS[event]);
+      });
+    };
+    const ready = Promise.resolve(signals.on(event, deliver)).catch(() => this._signals.delete(event));
+    (this._signalReady ??= new Map()).set(event, ready);
+  }
+
+  _unwatchSignal(event) {
+    if (!this._signals.has(event) || this.listenerCount(event) > 0) return;
+    this._signals.delete(event);
+    Promise.resolve(this._ctx.signals?.reset?.(event)).catch(() => {});
+  }
+
+  on(event, fn) {
+    this._watchSignal(event);
+    return super.on(event, fn);
+  }
+
+  addListener(event, fn) {
+    return this.on(event, fn);
+  }
+
+  off(event, fn) {
+    super.off(event, fn);
+    this._unwatchSignal(event);
+    return this;
+  }
+
+  removeAllListeners(event) {
+    super.removeAllListeners(event);
+    for (const sig of [...this._signals]) this._unwatchSignal(sig);
+    return this;
   }
 
   get title() {
@@ -587,13 +545,13 @@ class Process extends EventEmitter {
   }
 }
 
-export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles, Buffer }) {
-  const process = new Process({ ctx, argv, nextTick, onExit, handles, Buffer });
+export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles, Buffer, stdio }) {
+  const process = new Process({ ctx, argv, nextTick, onExit, handles, Buffer, stdio });
   process._onHardExit = onHardExit;
   return {
     process,
-    writeStdout: process._writeStdout,
-    writeStderr: process._writeStderr,
+    writeStdout: process._stdoutWrite,
+    writeStderr: process._stderrWrite,
     getExitCode: () =>
       numericExitCode(process._didExit ? process._forcedExitCode : process._assignedExitCode),
     getDidExit: () => process._didExit,

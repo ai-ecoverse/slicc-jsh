@@ -18,6 +18,7 @@
  * They throw ERR_FEATURE_UNAVAILABLE_ON_PLATFORM.
  */
 import { loadVendorCjs } from '../vendor-load.mjs';
+import { deprecate } from './util.mjs';
 import { trackPromise } from '../async-handles.mjs';
 import {
   ERR_INVALID_ARG_TYPE,
@@ -606,23 +607,6 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
       this.c.setAAD(toBuffer(toU8(aad)));
       return true;
     }
-  }
-
-  // util.deprecate's wrapper, as Node exports crypto.Hash / crypto.Hmac.
-  function deprecate(fn, msg, code) {
-    let warned = false;
-    function deprecated(...args) {
-      if (!warned) {
-        warned = true;
-        if (typeof process.emitWarning === 'function') process.emitWarning(msg, 'DeprecationWarning', code, deprecated);
-      }
-      if (new.target) return Reflect.construct(fn, args, new.target);
-      return Reflect.apply(fn, this, args);
-    }
-    Object.setPrototypeOf(deprecated, fn);
-    deprecated.prototype = fn.prototype;
-    Object.defineProperty(deprecated, 'length', { value: fn.length });
-    return deprecated;
   }
 
   function getDecoder(decoder, encoding) {

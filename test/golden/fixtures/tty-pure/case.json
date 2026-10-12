@@ -1,0 +1,6 @@
+{
+  "description": "tty.WriteStream's pure methods (Node's own internal/tty.js and readline callbacks): getColorDepth / hasColors for TERM, COLORTERM, NO_COLOR, FORCE_COLOR, CI; cursorTo / moveCursor / clearLine / clearScreenDown escape sequences and their errors",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

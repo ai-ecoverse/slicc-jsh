@@ -1,0 +1,7 @@
+{
+  "description": "process.stdout as a Writable: write() returns true, its callback, non-string chunks throw ERR_INVALID_ARG_TYPE, console.log goes through a replaced process.stdout.write, readFileSync(0)",
+  "argv": ["script.js"],
+  "stdin": "from stdin\n",
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

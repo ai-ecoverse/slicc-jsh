@@ -58,15 +58,29 @@ function throwBufferArgType(name, value) {
   throw err;
 }
 
+function hexVal(c) {
+  if (c >= 48 && c <= 57) return c - 48;
+  if (c >= 97 && c <= 102) return c - 87;
+  if (c >= 65 && c <= 70) return c - 55;
+  return -1;
+}
+
 function asUint8(value, encoding = 'utf8') {
   if (value instanceof Uint8Array) return value;
   if (typeof value === 'string') {
     const enc = normalizeEncoding(encoding);
     if (enc === 'hex') {
-      const clean = value.length % 2 ? `0${value}` : value;
-      const out = new Uint8Array(clean.length / 2);
-      for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-      return out;
+      // Node: whole pairs only, up to the first that isn't two hex digits.
+      const pairs = value.length >>> 1;
+      const out = new Uint8Array(pairs);
+      let n = 0;
+      for (; n < pairs; n++) {
+        const hi = hexVal(value.charCodeAt(n * 2));
+        const lo = hexVal(value.charCodeAt(n * 2 + 1));
+        if (hi < 0 || lo < 0) break;
+        out[n] = (hi << 4) | lo;
+      }
+      return n === pairs ? out : out.slice(0, n);
     }
     if (enc === 'base64') return fromBase64(value, false);
     if (enc === 'base64url') return fromBase64(value, true);

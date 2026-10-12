@@ -1,0 +1,7 @@
+{
+  "description": "process.stdin 'data'/'end'/'close', pause/resume, readableFlowing; Buffers without setEncoding",
+  "argv": ["script.js"],
+  "stdin": "0123456789",
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}
