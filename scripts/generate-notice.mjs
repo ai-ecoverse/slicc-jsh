@@ -26,15 +26,21 @@ const LICENSE_NAMES = [
   'license.md',
 ];
 
+function hasName(pkgJson) {
+  try {
+    return typeof JSON.parse(readFileSync(pkgJson, 'utf8')).name === 'string';
+  } catch {
+    return false;
+  }
+}
+
 function findPackageRoot(filePath) {
   let dir = dirname(filePath);
   for (let i = 0; i < 40; i++) {
     const pkg = join(dir, 'package.json');
-    if (existsSync(pkg)) {
-      // Prefer the package that owns node_modules/<name>/package.json
-      if (dir.includes(`${join('node_modules')}`)) return dir;
-      return dir;
-    }
+    // A nested package.json without a name (dist/commonjs/package.json's
+    // {"type": "commonjs"}) is not the package's root.
+    if (existsSync(pkg) && hasName(pkg)) return dir;
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;

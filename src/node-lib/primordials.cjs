@@ -134,6 +134,8 @@ const special = {
 
 function make(name) {
   if (name in special) return special[name];
+  // decodeURIComponent, encodeURI, escape, …: the global functions themselves.
+  if (/^[a-z]/.test(name) && typeof globalThis[name] === 'function') return globalThis[name];
   // `XApply`: X taking its arguments as an array (MathMaxApply(list),
   // ArrayPrototypePushApply(arr, items)).
   if (name.endsWith('Apply') && name !== 'ReflectApply' && name !== 'FunctionPrototypeApply') {

@@ -170,6 +170,12 @@ const nodeLib = await esbuild.build({
       setup(b) {
         // A Node lib file we carry is bundled; any other id is the runtime's.
         b.onResolve({ filter: /^[^./]/ }, (args) => {
+          // Node's own copy of minimatch (deps/minimatch, 10.0.3): the npm package.
+          if (args.path === 'internal/deps/minimatch/index') {
+            return { path: join(root, 'node_modules/minimatch/dist/commonjs/index.js') };
+          }
+          // What a bundled npm package requires (minimatch's brace expansion).
+          if (args.importer.includes('/node_modules/')) return undefined;
           const file = join(nodeLibRoot, `${args.path}.js`);
           if (existsSync(file)) return { path: file };
           return { path: args.path, external: true };
@@ -396,7 +402,7 @@ writeFileSync(join(dist, 'meta-zlib.json'), JSON.stringify(zlib.metafile));
 writeFileSync(join(dist, 'meta-crypto.json'), JSON.stringify(crypto.metafile));
 writeFileSync(join(dist, 'meta-node-lib.json'), JSON.stringify(nodeLib.metafile));
 
-const pkgRoots = packagesFromMetafiles([main.metafile, stream.metafile, decoder.metafile, zlib.metafile, crypto.metafile]);
+const pkgRoots = packagesFromMetafiles([main.metafile, stream.metafile, decoder.metafile, zlib.metafile, crypto.metafile, nodeLib.metafile]);
 const notice = renderNotice(pkgRoots);
 writeFileSync(join(root, 'NOTICE'), notice);
 console.log(`NOTICE: ${pkgRoots.size} bundled package(s)`);

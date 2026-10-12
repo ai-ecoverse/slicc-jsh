@@ -55,6 +55,14 @@ Outputs and errors match Node 22.22.0 (golden `crypto-node22`). That includes No
 - **Signals:** a `process.on('SIGINT' | 'SIGTERM' | 'SIGWINCH' | …)` listener installs a kernel signal handler. Removing the last listener puts the default action back. `SIGKILL`/`SIGSTOP` throw `uv_signal_start EINVAL`.
 - **Install timing:** the kernel installs a handler a moment after `process.on` returns, whereas Node does it synchronously. `setRawMode` likewise takes effect a moment after it returns (a key typed in between is still echoed).
 
+**`path`, `url`, `querystring`, `punycode`, `os`:** Node v22.22.0's own `lib/path.js` (`win32` included; `matchesGlob` over minimatch 10.0.3, the version Node vendors), `lib/url.js` (legacy `parse`/`format`/`resolve`, `fileURLToPath`/`pathToFileURL` with `windows`, `domainToASCII`/`domainToUnicode`, `urlToHttpOptions`), `lib/querystring.js`, `lib/punycode.js` and `lib/os.js`, in `src/node-lib`. What they ask Node's C++ for comes from `src/runtime/node-bindings.mjs`:
+- `os.userInfo()` is the kernel's `/etc/passwd` entry;
+- `os.constants` holds Linux's values;
+- `os.networkInterfaces()` lists the kernel's loopback;
+- `os.availableParallelism()` and `os.cpus()` come from `navigator.hardwareConcurrency`.
+
+The WHATWG `URL` is the platform's.
+
 **`events`:** Node v22.22.0's own `lib/events.js` (in `src/node-lib`). It is the EventEmitter of `require('events')` and of every emitter in the runtime: `process`, streams (readable-stream uses it, so `new Stream()` is an EventEmitter), child processes, servers and agents. That brings `newListener`/`removeListener`, `prependListener`, `errorMonitor`, `captureRejections`, `setMaxListeners` and the `MaxListenersExceededWarning`, `events.once`/`events.on` with `AbortSignal`, `getEventListeners`, `listenerCount` and `EventEmitter.call(this)` for old-style subclasses. The platform's own `EventTarget`/`AbortSignal` have none of Node's internals, so `getEventListeners` and `getMaxListeners` don't accept them.
 
 **`process` and the program's end (Node 22):**

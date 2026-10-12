@@ -5,12 +5,9 @@ import { createFs } from '../builtins/fs.mjs';
 import { createHttp } from '../builtins/http.mjs';
 import { createHttps } from '../builtins/https.mjs';
 import { createNet } from '../builtins/net.mjs';
-import { createOs } from '../builtins/os.mjs';
-import { createQuerystring } from '../builtins/querystring.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
-import { createUrl } from '../builtins/url.mjs';
 import { createUtil } from '../builtins/util.mjs';
 import { createZlib } from '../builtins/zlib.mjs';
 import { createCrypto } from '../builtins/crypto.mjs';
@@ -33,7 +30,9 @@ const BUILTIN_LIST = [
   'os',
   'path',
   'path/posix',
+  'path/win32',
   'process',
+  'punycode',
   'querystring',
   'readline',
   'readline/promises',
@@ -174,9 +173,6 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const assert = createAssert({ ctx, process });
   assert.strict = createAssertStrict({ ctx, process });
   const assertStrict = assert.strict;
-  const os = createOs(process.env);
-  const url = createUrl();
-  const querystring = createQuerystring();
   let stream;
   const getStream = () => {
     if (!stream) stream = createStream({ ctx, process, Buffer, handles });
@@ -237,8 +233,12 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     process: () => process,
     buffer: () => (bufferExports ??= bufferModule(Buffer)),
     console: () => console,
-    path: () => path,
-    'path/posix': () => path,
+    // Node's own lib/path.js, lib/url.js, lib/querystring.js, lib/os.js,
+    // lib/punycode.js (src/node-lib).
+    path: () => process._nodeLib().path,
+    'path/posix': () => process._nodeLib().path.posix,
+    'path/win32': () => process._nodeLib().path.win32,
+    punycode: () => process._nodeLib().punycode,
     module: () => ModuleExport,
     fs: () => fs,
     zlib: getZlib,
@@ -252,9 +252,9 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     'assert/strict': () => assertStrict,
     util: () => util,
     'util/types': () => util.types,
-    os: () => os,
-    url: () => url,
-    querystring: () => querystring,
+    os: () => process._nodeLib().os,
+    url: () => process._nodeLib().url,
+    querystring: () => process._nodeLib().querystring,
     string_decoder: () => stringDecoder,
     stream: () => getStream(),
     'stream/promises': () => streamPromises,

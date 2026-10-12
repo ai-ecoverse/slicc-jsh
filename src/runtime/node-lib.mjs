@@ -9,6 +9,10 @@ import { inspect, stripVTControlCharacters } from 'node-inspect-extracted';
 import nodeInspect from 'node-inspect-extracted';
 import { loadVendorCjs } from './vendor-load.mjs';
 import * as errors from './node-errors.mjs';
+import { internalBinding, setBinding } from './node-bindings.mjs';
+import { createUrlInternals, urlBindings } from './builtins/url-internal.mjs';
+
+for (const [name, value] of Object.entries(urlBindings)) setBinding(name, value);
 
 const PACKAGE_ROOT = '/node_modules/@ai-ecoverse/slicc-jsh';
 
@@ -36,6 +40,50 @@ const kEnhanceStackBeforeInspector = Symbol('kEnhanceStackBeforeInspector');
 const kEvents = Symbol('kEvents');
 const kIsEventTarget = Symbol.for('nodejs.event_target');
 
+let urlInternals;
+
+/** lib/internal/util.js getCIDR (os.networkInterfaces). */
+function getCIDR(address, netmask, family) {
+  let ones = 0;
+  let split = '.';
+  let range = 10;
+  let groupLength = 8;
+  let hasZeros = false;
+  let lastPos = 0;
+  if (family === 'IPv6') {
+    split = ':';
+    range = 16;
+    groupLength = 16;
+  }
+  const countBinaryOnes = (n) => {
+    n -= (n >>> 1) & 0x55555555;
+    n = (n & 0x33333333) + ((n >>> 2) & 0x33333333);
+    return (((n + (n >>> 4)) & 0xf0f0f0f) * 0x1010101) >>> 24;
+  };
+  for (let i = 0; i < netmask.length; i++) {
+    if (netmask[i] !== split) {
+      if (i + 1 < netmask.length) continue;
+      i++;
+    }
+    const part = netmask.slice(lastPos, i);
+    lastPos = i + 1;
+    if (part !== '') {
+      if (hasZeros) {
+        if (part !== '0') return null;
+      } else {
+        const binary = Number.parseInt(part, range);
+        const binaryOnes = countBinaryOnes(binary);
+        ones += binaryOnes;
+        if (binaryOnes !== groupLength) {
+          if (binary.toString(2).includes('01')) return null;
+          hasZeros = true;
+        }
+      }
+    }
+  }
+  return `${address}/${ones}`;
+}
+
 export function loadNodeLib({ ctx } = {}) {
   return loadVendorCjs({
     ctx,
@@ -47,6 +95,7 @@ export function loadNodeLib({ ctx } = {}) {
         codes: errors.errorCodes(),
         AbortError: errors.AbortError,
         isErrorStackTraceLimitWritable: () => true,
+        hideStackFrames: (fn) => fn,
         genericNodeError(message, errorProperties) {
           return Object.assign(new Error(message), errorProperties);
         },
@@ -83,6 +132,20 @@ export function loadNodeLib({ ctx } = {}) {
             value: name,
           });
         },
+        isWindows: false,
+        isMacOS: false,
+        getLazy(initializer) {
+          let value;
+          let initialized = false;
+          return () => {
+            if (!initialized) {
+              value = initializer();
+              initialized = true;
+            }
+            return value;
+          };
+        },
+        getCIDR,
         spliceOne(list, index) {
           for (; index + 1 < list.length; index++) list[index] = list[index + 1];
           list.pop();
@@ -114,6 +177,9 @@ export function loadNodeLib({ ctx } = {}) {
       os: lazy(() => builtin('os')),
       fs: lazy(() => builtin('fs')),
       path: lazy(() => builtin('path')),
+      buffer: lazy(() => builtin('buffer')),
+      'internal/url': lazy(() => (urlInternals ??= createUrlInternals({ nodePath: builtin('path'), Buffer: builtin('buffer').Buffer }))),
+      '__jsh/internal-binding': { internalBinding },
     },
   });
 }

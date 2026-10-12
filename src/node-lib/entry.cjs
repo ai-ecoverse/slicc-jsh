@@ -21,6 +21,21 @@ module.exports = {
   get readline() {
     return require('readline');
   },
+  get path() {
+    return require('path');
+  },
+  get url() {
+    return require('url');
+  },
+  get querystring() {
+    return require('querystring');
+  },
+  get os() {
+    return require('os');
+  },
+  get punycode() {
+    return require('punycode');
+  },
   get readlinePromises() {
     return require('readline/promises');
   },
@@ -51,6 +66,10 @@ module.exports = {
         return require('internal/events/symbols');
       case 'internal/fixed_queue':
         return require('internal/fixed_queue');
+      case 'internal/querystring':
+        return require('internal/querystring');
+      case 'internal/constants':
+        return require('internal/constants');
       default:
         try {
           return runtimeRequire(id);

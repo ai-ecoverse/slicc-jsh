@@ -1,0 +1,14 @@
+{
+  "description": "Node 22's own lib/path.js (win32 included, matchesGlob), lib/url.js (legacy parse/format/resolve, fileURLToPath/pathToFileURL, domainTo*), lib/querystring.js, lib/punycode.js and lib/os.js, against host Node",
+  "argv": [
+    "--no-deprecation",
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
