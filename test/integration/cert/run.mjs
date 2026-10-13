@@ -121,7 +121,10 @@ function normalize(s, real, hd, kd) {
     .replace(/\(node:\d+\)/g, '(node:PID)')
     .replace(/\bpid:\s*\d+/gi, 'pid: PID')
     .replace(/\b\d+(\.\d+)?\s*ms\b/g, 'Nms')
-    .replace(/Date\.now\(\)-t>=\d+/g, 'Date.now()-t>=N');
+    .replace(/Date\.now\(\)-t>=\d+/g, 'Date.now()-t>=N')
+    // An inspected array of paths breaks across lines by the paths' length,
+    // which the host's temporary directory makes longer than /os's.
+    .replace(/\[\n\s+('[^'\n]*')\n\s+\]/g, '[ $1 ]');
   const lines = masked.split('\n');
   const out = [];
   for (const line of lines) {

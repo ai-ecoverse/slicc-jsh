@@ -55,6 +55,20 @@ function toBytes(data) {
   return encoder.encode(String(data));
 }
 
+/** lib/internal/fs/utils.js StatFs. */
+class StatFs {
+  constructor(type, bsize, blocks, bfree, bavail, files, ffree, bigint) {
+    const v = bigint ? BigInt : (x) => x;
+    this.type = v(type);
+    this.bsize = v(bsize);
+    this.blocks = v(blocks);
+    this.bfree = v(bfree);
+    this.bavail = v(bavail);
+    this.files = v(files);
+    this.ffree = v(ffree);
+  }
+}
+
 const S_IFMT = 0o170000;
 const S_IFREG = 0o100000;
 const S_IFDIR = 0o040000;
@@ -247,6 +261,19 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   let nextFd = 3;
 
   function parseFlags(flags) {
+    // A number: the O_* bits (Linux's, as fs.constants has them).
+    if (typeof flags === 'number') {
+      const acc = flags & 3;
+      return {
+        raw: flags,
+        readable: acc === 0 || acc === 2,
+        writable: acc === 1 || acc === 2,
+        exclusive: !!(flags & 0o200),
+        append: !!(flags & 0o2000),
+        truncate: !!(flags & 0o1000),
+        create: !!(flags & 0o100),
+      };
+    }
     const f = flags == null ? 'r' : String(flags);
     const readable = f.includes('r') || f === 'a+' || f === 'w+' || f === 'ax+' || f === 'wx+';
     const writable =
@@ -372,7 +399,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     }
     const pos =
       filePosition == null
-        ? ent.flags.includes('a')
+        ? ent.append ?? String(ent.flags).includes('a')
           ? cur.length
           : ent.pos
         : filePosition;
@@ -745,6 +772,32 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         throw nodeFsError(code, 'stat', pathArg, err);
       }
     },
+    /**
+     * Node's StatFs. The kernel's storage estimate (ctx.sync.fs.statfs on
+     * slicc-kernel 1.72+: quota and usage) in 4 KiB blocks, as tmpfs (the
+     * program's files live in the browser's storage, which has no inodes:
+     * files/ffree follow the blocks); 1 GiB where the kernel has no estimate.
+     */
+    statfsSync(p, options) {
+      const target = abs(p);
+      try {
+        syncFs.stat(target);
+      } catch (err) {
+        throw nodeFsError(err?.code || 'ENOENT', 'statfs', p, err);
+      }
+      let usage = null;
+      try {
+        usage = syncFs.statfs?.(target) ?? null;
+      } catch {
+        usage = null;
+      }
+      const bsize = 4096;
+      const quota = usage ? usage.quota : 1024 ** 3;
+      const used = usage ? Math.min(usage.usage, quota) : 0;
+      const blocks = Math.floor(quota / bsize);
+      const bfree = Math.floor((quota - used) / bsize);
+      return new StatFs(0x01021994, bsize, blocks, bfree, bfree, blocks, bfree, options?.bigint === true);
+    },
     lstatSync(p, options) {
       const pathArg = p;
       try {
@@ -889,6 +942,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       fdTable.set(fd, {
         path: target,
         flags: fl.raw,
+        append: fl.append,
         pos,
         readable: fl.readable || fl.raw === 'r',
         writable: fl.writable,
@@ -1328,6 +1382,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         })()
       );
     },
+    statfs(p, options) {
+      return track(Promise.resolve().then(() => syncApi.statfsSync(p, options)));
+    },
     lstat(p, options) {
       return track(
         (async () => {
@@ -1675,6 +1732,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         cb();
       },
     });
+    // Node's WriteStream: strings are written in its encoding.
+    if (options?.encoding) w.setDefaultEncoding(options.encoding);
     w.path = p;
     w.bytesWritten = 0;
     // Node's: the descriptor once open (null before), and pending until then.
@@ -1844,6 +1903,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     },
     access: callbackify(syncApi.accessSync),
     stat: callbackify(syncApi.statSync),
+    statfs: callbackify(syncApi.statfsSync),
     lstat: callbackify(syncApi.lstatSync),
     realpath: Object.assign(callbackify(syncApi.realpathSync), {
       native: callbackify(realpathNative),
@@ -1903,24 +1963,63 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     symlink: callbackify(syncApi.symlinkSync, { minArgsBeforeCb: 2 }),
     readlink: callbackify(syncApi.readlinkSync),
     Stats,
+    // Node 22's on Linux x86_64 (node_constants.cc), in its order.
     constants: {
+      UV_FS_SYMLINK_DIR: 1,
+      UV_FS_SYMLINK_JUNCTION: 2,
+      O_RDONLY: 0,
+      O_WRONLY: 1,
+      O_RDWR: 2,
+      UV_DIRENT_UNKNOWN: 0,
+      UV_DIRENT_FILE: 1,
+      UV_DIRENT_DIR: 2,
+      UV_DIRENT_LINK: 3,
+      UV_DIRENT_FIFO: 4,
+      UV_DIRENT_SOCKET: 5,
+      UV_DIRENT_CHAR: 6,
+      UV_DIRENT_BLOCK: 7,
+      S_IFMT,
+      S_IFREG,
+      S_IFDIR,
+      S_IFCHR: 0o20000,
+      S_IFBLK: 0o60000,
+      S_IFIFO: 0o10000,
+      S_IFLNK,
+      S_IFSOCK: 0o140000,
+      O_CREAT: 0o100,
+      O_EXCL: 0o200,
+      UV_FS_O_FILEMAP: 0,
+      O_NOCTTY: 0o400,
+      O_TRUNC: 0o1000,
+      O_APPEND: 0o2000,
+      O_DIRECTORY: 0o200000,
+      O_NOATIME: 0o1000000,
+      O_NOFOLLOW: 0o400000,
+      O_SYNC: 0o4010000,
+      O_DSYNC: 0o10000,
+      O_DIRECT: 0o40000,
+      O_NONBLOCK: 0o4000,
+      S_IRWXU: 0o700,
+      S_IRUSR: 0o400,
+      S_IWUSR: 0o200,
+      S_IXUSR: 0o100,
+      S_IRWXG: 0o70,
+      S_IRGRP: 0o40,
+      S_IWGRP: 0o20,
+      S_IXGRP: 0o10,
+      S_IRWXO: 0o7,
+      S_IROTH: 0o4,
+      S_IWOTH: 0o2,
+      S_IXOTH: 0o1,
       F_OK: 0,
       R_OK: 4,
       W_OK: 2,
       X_OK: 1,
-      O_RDONLY: 0,
-      O_WRONLY: 1,
-      O_RDWR: 2,
-      O_CREAT: 0o100,
-      O_TRUNC: 0o1000,
-      O_APPEND: 0o2000,
-      O_EXCL: 0o200,
-      S_IFMT,
-      S_IFREG,
-      S_IFDIR,
-      S_IFLNK,
+      UV_FS_COPYFILE_EXCL: 1,
       COPYFILE_EXCL: 1,
+      UV_FS_COPYFILE_FICLONE: 2,
       COPYFILE_FICLONE: 2,
+      UV_FS_COPYFILE_FICLONE_FORCE: 4,
       COPYFILE_FICLONE_FORCE: 4,
     },
   };

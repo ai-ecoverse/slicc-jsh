@@ -173,6 +173,8 @@ class Process extends EventEmitter {
     this._title = 'node';
     // Node's: null until lib/domain.js makes it its accessor.
     this.domain = null;
+    // Node's: [object process], its constructor named process.
+    Object.defineProperty(this, Symbol.toStringTag, { value: 'process', writable: true, enumerable: false, configurable: false });
     this._ctx = ctx;
     this._onExit = onExit;
 
@@ -783,6 +785,7 @@ class Process extends EventEmitter {
     this._onExit?.(code);
   }
 }
+Object.defineProperty(Process, 'name', { value: 'process' });
 
 // Node's process methods are own properties that work from any receiver
 // (yargs keeps `cwd: process.cwd` and calls it detached).

@@ -1,0 +1,21 @@
+context import, main loader "function"
+context import, no callback THROWS TypeError ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING A dynamic import callback was not specified.
+new context import, a callback THROWS TypeError ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG A dynamic import callback was invoked without --experimental-vm-modules
+-r [0,"pre false true\nmain 1 [\"-r\",\"./pre.js\"]\n",""]
+--require= [0,"pre false true\n1\n",""]
+-r missing [1,"","node:internal/modules/cjs/loader:1386\n  throw err;\n  ^\n\nError: Cannot find module './nope.js'\nRequire stack:\n- internal/preload\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [ 'internal/preload' ]\n}\n\nNode.js v22.22.0\n"]
+-r no argument [9,"","NODE: -r requires an argument\n"]
+node - [0,"[[\"a\",\"b\"],\"[stdin]\",false]\n",""]
+--stack-trace-limit=2 [0,"3 2\n",""]
+--stack-trace-limit 3 [9,["Error: illegal value for flag --stack-trace-limit of type int","Try --help for options"]]
+write stream encoding [233]
+write stream encoding option "hi"
+numeric flags ["abc","EEXIST"]
+fs.constants [["UV_FS_SYMLINK_DIR","number","number"],["UV_DIRENT_BLOCK","number","number"],["S_IFCHR","number","number"],["S_IFBLK","number","number"],["S_IFIFO","number","number"],["S_IFSOCK","number","number"],["O_NOFOLLOW","number","number"],["O_SYNC","number","number"],["O_DIRECTORY","number","number"],["O_NOCTTY","number","number"],["O_DSYNC","number","number"],["O_NONBLOCK","number","number"],["S_IRWXU","number","number"],["S_IRUSR","number","number"],["S_IXOTH","number","number"],["UV_FS_COPYFILE_EXCL","number","number"],["UV_FS_COPYFILE_FICLONE_FORCE","number","number"],["UV_FS_O_FILEMAP","number","number"]]
+fs.constants (same everywhere) [8192,24576,4096,49152,448,256,1,7,4]
+statfsSync ["StatFs",["type","bsize","blocks","bfree","bavail","files","ffree"],true,true,true,"bigint"]
+statfsSync missing THROWS Error ENOENT ENOENT: no such file or directory, statfs 'DIR/nope'
+statfs callback / promise [[false,"number"],"number"]
+process ["[object process]","[object process]","process","process {"]
+require stack ["MODULE_NOT_FOUND",["DIR/r2.js","DIR/r1.js","SCRIPT"],"Cannot find module './missing'\nRequire stack:\n- DIR/r2.js\n- DIR/r1.js\n- SCRIPT"]
+warnings [["ExperimentalWarning","vm.USE_MAIN_CONTEXT_DEFAULT_LOADER is an experimental feature and might change at any time"]]

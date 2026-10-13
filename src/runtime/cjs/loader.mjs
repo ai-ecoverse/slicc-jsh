@@ -447,13 +447,19 @@ export function createCjs({
   let mainModule = null;
 
   function makeRequire(parentFilename, parentModule) {
+    // Node's requireStack: this file, then the files that required it.
+    const stackOf = () => {
+      const stack = [parentFilename];
+      for (let m = parentModule?.parent; m; m = m.parent) if (m.filename && !stack.includes(m.filename)) stack.push(m.filename);
+      return stack;
+    };
     const require = (request) => {
-      const resolved = resolver.resolve(request, parentFilename, [parentFilename]);
+      const resolved = resolver.resolve(request, parentFilename, stackOf());
       if (resolved.type === 'builtin') return builtins.load(resolved.id);
       return loadFile(resolved.filename, parentModule ?? null);
     };
     require.resolve = (request) => {
-      const resolved = resolver.resolve(request, parentFilename, [parentFilename]);
+      const resolved = resolver.resolve(request, parentFilename, stackOf());
       if (resolved.type === 'builtin') {
         // Node keeps a node: prefix when the request used one.
         return request.startsWith('node:') ? `node:${resolved.id}` : resolved.id;
@@ -497,6 +503,12 @@ export function createCjs({
     runMain,
     makeRequire,
     loadFile,
+    /** node -r / --require: a module loaded before the entry, from the working directory (require stack: internal/preload). */
+    preload(request) {
+      const resolved = resolver.resolve(request, `${process.cwd()}/`, ['internal/preload']);
+      if (resolved.type === 'builtin') return builtins.load(resolved.id);
+      return loadFile(resolved.filename, null);
+    },
     setRequireEsmHook,
     setImportModuleHook,
     findPackageType,

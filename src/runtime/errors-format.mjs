@@ -222,10 +222,11 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPro
   if (err.code === 'MODULE_NOT_FOUND') {
     head = `node:internal/modules/cjs/loader:1386\n  throw err;\n  ^\n\n`;
     const rs = err.requireStack?.[0];
-    const stackLine = rs ? `    at Object.<anonymous> (${rs}:1:1)` : '';
-    const inspected = sanitizeInspected(
-      util.inspect(err, { depth: 10, breakLength: 50, compact: false })
-    );
+    // The requiring file's frame (internal/preload's are Node's own).
+    const stackLine = rs?.startsWith('/') ? `    at Object.<anonymous> (${rs}:1:1)` : '';
+    // Node's inspect of the error, its defaults: a require stack that fits
+    // on a line is one (`[ '/x.js' ]`).
+    const inspected = sanitizeInspected(util.inspect(err, { depth: 10 }));
     const props = extractInspectProps(inspected);
     const body = `Error: ${err.message}\n${stackLine}${stackLine && props ? ' ' : ''}${props || ''}\n`;
     return { body: `${head}${body}${trailer}` };

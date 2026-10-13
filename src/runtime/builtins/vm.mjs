@@ -189,7 +189,10 @@ function compile(code, filename, lineOffset, scriptId, mode = 'this', ast = pars
   const walk = (node) => {
     if (!node || typeof node.type !== 'string') return;
     if (node.type === 'ImportExpression') {
-      edits.push({ start: node.start, end: node.source.start, text: `globalThis[Symbol.for('slicc-jsh.vmImport')](${scriptId}, ` });
+      // In a context, `globalThis` is the context's: the runner hands the
+      // loader in as a parameter there.
+      const call = mode === 'context' ? '__jsh_vm_import__' : "globalThis[Symbol.for('slicc-jsh.vmImport')]";
+      edits.push({ start: node.start, end: node.source.start, text: `${call}(${scriptId}, ` });
     }
     if (mode === 'context') {
       // Names a script assigns without declaring: the context's (sloppy globals).
@@ -280,7 +283,7 @@ export function createVm({
    * declarations aren't either while it runs: they are its own, hoisted.
    */
   const esGlobals = new Set(ES_GLOBALS);
-  const RUNNER_NAMES = new Set(['__jsh_vm_scope__', '__jsh_vm_code__', '__jsh_vm_fns__', '__jsh_vm_n__']);
+  const RUNNER_NAMES = new Set(['__jsh_vm_scope__', '__jsh_vm_code__', '__jsh_vm_fns__', '__jsh_vm_n__', '__jsh_vm_import__']);
   function scopeOf(sandbox) {
     let state = contexts.get(sandbox);
     if (state) return state;
@@ -326,6 +329,7 @@ export function createVm({
     '__jsh_vm_scope__',
     '__jsh_vm_code__',
     '__jsh_vm_fns__',
+    '__jsh_vm_import__',
     'try { with (__jsh_vm_scope__) { return eval(__jsh_vm_code__); } } finally { for (const __jsh_vm_n__ of __jsh_vm_fns__) { try { __jsh_vm_scope__[__jsh_vm_n__] = eval(__jsh_vm_n__); } catch {} } }'
   );
 
@@ -346,7 +350,7 @@ export function createVm({
     registerVmFile(filename, 0);
     try {
       // Top-level `this` is the context's global, as globalThis is.
-      return runner.call(sandbox, state.scope, `${compiled.lines}${compiled.body}${compiled.sourceURL}`, [...compiled.functions]);
+      return runner.call(sandbox, state.scope, `${compiled.lines}${compiled.body}${compiled.sourceURL}`, [...compiled.functions], globalThis[VM_IMPORT]);
     } finally {
       [state.names, state.functions] = saved;
     }

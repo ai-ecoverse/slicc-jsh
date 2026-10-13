@@ -599,6 +599,21 @@ export async function runNode(ctx, options = {}) {
       rewriteDynamicImports,
     };
     removeJshHandoff = installJshHandoff(ctx, rt);
+    // V8's --stack-trace-limit=N.
+    const limit = process.execArgv.findLast?.((a) => a.startsWith('--stack-trace-limit='));
+    if (limit) Error.stackTraceLimit = Number(limit.slice(20));
+    // node -r / --require: loaded first, in order, as Node's preload modules.
+    if (typeof options.main !== 'function') {
+      for (const request of parsed.preload ?? []) {
+        try {
+          cjs.preload(request);
+          flushTicks();
+        } catch (err) {
+          if (isExitError(err)) throw err;
+          if (!handleUncaught(err)) return dieUncaught(() => printUncaught(err));
+        }
+      }
+    }
     if (typeof options.main === 'function') {
       try {
         const result = options.main(rt);
@@ -617,7 +632,7 @@ export async function runNode(ctx, options = {}) {
           return dieUncaught(() => printUncaught(err));
         }
       }
-    } else if (parsed.mode === 'empty' && (parsed.interactive || process.stdin.isTTY)) {
+    } else if (parsed.mode === 'empty' && !parsed.stdinScript && (parsed.interactive || process.stdin.isTTY)) {
       // Node's REPL: no script, and stdin a terminal (or -i).
       const status = startRepl();
       if (status !== undefined) return status;
@@ -654,7 +669,8 @@ export async function runNode(ctx, options = {}) {
       const source = decoder.decode(merged);
       lastEvalCode = source;
       process._evalCode = source;
-      process.argv[1] = '[stdin]';
+      // `node -` keeps its `-`; piped input with no argument is [stdin].
+      if (!parsed.stdinScript) process.argv[1] = '[stdin]';
       const inputType = inputTypeOf(process.execArgv);
       const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(source);
       try {

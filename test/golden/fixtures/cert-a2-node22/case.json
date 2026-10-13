@@ -1,0 +1,14 @@
+{
+  "description": "cert A2 findings: import() in a vm context, -r/--require, node -, --stack-trace-limit=N, a write stream's encoding, numeric open flags, the full fs.constants; statfs; String(process); a require stack of several files",
+  "argv": [
+    "--no-warnings",
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
