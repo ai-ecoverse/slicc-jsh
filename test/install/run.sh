@@ -130,7 +130,7 @@ case_no_node() {
     'nvm install 22' 're-run it in a terminal' 'no terminal to ask on'; do
     grep -qF "$want" "$work/no-node.txt" || fail "no-node output lacks: $want"
   done
-  [ ! -e "$h/.jsh" ] && [ ! -e "$h/.local/bin/jsh" ] || fail "no-node left files behind"
+  if [ -e "$h/.jsh" ] || [ -e "$h/.local/bin/jsh" ]; then fail "no-node left files behind"; fi
   pass "no Node, no terminal: clean failure with instructions"
 
   # A too-old node on PATH is the same.
