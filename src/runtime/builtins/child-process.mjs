@@ -329,11 +329,15 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
    * it to a child: it is fed and drained here, through fs, which keeps the
    * fd's position as Node's shared file offset does. Taken when spawn() is
    * called, so closing the fd right after doesn't take it from the child.
+   * A device (/dev/null, /dev/zero, …) has a kernel descriptor behind it,
+   * `kernelFd`: the child gets that instead (spawn() holds it open until
+   * the child has it, so a closeSync() right after doesn't close it).
    */
   function jshOpenFile(fd) {
     if (typeof fd !== 'number' || fd < 3 || !getFs) return null;
     return getFs()._sliccOpenFile?.(fd) ?? null;
   }
+
 
   /** Kernel stdio for a slot: a jsh fd becomes a pipe that jsh serves. */
   function kernelStdio(mode, file) {
@@ -611,8 +615,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
 
     // Re-check in startSpawn so a cwd that vanishes between spawn() and the
     // tick still fails; ENOTDIR already threw from spawn() when applicable.
+    const releaseAll = () => files.forEach((f) => f?.release?.());
     if (options.cwd != null) {
       const bad = checkSpawnCwd(ctx, cwd);
+      if (bad) releaseAll();
       if (bad === 'ENOENT') {
         failSpawnEnoent(child, process, handles, file, args);
         return;
@@ -628,20 +634,25 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       }
     }
 
+    // A device goes to the child as its kernel descriptor (it streams, as in
+    // Node); spawn() held it open, and it is let go once the child has it.
+    const direct = files.map((f) => (f?.release ? f.kernelFd : null));
+    const served = files.map((f, i) => (direct[i] != null ? null : f));
     const spawnPromise = ctx.spawn({
       argv,
       cwd,
       env,
-      stdin: kernelStdio(stdio[0], files[0]),
-      stdout: kernelStdio(stdio[1], files[1]),
-      stderr: kernelStdio(stdio[2], files[2]),
+      stdin: direct[0] ?? kernelStdio(stdio[0], served[0]),
+      stdout: direct[1] ?? kernelStdio(stdio[1], served[1]),
+      stderr: direct[2] ?? kernelStdio(stdio[2], served[2]),
     });
     trackPromise(handles, spawnPromise);
+    spawnPromise.then(releaseAll, releaseAll);
 
     spawnPromise.then(
       (kernelChild) => {
         child._bindKernel(kernelChild);
-        connectStdio(child, kernelChild, files);
+        connectStdio(child, kernelChild, served);
         const spawnErr = safeEmit(child, 'spawn');
         if (spawnErr) return;
         const waitP = kernelChild.wait();
@@ -769,7 +780,12 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     }
     // jsh fds are taken now: a closeSync() right after spawn() must not
     // take them from the child (Node's child has them already).
-    const files = stdio.map((mode) => jshOpenFile(mode));
+    const files = stdio.map((mode) => {
+      const file = jshOpenFile(mode);
+      // Hold a device's kernel descriptor until the child has it.
+      if (file?.hold) file.release = file.hold();
+      return file;
+    });
     process.nextTick(() => startSpawn(child, file, argv, opts, stdio, files));
     return child;
   }
@@ -1036,6 +1052,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         const file = jshOpenFile(slot.fd);
         if (!file && takesFds) {
           how.push(slot.fd);
+        } else if (file?.kernelFd != null && takesFds) {
+          // A device: its kernel descriptor, streamed as in Node.
+          how.push(file.kernelFd);
         } else {
           how.push('pipe');
           capture[i] = { fd: slot.fd, file };

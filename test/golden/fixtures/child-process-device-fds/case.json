@@ -1,0 +1,5 @@
+{
+  "description": "child_process stdio on device fds from fs.openSync (/dev/zero as an endless stdin, /dev/null in and out), sync and async, closed right after spawn() (Node 22; slicc-kernel 1.70.0)",
+  "argv": ["main.js"],
+  "shim": true
+}

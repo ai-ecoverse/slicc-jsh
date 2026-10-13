@@ -987,6 +987,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       if (!fdTable.has(fd)) throw nodeFsError('EBADF', 'close', undefined);
       const ent = fdTable.get(fd);
       fdTable.delete(fd);
+      ent.closed = true;
+      // A device a child is still being given (child_process hold()) keeps
+      // its kernel descriptor until that is done, as a dup'd fd would.
+      if (ent.holds > 0) return;
       try {
         ent.device?.close();
       } catch {
@@ -1681,6 +1685,26 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       // it is; fed and drained here, it streams, up to the kernel's 64 MiB.
       return {
         kernelFd: ent.device.fd,
+        /**
+         * Keep kernelFd open past a closeSync() of the jsh fd until the
+         * returned release() (child_process: until the child has it).
+         */
+        hold() {
+          ent.holds = (ent.holds ?? 0) + 1;
+          let released = false;
+          return () => {
+            if (released) return;
+            released = true;
+            ent.holds -= 1;
+            if (ent.holds === 0 && ent.closed) {
+              try {
+                ent.device.close();
+              } catch {
+                /* closed */
+              }
+            }
+          };
+        },
         write(bytes) {
           let off = 0;
           while (bytes?.length && off < bytes.length) off += ent.device.write(0, bytes.subarray(off)) || bytes.length - off;
