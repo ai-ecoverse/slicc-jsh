@@ -1008,13 +1008,48 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     return out;
   }
 
-  function kernelSlot(slot, i) {
-    if (!slot) return 'ignore';
-    if (slot.type === 'pipe') return 'pipe';
-    if (slot.type === 'ignore') return 'ignore';
-    if (slot.fd === i) return 'inherit';
-    // Another descriptor: capture (or feed) here, see syncStdio.
-    return 'pipe';
+  /**
+   * Whether ctx.sync.run takes program fd numbers and stderr: 'stdout'
+   * (slicc-kernel 1.70.0+, ai-ecoverse/slicc-kernel#432). Unknown until the
+   * first call that needs it: an older kernel refuses those with EINVAL
+   * before it starts anything, and the call is then made the old way.
+   */
+  let syncRunTakesFds;
+
+  /**
+   * How each stdio slot goes to ctx.sync.run. `how` is the kernel's choice,
+   * `capture[i]` an fd whose output (or input) jsh carries itself: a jsh fd
+   * (fs.openSync) always, a kernel fd only where the kernel can't take its
+   * number. With `merged`, stdout and stderr share one capture (in the
+   * child's write order) that goes to slot 1's target.
+   */
+  function planSync(stdio, takesFds) {
+    const how = [];
+    const capture = [];
+    for (const i of [0, 1, 2]) {
+      const slot = stdio[i];
+      if (!slot) how.push('ignore');
+      else if (slot.type === 'pipe') how.push('pipe');
+      else if (slot.type === 'ignore') how.push('ignore');
+      else if (slot.fd === i) how.push('inherit');
+      else {
+        const file = jshOpenFile(slot.fd);
+        if (!file && takesFds) {
+          how.push(slot.fd);
+        } else {
+          how.push('pipe');
+          capture[i] = { fd: slot.fd, file };
+        }
+      }
+    }
+    // stdout and stderr to one jsh fd: one capture keeps their order.
+    let merged = false;
+    if (takesFds && capture[1] && capture[2] && capture[1].fd === capture[2].fd) {
+      how[2] = 'stdout';
+      capture[2] = undefined;
+      merged = true;
+    }
+    return { how, capture, merged };
   }
 
   /** Read a descriptor to its end (stdin redirected from another fd). */
@@ -1053,34 +1088,53 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       const bad = checkSpawnCwd(ctx, resolveSpawnCwd(path, options.cwd));
       if (bad) failed = bad;
     }
+    let plan;
     if (!failed) {
-      const how = [0, 1, 2].map((i) => kernelSlot(stdio[i], i));
-      remapped = [1, 2].some((i) => stdio[i]?.type === 'fd' && stdio[i].fd !== i);
-      let input = stdio[0]?.input;
-      if (stdio[0]?.type === 'fd' && stdio[0].fd !== 0) {
-        const file = jshOpenFile(stdio[0].fd);
-        input = file ? Buffer.from(file.readRest()) : readFdToEnd(stdio[0].fd);
-      }
-      const req = {
-        // Node's native layer stringifies each argument (null → 'null').
-        argv: [file, ...args.slice(1).map((a) => `${a}`)],
-        env: options.env,
-        cwd: resolveSpawnCwd(path, options.cwd),
-        stdin: how[0],
-        stdout: how[1],
-        stderr: how[2],
-        // Output remapped to another fd is captured here and written after
-        // the run; Node writes it straight through with no maxBuffer, so lift
-        // the kernel's limit (it keeps 64 MiB at most) and apply maxBuffer to
-        // the real pipes below.
-        maxBuffer: remapped ? Infinity : options.maxBuffer,
-        killSignal: options.killSignal ?? SIGNALS.SIGTERM,
+      let fed;
+      const request = (takesFds) => {
+        plan = planSync(stdio, takesFds);
+        const { how, capture } = plan;
+        remapped = capture[1] !== undefined || capture[2] !== undefined;
+        let input = stdio[0]?.input;
+        if (capture[0]) {
+          // Read once: a retry the old way must not read the fd again.
+          fed ??= capture[0].file ? Buffer.from(capture[0].file.readRest()) : readFdToEnd(capture[0].fd);
+          input = fed;
+        }
+        const req = {
+          // Node's native layer stringifies each argument (null → 'null').
+          argv: [file, ...args.slice(1).map((a) => `${a}`)],
+          env: options.env,
+          cwd: resolveSpawnCwd(path, options.cwd),
+          stdin: how[0],
+          stdout: how[1],
+          stderr: how[2],
+          // Output for another fd that jsh carries is written after the run;
+          // Node writes it straight through with no maxBuffer, so lift the
+          // kernel's limit (it keeps 64 MiB at most) and apply maxBuffer to
+          // the real pipes below.
+          maxBuffer: remapped ? Infinity : options.maxBuffer,
+          killSignal: options.killSignal ?? SIGNALS.SIGTERM,
+        };
+        if (how[0] === 'pipe' && input != null) {
+          req.input = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+        }
+        if (options.timeout > 0) req.timeout = options.timeout;
+        return req;
       };
-      if (how[0] === 'pipe' && input != null) {
-        req.input = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+      let req = request(syncRunTakesFds !== false);
+      const usesFds = [req.stdin, req.stdout, req.stderr].some((h) => typeof h === 'number' || h === 'stdout');
+      if (usesFds && syncRunTakesFds === undefined) {
+        try {
+          raw = ctx.sync.run(req);
+          syncRunTakesFds = true;
+        } catch (err) {
+          if (err?.code !== 'EINVAL') throw err;
+          syncRunTakesFds = false;
+          req = request(false);
+        }
       }
-      if (options.timeout > 0) req.timeout = options.timeout;
-      raw = ctx.sync.run(req);
+      raw ??= ctx.sync.run(req);
       if (raw.error && raw.pid === 0 && raw.status === null) failed = raw.error.code ?? 'ENOENT';
     }
 
@@ -1102,7 +1156,16 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       const slot = stdio[i];
       if (!slot) continue;
       let bytes = i === 1 ? raw.stdout : raw.stderr;
-      if (slot.type === 'pipe') {
+      const capture = plan.capture[i];
+      if (capture) {
+        // Carried by jsh: written now. Without the kernel's stderr: 'stdout'
+        // (before 1.70.0), stdout and stderr for one fd come one after the
+        // other rather than in the child's write order.
+        if (bytes?.length) {
+          if (capture.file) capture.file.write(bytes);
+          else ctx.sync.write(capture.fd, bytes);
+        }
+      } else if (slot.type === 'pipe') {
         bytes ??= new Uint8Array(0);
         // With the kernel's limit lifted (remapped fds), keep maxBuffer here;
         // the child has run to its end, so this can only truncate.
@@ -1111,12 +1174,6 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
           overflow = true;
         }
         output[i] = Buffer.from(bytes);
-      } else if (slot.type === 'fd' && slot.fd !== i && bytes?.length) {
-        // stdout and stderr captured apart: one after the other, even to the
-        // same fd (ctx.sync.run can't merge them in the child's write order).
-        const file = jshOpenFile(slot.fd);
-        if (file) file.write(bytes);
-        else ctx.sync.write(slot.fd, bytes);
       }
     }
     if (overflow && !raw.error) raw = { ...raw, error: { code: 'ENOBUFS' } };
