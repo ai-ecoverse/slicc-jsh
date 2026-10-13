@@ -105,6 +105,24 @@ export function createCjs({
     'util',
     'util/types',
   ];
+  // Node's: $HOME/.node_modules, $HOME/.node_libraries, <prefix>/lib/node.
+  const home = process.env.HOME;
+  Module.globalPaths = [
+    ...(home ? [path.resolve(home, '.node_modules'), path.resolve(home, '.node_libraries')] : []),
+    path.resolve(process.execPath, '..', '..', 'lib', 'node'),
+  ];
+  /** Node's Module._resolveLookupPaths: where a request is looked up from `parent`. */
+  Module._resolveLookupPaths = (request, parent) => {
+    if (Module.isBuiltin(request)) return null;
+    const r = String(request);
+    if (r[0] !== '.' || (r.length > 1 && r[1] !== '.' && r[1] !== '/')) {
+      const paths = parent?.paths?.length ? [...parent.paths, ...Module.globalPaths] : Module.globalPaths;
+      return paths.length > 0 ? paths : null;
+    }
+    // In the REPL, parent.filename is null.
+    if (!parent || !parent.id || !parent.filename) return ['.'];
+    return [path.dirname(parent.filename)];
+  };
   Module.isBuiltin = (id) => {
     if (typeof id !== 'string') return false;
     const bare = id.startsWith('node:') ? id.slice(5) : id;

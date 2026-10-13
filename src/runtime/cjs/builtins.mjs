@@ -11,6 +11,7 @@ import { createTimersModule, createTimersPromises } from '../builtins/timers-mod
 import { createUtil } from '../builtins/util.mjs';
 import { createAsyncHooks } from '../builtins/async-hooks.mjs';
 import { createV8 } from '../builtins/v8.mjs';
+import { createVm } from '../builtins/vm.mjs';
 import { createZlib } from '../builtins/zlib.mjs';
 import { createCrypto } from '../builtins/crypto.mjs';
 import { createTty } from '../builtins/tty.mjs';
@@ -49,6 +50,7 @@ const BUILTIN_LIST = [
   'util',
   'util/types',
   'v8',
+  'vm',
   'zlib',
 ];
 
@@ -59,7 +61,6 @@ const NOT_YET = [
   'dns',
   'tls',
   'cluster',
-  'vm',
   'perf_hooks',
   'inspector',
   'trace_events',
@@ -229,6 +230,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   let bufferExports;
   let asyncHooks;
   let v8;
+  let vm;
 
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
@@ -245,6 +247,13 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     punycode: () => process._nodeLib().punycode,
     async_hooks: () => (asyncHooks ??= createAsyncHooks()),
     v8: () => (v8 ??= createV8()),
+    vm: () =>
+      (vm ??= createVm({
+        cwd: () => process.cwd(),
+        importFrom: (specifier, referrer, options) => process._importFrom(specifier, referrer, options),
+        execArgv: () => process.execArgv ?? [],
+        emitWarning: (message, type) => process.emitWarning(message, type),
+      })),
     module: () => ModuleExport,
     fs: () => fs,
     zlib: getZlib,

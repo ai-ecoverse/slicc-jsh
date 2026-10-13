@@ -1,0 +1,45 @@
+Welcome to Node.js v22.22.0.
+Type ".help" for more information.
+> undefined
+> 2
+> undefined
+> { a: 1, b: [ 1, 2 ] }
+> ... ... undefined
+> 2
+> undefined
+> 3
+> 'v'
+> [ 2, 4 ]
+> [ 2, 4 ]
+> '2,41'
+> Uncaught Error: boom
+> 'boom'
+> foo bar
+    ^^^
+
+Uncaught SyntaxError: Unexpected identifier 'bar'
+> { a: 1 }
+> Uncaught ReferenceError: undefinedVar is not defined
+> Uncaught TypeError: Cannot read properties of null (reading 'x')
+> 'function'
+> 'object'
+> 'b'
+> 'a/b'
+> 'function'
+> 'str'
+> ... 'multi\nline'
+> ... ... 'iife'
+> > ... > 10
+> 10
+> .break   Sometimes you get stuck, this gets you out
+.clear   Alias for .break
+.exit    Exit the REPL
+.help    Print this help message
+.load    Load JS from a file into the REPL session
+.save    Save all evaluated commands in this REPL session to a file
+
+Press Ctrl+C to abort current expression, Ctrl+D to exit the REPL
+> 3
+> not reached by .exit when piped
+undefined
+> 

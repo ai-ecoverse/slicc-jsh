@@ -34,6 +34,7 @@ export function parseNodeArgv(argv) {
   let print = false;
   let script;
   const userArgs = [];
+  let interactive = false;
   // Options that only set behaviour; kept in execArgv as Node does.
   const flags = [];
   let i = 0;
@@ -84,6 +85,13 @@ export function parseNodeArgv(argv) {
       userArgs.push(...args.slice(i));
       break;
     }
+    if (arg === '-i' || arg === '--interactive') {
+      // The REPL even if stdin isn't a terminal (Node's -i); kept in execArgv.
+      interactive = true;
+      flags.push(arg);
+      i += 1;
+      continue;
+    }
     if (BOOLEAN_FLAGS.has(arg)) {
       flags.push(arg);
       i += 1;
@@ -132,6 +140,7 @@ export function parseNodeArgv(argv) {
       print,
       processArgv: [argv0, ...userArgs],
       execArgv: [...flags, flag, evalCode],
+      interactive,
     };
   }
 
@@ -148,5 +157,6 @@ export function parseNodeArgv(argv) {
     mode: 'empty',
     processArgv: [argv0],
     execArgv: [...flags],
+    interactive,
   };
 }

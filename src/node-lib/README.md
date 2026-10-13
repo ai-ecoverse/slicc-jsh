@@ -17,3 +17,4 @@ To update, copy the files from the new Node tag and re-run the goldens.
 | `lib/internal/readline/utils.js` | `CSI` for the above |
 | `lib/readline.js`, `lib/readline/promises.js`, `lib/internal/readline/{interface,emitKeypressEvents,promises}.js` | `require('readline')`, `require('readline/promises')` |
 | `lib/internal/process/warning.js` | `process.emitWarning` and the default `'warning'` listener |
+| `lib/repl.js`, `lib/internal/repl.js`, `lib/internal/repl/{utils,history,await}.js`, `lib/domain.js` | the REPL (`node` with no script on a terminal, or `-i`); `domain` is the REPL's own, not a builtin yet |

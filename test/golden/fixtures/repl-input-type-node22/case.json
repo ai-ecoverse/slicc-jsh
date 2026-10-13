@@ -1,0 +1,6 @@
+{
+  "description": "the REPL refuses --input-type (status 9), as Node",
+  "argv": ["-i", "--input-type=module"],
+  "stdin": "1\n",
+  "shim": true
+}
