@@ -27,6 +27,8 @@ write('bom.mjs', '\uFEFFconst x = ;\n');
 write('at.js', 'const a = @;\n');
 write('str.js', "const s = 'open\n");
 write('ll.mjs', 'let let = 1;\n');
+const tokens = ['const x = \\u{110000};', 'const u = "\\x4";', 'const y = 1n2;', 'const z = 0x;', 'const w = #;', 'const r = /ab;', 'const t = `abc'];
+tokens.forEach((src, i) => write(`tok${i}.js`, `${src}\n`));
 for (const [l, args] of [
   ['-p "1 +"', ['-p', '1 +']],
   ['-p "a b"', ['-p', 'a b']],
@@ -36,6 +38,7 @@ for (const [l, args] of [
   ['an invalid character', ['at.js']],
   ['an unterminated string', ['str.js']],
   ["a module's strict word", ['ll.mjs']],
+  ...tokens.map((src, i) => [`invalid token ${src}`, [`tok${i}.js`]]),
 ]) {
   const [status, err] = report(args);
   console.log(`== ${l} (${status})\n${err}`);

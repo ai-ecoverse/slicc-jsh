@@ -70,6 +70,69 @@ SyntaxError: Unexpected strict mode reserved word
 
 Node.js v22.22.0
 
+== invalid token const x = \u{110000}; (1)
+DIR/tok0.js:1
+const x = \u{110000};
+          ^^^^^^^^^
+
+SyntaxError: Undefined Unicode code-point
+
+Node.js v22.22.0
+
+== invalid token const u = "\x4"; (1)
+DIR/tok1.js:1
+const u = "\x4";
+           ^^^^
+
+SyntaxError: Invalid hexadecimal escape sequence
+
+Node.js v22.22.0
+
+== invalid token const y = 1n2; (1)
+DIR/tok2.js:1
+const y = 1n2;
+          ^^
+
+SyntaxError: Invalid or unexpected token
+
+Node.js v22.22.0
+
+== invalid token const z = 0x; (1)
+DIR/tok3.js:1
+const z = 0x;
+          ^^
+
+SyntaxError: Invalid or unexpected token
+
+Node.js v22.22.0
+
+== invalid token const w = #; (1)
+DIR/tok4.js:1
+const w = #;
+          ^
+
+SyntaxError: Invalid or unexpected token
+
+Node.js v22.22.0
+
+== invalid token const r = /ab; (1)
+DIR/tok5.js:1
+const r = /ab;
+          ^
+
+SyntaxError: Invalid regular expression: missing /
+
+Node.js v22.22.0
+
+== invalid token const t = `abc (1)
+DIR/tok6.js:2
+
+
+
+SyntaxError: Unexpected end of input
+
+Node.js v22.22.0
+
 md5-sha1 hmac e05460e72c196a1ae05e0c8fa96749bde515e4805471f3ea4089ae2f86961cbb6446deca
 md5-sha1 hmac, a key past the block 5d0221740cd949ab5944a61f02349db9a80dd8d4e6d653ad01b28f8cdc60a52297600838
 md5-sha1 pbkdf2 00f73d5b433e38c7a5613fb653bbd9bdbe679b536bedee054a5927a9ba0fbe3633fbb73d0d4a4eb5
