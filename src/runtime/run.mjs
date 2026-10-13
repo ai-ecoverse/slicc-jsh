@@ -165,6 +165,25 @@ export async function runNode(ctx, options = {}) {
     return code;
   };
 
+  /**
+   * An uncaught exception goes to process.setUncaughtExceptionCaptureCallback's
+   * callback, else to 'uncaughtException' listeners (the thrown value as is,
+   * with origin 'uncaughtException'). False when nothing takes it.
+   */
+  let processRef;
+  const handleUncaught = (err) => {
+    const p = processRef;
+    if (typeof p?._uncaughtCapture === 'function') {
+      p._uncaughtCapture(err);
+      return true;
+    }
+    if (p && p.listenerCount('uncaughtException') > 0) {
+      p.emit('uncaughtException', err, 'uncaughtException');
+      return true;
+    }
+    return false;
+  };
+
   const parsed = parseNodeArgv([...ctx.argv]);
   if (parsed.error) {
     await ctx.write(2, `${parsed.error}\n`);
@@ -219,6 +238,7 @@ export async function runNode(ctx, options = {}) {
     },
   });
   finishExitRef = finishExit;
+  processRef = process;
   process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
   process._setupWarnings();
   if (parsed.mode === 'eval') {
@@ -245,17 +265,10 @@ export async function runNode(ctx, options = {}) {
         }
         return;
       }
-      if (process.listenerCount('uncaughtException') > 0) {
-        try {
-          process.emit(
-            'uncaughtException',
-            err instanceof Error ? err : new Error(String(err)),
-            'uncaughtException'
-          );
-          return;
-        } catch {
-          /* fall through */
-        }
+      try {
+        if (handleUncaught(err)) return;
+      } catch {
+        /* fall through */
       }
       exitStatus = dieUncaught(() => printUncaught(err));
       timers.clearPending();
@@ -348,14 +361,7 @@ export async function runNode(ctx, options = {}) {
       }
       return;
     }
-    if (process.listenerCount('uncaughtException') > 0) {
-      process.emit(
-        'uncaughtException',
-        err instanceof Error ? err : new Error(String(err)),
-        'uncaughtException'
-      );
-      return;
-    }
+    if (handleUncaught(err)) return;
     fatal(err);
   };
 
@@ -483,12 +489,8 @@ export async function runNode(ctx, options = {}) {
         nextTick.flushSync();
       } catch (err) {
         if (isExitError(err)) throw err;
-        if (process.listenerCount('uncaughtException') > 0) {
-          process.emit(
-            'uncaughtException',
-            err instanceof Error ? err : new Error(String(err)),
-            'uncaughtException'
-          );
+        if (handleUncaught(err)) {
+          uncaughtFromEsm = false;
         } else {
           return dieUncaught(() => printUncaught(err));
         }
@@ -542,12 +544,8 @@ export async function runNode(ctx, options = {}) {
         nextTick.flushSync();
       } catch (err) {
         if (isExitError(err)) throw err;
-        if (process.listenerCount('uncaughtException') > 0) {
-          process.emit(
-            'uncaughtException',
-            err instanceof Error ? err : new Error(String(err)),
-            'uncaughtException'
-          );
+        if (handleUncaught(err)) {
+          uncaughtFromEsm = false;
         } else {
           return dieUncaught(() => printUncaught(err));
         }
@@ -608,12 +606,8 @@ export async function runNode(ctx, options = {}) {
         }
       } catch (err) {
         if (isExitError(err)) throw err;
-        if (process.listenerCount('uncaughtException') > 0) {
-          process.emit(
-            'uncaughtException',
-            err instanceof Error ? err : new Error(String(err)),
-            'uncaughtException'
-          );
+        if (handleUncaught(err)) {
+          uncaughtFromEsm = false;
         } else {
           return dieUncaught(() => printUncaught(err));
         }
@@ -648,13 +642,8 @@ export async function runNode(ctx, options = {}) {
         nextTick.flushSync();
       } catch (err) {
         if (isExitError(err)) throw err;
-        if (process.listenerCount('uncaughtException') > 0) {
+        if (handleUncaught(err)) {
           uncaughtFromEsm = false;
-          process.emit(
-            'uncaughtException',
-            err instanceof Error ? err : new Error(String(err)),
-            'uncaughtException'
-          );
         } else {
           return dieUncaught(() => printUncaught(err));
         }

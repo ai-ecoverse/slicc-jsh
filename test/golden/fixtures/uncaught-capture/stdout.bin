@@ -1,0 +1,4 @@
+listener string str uncaughtException
+listener number 1 uncaughtException
+captured boom true
+alive

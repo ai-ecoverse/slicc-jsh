@@ -1,0 +1,13 @@
+{
+  "description": "process methods are own properties that work called detached, as Node's (yargs' shim); os, Buffer statics, util, fs and path too; the process methods 22.22 has that jsh lacked",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

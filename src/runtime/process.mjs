@@ -206,7 +206,10 @@ class Process extends EventEmitter {
     this.ppid = ppid ?? 1;
     this.execPath = resolveNodeExecPath(ctx);
     this.execArgv = [];
-    this.nextTick = nextTick.nextTick.bind(nextTick);
+    const tickQueue = nextTick;
+    this.nextTick = function nextTick(callback, ...args) {
+      return tickQueue.nextTick(callback, ...args);
+    };
     this._umask = 0o022;
     this._cpuPrev = { user: 0, system: 0 };
     // Node exposes process.config (build-time variables). Minimal M1 shape.
@@ -396,6 +399,110 @@ class Process extends EventEmitter {
 
   memoryUsage() {
     return { rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 };
+  }
+
+  availableMemory() {
+    return 8 * 1024 * 1024 * 1024;
+  }
+
+  /** No cgroup limit here (Node: 0 when unconstrained). */
+  constrainedMemory() {
+    return 0;
+  }
+
+  resourceUsage() {
+    const { user, system } = this.cpuUsage();
+    return {
+      userCPUTime: user,
+      systemCPUTime: system,
+      maxRSS: 0,
+      sharedMemorySize: 0,
+      unsharedDataSize: 0,
+      unsharedStackSize: 0,
+      minorPageFault: 0,
+      majorPageFault: 0,
+      swappedOut: 0,
+      fsRead: 0,
+      fsWrite: 0,
+      ipcSent: 0,
+      ipcReceived: 0,
+      signalsCount: 0,
+      voluntaryContextSwitches: 0,
+      involuntaryContextSwitches: 0,
+    };
+  }
+
+  threadCpuUsage(previousValue) {
+    return this.cpuUsage(previousValue);
+  }
+
+  /** Node's: the kinds of what keeps the loop alive ('Timeout', 'FSReqCallback', …). */
+  getActiveResourcesInfo() {
+    return [];
+  }
+
+  _getActiveHandles() {
+    return [];
+  }
+
+  _getActiveRequests() {
+    return [];
+  }
+
+  /** process.getBuiltinModule(id) (Node 22.3+): a builtin by id, 'node:' or not; undefined if none. */
+  getBuiltinModule(id) {
+    if (typeof id !== 'string') throw ERR_INVALID_ARG_TYPE('id', 'string', id);
+    const bare = id.startsWith('node:') ? id.slice(5) : id;
+    try {
+      return this._builtin(bare);
+    } catch {
+      return undefined;
+    }
+  }
+
+  hasUncaughtExceptionCaptureCallback() {
+    return typeof this._uncaughtCapture === 'function';
+  }
+
+  setUncaughtExceptionCaptureCallback(fn) {
+    if (fn === null) {
+      this._uncaughtCapture = undefined;
+      return;
+    }
+    if (typeof fn !== 'function') throw ERR_INVALID_ARG_TYPE('fn', ['Function', 'null'], fn);
+    if (this._uncaughtCapture) {
+      throw nodeError(
+        Error,
+        'ERR_UNCAUGHT_EXCEPTION_CAPTURE_ALREADY_SET',
+        '`process.setupUncaughtExceptionCapture()` was called while a capture callback was already active'
+      );
+    }
+    this._uncaughtCapture = fn;
+  }
+
+  /** Node: ref()/unref() an object that has them (a timer, a server). */
+  ref(maybeRefable) {
+    if (typeof maybeRefable?.ref === 'function') maybeRefable.ref();
+  }
+
+  unref(maybeRefable) {
+    if (typeof maybeRefable?.unref === 'function') maybeRefable.unref();
+  }
+
+  /** process.abort(): SIGABRT's default action (the program dies of it). */
+  abort() {
+    this.kill(this.pid, 'SIGABRT');
+  }
+
+  /** process.loadEnvFile(path = './.env'): its variables, those not already set. */
+  loadEnvFile(path = './.env') {
+    const fs = this._builtin('fs');
+    const parsed = this._builtin('util').parseEnv(fs.readFileSync(path, 'utf8'));
+    for (const [k, v] of Object.entries(parsed)) if (!(k in this.env)) this.env[k] = v;
+  }
+
+  _rawDebug(...args) {
+    this._writeStderr(`${this._builtin('util').format(...args)}\n`);
   }
 
   cpuUsage(previousValue) {
@@ -598,8 +705,35 @@ class Process extends EventEmitter {
   }
 }
 
+// Node's process methods are own properties that work from any receiver
+// (yargs keeps `cwd: process.cwd` and calls it detached).
+const OWN_INTERNALS = ['_getActiveHandles', '_getActiveRequests', '_rawDebug'];
+const NODE_NAMES = { cwd: 'wrappedCwd', chdir: 'wrappedChdir', umask: 'wrappedUmask' };
+const NODE_LENGTHS = { exit: 1, kill: 2 };
+
+function bindOwnMethods(process) {
+  for (const name of Object.getOwnPropertyNames(Process.prototype)) {
+    if (name === 'constructor' || (name.startsWith('_') && !OWN_INTERNALS.includes(name))) continue;
+    const desc = Object.getOwnPropertyDescriptor(Process.prototype, name);
+    if (typeof desc.value !== 'function' || Object.prototype.hasOwnProperty.call(process, name)) continue;
+    const method = desc.value;
+    const bound = {
+      [name](...args) {
+        return Reflect.apply(method, process, args);
+      },
+    }[name];
+    // Node's names and lengths (its cwd/chdir/umask are wrappers).
+    if (NODE_NAMES[name]) Object.defineProperty(bound, 'name', { value: NODE_NAMES[name] });
+    Object.defineProperty(bound, 'length', { value: NODE_LENGTHS[name] ?? method.length });
+    Object.defineProperty(process, name, { value: bound, writable: true, enumerable: !name.startsWith('_'), configurable: true });
+  }
+  // As Node's: process.memoryUsage.rss().
+  process.memoryUsage.rss = () => process.memoryUsage().rss;
+}
+
 export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles, Buffer, stdio, ppid }) {
   const process = new Process({ ctx, argv, nextTick, onExit, handles, Buffer, stdio, ppid });
+  bindOwnMethods(process);
   process._onHardExit = onHardExit;
   return {
     process,

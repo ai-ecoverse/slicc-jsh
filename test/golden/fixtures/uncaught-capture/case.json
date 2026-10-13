@@ -1,0 +1,8 @@
+{
+  "description": "uncaughtException listeners get the thrown value as is; setUncaughtExceptionCaptureCallback takes uncaught exceptions instead",
+  "argv": [
+    "-e",
+    "process.on('uncaughtException', (e, o) => console.log('listener', typeof e, e, o)); setTimeout(() => { throw 1; }, 1); setTimeout(() => { process.removeAllListeners('uncaughtException'); process.setUncaughtExceptionCaptureCallback((e) => console.log('captured', e.message, process.hasUncaughtExceptionCaptureCallback())); setTimeout(() => { throw new Error('boom'); }, 1); setTimeout(() => console.log('alive'), 10); }, 5); throw 'str';"
+  ],
+  "shim": true
+}
