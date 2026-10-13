@@ -838,7 +838,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       if (this.#headers['content-length'] != null) {
         this.#streaming = true;
       } else if (this.#ended) {
-        this.#headers['content-length'] = String(body.length);
+        // Node: a GET / HEAD / DELETE / OPTIONS / TRACE / CONNECT with no body
+        // sends no Content-Length (the others send 0).
+        const method = (this.#opts.method ?? 'GET').toUpperCase();
+        const bodiless = ['GET', 'HEAD', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT'].includes(method);
+        if (body.length > 0 || !bodiless) this.#headers['content-length'] = String(body.length);
       }
       this.#socket.write(Buffer.concat([this.#writeHead(), body]));
     }

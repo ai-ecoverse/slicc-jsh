@@ -218,7 +218,7 @@ The case name is given for every row below.
 | `path` | `path.posix !== path`, no `win32` | Node's own `lib/path.js` (#102) | full | six≠node, seven=node | 5 | path |
 | `url` | no `parse`, `format`, `resolve` | Node's own `lib/url.js` (#102) | full | six≠node, seven=node | 0 | url |
 | `Buffer` | right | right (#79, #99, #121) | right | six≠node, seven=node | 9 `subarray`, 16 `Buffer` | buffer |
-| `http`/`https`/`net`: a server on 127.0.0.1 and a client | refused (`Use fetch()`) | work in the kernel (#75); the recorded `http.get` of the *host's* compare server is refused, because the kernel's sockets live on its own loopback | work | same for seven's own servers; environment for the host server | 0 | http-module, net |
+| `http`/`https`/`net`: a server on 127.0.0.1 and a client | refused (`Use fetch()`) | work in the kernel (#75); the recorded `http.get` of the *host's* compare server (`host.slicc.internal` for seven, the kernel's name for the real machine) is `ENETUNREACH`, because the kernel's sockets live on its own loopback and reach the host only through its proxy. `fetch` to 127.0.0.1 or localhost reaches the kernel's own servers as `http.get` does | work | same for seven's own servers; environment for the host server | 0 | http-module, net |
 | `tty.isatty` | `false` ×3 | `false` ×3 (#92) | `false` ×3 | six≠node, seven=node | 0 | tty |
 | `assert`, `string_decoder`, `querystring`, `timers/promises`, `module.createRequire` | partial | work | work | same for seven | 0 | misc-builtins |
 | `perf_hooks`, `async_hooks`, `worker_threads`, `vm`, `dns` | refused | `async_hooks` (#106) and `vm` (#119) work; `perf_hooks`, `worker_threads`, `dns` don't | work | seven≠node | 0 | misc-builtins |
@@ -273,7 +273,7 @@ The 13 cases where seven's recording differs from the host `jsh` on Node (re-rec
 | stdin-fd0 | `readFileSync('/dev/stdin')` after stdin was read gives `''`; the host's Node gives `EACCES` | environment, most likely: the host's macOS pipe (not checked on Linux) |
 | fs-errors | `errno` -39 against the host's -66 for `ENOTEMPTY` | environment: macOS numbers on the host, Linux's in jsh |
 | fetch | a refused `fetch`'s `err.cause.code` is `ECONNREFUSED`; the host's undici gives none | seven is more specific |
-| http-module | the `http.get` of the *host's* compare server is refused | environment: the kernel's sockets are on its own loopback |
+| http-module | the `http.get` of the *host's* compare server is `ENETUNREACH` | environment: the kernel's sockets are on its own loopback (fetch reaches the host's server through the kernel's proxy) |
 | globals | no `BroadcastChannel` | by design (the kernel withholds it from programs) |
 
 ## Proposed fixes, ordered by corpus impact

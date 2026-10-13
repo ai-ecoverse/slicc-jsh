@@ -51,7 +51,154 @@ function trackBody(response, track) {
   return response;
 }
 
-export function createFetch(ctx, { handles } = {}) {
+/**
+ * A loopback URL's address on the kernel's own loopback, as the kernel
+ * classifies names: 127.0.0.0/8, ::1, 0.0.0.0, localhost and *.localhost (a
+ * trailing dot or not) at the URL's port; `<port>.kernel.localhost` (the
+ * page's way to name a kernel port) at that port. `host.slicc.internal` (and
+ * its address 10.0.2.2), the real machine's loopback, through the kernel's
+ * proxy, which forwards it there (the platform's fetch doesn't). Else null:
+ * the platform's fetch.
+ */
+function kernelRoute(url) {
+  if (url.protocol !== 'http:') return null;
+  const host = url.hostname.toLowerCase().replace(/\.$/, '');
+  const port = Number(url.port || 80);
+  const kernelPort = /^(\d+)\.kernel\.localhost$/.exec(host);
+  if (kernelPort) return { host: '127.0.0.1', port: Number(kernelPort[1]) };
+  if (host === 'localhost' || host.endsWith('.localhost')) return { host: '127.0.0.1', port };
+  if (/^127(\.\d{1,3}){3}$/.test(host)) return { host, port };
+  if (host === '0.0.0.0') return { host: '127.0.0.1', port };
+  if (host === '[::1]' || host === '::1') return { host: '::1', port };
+  if (host === 'host.slicc.internal' || host === '10.0.2.2') return KERNEL_PROXY;
+  return null;
+}
+
+// The kernel's HTTP proxy (it takes absolute-form requests).
+const KERNEL_PROXY = Object.freeze({ host: '127.0.0.1', port: 3128, proxy: true });
+
+const NULL_BODY = new Set([101, 103, 204, 205, 304]);
+const REDIRECT = new Set([301, 302, 303, 307, 308]);
+// What undici adds to a request that doesn't set them, in its order.
+const DEFAULT_HEADERS = [
+  ['accept', '*/*'],
+  ['accept-language', '*'],
+  ['sec-fetch-mode', 'cors'],
+  ['user-agent', 'node'],
+  ['accept-encoding', 'gzip, deflate'],
+];
+
+/** undici's TypeError('fetch failed') with the network error as its cause. */
+const fetchFailed = (cause) => Object.assign(new TypeError('fetch failed'), { cause });
+
+/**
+ * fetch to the kernel's loopback: an HTTP/1.1 request over the kernel's
+ * sockets (node:http's client, as http.get reaches a server of this kernel),
+ * answered as undici's fetch answers: redirects followed (or manual / error),
+ * gzip and deflate bodies decoded, AbortSignal, `fetch failed` errors.
+ */
+async function loopbackFetch(getHttp, request, target, initHeaders) {
+  const http = getHttp();
+  const signal = request.signal;
+  if (signal?.aborted) throw signal.reason;
+  let method = request.method;
+  let body = method === 'GET' || method === 'HEAD' ? null : new Uint8Array(await request.arrayBuffer());
+  // undici keeps the order headers were given in (a Headers object's own
+  // order is sorted); the Request has them all (its own content-type too).
+  const headers = [];
+  const given = Array.isArray(initHeaders)
+    ? initHeaders.map(([k]) => String(k).toLowerCase())
+    : initHeaders && typeof initHeaders === 'object' && !(initHeaders instanceof Headers)
+      ? Object.keys(initHeaders).map((k) => k.toLowerCase())
+      : [];
+  for (const k of new Set(given)) if (request.headers.has(k)) headers.push([k, request.headers.get(k)]);
+  for (const [k, v] of request.headers) if (!given.includes(k)) headers.push([k, v]);
+  for (const [k, v] of DEFAULT_HEADERS) if (!request.headers.has(k)) headers.push([k, v]);
+  let url = new URL(request.url);
+  let addr = target;
+  let redirected = false;
+  for (let hops = 0; ; hops++) {
+    const res = await new Promise((resolve, reject) => {
+      const outgoing = {};
+      for (const [k, v] of headers) outgoing[k] = v;
+      const req = http.request({
+        host: addr.host,
+        port: addr.port,
+        method,
+        path: addr.proxy ? `${url.origin}${url.pathname}${url.search}` : `${url.pathname}${url.search}`,
+        headers: { host: url.host, ...outgoing },
+      });
+      const onAbort = () => {
+        req.destroy();
+        reject(signal.reason);
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      req.on('response', (incoming) => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve(incoming);
+      });
+      req.on('error', (err) => {
+        signal?.removeEventListener('abort', onAbort);
+        reject(signal?.aborted ? signal.reason : fetchFailed(err));
+      });
+      req.end(body ?? undefined);
+    });
+    const status = res.statusCode;
+    const location = res.headers.location;
+    if (REDIRECT.has(status) && location !== undefined && request.redirect !== 'manual') {
+      res.resume();
+      if (request.redirect === 'error') throw fetchFailed(new TypeError('unexpected redirect'));
+      if (hops >= 20) throw fetchFailed(new TypeError('redirect count exceeded'));
+      url = new URL(location, url);
+      redirected = true;
+      // 303, and 301/302 from a POST: a GET without the body (the fetch spec).
+      if (status === 303 ? method !== 'HEAD' : (status === 301 || status === 302) && method === 'POST') {
+        method = 'GET';
+        body = null;
+        for (let i = headers.length - 1; i >= 0; i--) {
+          if (/^content-(type|length|encoding|language|location)$/.test(headers[i][0])) headers.splice(i, 1);
+        }
+      }
+      const next = kernelRoute(url);
+      if (!next) {
+        // Off the loopback: the platform's fetch takes it from here.
+        return { handoff: new Request(url, { method, headers, body, redirect: request.redirect, signal }) };
+      }
+      addr = next;
+      continue;
+    }
+    return { response: toResponse(res, request, url, redirected) };
+  }
+}
+
+function toResponse(res, request, url, redirected) {
+  const headers = new Headers();
+  for (let i = 0; i < res.rawHeaders.length; i += 2) headers.append(res.rawHeaders[i], res.rawHeaders[i + 1]);
+  let stream = null;
+  if (!NULL_BODY.has(res.statusCode) && request.method !== 'HEAD') {
+    stream = new ReadableStream({
+      start(controller) {
+        res.on('data', (chunk) => controller.enqueue(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)));
+        res.on('end', () => controller.close());
+        res.on('error', (err) => controller.error(fetchFailed(err)));
+      },
+      cancel() {
+        res.destroy();
+      },
+    });
+    // undici decodes what it asked for (gzip, deflate).
+    const coding = String(headers.get('content-encoding') ?? '').toLowerCase().trim();
+    if ((coding === 'gzip' || coding === 'x-gzip' || coding === 'deflate') && typeof DecompressionStream === 'function') {
+      stream = stream.pipeThrough(new DecompressionStream(coding === 'deflate' ? 'deflate' : 'gzip'));
+    }
+  }
+  const response = new Response(stream, { status: res.statusCode, statusText: res.statusMessage ?? '', headers });
+  Object.defineProperty(response, 'url', { value: url.href, configurable: true });
+  Object.defineProperty(response, 'redirected', { value: redirected, configurable: true });
+  return response;
+}
+
+export function createFetch(ctx, { handles, getHttp } = {}) {
   const track = (p) => (handles ? trackPromise(handles, p) : p);
   async function fetch(input, init) {
     if (typeof ctx.fetch !== 'function') {
@@ -60,6 +207,24 @@ export function createFetch(ctx, { handles } = {}) {
         code: 'ENOTSUP',
       });
       throw err;
+    }
+    // A server of this kernel: its own sockets (the platform's fetch would
+    // go to the host's loopback, or nowhere in a browser).
+    let request;
+    let target = null;
+    if (getHttp) {
+      try {
+        request = new Request(input, init);
+        target = kernelRoute(new URL(request.url));
+      } catch {
+        target = null;
+      }
+    }
+    if (target) {
+      const result = await track(loopbackFetch(getHttp, request, target, init?.headers));
+      if (result.response) return handles ? trackBody(result.response, track) : result.response;
+      input = result.handoff;
+      init = undefined;
     }
     const response = await track(ctx.fetch(input, init));
     if (!handles || response == null || typeof response !== 'object') return response;
