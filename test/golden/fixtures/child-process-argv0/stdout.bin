@@ -1,0 +1,12 @@
+spawnSync /bin/sh "/bin/sh" 0
+spawnSync sh "sh" 0
+spawnSync argv0 "zork" 0
+execSync $0 "/bin/sh"
+execFileSync argv0 "zork"
+spawnargs ["async-zork","-c","printf \"%s\" \"$0\""] /bin/sh
+spawn argv0 "async-zork"
+exec $0 "/bin/sh"
+ERR_INVALID_ARG_TYPE The "options.argv0" property must be of type string. Received type number (5)
+execFile argv0 "/bin/sh" ["/bin/sh","-c","printf %s \"$0\""]
+exec argv0 "/bin/sh" ["/bin/sh","-c","printf %s \"$0\""]
+execFile argv0: 5 ERR_INVALID_ARG_TYPE
