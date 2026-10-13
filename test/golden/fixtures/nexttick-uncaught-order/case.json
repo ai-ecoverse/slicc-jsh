@@ -1,0 +1,8 @@
+{
+  "description": "after a tick's uncaught exception is handled, the rest of the tick queue runs before the promise jobs (Node's processTicksAndRejections goes on with it)",
+  "argv": [
+    "-e",
+    "process.on('uncaughtException', (e, origin) => console.log('uncaught', e.message, origin)); process.nextTick(() => console.log('tick 1')); process.nextTick(() => { throw new Error('from tick 2'); }); process.nextTick(() => console.log('tick 3')); setTimeout(() => console.log('timer still runs'), 100); Promise.resolve().then(() => console.log('microtask')); setTimeout(() => { process.nextTick(() => { throw new Error('in a timer'); }); process.nextTick(() => console.log('tick after')); Promise.resolve().then(() => console.log('job after')); }, 20)"
+  ],
+  "shim": true
+}

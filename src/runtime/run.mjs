@@ -293,6 +293,7 @@ export async function runNode(ctx, options = {}) {
   const WebSocket = createWebSocket(ctx, { handles, trackPromise });
 
   const timers = createTimers(handles, {
+    afterCallback: () => flushTicks(),
     onCallbackError: (err) => {
       if (isExitError(err) || getDidExit()) {
         exitStatus = getDidExit() ? getExitCode() : err.code;
@@ -417,6 +418,21 @@ export async function runNode(ctx, options = {}) {
       '    at processPromiseRejections (node:internal/process/promises:475:17)\n' +
       '    at process.processTicksAndRejections (node:internal/process/task_queues:106:32)';
     return err;
+  };
+  /**
+   * Run the queued ticks. One that throws is an uncaught exception; once it is
+   * handled, the rest of the queue runs on before any promise job, as in
+   * Node (processTicksAndRejections goes on with the queue).
+   */
+  const flushTicks = () => {
+    for (;;) {
+      try {
+        nextTick.flushSync();
+        return;
+      } catch (err) {
+        if (isExitError(err) || !handleUncaught(err)) throw err;
+      }
+    }
   };
   const exceptionHandler = (err) => {
     if (isExit(err)) {
@@ -607,7 +623,7 @@ export async function runNode(ctx, options = {}) {
           trackPromise(handles, result).catch(() => {});
           await result;
         }
-        nextTick.flushSync();
+        flushTicks();
       } catch (err) {
         if (isExitError(err)) throw err;
         if (handleUncaught(err)) {
@@ -666,7 +682,7 @@ export async function runNode(ctx, options = {}) {
           // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
           cjs.runMain('[stdin]', source, { setMain: false });
         }
-        nextTick.flushSync();
+        flushTicks();
       } catch (err) {
         if (isExitError(err)) throw err;
         if (handleUncaught(err)) {
@@ -699,7 +715,7 @@ export async function runNode(ctx, options = {}) {
           );
           uncaughtFromEsm = false;
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
-          nextTick.flushSync();
+          flushTicks();
         } else {
           const evalParent = `${process.cwd()}/[eval]`;
           const require = cjs.makeRequire(evalParent);
@@ -728,7 +744,7 @@ export async function runNode(ctx, options = {}) {
           if (result != null && typeof result.then === 'function') {
             trackPromise(handles, result);
           }
-          nextTick.flushSync();
+          flushTicks();
           // Node -p: console.log semantics (strings unquoted), not util.inspect.
           if (parsed.print) {
             console.log(result);
@@ -769,7 +785,7 @@ export async function runNode(ctx, options = {}) {
           cjs.runMain(mainPath, source);
         }
         uncaughtFromEsm = false;
-        nextTick.flushSync();
+        flushTicks();
       } catch (err) {
         if (isExitError(err)) throw err;
         if (handleUncaught(err)) {
@@ -811,7 +827,7 @@ export async function runNode(ctx, options = {}) {
       await new Promise((resolve) => {
         timers.setTimeout(resolve, 0);
       });
-      nextTick.flushSync();
+      flushTicks();
     }
 
     if (exitStatus !== undefined) return finishExit(exitStatus);

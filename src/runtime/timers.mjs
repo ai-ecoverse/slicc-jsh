@@ -7,7 +7,7 @@
 function Timeout() {}
 function Immediate() {}
 
-export function createTimers(handles, { onCallbackError } = {}) {
+export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
   const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
   const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
   const nativeSetInterval = globalThis.setInterval.bind(globalThis);
@@ -23,6 +23,14 @@ export function createTimers(handles, { onCallbackError } = {}) {
   const runMethod = (handle, method, args) => {
     try {
       handle[method](...args);
+    } catch (err) {
+      if (onCallbackError) onCallbackError(err);
+      else throw err;
+    }
+    // Node: the ticks a callback queued run right after it, before its
+    // promise jobs (processTicksAndRejections after each timer / immediate).
+    try {
+      if (!stopped) afterCallback?.();
     } catch (err) {
       if (onCallbackError) onCallbackError(err);
       else throw err;

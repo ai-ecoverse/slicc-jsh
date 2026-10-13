@@ -1520,6 +1520,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   }
 
   function createReadStream(p, options = {}) {
+    // Node: a string is the encoding.
+    if (typeof options === 'string') options = { encoding: options };
     const stream = getStream?.();
     if (!stream) throw new Error('fs.createReadStream: stream not available');
     const { Readable } = stream;
@@ -1576,13 +1578,15 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           }
           pos += n;
           const chunk = buf.subarray(0, n);
-          this.push(encoding ? chunk.toString(encoding) : chunk);
+          this.push(chunk);
         } catch (err) {
           this.destroy(err);
         }
       },
     });
     r.path = p;
+    // Node's ReadStream: an encoding is the stream's (strings, a character never split).
+    if (encoding) r.setEncoding(encoding);
     Object.defineProperty(r, 'fd', {
       get: () => fd ?? null,
       set: (v) => {
@@ -1619,6 +1623,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   }
 
   function createWriteStream(p, options = {}) {
+    if (typeof options === 'string') options = { encoding: options };
     const stream = getStream?.();
     if (!stream) throw new Error('fs.createWriteStream: stream not available');
     const { Writable } = stream;
@@ -1919,7 +1924,50 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       COPYFILE_FICLONE_FORCE: 4,
     },
   };
+  acceptFileUrls(fsModule);
+  acceptFileUrls(promises);
   // Not enumerable: require('fs') lists only Node's names.
   Object.defineProperty(fsModule, '_sliccOpenFile', { value: openFileOf });
   return fsModule;
+}
+
+/** lib/internal/url.js isURL: a WHATWG URL (not a legacy url.parse() result). */
+const isURL = (self) => Boolean(self?.href && self.protocol && self.auth === undefined && self.path === undefined);
+
+/** Functions whose first two arguments are paths (the rest: the first). */
+const TWO_PATHS = new Set(['rename', 'link', 'symlink', 'copyFile', 'cp']);
+
+/**
+ * Node's getValidatedPath / toPathIfFileURL: a path argument may be a
+ * `file:` URL (its fileURLToPath, with Node's errors for another scheme, a
+ * host, or an encoded `/`). Wraps each function of `api` in place.
+ */
+function acceptFileUrls(api) {
+  let fileURLToPath;
+  const toPath = (value) => {
+    if (!isURL(value)) return value;
+    fileURLToPath ??= globalThis.process?._builtin?.('url').fileURLToPath;
+    return fileURLToPath(value);
+  };
+  for (const name of Object.keys(api)) {
+    const fn = api[name];
+    if (typeof fn !== 'function' || /^[A-Z]/.test(name) || name === 'promises') continue;
+    const count = TWO_PATHS.has(name.replace(/Sync$/, '')) ? 2 : 1;
+    const wrapped = {
+      [name](...args) {
+        for (let i = 0; i < count && i < args.length; i++) args[i] = toPath(args[i]);
+        return Reflect.apply(fn, this, args);
+      },
+    }[name];
+    Object.defineProperty(wrapped, 'length', { value: fn.length });
+    for (const key of Reflect.ownKeys(fn)) {
+      if (key === 'length' || key === 'name' || key === 'prototype') continue;
+      try {
+        Object.defineProperty(wrapped, key, Object.getOwnPropertyDescriptor(fn, key));
+      } catch {
+        /* non-configurable */
+      }
+    }
+    api[name] = wrapped;
+  }
 }

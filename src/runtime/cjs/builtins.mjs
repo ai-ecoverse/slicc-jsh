@@ -12,6 +12,7 @@ import { createUtil } from '../builtins/util.mjs';
 import { createAsyncHooks } from '../builtins/async-hooks.mjs';
 import { createV8 } from '../builtins/v8.mjs';
 import { createVm } from '../builtins/vm.mjs';
+import { CRYPTO_CONSTANTS } from '../builtins/crypto-constants.mjs';
 import { createZlib } from '../builtins/zlib.mjs';
 import { createCrypto } from '../builtins/crypto.mjs';
 import { createTty } from '../builtins/tty.mjs';
@@ -23,6 +24,7 @@ const BUILTIN_LIST = [
   'buffer',
   'child_process',
   'console',
+  'constants',
   'crypto',
   'events',
   'fs',
@@ -231,6 +233,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   let asyncHooks;
   let v8;
   let vm;
+  let constants;
 
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
@@ -239,6 +242,17 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     process: () => process,
     buffer: () => (bufferExports ??= bufferModule(Buffer)),
     console: () => console,
+    // lib/constants.js (deprecated, DEP0008, documentation only): os's
+    // dlopen, errno, priority and signals, fs's and crypto's, frozen.
+    constants: () =>
+      (constants ??= Object.freeze(
+        Object.assign(
+          {},
+          ...['dlopen', 'errno', 'priority', 'signals'].map((k) => process._nodeLib().os.constants[k] ?? {}),
+          fs.constants,
+          CRYPTO_CONSTANTS
+        )
+      )),
     // Node's own lib/path.js, lib/url.js, lib/querystring.js, lib/os.js,
     // lib/punycode.js (src/node-lib).
     path: () => process._nodeLib().path,

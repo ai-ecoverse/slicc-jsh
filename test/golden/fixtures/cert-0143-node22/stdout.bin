@@ -1,0 +1,10 @@
+write/read/stat a URL ["xy",true,2,true]
+mkdir/readdir/rename/copy/unlink URLs [["c.txt","e"],["e"]]
+promises and callbacks with URLs ["p","p",1]
+streams with URLs "s"
+a URL of another scheme THROWS TypeError ERR_INVALID_URL_SCHEME
+a file URL with a host THROWS TypeError ERR_INVALID_FILE_URL_HOST
+a file URL with an encoded slash THROWS TypeError ERR_INVALID_FILE_URL_PATH
+constants [true,0,1,2,15,2,13,16384,32768,0,4,1,19,1,true]
+import of node:constants true
+columns     at URL:44:11 |     at URL:44:29 | 1     at URL:46:60

@@ -51,8 +51,28 @@ function isKernelFrame(frame) {
  * `Object.` receiver (a module's `this` is undefined).
  */
 const esmFrames = new Map();
-export function registerEsmFrames(filename, extraLines) {
-  if (typeof filename === 'string' && filename.startsWith('/')) esmFrames.set(filename, extraLines);
+const esmColumns = new Map();
+export function registerEsmFrames(filename, extraLines, columnShifts) {
+  if (typeof filename !== 'string' || !filename.startsWith('/')) return;
+  esmFrames.set(filename, extraLines);
+  if (columnShifts && Object.keys(columnShifts).length) esmColumns.set(filename, columnShifts);
+  else esmColumns.delete(filename);
+}
+
+/** A frame's column in the file's own line (1-based), past the transform's longer replacements. */
+function esmColumn(path, line, col) {
+  const shifts = esmColumns.get(path)?.[line];
+  if (!shifts || col == null) return col;
+  let grown = 0;
+  for (const [start, end, growth, called] of shifts) {
+    const genStart = start + grown;
+    if (col - 1 < genStart) break;
+    // Inside the replacement, or (a call of it) just after: its start, where
+    // V8 names a call of the plain identifier.
+    if (col - 1 < end + grown + growth + (called ? 1 : 0)) return start + 1;
+    grown += growth;
+  }
+  return col - grown;
 }
 /**
  * vm scripts (indirect eval with their filename as sourceURL): their lines
@@ -235,7 +255,7 @@ function wrapRaw(frame) {
 /** A frame in an ES module: Node's shape (file: URL, no receiver, top level unnamed). */
 function wrapEsmCallSite(frame, path, line) {
   const url = fileUrl(path);
-  const col = frame.getColumnNumber?.() ?? 0;
+  const col = esmColumn(path, line, frame.getColumnNumber?.() ?? 0);
   const ctor = typeof frame.isConstructor === 'function' ? frame.isConstructor() : false;
   let fn = frame.getFunctionName?.() || null;
   if (fn === 'eval' || fn === 'anonymous' || fn === '<anonymous>') fn = null;

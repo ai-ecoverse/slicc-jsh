@@ -375,9 +375,10 @@ class Process extends EventEmitter {
   _unwatchSignal(event) {
     if (!this._signals.has(event) || this.listenerCount(event) > 0) return;
     this._signals.delete(event);
-    // SIGPIPE and SIGUSR1 go back to ignored, as Node starts with them (see
-    // run.mjs: EPIPE instead of death; SIGUSR1 is its inspector's).
-    const back = event === 'SIGPIPE' || event === 'SIGUSR1' ? this._ctx.signals?.ignore : this._ctx.signals?.reset;
+    // The last listener gone, the signal's default action is back, as in
+    // Node: SIGPIPE too (a write to a dead pipe then ends the program, 141),
+    // though Node starts with it ignored. SIGUSR1 stays the inspector's (ignored).
+    const back = event === 'SIGUSR1' ? this._ctx.signals?.ignore : this._ctx.signals?.reset;
     Promise.resolve(back?.call(this._ctx.signals, event)).catch(() => {});
   }
 

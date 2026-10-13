@@ -293,6 +293,21 @@ export function transformEsm(source, filename) {
   // Shorter replacements are padded with spaces, so what follows on the line
   // keeps its column too.
   const newlines = (t) => (t.match(/\n/g) || []).length;
+  // Longer one-line replacements (`__live["x"]` for an import) push the rest
+  // of their line right: per line, [start, end, growth] for stack.mjs to map
+  // a frame's column back to the file's.
+  const columnShifts = {};
+  for (const r of replacements) {
+    const span = body.slice(r.start, r.end);
+    if (!span.includes('\n') && !r.text.includes('\n') && r.text.length > span.length) {
+      const lineStart = body.lastIndexOf('\n', r.start - 1) + 1;
+      const line = newlines(body.slice(0, r.start)) + 1;
+      // A call of an import, `(0, __live["f"])(…)`: V8 names the `(` after it.
+      const called = r.text.startsWith('(0, __live[') ? 1 : 0;
+      (columnShifts[line] ??= []).push([r.start - lineStart, r.end - lineStart, r.text.length - span.length, called]);
+    }
+  }
+  for (const list of Object.values(columnShifts)) list.sort((a, b) => a[0] - b[0]);
   for (const r of replacements) {
     const span = body.slice(r.start, r.end);
     const lost = newlines(span) - newlines(r.text);
@@ -310,6 +325,7 @@ export function transformEsm(source, filename) {
     code: out,
     // Lines `code` puts before the module's own first line.
     preambleLines: preamble ? newlines(preamble) + 1 : 0,
+    columnShifts,
     bodyCode: code,
     staticSpecs,
     staticAttributes,

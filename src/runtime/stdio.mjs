@@ -86,8 +86,14 @@ export function createStdio({ ctx, process, Buffer, handles, info = {} }) {
         }
         callback();
       },
+      // Node's dummyDestroy (getStdout/getStderr): the descriptor is never
+      // closed and the stream is undestroyed at once, so a later write fails
+      // (and emits 'error') again — console.log to a dead pipe then dies of
+      // the second one, as in Node.
       _destroy(err, callback) {
         callback(err);
+        this._undestroy?.();
+        if (!this._writableState.emitClose) process.nextTick(() => this.emit('close'));
       },
     };
 
