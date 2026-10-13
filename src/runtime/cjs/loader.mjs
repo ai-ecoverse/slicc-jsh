@@ -325,7 +325,7 @@ export function createCjs({
           }
         }
         // Node's report: file:line, the line, carets under the token.
-        const report = syntaxReport(body, { kind: 'commonjs', filename, error: err });
+        const report = syntaxReport(source, { kind: 'commonjs', filename, error: err });
         if (report && !wrapperRedeclare) {
           Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
           err.stack = report.stack;

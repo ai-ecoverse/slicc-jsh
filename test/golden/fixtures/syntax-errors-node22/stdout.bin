@@ -45,6 +45,33 @@ Node.js v22.22.0
 
 == cjs-import.js (0)
 
+== cjs-hashbang.js (1)
+DIR/cjs-hashbang.js:3
+const x = ;
+          ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== cjs-with-import-call.js (1)
+DIR/cjs-with-import-call.js:2
+const x = ;
+          ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== esm-hashbang.mjs (1)
+file://DIR/esm-hashbang.mjs:3
+const x = ;
+          ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
 == esm-token.mjs (1)
 file://DIR/esm-token.mjs:3
 const x = ;
