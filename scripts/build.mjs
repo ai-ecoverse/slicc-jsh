@@ -174,6 +174,10 @@ const nodeLib = await esbuild.build({
           if (args.path === 'internal/deps/minimatch/index') {
             return { path: join(root, 'node_modules/minimatch/dist/commonjs/index.js') };
           }
+          // Node's own cjs-module-lexer (deps/cjs-module-lexer, 2.1.0): the npm package's JS build.
+          if (args.path === 'internal/deps/cjs-module-lexer/lexer') {
+            return { path: join(root, 'node_modules/cjs-module-lexer/lexer.js') };
+          }
           // What a bundled npm package requires (minimatch's brace expansion).
           if (args.importer.includes('/node_modules/')) return undefined;
           const file = join(nodeLibRoot, `${args.path}.js`);

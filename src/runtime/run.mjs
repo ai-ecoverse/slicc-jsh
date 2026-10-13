@@ -260,6 +260,13 @@ export async function runNode(ctx, options = {}) {
   } catch {
     /* no signals */
   }
+  // Node takes SIGUSR1 for its inspector, so it never ends the program; there
+  // is no inspector here: ignored.
+  try {
+    Promise.resolve(ctx.signals?.ignore?.('SIGUSR1')).catch(() => {});
+  } catch {
+    /* no signals */
+  }
   if (parsed.mode === 'eval') {
     process._evalCode = parsed.code;
     lastEvalCode = parsed.code;
@@ -435,7 +442,7 @@ export async function runNode(ctx, options = {}) {
     process,
     handles,
     builtins: {
-      load: (id) => nodeRequire(id),
+      load: (id) => nodeRequire(`node:${id}`),
     },
     cjs,
     trackPromise,

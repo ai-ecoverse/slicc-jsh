@@ -1532,8 +1532,25 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     let opened = fd != null;
     let openEmitted = opened;
 
+    // autoClose: the descriptor closes as the stream is destroyed (after end/finish,
+    // or by destroy()), and fd is null again (Node).
+    const closeFd = () => {
+      if (autoClose && fd != null && fd !== 0) {
+        const f = fd;
+        fd = null;
+        syncApi.closeSync(f);
+      }
+    };
     const r = new Readable({
       highWaterMark,
+      destroy(err, cb) {
+        try {
+          closeFd();
+        } catch {
+          /* already closed */
+        }
+        cb(err);
+      },
       read(size) {
         try {
           if (!opened) {
@@ -1548,7 +1565,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           const toRead = end != null ? Math.min(size, end - pos + 1) : size;
           if (toRead <= 0) {
             this.push(null);
-            if (autoClose && fd != null && fd !== 0) syncApi.closeSync(fd);
             return;
           }
           const buf = Buffer.alloc(toRead);
@@ -1556,7 +1572,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           r.bytesRead += n;
           if (n === 0) {
             this.push(null);
-            if (autoClose && fd != null && fd !== 0) syncApi.closeSync(fd);
             return;
           }
           pos += n;
@@ -1568,6 +1583,15 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       },
     });
     r.path = p;
+    Object.defineProperty(r, 'fd', {
+      get: () => fd ?? null,
+      set: (v) => {
+        fd = v;
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    Object.defineProperty(r, 'pending', { get: () => fd == null, enumerable: false, configurable: true });
     r.bytesRead = 0;
     Object.defineProperty(r, FS_READ_STREAM, { value: true });
 
@@ -1605,8 +1629,25 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     let openEmitted = opened;
     const flags = options?.flags ?? 'w';
 
+    // autoClose: the descriptor closes as the stream is destroyed (after end/finish,
+    // or by destroy()), and fd is null again (Node).
+    const closeFd = () => {
+      if (autoClose && fd != null && fd !== 0 && fd !== 1 && fd !== 2) {
+        const f = fd;
+        fd = null;
+        syncApi.closeSync(f);
+      }
+    };
     const w = new Writable({
       highWaterMark,
+      destroy(err, cb) {
+        try {
+          closeFd();
+        } catch {
+          /* already closed */
+        }
+        cb(err);
+      },
       write(chunk, enc, cb) {
         try {
           if (!opened) {
@@ -1626,16 +1667,21 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         }
       },
       final(cb) {
-        try {
-          if (autoClose && fd != null && fd !== 0 && fd !== 1 && fd !== 2) syncApi.closeSync(fd);
-          cb();
-        } catch (err) {
-          cb(err);
-        }
+        cb();
       },
     });
     w.path = p;
     w.bytesWritten = 0;
+    // Node's: the descriptor once open (null before), and pending until then.
+    Object.defineProperty(w, 'fd', {
+      get: () => fd ?? null,
+      set: (v) => {
+        fd = v;
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    Object.defineProperty(w, 'pending', { get: () => fd == null, enumerable: false, configurable: true });
     Object.defineProperty(w, FS_WRITE_STREAM, { value: true });
 
     if (!openEmitted) {

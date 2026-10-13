@@ -375,8 +375,9 @@ class Process extends EventEmitter {
   _unwatchSignal(event) {
     if (!this._signals.has(event) || this.listenerCount(event) > 0) return;
     this._signals.delete(event);
-    // SIGPIPE goes back to ignored, as Node starts with it (see ignoreSigpipe).
-    const back = event === 'SIGPIPE' ? this._ctx.signals?.ignore : this._ctx.signals?.reset;
+    // SIGPIPE and SIGUSR1 go back to ignored, as Node starts with them (see
+    // run.mjs: EPIPE instead of death; SIGUSR1 is its inspector's).
+    const back = event === 'SIGPIPE' || event === 'SIGUSR1' ? this._ctx.signals?.ignore : this._ctx.signals?.reset;
     Promise.resolve(back?.call(this._ctx.signals, event)).catch(() => {});
   }
 
@@ -617,7 +618,8 @@ class Process extends EventEmitter {
       });
       return true;
     }
-    if (name === 'SIGWINCH' || name === 'SIGCHLD' || name === 'SIGURG' || name === 'SIGCONT') return true;
+    // SIGUSR1 starts Node's inspector rather than ending it; there is none here.
+    if (name === 'SIGWINCH' || name === 'SIGCHLD' || name === 'SIGURG' || name === 'SIGCONT' || name === 'SIGUSR1') return true;
     // Job-control stops: the kernel stops the process (on a turn of its own)
     // and SIGCONT resumes it where it was, as in Node: no exit.
     if (name === 'SIGSTOP' || name === 'SIGTSTP' || name === 'SIGTTIN' || name === 'SIGTTOU') {

@@ -10,6 +10,7 @@ import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
 import { createUtil } from '../builtins/util.mjs';
 import { createAsyncHooks } from '../builtins/async-hooks.mjs';
+import { createV8 } from '../builtins/v8.mjs';
 import { createZlib } from '../builtins/zlib.mjs';
 import { createCrypto } from '../builtins/crypto.mjs';
 import { createTty } from '../builtins/tty.mjs';
@@ -47,6 +48,7 @@ const BUILTIN_LIST = [
   'url',
   'util',
   'util/types',
+  'v8',
   'zlib',
 ];
 
@@ -61,7 +63,6 @@ const NOT_YET = [
   'perf_hooks',
   'inspector',
   'trace_events',
-  'v8',
   'was',
 ];
 
@@ -227,6 +228,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
 
   let bufferExports;
   let asyncHooks;
+  let v8;
 
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
@@ -242,6 +244,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     'path/win32': () => process._nodeLib().path.win32,
     punycode: () => process._nodeLib().punycode,
     async_hooks: () => (asyncHooks ??= createAsyncHooks()),
+    v8: () => (v8 ??= createV8()),
     module: () => ModuleExport,
     fs: () => fs,
     zlib: getZlib,
@@ -289,7 +292,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
       if (NOT_YET.includes(bare)) notSupported(bare);
       const factory = implemented[bare];
       if (!factory) {
-        const err = new Error(`No such built-in module: ${id}`);
+        const err = new Error(`No such built-in module: node:${bare}`);
         err.code = 'ERR_UNKNOWN_BUILTIN_MODULE';
         throw err;
       }

@@ -114,6 +114,16 @@ describe('smaller Node 22 gaps (kernel)', () => {
     assert.equal(r.stdout, '');
   });
 
+  it('SIGUSR1 (Node\'s inspector signal) never ends the program, from itself or a parent', async () => {
+    const a = await node('-e', "process.kill(process.pid, 'SIGUSR1'); setTimeout(() => console.log('alive'), 30)");
+    assert.equal(a.stdout, 'alive\n');
+    const b = await node(
+      '-e',
+      "const c = require('child_process').spawn('node', ['-e', 'setTimeout(() => console.log(\"child alive\"), 300)'], { stdio: ['ignore', 'inherit', 'inherit'] }); setTimeout(() => c.kill('SIGUSR1'), 100); c.on('close', (code, sig) => console.log(code, sig))"
+    );
+    assert.equal(b.stdout, 'child alive\n0 null\n');
+  });
+
   it('process.ppid is a number, from the kernel', async () => {
     const r = await node('-p', 'Number.isInteger(process.ppid) && process.ppid >= 0');
     assert.equal(r.stdout, 'true\n');
