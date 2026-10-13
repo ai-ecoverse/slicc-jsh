@@ -144,7 +144,9 @@ export function parseNodeArgv(argv) {
         continue;
       }
       if (!/^\d+$/.test(value)) {
-        return { error: v8FlagError(argv0, [bounds, `Error: illegal value for flag ${arg} of type size_t`], arg), status: 9 };
+        // Linux's V8 (strtoull doesn't take the value): just "illegal value";
+        // macOS's prints the out-of-bounds line before it.
+        return { error: v8FlagError(argv0, [`Error: illegal value for flag ${arg} of type size_t`], arg), status: 9 };
       }
       flags.push(arg);
       i += 1;

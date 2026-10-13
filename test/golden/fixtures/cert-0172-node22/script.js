@@ -15,7 +15,10 @@ const clean = (s) =>
     .replace(/^node: /gm, 'NODE: ');
 const node = (args) => {
   const r = spawnSync(process.execPath, args, { cwd: dir, encoding: 'utf8' });
-  return [r.status, clean(r.stdout), clean(r.stderr.split('\n').filter((l) => !/^\s+at /.test(l)).join('\n'))];
+  // macOS's V8 notes an unparsable size as out of bounds before "illegal
+  // value"; Linux's (jsh's platform) doesn't.
+  const err = r.stderr.split('\n').filter((l, i, a) => !/^\s+at /.test(l) && !(/out of bounds/.test(l) && /illegal value/.test(a[i + 1] ?? '')));
+  return [r.status, clean(r.stdout), clean(err.join('\n'))];
 };
 const t = async (l, f) => {
   try {
