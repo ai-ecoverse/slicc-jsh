@@ -7,6 +7,8 @@
  * `internal/errors`, `internal/validators`, `os`, … come from the runtime
  * (src/runtime/node-lib.mjs).
  */
+let consoleReady = false;
+
 module.exports = {
   events: require('events'),
   get tty() {
@@ -35,6 +37,50 @@ module.exports = {
   },
   get punycode() {
     return require('punycode');
+  },
+  get util() {
+    return require('util');
+  },
+  /** The global console (Node's), its streams the program's process.stdout / stderr, bound lazily. */
+  consoleFor(proc) {
+    const globalConsole = require('internal/console/global');
+    if (!consoleReady) {
+      consoleReady = true;
+      // Node's bootstrap: NODE_DEBUG for util.debuglog.
+      require('internal/util/debuglog').initializeDebugEnv(proc.env.NODE_DEBUG);
+      globalConsole[require('internal/console/constructor').kBindStreamsLazy](proc);
+      // What V8's own console adds to Node's (the inspector's methods; no
+      // inspector here, so they do nothing).
+      const noop = () => {};
+      for (const name of ['profile', 'profileEnd', 'timeStamp']) {
+        if (!(name in globalConsole)) {
+          Object.defineProperty(globalConsole, name, { value: { [name]() {} }[name], writable: true, enumerable: true, configurable: true });
+        }
+      }
+      if (!('context' in globalConsole)) {
+        Object.defineProperty(globalConsole, 'context', {
+          value: function context() {
+            const c = {};
+            for (const k of Object.keys(globalConsole)) if (typeof globalConsole[k] === 'function' && k !== 'Console') c[k] = noop;
+            return c;
+          },
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+      }
+      if (!('createTask' in globalConsole)) {
+        Object.defineProperty(globalConsole, 'createTask', {
+          value: function createTask() {
+            return { run: (fn) => fn() };
+          },
+          writable: true,
+          enumerable: true,
+          configurable: true,
+        });
+      }
+    }
+    return globalConsole;
   },
   get readlinePromises() {
     return require('readline/promises');
@@ -66,6 +112,22 @@ module.exports = {
         return require('internal/events/symbols');
       case 'internal/fixed_queue':
         return require('internal/fixed_queue');
+      case 'internal/util/parse_args/parse_args':
+        return require('internal/util/parse_args/parse_args');
+      case 'internal/mime':
+        return require('internal/mime');
+      case 'internal/util/diff':
+        return require('internal/util/diff');
+      case 'internal/util/types':
+        return require('internal/util/types');
+      case 'internal/util/colors':
+        return require('internal/util/colors');
+      case 'internal/util/debuglog':
+        return require('internal/util/debuglog');
+      case 'internal/cli_table':
+        return require('internal/cli_table');
+      case 'internal/console/constructor':
+        return require('internal/console/constructor');
       case 'internal/querystring':
         return require('internal/querystring');
       case 'internal/constants':

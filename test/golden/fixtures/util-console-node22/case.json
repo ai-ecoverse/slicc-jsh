@@ -1,0 +1,14 @@
+{
+  "description": "Node 22's own lib/util.js (parseArgs, styleText, MIMEType, parseEnv, getSystemError*, types, legacy helpers) and console (table, group, count, Console instances), and async_hooks' AsyncResource, against host Node",
+  "argv": [
+    "--no-deprecation",
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

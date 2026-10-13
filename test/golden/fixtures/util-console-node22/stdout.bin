@@ -1,0 +1,91 @@
+keys MIMEParams MIMEType TextDecoder TextEncoder _errnoException _exceptionWithHostPort _extend aborted callbackify debug debuglog deprecate diff format formatWithOptions getCallSite getCallSites getSystemErrorMap getSystemErrorMessage getSystemErrorName inherits inspect isArray isBoolean isBuffer isDate isDeepStrictEqual isError isFunction isNull isNullOrUndefined isNumber isObject isPrimitive isRegExp isString isSymbol isUndefined log parseArgs parseEnv promisify setTraceSigInt stripVTControlCharacters styleText toUSVString transferableAbortController transferableAbortSignal types
+types keys 43
+parseArgs {
+  values: [Object: null prototype] { foo: true, bar: 'b', color: false },
+  positionals: [ 'pos' ],
+  tokens: [
+    { kind: 'option', name: 'foo', rawName: '-f', index: 0, value: undefined, inlineValue: undefined },
+    { kind: 'option', name: 'bar', rawName: '--bar', index: 1, value: 'b', inlineValue: false },
+    { kind: 'positional', index: 3, value: 'pos' },
+    {
+      kind: 'option',
+      name: 'color',
+      rawName: '--no-color',
+      index: 4,
+      value: undefined,
+      inlineValue: undefined
+    }
+  ]
+}
+parseArgs unknown THROWS TypeError ERR_PARSE_ARGS_UNKNOWN_OPTION Unknown option '--nope'
+parseArgs positional THROWS TypeError ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL Unexpected argument 'x'. This command does not take positional arguments
+parseArgs default [Object: null prototype] { n: 'd', m: [ 'a' ] }
+styleText ["\u001b[31mhi\u001b[39m","\u001b[1m\u001b[4mx\u001b[24m\u001b[22m","n"]
+styleText bad THROWS TypeError ERR_INVALID_ARG_VALUE The argument 'format' must be one of: 'reset', 'bold', 'dim', 'italic', 'underline', 'blink', 'inverse', 'hidden', 'strikethrough', 'doubleunderline', 'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white', 'bgBlack', 'bgRed', 'bgGreen', 'bgYellow', 'bgBlue', 'bgMagenta', 'bgCyan', 'bgWhite', 'framed', 'overlined', 'gray', 'redBright', 'greenBright', 'yellowBright', 'blueBright', 'magentaBright', 'cyanBright', 'whiteBright', 'bgGray', 'bgRedBright', 'bgGreenBright', 'bgYellowBright', 'bgBlueBright', 'bgMagentaBright', 'bgCyanBright', 'bgWhiteBright'. Received 'nocolor'
+styleText stream plain
+inspect.colors [ 31, 39 ]
+inspect.styles yellow
+stripVT red link
+toUSVString "a�b"
+errors [
+  [ 'EPERM', 'operation not permitted' ],
+  [ 'ENOENT', 'no such file or directory' ],
+  [ 'EBADF', 'bad file descriptor' ],
+  [ 'EACCES', 'permission denied' ],
+  [ 'EINVAL', 'invalid argument' ],
+  [ 'Unknown system error -99999', 'Unknown system error -99999' ]
+]
+errors bad THROWS RangeError ERR_OUT_OF_RANGE The value of "err" is out of range. It must be a negative integer. Received 2
+errorMap [ 'ENOENT', 'no such file or directory' ]
+parseEnv { A: '1', B: 'x\ny', C: '3', D: 'q', F: 'b' }
+MIMEType [ 'text', 'html', 'text/html', 'utf-8', 'text/html;charset=utf-8;x=y', [ 'charset', 'x' ] ]
+MIMEType bad THROWS TypeError ERR_INVALID_MIME_SYNTAX The MIME syntax for a type in "/x" is invalid
+types [
+  true, true, true,
+  true, true, false,
+  true, true, true,
+  true, true, true,
+  true
+]
+proxy [ true, false, 'Proxy [ { a: 1 }, {} ]', '<Revoked Proxy>', 'Proxy' ]
+legacy [ true, true, true, { a: 1, b: 2 } ]
+callbackify function
+isDeepStrictEqual [ true, false, true, true, false ]
+diff [ [ 0, 'a' ], [ 0, 'b' ], [ 1, 'c' ], [ -1, 'd' ] ]
+transferable object
+debuglog [ 'function', false ]
+events spread EventEmitter EventEmitterAsyncResource addAbortListener captureRejectionSymbol captureRejections defaultMaxListeners errorMonitor getEventListeners getMaxListeners init listenerCount on once setMaxListeners usingDomains
+EventEmitterAsyncResource [ 'object', true, true ]
+async_hooks [
+  'AsyncLocalStorage AsyncResource asyncWrapProviders createHook executionAsyncId executionAsyncResource triggerAsyncId',
+  1,
+  true,
+  3
+]
+┌─────────┬───┬─────┬──────┐
+│ (index) │ a │ b   │ c    │
+├─────────┼───┼─────┼──────┤
+│ 0       │ 1 │ 'x' │      │
+│ 1       │ 2 │     │ true │
+└─────────┴───┴─────┴──────┘
+┌───────────────────┬─────┬──────────┐
+│ (iteration index) │ Key │ Values   │
+├───────────────────┼─────┼──────────┤
+│ 0                 │ 'k' │ { v: 1 } │
+└───────────────────┴─────┴──────────┘
+┌─────────┬───┐
+│ (index) │ 0 │
+├─────────┼───┤
+│ 0       │ 1 │
+│ 1       │ 3 │
+└─────────┴───┘
+G
+  in
+default: 1
+default: 2
+default: 1
+{ a: { b: [Object] } }
+ styled
+Console instance "h\n    { x: 1 }\n    e\n"
+console keys Console assert clear context count countReset createTask debug dir dirxml error group groupCollapsed groupEnd info log profile profileEnd table time timeEnd timeLog timeStamp trace warn
+console bad THROWS TypeError ERR_CONSOLE_WRITABLE_STREAM Console expects a writable stream instance for stdout

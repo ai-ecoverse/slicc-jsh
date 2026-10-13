@@ -3,6 +3,7 @@
  * what Node's C++ gives them, made here over the kernel process (its env,
  * uid/gid) and the platform. Only what those files ask for.
  */
+import nodeInspect from 'node-inspect-extracted';
 import { SIGNALS } from './signals.mjs';
 
 const proc = () => globalThis.process;
@@ -175,3 +176,309 @@ export function internalBinding(name) {
 export function setBinding(name, value) {
   bindings[name] = value;
 }
+
+// --- util binding -----------------------------------------------------------
+
+/** src/node_dotenv.cc Dotenv::ParseContent (Node 22.22.0), into a std::map (sorted keys). */
+function parseEnv(input) {
+  const store = new Map();
+  const trim = (s) => s.replace(/^[ \t\n]+/, '').replace(/[ \t\n]+$/, '');
+  let content = trim(input.replace(/\r/g, ''));
+  while (content.length) {
+    if (content[0] === '\n' || content[0] === '#') {
+      const nl = content.indexOf('\n');
+      content = nl === -1 ? '' : content.slice(nl + 1);
+      continue;
+    }
+    const eqnl = content.search(/[=\n]/);
+    if (eqnl === -1 || content[eqnl] === '\n') {
+      if (eqnl !== -1) {
+        content = trim(content.slice(eqnl + 1));
+        continue;
+      }
+      break;
+    }
+    let key = trim(content.slice(0, eqnl));
+    content = content.slice(eqnl + 1);
+    if (!content.length || content[0] === '\n') {
+      store.set(key, '');
+      continue;
+    }
+    content = trim(content);
+    if (!key) continue;
+    if (key.startsWith('export ')) key = trim(key.slice(7));
+    if (!content.length) {
+      store.set(key, '');
+      break;
+    }
+    if (content[0] === '"') {
+      const close = content.indexOf('"', 1);
+      if (close !== -1) {
+        store.set(key, content.slice(1, close).split('\\n').join('\n'));
+        const nl = content.indexOf('\n', close + 1);
+        content = nl === -1 ? '' : content.slice(nl + 1);
+        continue;
+      }
+    }
+    if (content[0] === "'" || content[0] === '"' || content[0] === '`') {
+      const close = content.indexOf(content[0], 1);
+      if (close === -1) {
+        const nl = content.indexOf('\n');
+        if (nl !== -1) {
+          store.set(key, content.slice(0, nl));
+          content = content.slice(nl + 1);
+        } else {
+          store.set(key, content);
+          break;
+        }
+      } else {
+        store.set(key, content.slice(1, close));
+        const nl = content.indexOf('\n', close + 1);
+        content = nl === -1 ? '' : content.slice(nl + 1);
+        continue;
+      }
+    } else {
+      const nl = content.indexOf('\n');
+      let value = nl === -1 ? content : content.slice(0, nl);
+      const hash = value.indexOf('#');
+      if (hash !== -1) value = value.slice(0, hash);
+      store.set(key, trim(value));
+      if (nl === -1) {
+        content = '';
+      } else {
+        content = content.slice(nl + 1);
+      }
+    }
+    content = trim(content);
+  }
+  const out = {};
+  const enc = new TextEncoder();
+  const keys = [...store.keys()].sort((a, b) => {
+    const x = enc.encode(a);
+    const y = enc.encode(b);
+    for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i] - y[i];
+    return x.length - y.length;
+  });
+  for (const k of keys) out[k] = store.get(k);
+  return out;
+}
+
+const toTag = (v) => Object.prototype.toString.call(v);
+const brand = (fn) => (v) => {
+  if (v === null || (typeof v !== 'object' && typeof v !== 'function')) return false;
+  try {
+    fn(v);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const MapIteratorProto = Object.getPrototypeOf(new Map()[Symbol.iterator]());
+const SetIteratorProto = Object.getPrototypeOf(new Set()[Symbol.iterator]());
+const AsyncFunctionProto = Object.getPrototypeOf(async () => {});
+const GeneratorFunctionProto = Object.getPrototypeOf(function* () {});
+const AsyncGeneratorFunctionProto = Object.getPrototypeOf(async function* () {});
+// [[ErrorData]] is what makes Object.prototype.toString say "Error".
+const isNativeErrorTag = (v) => toTag(v) === '[object Error]';
+
+/** internalBinding('types'): V8's brand checks, from JS. */
+const types = {
+  isExternal: () => false,
+  isDate: brand((v) => Date.prototype.getTime.call(v)),
+  isArgumentsObject: (v) => toTag(v) === '[object Arguments]',
+  isBigIntObject: brand((v) => BigInt.prototype.valueOf.call(v)),
+  isBooleanObject: brand((v) => Boolean.prototype.valueOf.call(v)),
+  isNumberObject: brand((v) => Number.prototype.valueOf.call(v)),
+  isStringObject: brand((v) => String.prototype.valueOf.call(v)),
+  isSymbolObject: brand((v) => Symbol.prototype.valueOf.call(v)),
+  isBoxedPrimitive: (v) =>
+    types.isBigIntObject(v) || types.isBooleanObject(v) || types.isNumberObject(v) || types.isStringObject(v) || types.isSymbolObject(v),
+  isNativeError: (v) => v !== null && typeof v === 'object' && isNativeErrorTag(v),
+  isRegExp: brand((v) => Object.getOwnPropertyDescriptor(RegExp.prototype, 'source').get.call(v)),
+  isAsyncFunction: (v) =>
+    typeof v === 'function' &&
+    (Object.getPrototypeOf(v) === AsyncFunctionProto || Object.getPrototypeOf(v) === AsyncGeneratorFunctionProto),
+  isGeneratorFunction: (v) =>
+    typeof v === 'function' &&
+    (Object.getPrototypeOf(v) === GeneratorFunctionProto || Object.getPrototypeOf(v) === AsyncGeneratorFunctionProto),
+  isGeneratorObject: (v) => toTag(v) === '[object Generator]' || toTag(v) === '[object AsyncGenerator]',
+  isPromise: brand((v) => {
+    if (toTag(v) !== '[object Promise]') throw new TypeError();
+    Promise.prototype.then.call(v, undefined, undefined);
+  }),
+  isMap: brand((v) => Map.prototype.has.call(v)),
+  isSet: brand((v) => Set.prototype.has.call(v)),
+  isMapIterator: (v) => v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === MapIteratorProto,
+  isSetIterator: (v) => v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === SetIteratorProto,
+  isWeakMap: brand((v) => WeakMap.prototype.has.call(v, {})),
+  isWeakSet: brand((v) => WeakSet.prototype.has.call(v, {})),
+  isArrayBuffer: brand((v) => Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get.call(v)),
+  isSharedArrayBuffer: (v) =>
+    typeof SharedArrayBuffer === 'function' &&
+    brand((x) => Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength').get.call(x))(v),
+  isAnyArrayBuffer: (v) => types.isArrayBuffer(v) || types.isSharedArrayBuffer(v),
+  isDataView: brand((v) => Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength').get.call(v)),
+  // Proxies made through the runtime's global Proxy (run.mjs) are known.
+  isProxy: (v) => nodeInspect.Proxy.getProxyDetails(v, false) !== undefined,
+  isModuleNamespaceObject: (v) =>
+    v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === null && v[Symbol.toStringTag] === 'Module',
+};
+
+bindings.types = types;
+bindings.trace_events = {
+  trace() {},
+  isTraceCategoryEnabled: () => false,
+  getCategoryEnabledBuffer: () => new Uint8Array(1),
+};
+bindings.config = { hasInspector: false, hasIntl: true };
+/** V8's current stack as util.getCallSites gives it, from the caller of util.getCallSites. */
+function getCallSites(frameCount) {
+  const prevPrepare = Error.prepareStackTrace;
+  const prevLimit = Error.stackTraceLimit;
+  const holder = {};
+  try {
+    // The runtime's prepareStackTrace drops its own frames (util.getCallSites
+    // among them) before a user formatter sees the rest: capture a few more.
+    Error.stackTraceLimit = frameCount + 16;
+    Error.prepareStackTrace = (_, callSites) => callSites;
+    Error.captureStackTrace(holder, getCallSites);
+    const sites = Array.isArray(holder.stack) ? holder.stack : [];
+    return sites.slice(0, frameCount).map((site) => ({
+      functionName: site.getFunctionName() ?? '',
+      scriptId: String(site.getScriptId?.() ?? '0'),
+      scriptName: site.getFileName() ?? '',
+      lineNumber: site.getLineNumber() ?? 0,
+      columnNumber: site.getColumnNumber() ?? 0,
+      column: site.getColumnNumber() ?? 0,
+    }));
+  } finally {
+    Error.prepareStackTrace = prevPrepare;
+    Error.stackTraceLimit = prevLimit;
+  }
+}
+
+/** internalBinding('util').getOwnNonIndexProperties (with its filter bits). */
+const ONLY_ENUMERABLE = 2;
+const SKIP_SYMBOLS = 16;
+function getOwnNonIndexProperties(obj, filter) {
+  const out = [];
+  for (const key of Reflect.ownKeys(obj)) {
+    if (typeof key === 'string' && /^(0|[1-9][0-9]*)$/.test(key) && Number(key) < 2 ** 32 - 1) continue;
+    if (typeof key === 'symbol' && filter & SKIP_SYMBOLS) continue;
+    if (filter & ONLY_ENUMERABLE && !Object.prototype.propertyIsEnumerable.call(obj, key)) continue;
+    out.push(key);
+  }
+  return out;
+}
+
+bindings.buffer = {
+  compare(a, b) {
+    const n = Math.min(a.length, b.length);
+    for (let i = 0; i < n; i++) if (a[i] !== b[i]) return a[i] < b[i] ? -1 : 1;
+    return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
+  },
+};
+
+bindings.util = {
+  ...bindings.util,
+  constants: { ALL_PROPERTIES: 0, ONLY_ENUMERABLE, ONLY_WRITABLE: 1, ONLY_CONFIGURABLE: 4, SKIP_STRINGS: 8, SKIP_SYMBOLS, kPending: 0, kFulfilled: 1, kRejected: 2 },
+  getOwnNonIndexProperties,
+  getCallSites,
+  parseEnv,
+  // Map/Set iterator previews (console.table of an iterator): not visible from JS.
+  previewEntries: (value, isIterator) => (isIterator ? [[], false] : []),
+};
+
+/** libuv's errors (UV_ERRNO_MAP, v1.51.0) with Linux's numbers: util.getSystemErrorMap(). */
+export const UV_ERRORS = [
+  [-7, 'E2BIG', 'argument list too long'],
+  [-13, 'EACCES', 'permission denied'],
+  [-98, 'EADDRINUSE', 'address already in use'],
+  [-99, 'EADDRNOTAVAIL', 'address not available'],
+  [-97, 'EAFNOSUPPORT', 'address family not supported'],
+  [-11, 'EAGAIN', 'resource temporarily unavailable'],
+  [-3000, 'EAI_ADDRFAMILY', 'address family not supported'],
+  [-3001, 'EAI_AGAIN', 'temporary failure'],
+  [-3002, 'EAI_BADFLAGS', 'bad ai_flags value'],
+  [-3013, 'EAI_BADHINTS', 'invalid value for hints'],
+  [-3003, 'EAI_CANCELED', 'request canceled'],
+  [-3004, 'EAI_FAIL', 'permanent failure'],
+  [-3005, 'EAI_FAMILY', 'ai_family not supported'],
+  [-3006, 'EAI_MEMORY', 'out of memory'],
+  [-3007, 'EAI_NODATA', 'no address'],
+  [-3008, 'EAI_NONAME', 'unknown node or service'],
+  [-3009, 'EAI_OVERFLOW', 'argument buffer overflow'],
+  [-3014, 'EAI_PROTOCOL', 'resolved protocol is unknown'],
+  [-3010, 'EAI_SERVICE', 'service not available for socket type'],
+  [-3011, 'EAI_SOCKTYPE', 'socket type not supported'],
+  [-114, 'EALREADY', 'connection already in progress'],
+  [-9, 'EBADF', 'bad file descriptor'],
+  [-16, 'EBUSY', 'resource busy or locked'],
+  [-125, 'ECANCELED', 'operation canceled'],
+  [-4080, 'ECHARSET', 'invalid Unicode character'],
+  [-103, 'ECONNABORTED', 'software caused connection abort'],
+  [-111, 'ECONNREFUSED', 'connection refused'],
+  [-104, 'ECONNRESET', 'connection reset by peer'],
+  [-89, 'EDESTADDRREQ', 'destination address required'],
+  [-17, 'EEXIST', 'file already exists'],
+  [-14, 'EFAULT', 'bad address in system call argument'],
+  [-27, 'EFBIG', 'file too large'],
+  [-113, 'EHOSTUNREACH', 'host is unreachable'],
+  [-4, 'EINTR', 'interrupted system call'],
+  [-22, 'EINVAL', 'invalid argument'],
+  [-5, 'EIO', 'i/o error'],
+  [-106, 'EISCONN', 'socket is already connected'],
+  [-21, 'EISDIR', 'illegal operation on a directory'],
+  [-40, 'ELOOP', 'too many symbolic links encountered'],
+  [-24, 'EMFILE', 'too many open files'],
+  [-90, 'EMSGSIZE', 'message too long'],
+  [-36, 'ENAMETOOLONG', 'name too long'],
+  [-100, 'ENETDOWN', 'network is down'],
+  [-101, 'ENETUNREACH', 'network is unreachable'],
+  [-23, 'ENFILE', 'file table overflow'],
+  [-105, 'ENOBUFS', 'no buffer space available'],
+  [-19, 'ENODEV', 'no such device'],
+  [-2, 'ENOENT', 'no such file or directory'],
+  [-12, 'ENOMEM', 'not enough memory'],
+  [-64, 'ENONET', 'machine is not on the network'],
+  [-92, 'ENOPROTOOPT', 'protocol not available'],
+  [-28, 'ENOSPC', 'no space left on device'],
+  [-38, 'ENOSYS', 'function not implemented'],
+  [-107, 'ENOTCONN', 'socket is not connected'],
+  [-20, 'ENOTDIR', 'not a directory'],
+  [-39, 'ENOTEMPTY', 'directory not empty'],
+  [-88, 'ENOTSOCK', 'socket operation on non-socket'],
+  [-95, 'ENOTSUP', 'operation not supported on socket'],
+  [-75, 'EOVERFLOW', 'value too large for defined data type'],
+  [-1, 'EPERM', 'operation not permitted'],
+  [-32, 'EPIPE', 'broken pipe'],
+  [-71, 'EPROTO', 'protocol error'],
+  [-93, 'EPROTONOSUPPORT', 'protocol not supported'],
+  [-91, 'EPROTOTYPE', 'protocol wrong type for socket'],
+  [-34, 'ERANGE', 'result too large'],
+  [-30, 'EROFS', 'read-only file system'],
+  [-108, 'ESHUTDOWN', 'cannot send after transport endpoint shutdown'],
+  [-29, 'ESPIPE', 'invalid seek'],
+  [-3, 'ESRCH', 'no such process'],
+  [-110, 'ETIMEDOUT', 'connection timed out'],
+  [-26, 'ETXTBSY', 'text file is busy'],
+  [-18, 'EXDEV', 'cross-device link not permitted'],
+  [-4094, 'UNKNOWN', 'unknown error'],
+  [-4095, 'EOF', 'end of file'],
+  [-6, 'ENXIO', 'no such device or address'],
+  [-31, 'EMLINK', 'too many links'],
+  [-112, 'EHOSTDOWN', 'host is down'],
+  [-121, 'EREMOTEIO', 'remote I/O error'],
+  [-25, 'ENOTTY', 'inappropriate ioctl for device'],
+  [-4028, 'EFTYPE', 'inappropriate file type or format'],
+  [-84, 'EILSEQ', 'illegal byte sequence'],
+  [-94, 'ESOCKTNOSUPPORT', 'socket type not supported'],
+  [-61, 'ENODATA', 'no data available'],
+  [-49, 'EUNATCH', 'protocol driver not attached'],
+  [-8, 'ENOEXEC', 'exec format error'],
+];
+const uvByErrno = new Map(UV_ERRORS.map(([n, name, msg]) => [n, [name, msg]]));
+export const uvErrmapGet = (err) => uvByErrno.get(err);
+export const getSystemErrorMap = () => new Map(uvByErrno);
+export const getSystemErrorName = (err) => uvByErrno.get(err)?.[0] ?? `Unknown system error ${err}`;
+export const getSystemErrorMessage = (err) => uvByErrno.get(err)?.[1] ?? `Unknown system error ${err}`;

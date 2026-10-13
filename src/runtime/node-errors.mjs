@@ -201,8 +201,22 @@ export function validateBoolean(value, name) {
   if (typeof value !== 'boolean') throw ERR_INVALID_ARG_TYPE(name, 'boolean', value);
 }
 
-export function validateObject(value, name) {
-  if (value === null || Array.isArray(value) || typeof value !== 'object') {
+// validateObject's options (lib/internal/validators.js).
+export const kValidateObjectAllowNullable = 1;
+export const kValidateObjectAllowArray = 2;
+export const kValidateObjectAllowFunction = 4;
+
+export function validateObject(value, name, options = 0) {
+  if (options === 0) {
+    if (value === null || Array.isArray(value) || typeof value !== 'object') {
+      throw ERR_INVALID_ARG_TYPE(name, 'Object', value);
+    }
+    return;
+  }
+  if ((options & kValidateObjectAllowNullable) === 0 && value === null) throw ERR_INVALID_ARG_TYPE(name, 'Object', value);
+  if ((options & kValidateObjectAllowArray) === 0 && Array.isArray(value)) throw ERR_INVALID_ARG_TYPE(name, 'Object', value);
+  const t = typeof value;
+  if (!(t === 'object' || ((options & kValidateObjectAllowFunction) !== 0 && t === 'function'))) {
     throw ERR_INVALID_ARG_TYPE(name, 'Object', value);
   }
 }
@@ -311,6 +325,37 @@ export function errorCodes() {
       Object.assign(nodeError(TypeError, 'ERR_INVALID_FILE_URL_PATH', `File URL path ${reason}`), { input }),
     ERR_MISSING_ARGS: (...args) => ERR_MISSING_ARGS(...args),
     ERR_SYSTEM_ERROR: (ctx) => systemError('ERR_SYSTEM_ERROR', 'A system error occurred', ctx),
+    ERR_ASYNC_TYPE: (type) => nodeError(TypeError, 'ERR_ASYNC_TYPE', `Invalid name for async "type": ${type}`),
+    ERR_INVALID_ASYNC_ID: (type, id) => nodeError(RangeError, 'ERR_INVALID_ASYNC_ID', `Invalid ${type} value: ${id}`),
+    ERR_CONSOLE_WRITABLE_STREAM: (name) =>
+      nodeError(TypeError, 'ERR_CONSOLE_WRITABLE_STREAM', `Console expects a writable stream instance for ${name}`),
+    ERR_FALSY_VALUE_REJECTION: (reason) =>
+      Object.assign(nodeError(Error, 'ERR_FALSY_VALUE_REJECTION', 'Promise was rejected with falsy value'), { reason }),
+    ERR_INCOMPATIBLE_OPTION_PAIR: (a, b) =>
+      nodeError(TypeError, 'ERR_INCOMPATIBLE_OPTION_PAIR', `Option "${a}" cannot be used in combination with option "${b}"`),
+    ERR_INVALID_MIME_SYNTAX: (production, str, invalidIndex) =>
+      nodeError(
+        TypeError,
+        'ERR_INVALID_MIME_SYNTAX',
+        `The MIME syntax for a ${production} in "${str}" is invalid${invalidIndex !== -1 ? ` at ${invalidIndex}` : ''}`
+      ),
+    ERR_PARSE_ARGS_INVALID_OPTION_VALUE: (msg) => nodeError(TypeError, 'ERR_PARSE_ARGS_INVALID_OPTION_VALUE', msg),
+    ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL: (arg) =>
+      nodeError(
+        TypeError,
+        'ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL',
+        `Unexpected argument '${arg}'. This command does not take positional arguments`
+      ),
+    ERR_PARSE_ARGS_UNKNOWN_OPTION: (option, allowPositionals) =>
+      nodeError(
+        TypeError,
+        'ERR_PARSE_ARGS_UNKNOWN_OPTION',
+        `Unknown option '${option}'${
+          allowPositionals
+            ? `. To specify a positional argument starting with a '-', place it at the end of the command after '--', as in '-- ${JSON.stringify(option)}`
+            : ''
+        }`
+      ),
   };
   const codes = {};
   for (const [name, make] of Object.entries(factories)) {
@@ -319,6 +364,8 @@ export function errorCodes() {
       return make(...args);
     };
     Object.defineProperty(ctor, 'name', { value: name });
+    // Node's codes have a HideStackFramesError twin (for hideStackFrames()).
+    ctor.HideStackFramesError = ctor;
     codes[name] = ctor;
   }
   return codes;
@@ -328,6 +375,24 @@ export function validateAbortSignal(signal, name) {
   if (signal !== undefined && (signal === null || typeof signal !== 'object' || !('aborted' in signal))) {
     throw ERR_INVALID_ARG_TYPE(name, 'AbortSignal', signal);
   }
+}
+
+export function validateStringArray(value, name) {
+  validateArray(value, name);
+  for (let i = 0; i < value.length; ++i) {
+    if (typeof value[i] !== 'string') throw ERR_INVALID_ARG_TYPE(`${name}[${i}]`, 'string', value[i]);
+  }
+}
+
+export function validateBooleanArray(value, name) {
+  validateArray(value, name);
+  for (let i = 0; i < value.length; ++i) {
+    if (value[i] !== true && value[i] !== false) throw ERR_INVALID_ARG_TYPE(`${name}[${i}]`, 'boolean', value[i]);
+  }
+}
+
+export function validateUnion(value, name, union) {
+  if (!union.includes(value)) throw ERR_INVALID_ARG_TYPE(name, `('${union.join('|')}')`, value);
 }
 
 export function validateArray(value, name, minLength = 0) {
@@ -342,4 +407,39 @@ export function validateOneOf(value, name, oneOf) {
     const allowed = oneOf.map((v) => (typeof v === 'string' ? `'${v}'` : String(v))).join(', ');
     throw ERR_INVALID_ARG_VALUE(name, value, `must be one of: ${allowed}`);
   }
+}
+
+/** internal/errors ErrnoException / ExceptionWithHostPort (util._errnoException, …). */
+export function makeErrnoClasses(getSystemErrorName) {
+  class ErrnoException extends Error {
+    constructor(err, syscall, original) {
+      const code = getSystemErrorName(err);
+      super(original ? `${syscall} ${code} ${original}` : `${syscall} ${code}`);
+      this.errno = err;
+      this.code = code;
+      this.syscall = syscall;
+    }
+    get ['constructor']() {
+      return Error;
+    }
+  }
+  class ExceptionWithHostPort extends Error {
+    constructor(err, syscall, address, port, additional) {
+      const code = getSystemErrorName(err);
+      let details = '';
+      if (port && port > 0) details = ` ${address}:${port}`;
+      else if (address) details = ` ${address}`;
+      if (additional) details += ` - Local (${additional})`;
+      super(`${syscall} ${code}${details}`);
+      this.errno = err;
+      this.code = code;
+      this.syscall = syscall;
+      this.address = address;
+      if (port) this.port = port;
+    }
+    get ['constructor']() {
+      return Error;
+    }
+  }
+  return { ErrnoException, ExceptionWithHostPort };
 }
