@@ -1,4 +1,5 @@
-# Lint, Node 22 golden baselines, and slicc-kernel Node-entry integration.
+# Lint, Node 22 golden baselines, slicc-kernel Node-entry integration, and
+# the curl | sh installer (install.sh) on Linux and macOS.
 name: ci
 
 on:
@@ -82,6 +83,10 @@ jobs:
           test -n "$(grep 'package/NOTICE' "$RUNNER_TEMP/listing.txt")"
           test -n "$(grep 'package/dist/host/jsh.mjs' "$RUNNER_TEMP/listing.txt")"
           test -n "$(grep 'package/dist/host/main.mjs' "$RUNNER_TEMP/listing.txt")"
+          if grep -E 'package/install\.sh' "$RUNNER_TEMP/listing.txt"; then
+            echo "refuse: tarball ships install.sh" >&2
+            exit 1
+          fi
       - name: Host jsh from the tarball (global install, #!/usr/bin/env jsh)
         run: |
           set -euo pipefail
@@ -97,3 +102,26 @@ jobs:
           name: package
           path: ${{ runner.temp }}/ai-ecoverse-slicc-jsh-*.tgz
           if-no-files-found: error
+
+  install:
+    # install.sh from this checkout, against the published package, in a
+    # throwaway HOME: (a) with Node 22 (install an older version, a
+    # #!/usr/bin/env jsh script, re-run upgrades), (b) no Node and no
+    # terminal fails with the instructions, the "yes, download Node" path on
+    # a pseudo-terminal (test/install/answer-tty.py), and (c) --uninstall.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: shellcheck
+        if: runner.os == 'Linux'
+        run: shellcheck -s sh install.sh test/install/run.sh
+      - name: install.sh (Node 22, no Node, pty, uninstall)
+        run: sh test/install/run.sh

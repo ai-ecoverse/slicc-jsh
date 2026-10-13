@@ -109,6 +109,38 @@ JS program entries are **esbuild-bundled** to single files (`dist/node.mjs`, `di
 
 ## `jsh` outside SLICC
 
+### Install
+
+On macOS or Linux (x64 or arm64), without npm:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/slicc-jsh/main/install.sh | sh
+```
+
+[`install.sh`](install.sh) does this:
+
+- **Node.** It uses `node` on `PATH` if that's Node 22 or later. If not, it asks before downloading the latest Node 22 LTS from nodejs.org into `~/.jsh/node`, checked against nodejs.org's `SHASUMS256.txt`. That Node is for jsh only: no sudo, no package manager. No flag skips the question; with no terminal (CI), it stops and says how to install Node 22 (nodejs.org, Homebrew, fnm or nvm).
+- **jsh.** It gets the latest version (or the one you ask for) from the npm registry, checks the tarball against the registry's sha512 `integrity`, and unpacks it to `~/.jsh/lib/node_modules/@ai-ecoverse/slicc-jsh`. The new version is unpacked beside the old one and moved in only once it runs, so a failed upgrade keeps the old one.
+- **The `jsh` command.** It writes `~/.local/bin/jsh`, a small `sh` script that runs that Node on the installed jsh. It's a file, not an alias, so `#!/usr/bin/env jsh`, cron and non-interactive shells work. If `~/.local/bin` isn't on `PATH`, it asks before adding one line to your shell's rc file (`.zshrc`, `.bashrc` or `.bash_profile`, fish's `config.fish`, else `.profile`). Without a terminal it prints the line instead.
+- It finishes with `jsh --version`.
+
+Run it again to upgrade (and to update its private Node to the latest 22). `sliccy:<name>` packages resolve from `~/.jsh/lib/node_modules` as well as from a `node_modules` next to your script; `npm i -g --prefix ~/.jsh sliccy-<name>` puts one there.
+
+| Environment | Default | |
+|---|---|---|
+| `JSH_HOME` | `~/.jsh` | where jsh and its private Node go |
+| `JSH_BIN_DIR` | `~/.local/bin` | where the `jsh` command goes |
+| `JSH_VERSION` | latest | the version to install, also `--version x.y.z` |
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/slicc-jsh/main/install.sh | sh -s -- --version 0.16.1
+curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/slicc-jsh/main/install.sh | sh -s -- --uninstall
+```
+
+`--uninstall` (with the same `JSH_HOME` and `JSH_BIN_DIR`, if you set them) removes `~/.jsh` and the `jsh` command. It doesn't edit rc files; it tells you which line to remove. Windows isn't covered yet: [ai-ecoverse/slicc-jsh#127](https://github.com/ai-ecoverse/slicc-jsh/issues/127).
+
+### npm
+
 The package's `bin` is the host `jsh` (`dist/host/jsh.mjs`), which runs `.jsh` scripts on the host's own Node 22+. Inside slicc-kernel (a global `pnpm add -g` puts this `bin` on `PATH` ahead of the kernel's `jsh`), it hands off to the kernel jsh instead:
 
 ```bash
@@ -116,6 +148,8 @@ npm i -g @ai-ecoverse/slicc-jsh
 jsh script.jsh args…          # or ./script.jsh with #!/usr/bin/env jsh
 npx @ai-ecoverse/slicc-jsh script.jsh
 ```
+
+### `.jsh` scripts
 
 A `.jsh` file is the body of an async function with `process`, `console`, `require`, `module`, `exports`, `fetch`, `__dirname` and `__filename` in scope, the same in the kernel and on the host. `require('fs')` is Node's `fs`. Built-in `sliccy:` modules are `cli`, `color`, `exec`, `fmt`, `http`, `pool`, `skill` and `time`. Any other `sliccy:<name>` resolves to an `@ai-ecoverse/sliccy-<name>` or `sliccy-<name>` package; `sliccy:browser` over CDP comes from slicc-cdp ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)). The parity tables are in the [design note](docs/design/run-outside-slicc.md#parity-tables).
 
@@ -128,6 +162,7 @@ npm run lint
 npm run test:golden          # host Node 22 baselines (npx node@22)
 npm run test:jsh             # .jsh parity: host jsh baseline vs kernel jsh
 npm run test:integration     # slicc-kernel Node entry, memory root
+sh test/install/run.sh       # install.sh in throwaway HOMEs, against the registry
 ```
 
 Golden fixtures live under `test/golden/fixtures/` and are **not** published (`files` allowlists `dist` only). Record baselines with Node 22:
