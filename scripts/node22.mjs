@@ -6,6 +6,7 @@
  * the run with a message instead of hanging it.
  */
 import { spawnSync } from 'node:child_process';
+import { dirname } from 'node:path';
 
 export const NODE22_VERSION = '22.22.0';
 const RESOLVE_TIMEOUT_MS = 180_000;
@@ -35,4 +36,15 @@ export function node22Bin() {
   }
   bin = r.stdout.trim();
   return bin;
+}
+
+/**
+ * An environment for a baseline run: `env` with Node 22's directory first on
+ * PATH, so a fixture that runs `node` (a child process) gets Node 22 too, as
+ * under npx (which puts the fetched package's bin first).
+ */
+export function node22Env(env = process.env) {
+  const dir = dirname(node22Bin());
+  const sep = process.platform === 'win32' ? ';' : ':';
+  return { ...env, PATH: [dir, env.PATH ?? ''].filter(Boolean).join(sep) };
 }

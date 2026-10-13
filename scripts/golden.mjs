@@ -24,7 +24,7 @@ import {
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
-import { node22Bin } from './node22.mjs';
+import { node22Bin, node22Env } from './node22.mjs';
 import { devPackageFiles, packageFiles } from '../test/integration/helpers.mjs';
 
 const SKIP_NAMES = new Set([
@@ -93,7 +93,7 @@ function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
     maxBuffer: 4 * 1024 * 1024,
     // case.json `env` applies to Node too (on top of the caller's, less the
     // colour switches: the shim's environment has none unless the case sets them).
-    env: { ...withoutColorEnv(process.env), npm_config_yes: 'true', ...env },
+    env: node22Env({ ...withoutColorEnv(process.env), npm_config_yes: 'true', ...env }),
   });
   if (result.error) throw result.error;
   return {
