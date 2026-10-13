@@ -18,9 +18,9 @@ console.log('internal (_) keys:', keys.filter((k) => k.startsWith('_')).join(' '
 const shape = (name) => {
   const d = Object.getOwnPropertyDescriptor(process, name);
   if (!d) return 'none';
-  return `${'value' in d ? 'value' : 'accessor'} enumerable=${d.enumerable}`;
+  return `${'value' in d ? `value writable=${d.writable}` : `accessor set=${typeof d.set}`} enumerable=${d.enumerable} configurable=${d.configurable}`;
 };
-for (const name of ['stdin', 'stdout', 'stderr', 'exitCode', '_getActiveHandles', '_getActiveRequests', '_rawDebug', 'cwd', 'nextTick']) {
+for (const name of ['stdin', 'stdout', 'stderr', 'exitCode', 'title', '_exiting', '_getActiveHandles', '_getActiveRequests', '_rawDebug', 'cwd', 'nextTick']) {
   console.log(name, shape(name));
 }
 // A later assignment of a jsh internal stays out of the keys.

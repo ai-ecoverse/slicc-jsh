@@ -170,7 +170,8 @@ class Process extends EventEmitter {
     this._assignedExitCode = undefined;
     this._forcedExitCode = undefined;
     this._didExit = false;
-    this._title = 'node';
+    // Node's: a plain data property.
+    this.title = 'node';
     // Node's: null until lib/domain.js makes it its accessor.
     this.domain = null;
     // Node's: [object process], its constructor named process.
@@ -384,13 +385,6 @@ class Process extends EventEmitter {
     // though Node starts with it ignored. SIGUSR1 stays the inspector's (ignored).
     const back = event === 'SIGUSR1' ? this._ctx.signals?.ignore : this._ctx.signals?.reset;
     Promise.resolve(back?.call(this._ctx.signals, event)).catch(() => {});
-  }
-
-  get title() {
-    return this._title;
-  }
-  set title(v) {
-    this._title = String(v);
   }
 
   get exitCode() {
@@ -800,13 +794,14 @@ const JSH_INTERNALS = [
   '_assignedExitCode', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
   '_dispatchSignal', '_evalCode', '_exitError', '_forcedExitCode', '_handles', '_nodeLib', '_onExit',
   '_onHardExit', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
-  '_stdio', '_stdoutWrite', '_title', '_umask', '_uncaughtCapture', '_writeStderr', '_writeStdout',
+  '_stdio', '_stdoutWrite', '_umask', '_uncaughtCapture', '_writeStderr', '_writeStdout',
 ];
 
 /**
  * Node's shape: its own state hidden (above), and what Node has as own
- * enumerable properties of process so (`title`, `exitCode`, `_exiting`;
- * stdin/stdout/stderr and the methods are made own where they are defined).
+ * enumerable properties of process so: `exitCode` and `_exiting` as
+ * accessors (`title` is a data property, stdin/stdout/stderr and the methods
+ * are made own where they are defined).
  */
 function nodeShape(process) {
   for (const name of JSH_INTERNALS) {
@@ -815,14 +810,17 @@ function nodeShape(process) {
     else Object.defineProperty(process, name, { value: undefined, writable: true, enumerable: false, configurable: true });
   }
   const proto = Process.prototype;
-  for (const [name, configurable] of [
-    ['title', true],
-    ['exitCode', false],
-  ]) {
-    const { get, set } = Object.getOwnPropertyDescriptor(proto, name);
-    Object.defineProperty(process, name, { get, set, enumerable: true, configurable });
-  }
-  if (!Object.prototype.hasOwnProperty.call(process, '_exiting')) process._exiting = false;
+  const { get, set } = Object.getOwnPropertyDescriptor(proto, 'exitCode');
+  Object.defineProperty(process, 'exitCode', { get, set, enumerable: true, configurable: false });
+  let exiting = process._exiting === true;
+  Object.defineProperty(process, '_exiting', {
+    get: () => exiting,
+    set: (value) => {
+      exiting = value;
+    },
+    enumerable: true,
+    configurable: true,
+  });
 }
 const NODE_NAMES = { cwd: 'wrappedCwd', chdir: 'wrappedChdir', umask: 'wrappedUmask' };
 const NODE_LENGTHS = { exit: 1, kill: 2 };
