@@ -41,6 +41,22 @@ module.exports = {
   get util() {
     return require('util');
   },
+  /** require('repl'): lib/repl.js. */
+  get replModule() {
+    return require('repl');
+  },
+  get domain() {
+    return require('domain');
+  },
+  get sys() {
+    return require('sys');
+  },
+  get diagnosticsChannel() {
+    return require('diagnostics_channel');
+  },
+  get streamConsumers() {
+    return require('stream/consumers');
+  },
   /** Node's REPL (lib/internal/repl.js: createInternalRepl, and lib/repl.js through it). */
   get repl() {
     return require('internal/repl');

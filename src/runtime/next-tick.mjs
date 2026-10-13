@@ -9,6 +9,8 @@
 export function createNextTick() {
   const queue = [];
   let stopped = false;
+  // Ticks run so far (the drain loop's measure of progress).
+  let ran = 0;
 
   return {
     nextTick(fn, ...args) {
@@ -25,7 +27,19 @@ export function createNextTick() {
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
       }
-      if (!stopped) queue.push(() => fn(...args));
+      if (stopped) return;
+      // The domain the tick was queued in (lib/domain.js), entered while it
+      // runs; a throw leaves it entered for the uncaught-exception path (its
+      // error handler exits it), as Node's skipped after-hook does.
+      const domain = globalThis.process?.domain ?? undefined;
+      if (!domain) queue.push(() => fn(...args));
+      else {
+        queue.push(() => {
+          domain.enter();
+          fn(...args);
+          domain.exit();
+        });
+      }
     },
     /** process.exit(): drop what is queued and ignore new ticks. */
     stop() {
@@ -38,6 +52,7 @@ export function createNextTick() {
         const batch = queue.splice(0);
         for (let i = 0; i < batch.length; i++) {
           try {
+            ran++;
             batch[i]();
           } catch (err) {
             // The rest of the batch still runs (after the error is handled).
@@ -49,6 +64,9 @@ export function createNextTick() {
     },
     get depth() {
       return queue.length;
+    },
+    get ran() {
+      return ran;
     },
   };
 }

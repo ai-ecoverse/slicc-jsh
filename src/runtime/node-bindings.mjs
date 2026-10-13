@@ -154,6 +154,17 @@ const bindings = {
     },
     isBigEndian: false,
   },
+  // diagnostics_channel's: a subscriber that throws is an uncaught exception
+  // (the runtime's, set by run.mjs), and the publish goes on.
+  errors: {
+    triggerUncaughtException(err) {
+      const trigger = globalThis.process?._triggerUncaught;
+      if (typeof trigger === 'function') trigger(err);
+      else queueMicrotask(() => {
+        throw err;
+      });
+    },
+  },
   // The REPL's ^C watchdog (breakEvalOnSigint): a running script can't be
   // interrupted here, so it starts (nothing to watch) and has seen no SIGINT.
   contextify: {

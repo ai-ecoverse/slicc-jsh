@@ -171,6 +171,8 @@ class Process extends EventEmitter {
     this._forcedExitCode = undefined;
     this._didExit = false;
     this._title = 'node';
+    // Node's: null until lib/domain.js makes it its accessor.
+    this.domain = null;
     this._ctx = ctx;
     this._onExit = onExit;
 

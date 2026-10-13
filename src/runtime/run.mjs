@@ -16,8 +16,7 @@ import { createNextTick } from './next-tick.mjs';
 import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
 import { probeStdio } from './stdio.mjs';
 import { installFunctionImport } from './function-import.mjs';
-import { addBuiltinLibsToObject, makeRequireFunction } from './node-lib.mjs';
-import { setGlobalOverlay } from './builtins/vm.mjs';
+import { patchReplServer } from './node-lib.mjs';
 import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
@@ -533,24 +532,7 @@ export async function runNode(ctx, options = {}) {
     }
     console.log(`Welcome to Node.js ${process.version}.\nType ".help" for more information.`);
     const cliRepl = process._nodeLib().repl;
-    // The Node-hosted kernel locks `module` and `require` on globalThis, so
-    // Node's createContext (which defines them there) can't run as is: the
-    // same context, with those two in the scope REPL scripts see.
-    const { REPLServer } = cliRepl;
-    const nodeCreateContext = REPLServer.prototype.createContext;
-    REPLServer.prototype.createContext = function createContext() {
-      const locked = ['module', 'require'].some((n) => Object.getOwnPropertyDescriptor(globalThis, n)?.configurable === false);
-      if (!this.useGlobal || !locked) return nodeCreateContext.call(this);
-      const Module = nodeRequire('module');
-      const replModule = new Module('<repl>');
-      replModule.paths = Module._resolveLookupPaths('<repl>', { paths: Module._nodeModulePaths(process.cwd()) });
-      const overlay = Object.create(null);
-      overlay.module = replModule;
-      overlay.require = makeRequireFunction(replModule);
-      setGlobalOverlay(overlay);
-      addBuiltinLibsToObject(globalThis, '<REPL>');
-      return globalThis;
-    };
+    patchReplServer(cliRepl.REPLServer);
     cliRepl.createInternalRepl(process.env, (err, repl) => {
       if (err) throw err;
       repl.on('exit', () => {

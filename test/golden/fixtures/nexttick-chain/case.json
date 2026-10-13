@@ -1,0 +1,8 @@
+{
+  "description": "a long chain of ticks and promise jobs with nothing ref'd runs to its end (the loop doesn't take a busy chain for idle)",
+  "argv": [
+    "-e",
+    "let n = 0; const step = () => new Promise((r) => process.nextTick(r)).then(() => (++n < 2000 ? step() : console.log('ticks', n))); step(); (async () => { for (let i = 0; i < 300; i++) { await new Promise((r) => process.nextTick(r)); await null; await null; } console.log('mixed done'); })();"
+  ],
+  "shim": true
+}

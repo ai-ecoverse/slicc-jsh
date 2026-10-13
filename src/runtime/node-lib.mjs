@@ -20,7 +20,7 @@ import {
 import { createUtil } from './builtins/util.mjs';
 import { createUrlInternals, urlBindings } from './builtins/url-internal.mjs';
 import * as acorn from 'acorn';
-import { decorateErrorStack, makeContextifyScriptWith } from './builtins/vm.mjs';
+import { ES_GLOBALS, decorateErrorStack, makeContextifyScriptWith, setGlobalOverlay } from './builtins/vm.mjs';
 import { ErrorPrepareStackTrace, overrideStackTrace } from './stack.mjs';
 
 for (const [name, value] of Object.entries(urlBindings)) setBinding(name, value);
@@ -231,6 +231,56 @@ export function addBuiltinLibsToObject(object, dummyModuleName) {
   void dummyModuleName;
 }
 
+const kPatched = Symbol('slicc-jsh.replPatched');
+
+/**
+ * lib/repl.js's REPLServer.prototype.createContext, where the realm withholds
+ * names the kernel locks on globalThis (the Node-hosted kernel: `module`,
+ * `require`, `exports`, … as non-configurable undefined). Node's own runs
+ * where none is locked (the browser kernel). Otherwise, as Node's:
+ * - useGlobal: globalThis, with the REPL's `module` and `require` in the
+ *   scope its lines run in (vm's overlay), as they can't be defined on it;
+ * - a context of its own: the program's globals copied in (the locked ones
+ *   left out), its own console, then `module` and `require` on it.
+ */
+export function patchReplServer(REPLServer) {
+  if (!REPLServer || REPLServer.prototype[kPatched]) return REPLServer;
+  const nodeCreateContext = REPLServer.prototype.createContext;
+  const lockedOn = (o, n) => Object.getOwnPropertyDescriptor(o, n)?.configurable === false && o[n] === undefined;
+  REPLServer.prototype.createContext = function createContext() {
+    if (!['module', 'require'].some((n) => lockedOn(globalThis, n))) return nodeCreateContext.call(this);
+    const Module = builtin('module');
+    const replModule = new Module('<repl>');
+    replModule.paths = Module._resolveLookupPaths('<repl>', { paths: Module._nodeModulePaths(proc().cwd()) });
+    if (this.useGlobal) {
+      const overlay = Object.create(null);
+      overlay.module = replModule;
+      overlay.require = makeRequireFunction(replModule);
+      setGlobalOverlay(overlay);
+      addBuiltinLibsToObject(globalThis, '<REPL>');
+      return globalThis;
+    }
+    const context = builtin('vm').createContext();
+    const fresh = new Set(ES_GLOBALS);
+    for (const name of Object.getOwnPropertyNames(globalThis)) {
+      if (fresh.has(name) || lockedOn(globalThis, name)) continue;
+      Object.defineProperty(context, name, { __proto__: null, ...Object.getOwnPropertyDescriptor(globalThis, name) });
+    }
+    context.global = context;
+    Object.defineProperty(context, 'console', {
+      configurable: true,
+      writable: true,
+      value: new (builtin('console').Console)(this.output),
+    });
+    Object.defineProperty(context, 'module', { configurable: true, writable: true, value: replModule });
+    Object.defineProperty(context, 'require', { configurable: true, writable: true, value: makeRequireFunction(replModule) });
+    addBuiltinLibsToObject(context, '<REPL>');
+    return context;
+  };
+  Object.defineProperty(REPLServer.prototype, kPatched, { value: true });
+  return REPLServer;
+}
+
 export function loadNodeLib({ ctx, process } = {}) {
   if (process) programProcess = process;
   return loadVendorCjs({
@@ -354,10 +404,8 @@ export function loadNodeLib({ ctx, process } = {}) {
         isKeyObject: (v) => v instanceof builtin('crypto').KeyObject,
         isCryptoKey: (v) => typeof globalThis.CryptoKey === 'function' && v instanceof globalThis.CryptoKey,
       })),
-      // console's diagnostics channels: nothing subscribes.
-      diagnostics_channel: {
-        channel: () => ({ hasSubscribers: false, publish() {}, subscribe() {}, unsubscribe() {} }),
-      },
+      // stream/consumers' Blob: the platform's.
+      'internal/blob': { Blob: globalThis.Blob },
       console: lazy(() => builtin('console')),
       // The platform's EventTarget has none of Node's internals (listener
       // lists, max listeners): events' EventTarget paths see only Node's own.
@@ -426,7 +474,17 @@ export function loadNodeLib({ ctx, process } = {}) {
             set: (_, key, value) => Reflect.set(proc(), key, value),
             has: (_, key) => key in proc(),
             ownKeys: () => Reflect.ownKeys(proc()),
-            getOwnPropertyDescriptor: (_, key) => {
+            // lib/domain.js defines process.domain (an accessor, not
+            // configurable): on the program's process, and — as the Proxy
+            // invariants want for a non-configurable one — on the target too.
+            defineProperty: (target, key, desc) => {
+              const ok = Reflect.defineProperty(proc(), key, desc);
+              if (ok && desc.configurable !== true) Reflect.defineProperty(target, key, { ...desc, configurable: false });
+              return ok;
+            },
+            getOwnPropertyDescriptor: (target, key) => {
+              const own = Reflect.getOwnPropertyDescriptor(target, key);
+              if (own) return own;
               const d = Reflect.getOwnPropertyDescriptor(proc(), key);
               if (d) d.configurable = true;
               return d;

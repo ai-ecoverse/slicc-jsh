@@ -1,0 +1,32 @@
+perf_hooks keys ["Performance","PerformanceEntry","PerformanceMark","PerformanceMeasure","PerformanceObserver","PerformanceObserverEntryList","PerformanceResourceTiming","constants","createHistogram","monitorEventLoopDelay","performance"]
+stream/web keys ["ByteLengthQueuingStrategy","CompressionStream","CountQueuingStrategy","DecompressionStream","ReadableByteStreamController","ReadableStream","ReadableStreamBYOBReader","ReadableStreamBYOBRequest","ReadableStreamDefaultController","ReadableStreamDefaultReader","TextDecoderStream","TextEncoderStream","TransformStream","TransformStreamDefaultController","WritableStream","WritableStreamDefaultController","WritableStreamDefaultWriter"]
+stream/consumers keys ["arrayBuffer","blob","buffer","json","text"]
+diagnostics_channel keys ["Channel","channel","hasSubscribers","subscribe","tracingChannel","unsubscribe"]
+domain keys ["Domain","_stack","active","create","createDomain"]
+repl keys ["REPLServer","REPL_MODE_SLOPPY","REPL_MODE_STRICT","Recoverable","isValidSyntax","start","writer"]
+builtins [[true,true],[true,true],[true,true],[true,true],[true,true],[true,true],[true,true]]
+sys is util [true,true]
+performance [true,"number","function",4,64,11]
+empty histogram [9223372036854776000,0,null,null,0,0,[[100,0]],0,"9223372036854775807","0"]
+histogram [1,10,5.5,2.8722813232690143,10,5,9,10,[[0,1],[50,5],[75,8],[87.5,9],[93.75,10],[100,10]],{"count":10,"min":1,"max":10,"mean":5.5,"exceeds":0,"stddev":2.8722813232690143,"percentiles":{"0":1,"50":5,"75":8,"100":10,"87.5":9,"93.75":10}}]
+record 0 THROWS RangeError ERR_OUT_OF_RANGE The value of "val" is out of range. It must be >= 1 && <= 9007199254740991. Received 0
+record 1.5 THROWS RangeError ERR_OUT_OF_RANGE The value of "val" is out of range. It must be an integer. Received 1.5
+record "x" THROWS TypeError ERR_INVALID_ARG_TYPE The "val" argument must be of type number. Received type string ('x')
+record 0n THROWS RangeError ERR_OUT_OF_RANGE value is out of range
+percentile 0 THROWS RangeError ERR_OUT_OF_RANGE The value of "percentile" is out of range. It must be > 0 && <= 100. Received 0
+exceeds [1,1,7]
+add / reset [["5",[[0,5],[100,5]]],[12,10],0,9223372036854776000]
+createHistogram {"lowest":0} THROWS RangeError ERR_OUT_OF_RANGE The value of "options.lowest" is out of range. It must be >= 1 && <= 9007199254740991. Received 0
+createHistogram {"highest":1} THROWS RangeError ERR_OUT_OF_RANGE The value of "options.highest" is out of range. It must be >= 2 && <= 9007199254740991. Received 1
+createHistogram {"figures":6} THROWS RangeError ERR_OUT_OF_RANGE The value of "options.figures" is out of range. It must be >= 1 && <= 5. Received 6
+createHistogram {"lowest":"x"} THROWS TypeError ERR_INVALID_ARG_TYPE The "options.lowest" property must be of type number. Received type string ('x')
+monitorEventLoopDelay [true,false,true,false,"number","ELDHistogram"]
+monitorEventLoopDelay resolution 0 THROWS RangeError ERR_OUT_OF_RANGE The value of "options.resolution" is out of range. It must be >= 1 && <= 9007199254740991. Received 0
+inspect "Histogram {\n  min: 9223372036854776000,\n  max: 0,\n  mean: NaN,\n  exceeds: 0,\n  stddev: NaN,\n  count: 0,\n  percentiles: Map(1) { 100 => 0 }\n}"
+channel [false,true,true,true,[[{"a":1},"jsh:test"]],false]
+tracingChannel [42,["start","end"]]
+stream/web [true,"function","function"]
+consumers ["ab",{"k":1},"xy",1,4,"web"]
+domain [["intercepted","tick","timer","emitter"],[],"function",true]
+repl.start ["$ 21\n$ undefined\n$ 2\n$ ","function",false]
+warnings [["DeprecationWarning","DEP0025"]]
