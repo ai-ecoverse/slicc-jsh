@@ -1,0 +1,21 @@
+file fd for both 0 [null,null,null] "a\nb\nc\nd\ne\nf\n"
+execFileSync both to file null
+  file "a\nb\nc\nd\ne\nf\n"
+[stdout for both]
+a
+b
+c
+d
+e
+f
+[/stdout for both] 0 [null,null,null]
+stdout to fd 2 0 [null,null,"e piped\n"]
+[execSync both to stdout]
+1
+2
+3
+[/execSync both to stdout]
+timeout with a writing grandchild ETIMEDOUT SIGTERM true
+grandchild EPIPE
+background holds the pipe "hi\n" true
+background redirected "hi\n" true

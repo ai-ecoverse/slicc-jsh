@@ -1,0 +1,6 @@
+{
+  "description": "spawnSync/execSync on slicc-kernel 1.70.0's ctx.sync.run: stdout and stderr to one fd keep the child's write order (a file fd and the program's own fds), kernel fds passed through, a grandchild still writing after a timeout kill gets EPIPE, a background process holding the captured pipe keeps execSync waiting (Node 22; /bin/sh from wasm-bash in the shim)",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-bash"]
+}
