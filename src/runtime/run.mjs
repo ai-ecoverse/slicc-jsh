@@ -155,6 +155,7 @@ export async function runNode(ctx, options = {}) {
    * Returns the status the listeners leave.
    */
   let finishExitRef;
+  let nextTickRef;
   const dieUncaught = (report, status = 1) => {
     const code = finishExitRef(status);
     try {
@@ -162,6 +163,8 @@ export async function runNode(ctx, options = {}) {
     } catch {
       /* ignore */
     }
+    // The program is over: no tick queued before or during this runs (Node).
+    nextTickRef?.stop();
     return code;
   };
 
@@ -246,6 +249,7 @@ export async function runNode(ctx, options = {}) {
     },
   });
   finishExitRef = finishExit;
+  nextTickRef = nextTick;
   processRef = process;
   process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
   process._setupWarnings();
