@@ -730,6 +730,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       const pathArg = p;
       const target = abs(p);
       if (isDevicePath(target)) return writeThroughDescriptor(p, next, flag);
+      // 'ax' / 'ax+': O_EXCL, as the open behind Node's appendFile has it.
+      if (flag.includes('x') && syncFs.exists(target)) throw nodeFsError('EEXIST', 'open', pathArg);
       try {
         let prev = new Uint8Array(0);
         if (syncFs.exists(target)) prev = syncFs.readFile(target);

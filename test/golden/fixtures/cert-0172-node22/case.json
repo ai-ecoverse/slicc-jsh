@@ -1,0 +1,13 @@
+{
+  "description": "cert A2 findings on 0.17.2: 'ax'/'ax+' append flags are exclusive, --import (after -r), --trace-uncaught and --max-old-space-size accepted, V8's report for a bad V8 flag value (with Node's bad-option lines)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

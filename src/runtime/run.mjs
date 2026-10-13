@@ -214,6 +214,7 @@ export async function runNode(ctx, options = {}) {
     await ctx.write(2, `${parsed.error}\n`);
     return parsed.status ?? 9;
   }
+  if (parsed.v8Warnings?.length) await ctx.write(2, `${parsed.v8Warnings.join('\n')}\n`);
   if (parsed.mode === 'version') {
     await ctx.write(1, `v${NODE_SHIM_VERSION}\n`);
     return 0;
@@ -600,6 +601,7 @@ export async function runNode(ctx, options = {}) {
       rewriteDynamicImports,
     };
     removeJshHandoff = installJshHandoff(ctx, rt);
+    let skipEntry = false;
     // V8's --stack-trace-limit=N.
     const limit = process.execArgv.findLast?.((a) => a.startsWith('--stack-trace-limit='));
     if (limit) Error.stackTraceLimit = Number(limit.slice(20));
@@ -614,8 +616,48 @@ export async function runNode(ctx, options = {}) {
           if (!handleUncaught(err)) return dieUncaught(() => printUncaught(err));
         }
       }
+      // --import: ES modules from the working directory, in order, before the
+      // entry, with the loop running (as Node's runEntryPointWithESMLoader).
+      // One that fails ends startup (the entry doesn't run; a handler that
+      // took the error leaves the loop to drain); one whose top-level await
+      // never settles leaves the loop to end, and the entry never runs.
+      if (parsed.imports?.length) {
+        let settled = false;
+        let failure;
+        (async () => {
+          for (const specifier of parsed.imports) await esm.importPreload(specifier);
+        })().then(
+          () => {
+            settled = true;
+            handles.notify();
+          },
+          (err) => {
+            settled = true;
+            failure = { err };
+            handles.notify();
+          }
+        );
+        await drainLoop(handles, nextTick, {
+          shouldStop: () => settled || getDidExit() || exitStatus !== undefined,
+          weakPending: () => !settled,
+          onTickError: (err) => exceptionHandler(err),
+        });
+        if (!settled || failure) skipEntry = true;
+        if (failure) {
+          if (isExitError(failure.err)) throw failure.err;
+          uncaughtFromEsm = true;
+          try {
+            if (!handleUncaught(failure.err)) return dieUncaught(() => printUncaught(failure.err));
+          } finally {
+            uncaughtFromEsm = false;
+          }
+        }
+        if (getDidExit() || exitStatus !== undefined) skipEntry = true;
+      }
     }
-    if (typeof options.main === 'function') {
+    if (skipEntry) {
+      // --import ended startup: no entry.
+    } else if (typeof options.main === 'function') {
       try {
         const result = options.main(rt);
         if (result != null && typeof result.then === 'function') {
@@ -659,7 +701,7 @@ export async function runNode(ctx, options = {}) {
         /* EOF / no stdin */
       }
       // Nothing piped: no program, but what -r loaded still runs its loop.
-      if (chunks.length === 0 && !(parsed.preload?.length > 0)) return 0;
+      if (chunks.length === 0 && !(parsed.preload?.length > 0) && !(parsed.imports?.length > 0)) return 0;
       let total = 0;
       for (const c of chunks) total += c.byteLength;
       const merged = new Uint8Array(total);

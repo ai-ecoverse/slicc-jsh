@@ -13,7 +13,21 @@ const BOOLEAN_FLAGS = new Set([
   '--throw-deprecation',
   '--pending-deprecation',
   '--expose-internals',
+  // Node prints a thrown non-Error's site with it; accepted (the report is the usual one).
+  '--trace-uncaught',
 ]);
+
+/** V8's report for a flag it couldn't take, then Node's "bad option" for it and for the flags Node 22.22 passes V8 after it. */
+function v8FlagError(argv0, lines, arg) {
+  const after = [
+    '--harmony-import-attributes',
+    '--no-harmony-import-assertions',
+    '--experimental-wasm-imported-strings',
+    '--experimental-wasm-memory64',
+    '--experimental-wasm-exnref',
+  ];
+  return [...lines, 'Try --help for options', ...[arg, ...after].map((f) => `${argv0}: bad option: ${f}`)].join('\n');
+}
 const VALUED_FLAGS = ['--disable-warning', '--redirect-warnings', '--input-type'];
 const INPUT_TYPES = ['module', 'commonjs', 'module-typescript', 'commonjs-typescript'];
 
@@ -37,6 +51,9 @@ export function parseNodeArgv(argv) {
   let interactive = false;
   // -r / --require modules, in order; `node -`: the program from stdin.
   const preload = [];
+  const imports = [];
+  // What V8 prints about a flag it still took (stderr, before the program).
+  const v8Warnings = [];
   let stdinScript = false;
   // Options that only set behaviour; kept in execArgv as Node does.
   const flags = [];
@@ -104,12 +121,48 @@ export function parseNodeArgv(argv) {
       i += 1;
       continue;
     }
-    // V8's --stack-trace-limit=N (only that form; V8 reads its own flags).
+    // V8's own flags (only the `=` form; V8 reads them itself):
+    // --stack-trace-limit=N sets Error.stackTraceLimit; --max-old-space-size=N
+    // is accepted (the kernel sets a program's memory). A bad value is V8's
+    // report, then Node's for the flags V8 then didn't take.
     if (arg === '--stack-trace-limit' || arg.startsWith('--stack-trace-limit=')) {
-      const value = arg.slice(20);
-      if (!/^-?\d+$/.test(value)) {
-        return { error: 'Error: illegal value for flag --stack-trace-limit of type int\nTry --help for options', status: 9 };
+      if (!/^-?\d+$/.test(arg.slice(20))) {
+        return { error: v8FlagError(argv0, [`Error: illegal value for flag ${arg} of type int`], arg), status: 9 };
       }
+      flags.push(arg);
+      i += 1;
+      continue;
+    }
+    if (arg === '--max-old-space-size' || arg.startsWith('--max-old-space-size=')) {
+      const value = arg.slice(21);
+      const bounds = `Error: Value for flag ${arg} of type size_t is out of bounds [0-18446744073709551615]`;
+      // A negative size: V8 says so and goes on (with its default).
+      if (/^-\d+$/.test(value)) {
+        v8Warnings.push(bounds, 'Try --help for options');
+        flags.push(arg);
+        i += 1;
+        continue;
+      }
+      if (!/^\d+$/.test(value)) {
+        // Linux's V8 (strtoull doesn't take the value): just "illegal value";
+        // macOS's prints the out-of-bounds line before it.
+        return { error: v8FlagError(argv0, [`Error: illegal value for flag ${arg} of type size_t`], arg), status: 9 };
+      }
+      flags.push(arg);
+      i += 1;
+      continue;
+    }
+    // --import X / --import=X: ES modules loaded before the entry (after -r).
+    if (arg === '--import') {
+      if (i + 1 >= args.length) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      imports.push(args[i + 1]);
+      flags.push(arg, args[i + 1]);
+      i += 2;
+      continue;
+    }
+    if (arg.startsWith('--import=')) {
+      if (arg === '--import=') return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      imports.push(arg.slice(9));
       flags.push(arg);
       i += 1;
       continue;
@@ -182,6 +235,8 @@ export function parseNodeArgv(argv) {
       execArgv: [...flags],
       interactive,
       preload,
+      imports,
+      v8Warnings,
     };
   }
 
@@ -192,6 +247,8 @@ export function parseNodeArgv(argv) {
       processArgv: [argv0, script, ...userArgs],
       execArgv: [...flags],
       preload,
+      imports,
+      v8Warnings,
     };
   }
 
@@ -201,6 +258,8 @@ export function parseNodeArgv(argv) {
     execArgv: [...flags],
     interactive,
     preload,
+    imports,
+    v8Warnings,
     stdinScript,
   };
 }
