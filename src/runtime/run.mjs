@@ -601,6 +601,7 @@ export async function runNode(ctx, options = {}) {
       rewriteDynamicImports,
     };
     removeJshHandoff = installJshHandoff(ctx, rt);
+    let skipEntry = false;
     // V8's --stack-trace-limit=N.
     const limit = process.execArgv.findLast?.((a) => a.startsWith('--stack-trace-limit='));
     if (limit) Error.stackTraceLimit = Number(limit.slice(20));
@@ -615,22 +616,48 @@ export async function runNode(ctx, options = {}) {
           if (!handleUncaught(err)) return dieUncaught(() => printUncaught(err));
         }
       }
-      // --import: ES modules, resolved from the working directory, loaded
-      // (top-level await and all) before the entry, as Node's.
-      for (const specifier of parsed.imports ?? []) {
-        try {
+      // --import: ES modules from the working directory, in order, before the
+      // entry, with the loop running (as Node's runEntryPointWithESMLoader).
+      // One that fails ends startup (the entry doesn't run; a handler that
+      // took the error leaves the loop to drain); one whose top-level await
+      // never settles leaves the loop to end, and the entry never runs.
+      if (parsed.imports?.length) {
+        let settled = false;
+        let failure;
+        (async () => {
+          for (const specifier of parsed.imports) await esm.importPreload(specifier);
+        })().then(
+          () => {
+            settled = true;
+            handles.notify();
+          },
+          (err) => {
+            settled = true;
+            failure = { err };
+            handles.notify();
+          }
+        );
+        await drainLoop(handles, nextTick, {
+          shouldStop: () => settled || getDidExit() || exitStatus !== undefined,
+          weakPending: () => !settled,
+          onTickError: (err) => exceptionHandler(err),
+        });
+        if (!settled || failure) skipEntry = true;
+        if (failure) {
+          if (isExitError(failure.err)) throw failure.err;
           uncaughtFromEsm = true;
-          await esm.importDynamic(specifier, `${process.cwd().replace(/\/$/, '')}/[import]`);
-          uncaughtFromEsm = false;
-          flushTicks();
-        } catch (err) {
-          if (isExitError(err)) throw err;
-          if (!handleUncaught(err)) return dieUncaught(() => printUncaught(err));
-          uncaughtFromEsm = false;
+          try {
+            if (!handleUncaught(failure.err)) return dieUncaught(() => printUncaught(failure.err));
+          } finally {
+            uncaughtFromEsm = false;
+          }
         }
+        if (getDidExit() || exitStatus !== undefined) skipEntry = true;
       }
     }
-    if (typeof options.main === 'function') {
+    if (skipEntry) {
+      // --import ended startup: no entry.
+    } else if (typeof options.main === 'function') {
       try {
         const result = options.main(rt);
         if (result != null && typeof result.then === 'function') {

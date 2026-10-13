@@ -41,6 +41,15 @@ const t = async (l, f) => {
   await t('--import a builtin', () => node(['--import', 'node:path', 'm.js']));
   await t('--import missing', () => { const [status, , err] = node(['--import', './nope.mjs', 'm.js']); return [status, err.split('\n').find((l) => l.startsWith('Error')).replace(/ \{$/, '')]; });
   await t('--import no argument', () => node(['--import']));
+  await t('--import= no argument', () => node(['--import=', '-e', '1']));
+  fs.writeFileSync(at('hang.mjs'), 'await new Promise(() => {});\n');
+  fs.writeFileSync(at('hang-timer.mjs'), 'setTimeout(() => console.log("import timer"), 10);\nawait new Promise(() => {});\n');
+  fs.writeFileSync(at('handler.js'), 'process.on("uncaughtException", (e) => console.log("caught", e.message));\n');
+  fs.writeFileSync(at('bad.mjs'), 'throw new Error("import fails")\n');
+  await t('--import whose await never settles: no entry, exit 0', () => node(['--import', './hang.mjs', 'm.js']));
+  await t('--import whose await never settles, a timer', () => node(['--import', './hang-timer.mjs', 'm.js']));
+  await t('--import throws, a handler takes it: no entry', () => node(['-r', './handler.js', '--import', './bad.mjs', 'm.js']));
+  await t('--import throws', () => node(['--import', './bad.mjs', 'm.js']));
   await t('--max-old-space-size, --trace-uncaught', () => node(['--max-old-space-size=100', '--trace-uncaught', '-e', 'console.log(JSON.stringify(process.execArgv))']));
   for (const a of [['--max-old-space-size', '100'], ['--max-old-space-size=-5'], ['--max-old-space-size=abc'], ['--stack-trace-limit', '3'], ['--stack-trace-limit=abc']]) {
     await t(`bad V8 flag ${a.join(' ')}`, () => node([...a, '-e', '1']));

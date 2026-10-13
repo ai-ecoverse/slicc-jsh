@@ -159,6 +159,7 @@ export function parseNodeArgv(argv) {
       continue;
     }
     if (arg.startsWith('--import=')) {
+      if (arg === '--import=') return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
       imports.push(arg.slice(9));
       flags.push(arg);
       i += 1;
