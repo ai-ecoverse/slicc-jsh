@@ -288,7 +288,25 @@ function asUint8(value, encoding = 'utf8') {
   return encoder.encode(String(value));
 }
 
+/** V8's String::kMaxLength (buffer.constants.MAX_STRING_LENGTH). */
+const MAX_STRING_LENGTH = 0x1fffffe8;
+
+/** The longest string `n` bytes can decode to (what Node's StringBytes::Encode checks first). */
+function encodedLength(enc, n) {
+  if (enc === 'hex') return n * 2;
+  if (enc === 'base64') return Math.ceil(n / 3) * 4;
+  if (enc === 'base64url') return Math.ceil((n * 4) / 3);
+  if (enc === 'utf16le') return Math.floor(n / 2);
+  return n;
+}
+
 function toStringOf(bytes, enc = 'utf8', start = 0, end = bytes.length) {
+  // Node refuses before decoding (no huge intermediate first).
+  if (encodedLength(enc, end - start) > MAX_STRING_LENGTH) {
+    const e = new Error('Cannot create a string longer than 0x1fffffe8 characters');
+    e.code = 'ERR_STRING_TOO_LONG';
+    throw e;
+  }
   const slice = bytes.subarray(start, end);
   if (enc === 'hex') {
     let out = '';
@@ -999,15 +1017,16 @@ export function createBuffer() {
 
     static alloc(size, fill = 0, encoding = 'utf8') {
       const n = assertAllocSize(size);
-      const buf = Buffer.fromBytes(new Uint8Array(n));
-      if (n === 0) return buf;
+      // Made at its size (zeroed), not copied from a scratch array.
+      const buf = new Buffer(n);
+      if (n === 0 || fill === 0) return buf;
       return buf.fill(fill, 0, n, encoding);
     }
 
     /** Zero-fills (never exposes prior allocator contents). */
     static allocUnsafe(size) {
       const n = assertAllocSize(size);
-      return Buffer.fromBytes(new Uint8Array(n));
+      return new Buffer(n);
     }
 
     /** Same as allocUnsafe when poolSize is 0. */
@@ -1214,7 +1233,17 @@ export function createBuffer() {
         if (typeof value === 'string' || ArrayBuffer.isView(value)) throw ERR_INVALID_ARG_VALUE('value', value);
         bytes = new Uint8Array([0]);
       }
-      for (let i = offset; i < end; i++) this[i] = bytes[(i - offset) % bytes.length];
+      // One byte: the typed array's own fill; a pattern: written once, then
+      // doubled with copyWithin.
+      if (bytes.length === 1) {
+        Uint8Array.prototype.fill.call(this, bytes[0], offset, end);
+        return this;
+      }
+      const first = Math.min(bytes.length, end - offset);
+      for (let i = 0; i < first; i++) this[offset + i] = bytes[i];
+      for (let filled = first; filled < end - offset; filled *= 2) {
+        Uint8Array.prototype.copyWithin.call(this, offset + filled, offset, offset + Math.min(filled, end - offset - filled));
+      }
       return this;
     }
 
@@ -1409,6 +1438,8 @@ export function createBuffer() {
       return `<Buffer ${parts.join(' ')}${more}>`;
     }
   }
+  // The bundler may rename the class (Buffer2); its name is Node's.
+  Object.defineProperty(Buffer, 'name', { value: 'Buffer', configurable: true });
 
   return Buffer;
 }
