@@ -327,6 +327,7 @@ function packageNameOf(request) {
 const BUILTIN_NAMES = new Set([
   'assert',
   'assert/strict',
+  'async_hooks',
   'buffer',
   'console',
   'events',

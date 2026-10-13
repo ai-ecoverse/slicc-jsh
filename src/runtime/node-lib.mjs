@@ -5,18 +5,29 @@
  * files need at run time (process, a builtin, the options) is looked up on
  * the program's `process` when they ask.
  */
-import { inspect, stripVTControlCharacters } from 'node-inspect-extracted';
+import { stripVTControlCharacters } from 'node-inspect-extracted';
 import nodeInspect from 'node-inspect-extracted';
 import { loadVendorCjs } from './vendor-load.mjs';
 import * as errors from './node-errors.mjs';
-import { internalBinding, setBinding } from './node-bindings.mjs';
+import {
+  getSystemErrorMap,
+  getSystemErrorMessage,
+  getSystemErrorName,
+  internalBinding,
+  setBinding,
+  uvErrmapGet,
+} from './node-bindings.mjs';
+import { createUtil } from './builtins/util.mjs';
 import { createUrlInternals, urlBindings } from './builtins/url-internal.mjs';
 
 for (const [name, value] of Object.entries(urlBindings)) setBinding(name, value);
 
 const PACKAGE_ROOT = '/node_modules/@ai-ecoverse/slicc-jsh';
 
-const proc = () => globalThis.process;
+// The program's process (handed in by process.mjs; Node's own files see it as
+// their free \`process\` once run.mjs installs it as the global).
+let programProcess;
+const proc = () => programProcess ?? globalThis.process;
 
 /** internal/options getOptionValue, over process.execArgv (`--x=v` or `--x v`). */
 function getOptionValue(name) {
@@ -41,6 +52,79 @@ const kEvents = Symbol('kEvents');
 const kIsEventTarget = Symbol.for('nodejs.event_target');
 
 let urlInternals;
+
+let maxStack;
+/** internal/errors isStackOverflowError. */
+function isStackOverflowError(err) {
+  if (maxStack === undefined) {
+    try {
+      const overflow = () => overflow();
+      overflow();
+    } catch (e) {
+      maxStack = { name: e.name, message: e.message };
+    }
+  }
+  return !!err && err.name === maxStack.name && err.message === maxStack.message;
+}
+// The runtime's own util (inspect over node-inspect-extracted, promisify,
+// deprecate, …) under Node's lib/util.js and console.
+let rtUtil;
+const runtimeUtil = () => (rtUtil ??= createUtil());
+const errnoClasses = errors.makeErrnoClasses(getSystemErrorName);
+
+/** internal/util defineLazyProperties (a binding in Node): getters that load `id` on first use. */
+function defineLazyProperties(target, id, keys, enumerable = true) {
+  for (const key of keys) {
+    let value;
+    let loaded = false;
+    Object.defineProperty(target, key, {
+      __proto__: null,
+      enumerable,
+      configurable: true,
+      get() {
+        if (!loaded) {
+          value = proc()._nodeLib().internal(id)[key];
+          loaded = true;
+        }
+        return value;
+      },
+      set(v) {
+        value = v;
+        loaded = true;
+      },
+    });
+  }
+}
+
+/** lib/internal/streams/utils.js's stream kind checks. */
+const isNodeStream = (obj) =>
+  !!obj &&
+  (obj._readableState ||
+    obj._writableState ||
+    (typeof obj.write === 'function' && typeof obj.on === 'function') ||
+    (typeof obj.pipe === 'function' && typeof obj.on === 'function'));
+const isReadableStream = (obj) =>
+  !!(obj && !isNodeStream(obj) && typeof obj.pipeThrough === 'function' && typeof obj.getReader === 'function' && typeof obj.cancel === 'function');
+const isWritableStream = (obj) =>
+  !!(obj && !isNodeStream(obj) && typeof obj.getWriter === 'function' && typeof obj.abort === 'function');
+
+/** internal/abort_controller's aborted / transferable* over the platform's AbortController. */
+const abortController = {
+  async aborted(signal, resource) {
+    if (signal === undefined) throw errors.ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal);
+    errors.validateAbortSignal(signal, 'signal');
+    errors.validateObject(resource, 'resource', errors.kValidateObjectAllowNullable | errors.kValidateObjectAllowFunction);
+    if (signal.aborted) return;
+    await new Promise((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+  },
+  transferableAbortSignal(signal) {
+    if (signal?.constructor?.name !== 'AbortSignal') throw errors.ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal);
+    return signal;
+  },
+  transferableAbortController() {
+    return new AbortController();
+  },
+};
 
 /** lib/internal/util.js getCIDR (os.networkInterfaces). */
 function getCIDR(address, netmask, family) {
@@ -84,7 +168,8 @@ function getCIDR(address, netmask, family) {
   return `${address}/${ones}`;
 }
 
-export function loadNodeLib({ ctx } = {}) {
+export function loadNodeLib({ ctx, process } = {}) {
+  if (process) programProcess = process;
   return loadVendorCjs({
     ctx,
     packageRoot: PACKAGE_ROOT,
@@ -96,6 +181,10 @@ export function loadNodeLib({ ctx } = {}) {
         AbortError: errors.AbortError,
         isErrorStackTraceLimitWritable: () => true,
         hideStackFrames: (fn) => fn,
+        ErrnoException: errnoClasses.ErrnoException,
+        isStackOverflowError,
+        ExceptionWithHostPort: errnoClasses.ExceptionWithHostPort,
+        uvErrmapGet,
         genericNodeError(message, errorProperties) {
           return Object.assign(new Error(message), errorProperties);
         },
@@ -111,6 +200,12 @@ export function loadNodeLib({ ctx } = {}) {
         validateInt32: errors.validateInt32,
         validateNumber: errors.validateNumber,
         validateObject: errors.validateObject,
+        validateStringArray: errors.validateStringArray,
+        validateBooleanArray: errors.validateBooleanArray,
+        validateUnion: errors.validateUnion,
+        kValidateObjectAllowNullable: errors.kValidateObjectAllowNullable,
+        kValidateObjectAllowArray: errors.kValidateObjectAllowArray,
+        kValidateObjectAllowFunction: errors.kValidateObjectAllowFunction,
         validateString: errors.validateString,
         validateUint32: errors.validateUint32,
       },
@@ -118,10 +213,16 @@ export function loadNodeLib({ ctx } = {}) {
         kEmptyObject: Object.freeze({ __proto__: null }),
         SymbolDispose: Symbol.dispose || Symbol.for('nodejs.dispose'),
         SymbolAsyncDispose: Symbol.asyncDispose || Symbol.for('nodejs.asyncDispose'),
-        // util.promisify, read when called (util is a builtin).
         get promisify() {
-          return builtin('util').promisify;
+          return runtimeUtil().promisify;
         },
+        get deprecate() {
+          return runtimeUtil().deprecate;
+        },
+        getSystemErrorMap,
+        getSystemErrorName,
+        getSystemErrorMessage,
+        defineLazyProperties,
         assignFunctionName(name, fn, descriptor = {}) {
           if (typeof name !== 'string') name = `[${name.description}]`;
           return Object.defineProperty(fn, 'name', {
@@ -133,6 +234,7 @@ export function loadNodeLib({ ctx } = {}) {
           });
         },
         isWindows: false,
+        isError: (e) => Object.prototype.toString.call(e) === '[object Error]' || e instanceof Error,
         isMacOS: false,
         getLazy(initializer) {
           let value;
@@ -152,11 +254,38 @@ export function loadNodeLib({ ctx } = {}) {
         },
       },
       'internal/util/inspect': {
-        inspect,
+        get inspect() {
+          return runtimeUtil().inspect;
+        },
+        get format() {
+          return runtimeUtil().format;
+        },
+        get formatWithOptions() {
+          return runtimeUtil().formatWithOptions;
+        },
         identicalSequenceRange: nodeInspect.identicalSequenceRange,
         getStringWidth: nodeInspect.getStringWidth,
         stripVTControlCharacters,
       },
+      'internal/abort_controller': abortController,
+      'internal/source_map/source_map_cache': { findSourceMap: () => undefined },
+      'internal/v8/startup_snapshot': { namespace: { addSerializeCallback() {}, isBuildingSnapshot: () => false } },
+      'internal/encoding': { TextEncoder: globalThis.TextEncoder, TextDecoder: globalThis.TextDecoder },
+      'internal/util/trace_sigint': {
+        setTraceSigInt(enable) {
+          errors.validateBoolean(enable, 'enable');
+        },
+      },
+      'internal/crypto/util': { kKeyObject: Symbol('kKeyObject') },
+      'internal/crypto/keys': lazy(() => ({
+        isKeyObject: (v) => v instanceof builtin('crypto').KeyObject,
+        isCryptoKey: (v) => typeof globalThis.CryptoKey === 'function' && v instanceof globalThis.CryptoKey,
+      })),
+      // console's diagnostics channels: nothing subscribes.
+      diagnostics_channel: {
+        channel: () => ({ hasSubscribers: false, publish() {}, subscribe() {}, unsubscribe() {} }),
+      },
+      console: lazy(() => builtin('console')),
       // The platform's EventTarget has none of Node's internals (listener
       // lists, max listeners): events' EventTarget paths see only Node's own.
       'internal/event_target': {
@@ -166,7 +295,12 @@ export function loadNodeLib({ ctx } = {}) {
       },
       'internal/process/task_queues': { queueMicrotask: (fn) => queueMicrotask(fn) },
       'internal/options': { getOptionValue },
-      'internal/streams/utils': lazy(() => ({ isWritable: builtin('stream').isWritable })),
+      'internal/streams/utils': lazy(() => ({
+        isWritable: builtin('stream').isWritable,
+        isNodeStream,
+        isReadableStream,
+        isWritableStream,
+      })),
       string_decoder: lazy(() => builtin('string_decoder')),
       timers: lazy(() => builtin('timers')),
       'internal/assert': function assert(value, message) {
@@ -177,9 +311,32 @@ export function loadNodeLib({ ctx } = {}) {
       os: lazy(() => builtin('os')),
       fs: lazy(() => builtin('fs')),
       path: lazy(() => builtin('path')),
-      buffer: lazy(() => builtin('buffer')),
+      // The console is made before the builtins exist: until then, the Buffer class itself.
+      buffer: lazy(() => (typeof proc()._builtinLoader === 'function' ? builtin('buffer') : { Buffer: proc()._Buffer })),
       'internal/url': lazy(() => (urlInternals ??= createUrlInternals({ nodePath: builtin('path'), Buffer: builtin('buffer').Buffer }))),
-      '__jsh/internal-binding': { internalBinding },
+      '__jsh/internal-binding': {
+        internalBinding,
+        // The program's process, whoever is the global yet.
+        process: new Proxy(
+          {},
+          {
+            get: (_, key) => {
+              const p = proc();
+              const v = Reflect.get(p, key, p);
+              return v;
+            },
+            set: (_, key, value) => Reflect.set(proc(), key, value),
+            has: (_, key) => key in proc(),
+            ownKeys: () => Reflect.ownKeys(proc()),
+            getOwnPropertyDescriptor: (_, key) => {
+              const d = Reflect.getOwnPropertyDescriptor(proc(), key);
+              if (d) d.configurable = true;
+              return d;
+            },
+            getPrototypeOf: () => Object.getPrototypeOf(proc()),
+          }
+        ),
+      },
     },
   });
 }

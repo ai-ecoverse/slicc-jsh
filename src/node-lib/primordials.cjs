@@ -124,6 +124,7 @@ const special = {
   PromisePrototypeThen: (promise, onFulfilled, onRejected) =>
     Promise.prototype.then.call(promise, onFulfilled, onRejected),
   hardenRegExp: (re) => re,
+  SafeStringPrototypeSearch: (str, regexp) => String.prototype.search.call(str, regexp),
   makeSafe: (unsafe, safe) => safe,
   ArrayPrototypeSymbolIterator: uncurryThis(Array.prototype[Symbol.iterator]),
   StringPrototypeSymbolIterator: uncurryThis(String.prototype[Symbol.iterator]),

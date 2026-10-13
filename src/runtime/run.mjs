@@ -5,7 +5,6 @@ import { createUtil } from './builtins/util.mjs';
 import { createCjs } from './cjs/loader.mjs';
 import { inputTypeOf, parseNodeArgv } from './cli.mjs';
 import { nodeError } from './node-errors.mjs';
-import { createConsole } from './console.mjs';
 import { createEsm } from './esm/loader.mjs';
 import { rewriteDynamicImports, shouldRunAsEsm } from './esm/transform.mjs';
 import { formatUncaughtError, formatUnhandledRejection } from './errors-format.mjs';
@@ -217,13 +216,8 @@ export async function runNode(ctx, options = {}) {
     lastEvalCode = parsed.code;
   }
 
-  // Node's shouldColorize (internal/util/colors): FORCE_COLOR decides, else a
-  // terminal with more than 2 bits of color.
-  const colorFor = (fd) => {
-    if (process.env.FORCE_COLOR === undefined && stdio[fd]?.type !== 'tty') return false;
-    return process._nodeLib().tty.getColorDepth(process.env) > 2;
-  };
-  const console = createConsole(writeStdout, writeStderr, util, colorFor);
+  // Node's own console (lib/internal/console), on process.stdout / stderr.
+  const console = process._nodeLib().consoleFor(process);
   const fetch = createFetch(ctx, { handles });
   const restorePlatform = trackPlatformAsync(handles);
   const WebSocket = createWebSocket(ctx, { handles, trackPromise });

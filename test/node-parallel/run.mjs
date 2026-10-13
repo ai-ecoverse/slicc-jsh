@@ -77,9 +77,14 @@ for (const name of readdirSync(nodeCommonDir)) {
 
 // The few Node v22.22.0 test/fixtures files the fixtures read.
 const nodeFixturesDir = join(here, 'node-fixtures');
-for (const name of readdirSync(nodeFixturesDir)) {
-  await k.writeFile(`/os/test/fixtures/${name}`, readFileSync(join(nodeFixturesDir, name)));
-}
+const copyFixtures = async (dir, rel) => {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) await copyFixtures(p, `${rel}${name}/`);
+    else await k.writeFile(`/os/test/fixtures/${rel}${name}`, readFileSync(p));
+  }
+};
+await copyFixtures(nodeFixturesDir, '');
 
 const files = readdirSync(fixturesDir)
   .filter((f) => f.startsWith('test-') && f.endsWith('.js'))

@@ -9,6 +9,7 @@ import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
 import { createUtil } from '../builtins/util.mjs';
+import { createAsyncHooks } from '../builtins/async-hooks.mjs';
 import { createZlib } from '../builtins/zlib.mjs';
 import { createCrypto } from '../builtins/crypto.mjs';
 import { createTty } from '../builtins/tty.mjs';
@@ -16,6 +17,7 @@ import { createTty } from '../builtins/tty.mjs';
 const BUILTIN_LIST = [
   'assert',
   'assert/strict',
+  'async_hooks',
   'buffer',
   'child_process',
   'console',
@@ -57,7 +59,6 @@ const NOT_YET = [
   'cluster',
   'vm',
   'perf_hooks',
-  'async_hooks',
   'inspector',
   'trace_events',
   'v8',
@@ -225,6 +226,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
 
   let bufferExports;
+  let asyncHooks;
 
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
@@ -239,6 +241,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     'path/posix': () => process._nodeLib().path.posix,
     'path/win32': () => process._nodeLib().path.win32,
     punycode: () => process._nodeLib().punycode,
+    async_hooks: () => (asyncHooks ??= createAsyncHooks()),
     module: () => ModuleExport,
     fs: () => fs,
     zlib: getZlib,
@@ -250,8 +253,9 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     events: () => events,
     assert: () => assert,
     'assert/strict': () => assertStrict,
-    util: () => util,
-    'util/types': () => util.types,
+    // Node's own lib/util.js (src/node-lib).
+    util: () => process._nodeLib().util,
+    'util/types': () => process._nodeLib().util.types,
     os: () => process._nodeLib().os,
     url: () => process._nodeLib().url,
     querystring: () => process._nodeLib().querystring,

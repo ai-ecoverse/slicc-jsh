@@ -167,7 +167,17 @@ export function createUtil() {
       // node-inspect-extracted brackets ArrayBuffer.byteLength; Node 22 does not.
       .replace(/\[byteLength\]:/g, 'byteLength:');
   inspect.custom = INSPECT_CUSTOM;
-  inspect.defaultOptions = nodeInspect.defaultOptions ?? { depth: 2, colors: false };
+  // Node's inspect.colors / styles / defaultOptions (shared with the inspector underneath).
+  inspect.colors = nodeInspect.colors;
+  inspect.styles = nodeInspect.styles;
+  Object.defineProperty(inspect, 'defaultOptions', {
+    get: () => nodeInspect.defaultOptions,
+    set: (options) => {
+      nodeInspect.defaultOptions = options;
+    },
+    enumerable: true,
+    configurable: true,
+  });
 
   /**
    * Node's formatWithOptionsInternal (lib/internal/util/inspect.js), over the

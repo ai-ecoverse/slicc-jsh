@@ -247,9 +247,10 @@ class Process extends EventEmitter {
     this._writeStdout = writeStdout;
     this._writeStderr = writeStderr;
 
-    this._nodeLib = () => loadNodeLib({ ctx });
+    this._nodeLib = () => loadNodeLib({ ctx, process: this });
 
     // process.stdin / stdout / stderr: Node's streams, made on first access.
+    this._Buffer = Buffer;
     const io = createStdio({ ctx, process: this, Buffer, handles, info: stdio });
     this._stdio = io;
     for (const [name, get] of [
