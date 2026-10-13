@@ -1,0 +1,15 @@
+keys: _events _eventsCount _exiting _getActiveHandles _getActiveRequests _maxListeners _rawDebug abort arch argv argv0 availableMemory chdir config constrainedMemory cpuUsage cwd domain emitWarning env execArgv execPath exit exitCode features getActiveResourcesInfo getBuiltinModule getegid geteuid getgid getgroups getuid hasUncaughtExceptionCaptureCallback hrtime kill loadEnvFile memoryUsage nextTick pid platform ppid ref release resourceUsage setUncaughtExceptionCaptureCallback stderr stdin stdout threadCpuUsage title umask unref uptime version versions
+for-in beyond keys: addListener emit eventNames getMaxListeners listenerCount listeners off on once prependListener prependOnceListener rawListeners removeAllListeners removeListener setMaxListeners
+internal (_) keys: _events _eventsCount _exiting _getActiveHandles _getActiveRequests _maxListeners _rawDebug
+stdin accessor enumerable=true
+stdout accessor enumerable=true
+stderr accessor enumerable=true
+exitCode accessor enumerable=true
+_getActiveHandles value enumerable=true
+_getActiveRequests value enumerable=true
+_rawDebug value enumerable=true
+cwd value enumerable=true
+nextTick value enumerable=true
+title renamed true
+exitCode 0 true
+typeof internals: {"_events":"object","_eventsCount":"number","_exiting":"boolean","_getActiveHandles":"function","_getActiveRequests":"function","_maxListeners":"undefined","_rawDebug":"function"}

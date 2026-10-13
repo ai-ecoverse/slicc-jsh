@@ -1,0 +1,13 @@
+{
+  "description": "process's own enumerable shape (Object.keys, for\u2026in, own descriptors) matches Node's: jsh's internal state hidden, stdin/stdout/stderr, title, exitCode, _exiting and Node's own _ methods enumerable",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

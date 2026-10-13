@@ -266,7 +266,7 @@ class Process extends EventEmitter {
       ['stdout', io.stdout],
       ['stderr', io.stderr],
     ]) {
-      Object.defineProperty(this, name, { configurable: true, enumerable: false, get });
+      Object.defineProperty(this, name, { configurable: true, enumerable: true, get });
     }
     // console and the runtime: through the stream once a program has it (so a
     // replaced process.stdout.write sees console.log), else straight to the fd.
@@ -790,6 +790,40 @@ Object.defineProperty(Process, 'name', { value: 'process' });
 // Node's process methods are own properties that work from any receiver
 // (yargs keeps `cwd: process.cwd` and calls it detached).
 const OWN_INTERNALS = ['_getActiveHandles', '_getActiveRequests', '_rawDebug'];
+
+/**
+ * jsh's own state on process, set at start or later (the CJS loader, run.mjs):
+ * none of Node's `process` keys, so they are kept out of `Object.keys(process)`
+ * and `for … in`. Declared up front, so a later assignment stays hidden too.
+ */
+const JSH_INTERNALS = [
+  '_assignedExitCode', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
+  '_dispatchSignal', '_evalCode', '_exitError', '_forcedExitCode', '_handles', '_nodeLib', '_onExit',
+  '_onHardExit', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
+  '_stdio', '_stdoutWrite', '_title', '_umask', '_uncaughtCapture', '_writeStderr', '_writeStdout',
+];
+
+/**
+ * Node's shape: its own state hidden (above), and what Node has as own
+ * enumerable properties of process so (`title`, `exitCode`, `_exiting`;
+ * stdin/stdout/stderr and the methods are made own where they are defined).
+ */
+function nodeShape(process) {
+  for (const name of JSH_INTERNALS) {
+    const desc = Object.getOwnPropertyDescriptor(process, name);
+    if (desc) Object.defineProperty(process, name, { ...desc, enumerable: false });
+    else Object.defineProperty(process, name, { value: undefined, writable: true, enumerable: false, configurable: true });
+  }
+  const proto = Process.prototype;
+  for (const [name, configurable] of [
+    ['title', true],
+    ['exitCode', false],
+  ]) {
+    const { get, set } = Object.getOwnPropertyDescriptor(proto, name);
+    Object.defineProperty(process, name, { get, set, enumerable: true, configurable });
+  }
+  if (!Object.prototype.hasOwnProperty.call(process, '_exiting')) process._exiting = false;
+}
 const NODE_NAMES = { cwd: 'wrappedCwd', chdir: 'wrappedChdir', umask: 'wrappedUmask' };
 const NODE_LENGTHS = { exit: 1, kill: 2 };
 
@@ -807,7 +841,7 @@ function bindOwnMethods(process) {
     // Node's names and lengths (its cwd/chdir/umask are wrappers).
     if (NODE_NAMES[name]) Object.defineProperty(bound, 'name', { value: NODE_NAMES[name] });
     Object.defineProperty(bound, 'length', { value: NODE_LENGTHS[name] ?? method.length });
-    Object.defineProperty(process, name, { value: bound, writable: true, enumerable: !name.startsWith('_'), configurable: true });
+    Object.defineProperty(process, name, { value: bound, writable: true, enumerable: true, configurable: true });
   }
   // As Node's: process.memoryUsage.rss().
   process.memoryUsage.rss = () => process.memoryUsage().rss;
@@ -817,6 +851,7 @@ export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles
   const process = new Process({ ctx, argv, nextTick, onExit, handles, Buffer, stdio, ppid });
   bindOwnMethods(process);
   process._onHardExit = onHardExit;
+  nodeShape(process);
   return {
     process,
     writeStdout: process._stdoutWrite,
