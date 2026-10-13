@@ -36,6 +36,7 @@ latest=$(curl -fsSL https://registry.npmjs.org/@ai-ecoverse/slicc-jsh/latest |
 [ "$latest" != "$PREV" ] || fail "PREV ($PREV) is the latest; pick an older one"
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/jsh-install-test.XXXXXX")
+work=$(cd "$work" && pwd)
 trap 'rm -rf "$work"' EXIT
 
 fresh_home() {
@@ -117,6 +118,21 @@ case_node() {
   grep -qF "$h/alt/lib/node_modules/@ai-ecoverse/slicc-jsh/dist/host/jsh.mjs" "$h/altbin/jsh" ||
     fail "wrapper does not use JSH_HOME"
   pass "JSH_HOME and JSH_BIN_DIR"
+
+  # A bin dir with shell-special characters gets a quoted rc line that works,
+  # and a node found through a relative PATH entry is pinned absolute.
+  odd="$h/odd \$dir \"q\" 'x'"
+  mkdir -p "$h/rel"
+  ln -s "$(command -v node)" "$h/rel/node"
+  (cd "$h" && HOME="$h" JSH_HOME="$h/odd-home" JSH_BIN_DIR="$odd" SHELL=/bin/sh PATH="rel:$PATH" no_tty sh "$installer") >"$work/odd.txt" 2>&1 ||
+    fail "odd bin dir: $(cat "$work/odd.txt")"
+  line=$(grep -A 1 'add this line to' "$work/odd.txt" | tail -n 1)
+  got=$(sh -c "$line"'; printf "%s" "${PATH%%:*}"')
+  [ "$got" = "$odd" ] || fail "odd rc line $line gives $got"
+  got=$(cd / && env -i HOME="$h" PATH="$odd:/usr/bin:/bin" jsh --version)
+  [ "$got" = "$latest" ] || fail "odd-dir jsh from / said: $got"
+  grep -qF "node='$h/rel/node'" "$odd/jsh" || fail "relative node not made absolute: $(grep node= "$odd/jsh")"
+  pass "a quoted rc line for an odd bin dir, an absolute node from a relative PATH"
 }
 
 case_no_node() {
@@ -209,6 +225,11 @@ case_uninstall() {
     fail "uninstall of a foreign JSH_HOME succeeded"
   fi
   [ -e "$h/notours/keep" ] || fail "uninstall removed a foreign JSH_HOME"
+  echo 'something else' >"$h/notours/.installed-by"
+  if HOME="$h" JSH_HOME="$h/notours" no_tty sh "$installer" --uninstall >/dev/null 2>&1; then
+    fail "uninstall of a JSH_HOME with a foreign .installed-by succeeded"
+  fi
+  [ -e "$h/notours/keep" ] || fail "uninstall removed a JSH_HOME with a foreign .installed-by"
   if HOME="$h" no_tty sh "$installer" >"$work/foreign.txt" 2>&1; then
     fail "install over a foreign jsh succeeded"
   fi

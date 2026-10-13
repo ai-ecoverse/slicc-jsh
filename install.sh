@@ -209,6 +209,8 @@ choose_node() {
     return
   fi
   found=$(command -v node 2>/dev/null || true)
+  # A relative PATH entry gives a relative path; the wrapper needs it absolute.
+  if [ -n "$found" ]; then found=$(absolute "$found"); fi
   if [ -n "$found" ] && node_ok "$found"; then
     node_bin=$found
     say "using Node $("$found" --version) at $found"
@@ -275,11 +277,21 @@ install_jsh() {
   say "installed $PKG@$version in $(home_form "$pkg_dir")"
 }
 
+# Whether directory $1 was created by this script (its marker file says so).
+ours() {
+  [ -f "$1/.installed-by" ] && [ "$(cat "$1/.installed-by" 2>/dev/null || true)" = "$MARKER" ]
+}
+
+# Whether file $1 is a wrapper this script wrote.
+our_wrapper() {
+  grep -q "^# jsh, written by $MARKER " "$1" 2>/dev/null
+}
+
 # Refuse to overwrite a jsh this script did not write.
 check_wrapper() {
   wrapper="$JSH_BIN_DIR/jsh"
   if [ -e "$wrapper" ] || [ -L "$wrapper" ]; then
-    grep -q "$MARKER" "$wrapper" 2>/dev/null ||
+    our_wrapper "$wrapper" ||
       die "$wrapper exists and was not written by this installer; remove it or set JSH_BIN_DIR"
   fi
 }
@@ -306,25 +318,30 @@ EOF
 
 # The rc file for the user's login shell, and the line that puts
 # $JSH_BIN_DIR on PATH in it.
+# A plain path is written as "$HOME/…"; anything else is single-quoted.
 rc_for_shell() {
-  dir=$(home_form "$JSH_BIN_DIR")
-  case $(basename "${SHELL:-sh}") in
-    zsh)
-      rc="${ZDOTDIR:-$HOME}/.zshrc"
-      rc_line="export PATH=\"$dir:\$PATH\""
+  case $JSH_BIN_DIR in
+    *[!A-Za-z0-9_./@%+,-]*)
+      sh_line="export PATH=$(shquote "$JSH_BIN_DIR")\":\$PATH\""
+      fish_line="fish_add_path '$(printf '%s' "$JSH_BIN_DIR" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g")'"
       ;;
+    *)
+      dir=$(home_form "$JSH_BIN_DIR")
+      sh_line="export PATH=\"$dir:\$PATH\""
+      fish_line="fish_add_path \"$dir\""
+      ;;
+  esac
+  rc_line=$sh_line
+  case $(basename "${SHELL:-sh}") in
+    zsh) rc="${ZDOTDIR:-$HOME}/.zshrc" ;;
     bash)
       if [ "$(uname -s)" = Darwin ]; then rc="$HOME/.bash_profile"; else rc="$HOME/.bashrc"; fi
-      rc_line="export PATH=\"$dir:\$PATH\""
       ;;
     fish)
       rc="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
-      rc_line="fish_add_path \"$dir\""
+      rc_line=$fish_line
       ;;
-    *)
-      rc="$HOME/.profile"
-      rc_line="export PATH=\"$dir:\$PATH\""
-      ;;
+    *) rc="$HOME/.profile" ;;
   esac
 }
 
@@ -357,14 +374,14 @@ ensure_path() {
 
 uninstall() {
   if [ -e "$JSH_HOME" ]; then
-    [ -f "$JSH_HOME/.installed-by" ] ||
+    ours "$JSH_HOME" ||
       die "$JSH_HOME was not created by this installer; not removing it"
     rm -rf "$JSH_HOME"
     say "removed $(home_form "$JSH_HOME")"
   fi
   wrapper="$JSH_BIN_DIR/jsh"
   if [ -e "$wrapper" ]; then
-    if grep -q "$MARKER" "$wrapper" 2>/dev/null; then
+    if our_wrapper "$wrapper"; then
       rm -f "$wrapper"
       say "removed $(home_form "$wrapper")"
     else
@@ -449,7 +466,7 @@ main() {
   have tar || die "tar is needed"
   check_wrapper
 
-  if [ -e "$JSH_HOME" ] && [ ! -f "$JSH_HOME/.installed-by" ] &&
+  if [ -e "$JSH_HOME" ] && ! ours "$JSH_HOME" &&
     [ -n "$(ls -A "$JSH_HOME" 2>/dev/null || echo x)" ]; then
     die "$JSH_HOME exists and was not created by this installer; remove it or set JSH_HOME"
   fi
