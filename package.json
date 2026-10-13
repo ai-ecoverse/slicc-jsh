@@ -82,7 +82,7 @@
     "browserify-zlib": "0.2.0",
     "cjs-module-lexer": "2.3.0",
     "esbuild": "0.28.2",
-    "minimatch": "10.0.3",
+    "minimatch": "10.2.6",
     "node-inspect-extracted": "3.3.4",
     "pako": "3.0.2",
     "process": "0.11.10",
