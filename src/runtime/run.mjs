@@ -289,7 +289,7 @@ export async function runNode(ctx, options = {}) {
 
   // Node's own console (lib/internal/console), on process.stdout / stderr.
   const console = process._nodeLib().consoleFor(process);
-  const fetch = createFetch(ctx, { handles });
+  const fetch = createFetch(ctx, { handles, getHttp: () => process._builtin('http') });
   const restorePlatform = trackPlatformAsync(handles);
   const WebSocket = createWebSocket(ctx, { handles, trackPromise });
 

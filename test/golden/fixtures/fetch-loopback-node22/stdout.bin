@@ -1,0 +1,27 @@
+get 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] false http://127.0.0.1:PORT/a?b=1 true "{\"method\":\"GET\",\"url\":\"/a?b=1\",\"headers\":{\"accept\":\"*/*\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"user-agent\":\"node\",\"accept-encoding\":\"gzip, deflate\"},\"body\":\"\"}"
+localhost 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] false http://localhost:PORT/l true "{\"method\":\"GET\",\"url\":\"/l\",\"headers\":{\"accept\":\"*/*\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"user-agent\":\"node\",\"accept-encoding\":\"gzip, deflate\"},\"body\":\"\"}"
+post json 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] false http://127.0.0.1:PORT/p true "{\"method\":\"POST\",\"url\":\"/p\",\"headers\":{\"content-type\":\"application/json\",\"x-h\":\"v\",\"accept\":\"*/*\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"user-agent\":\"node\",\"accept-encoding\":\"gzip, deflate\",\"content-length\":\"7\"},\"body\":\"{\\\"x\\\":1}\"}"
+post params 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] false http://127.0.0.1:PORT/q true "{\"method\":\"POST\",\"url\":\"/q\",\"headers\":{\"content-type\":\"application/x-www-form-urlencoded;charset=UTF-8\",\"accept\":\"*/*\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"user-agent\":\"node\",\"accept-encoding\":\"gzip, deflate\",\"content-length\":\"3\"},\"body\":\"a=1\"}"
+post empty 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] false http://127.0.0.1:PORT/e true "{\"method\":\"POST\",\"url\":\"/e\",\"headers\":{\"accept\":\"*/*\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"user-agent\":\"node\",\"accept-encoding\":\"gzip, deflate\",\"content-length\":\"0\"},\"body\":\"\"}"
+put bytes 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] false http://127.0.0.1:PORT/b true "{\"method\":\"PUT\",\"url\":\"/b\",\"headers\":{\"accept\":\"*/*\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"user-agent\":\"node\",\"accept-encoding\":\"gzip, deflate\",\"content-length\":\"2\"},\"body\":\"hi\"}"
+a Request 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] false http://127.0.0.1:PORT/r true "{\"method\":\"DELETE\",\"url\":\"/r\",\"headers\":{\"x-req\":\"1\",\"accept\":\"*/*\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"user-agent\":\"node\",\"accept-encoding\":\"gzip, deflate\"},\"body\":\"\"}"
+user-agent set 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] false http://127.0.0.1:PORT/ua true "{\"method\":\"GET\",\"url\":\"/ua\",\"headers\":{\"user-agent\":\"me\",\"accept\":\"text/plain\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"accept-encoding\":\"gzip, deflate\"},\"body\":\"\"}"
+redirect 200 "OK" [["content-type","text/plain"]] true http://127.0.0.1:PORT/final true "final"
+303 after POST 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] true http://127.0.0.1:PORT/echo true "{\"method\":\"GET\",\"url\":\"/echo\",\"headers\":{\"accept\":\"*/*\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"user-agent\":\"node\",\"accept-encoding\":\"gzip, deflate\"},\"body\":\"\"}"
+307 after POST 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] true http://127.0.0.1:PORT/echo true "{\"method\":\"POST\",\"url\":\"/echo\",\"headers\":{\"content-type\":\"text/plain;charset=UTF-8\",\"accept\":\"*/*\",\"accept-language\":\"*\",\"sec-fetch-mode\":\"cors\",\"user-agent\":\"node\",\"accept-encoding\":\"gzip, deflate\",\"content-length\":\"4\"},\"body\":\"kept\"}"
+redirect manual 302 "Found" [["location","/final"]] false http://127.0.0.1:PORT/redirect false ""
+redirect error THROWS TypeError fetch failed unexpected redirect
+gzip 200 "OK" [["content-encoding","gzip"],["content-type","text/plain"]] false http://127.0.0.1:PORT/gzip true "zipped body"
+deflate 200 "OK" [["content-encoding","deflate"]] false http://127.0.0.1:PORT/deflate true "deflated body"
+204 204 "No Content" [] false http://127.0.0.1:PORT/empty true ""
+HEAD 200 "OK" [["content-type","text/plain"]] false http://127.0.0.1:PORT/final true ""
+chunks 200 "OK" [["content-type","text/plain"]] false http://127.0.0.1:PORT/chunks true "one,two"
+json 200 "OK" [["content-type","application/json"]] false http://127.0.0.1:PORT/json true {"k":[1,2]}
+a body stream 200 "OK" [["content-type","text/plain"]] false http://127.0.0.1:PORT/chunks true "one,two"
+aborted THROWS AbortError This operation was aborted undefined
+aborted in flight THROWS AbortError This operation was aborted undefined
+aborted while the body is read THROWS AbortError This operation was aborted undefined
+cross-origin redirect 200 "OK" [] true http://localhost:PORT/far true "[\"host\",\"x-keep\",\"accept\",\"accept-language\",\"sec-fetch-mode\",\"user-agent\",\"accept-encoding\"]"
+same-origin redirect 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] true http://127.0.0.1:PORT/echo true {"authorization":"Bearer s","cookie":"c=1","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate"}
+refused THROWS TypeError fetch failed ECONNREFUSED
+refused, again THROWS TypeError fetch failed ECONNREFUSED

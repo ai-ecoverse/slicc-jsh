@@ -479,10 +479,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       try {
         for (;;) {
           if (this.#closed) break;
-          const conn = await trackPromise(
-            handles,
-            listener.accept({ signal: this.#acceptAbort.signal })
-          );
+          // The server's handle keeps the loop alive (or not, unref'd): a
+          // pending accept is not a handle of its own.
+          const conn = await listener.accept({ signal: this.#acceptAbort.signal });
           const socket = new Socket({ allowHalfOpen: Boolean(this.#options.allowHalfOpen) });
           socket._attach(conn);
           this.emit('connection', socket);
@@ -517,11 +516,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       }
       const listener = this.#listener;
       this.#listener = undefined;
-      void Promise.resolve(listener?.close?.())
+      // Until 'close' is emitted the closing keeps the loop alive (Node's
+      // handle does, until its close callback).
+      const closing = Promise.resolve(listener?.close?.())
         .catch(() => {})
         .finally(() => {
           this.emit('close');
         });
+      trackPromise(handles, closing).catch(() => {});
       return this;
     }
 

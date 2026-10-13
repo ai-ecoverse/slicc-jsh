@@ -46,7 +46,9 @@ describe('event loop and exit (kernel)', () => {
       setTimeout(() => res.end(`slow ${req.url}`), 200);
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-    url = `http://127.0.0.1:${server.address().port}`;
+    // The real machine's loopback is host.slicc.internal in the kernel
+    // (127.0.0.1 is the kernel's own).
+    url = `http://host.slicc.internal:${server.address().port}`;
   });
 
   after(() => {
@@ -100,6 +102,24 @@ describe('event loop and exit (kernel)', () => {
     );
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, 'slow /y\n');
+  });
+
+  it("a floating fetch to the kernel's own loopback keeps the program alive (its server unref'd)", async () => {
+    const r = await run(
+      'floating-loopback-fetch.js',
+      [
+        "const srv = require('http').createServer((req, res) => setTimeout(() => res.end(`slow ${req.url}`), 200));",
+        "srv.listen(0, '127.0.0.1', () => {",
+        '  srv.unref();',
+        "  fetch(`http://localhost:${srv.address().port}/z`).then((r) => r.text()).then((t) => console.log(t));",
+        "  console.log('listening');",
+        '});',
+        '',
+      ].join('\n'),
+      ['node', 'floating-loopback-fetch.js']
+    );
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'listening\nslow /z\n');
   });
 
   it('a pending WebCrypto digest keeps the program alive', async () => {

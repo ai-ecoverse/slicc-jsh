@@ -1,0 +1,13 @@
+{
+  "description": "fetch() to a server of this program on the loopback (127.0.0.1, localhost): the request the server sees (undici's default headers), the Response (status, headers, redirects, gzip/deflate, 204, HEAD, streams), aborts, refused connections",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

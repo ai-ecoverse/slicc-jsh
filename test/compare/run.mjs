@@ -338,9 +338,10 @@ async function runSeven(c, http) {
     const live = { stdout: '', stderr: '' };
     const work = kernel.run(['jsh', c.meta.entry, ...c.meta.args], {
       cwd: SEVEN_CASE_ROOT,
-      // jsh's fetch goes straight to the transport, so 127.0.0.1 is the
-      // host's loopback here (the kernel's own sockets are another network).
-      env: { COMPARE_HTTP: `http://127.0.0.1:${http.port}`, ...c.meta.env },
+      // The real machine's loopback is host.slicc.internal in the kernel:
+      // 127.0.0.1 is the kernel's own (fetch, http and net all reach the
+      // kernel's servers there).
+      env: { COMPARE_HTTP: `http://host.slicc.internal:${http.port}`, ...c.meta.env },
       onStdout: (t) => {
         live.stdout += t;
       },
