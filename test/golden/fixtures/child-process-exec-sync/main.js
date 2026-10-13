@@ -85,14 +85,13 @@ show('execFileSync killed', () => {
   return [e.message, e.code];
 });
 
-// A signal the program catches waits until the sync call returns. (The
-// handler is installed a tick before: the kernel's ctx.signals.on is async.)
+// A signal the program catches waits until the sync call returns. The
+// handler is installed in the same tick (slicc-kernel 1.69.0+:
+// ctx.signals.on takes effect at once, ai-ecoverse/slicc-kernel#421).
 process.on('SIGUSR1', () => console.log('SIGUSR1 handler ran'));
+show('signal during execSync', () => cp.execSync('kill -USR1 $PPID; printf done', { encoding: 'utf8' }));
+console.log('after signal call');
 setTimeout(() => {
-  show('signal during execSync', () => cp.execSync('kill -USR1 $PPID; printf done', { encoding: 'utf8' }));
-  console.log('after signal call');
-  setTimeout(() => {
-    fs.rmSync('w-es', { recursive: true, force: true });
-    console.log('end');
-  }, 100);
-}, 50);
+  fs.rmSync('w-es', { recursive: true, force: true });
+  console.log('end');
+}, 100);
