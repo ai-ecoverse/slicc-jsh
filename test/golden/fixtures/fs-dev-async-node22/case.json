@@ -1,0 +1,13 @@
+{
+  "description": "/dev through fs.promises and callbacks (writeFile, appendFile to /dev/stdout and /dev/stderr, readFile, FileHandle.read of /dev/zero), and writes by path keep their order with process.stdout",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

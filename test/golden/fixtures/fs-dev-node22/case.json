@@ -1,0 +1,13 @@
+{
+  "description": "/dev through fs, as Node: writeFileSync('/dev/null'), appendFileSync('/dev/stdout' | '/dev/stderr'), createWriteStream('/dev/stdout'), readSync of /dev/zero and /dev/urandom, openSync('/dev/fd/1'), a character device's stat, ENOENT for a missing device",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
