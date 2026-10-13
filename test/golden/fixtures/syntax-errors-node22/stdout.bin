@@ -180,3 +180,75 @@ SyntaxError: Invalid regular expression: missing /
 
 Node.js v22.22.0
 
+== esm-after-import-meta.mjs (1)
+file://DIR/esm-after-import-meta.mjs:2
+let static = 1;
+    ^^^^^^
+
+SyntaxError: Unexpected strict mode reserved word
+
+Node.js v22.22.0
+
+== esm-import-redeclared.mjs (1)
+file://DIR/esm-import-redeclared.mjs:2
+let x;
+    ^
+
+SyntaxError: Identifier 'x' has already been declared
+
+Node.js v22.22.0
+
+== esm-import-attributes-multiline.mjs (1)
+file://DIR/esm-import-attributes-multiline.mjs:4
+const y = 1 2;
+            ^
+
+SyntaxError: Unexpected number
+
+Node.js v22.22.0
+
+== esm-module-syntax-mix.mjs (1)
+file://DIR/esm-module-syntax-mix.mjs:9
+let let = 3;
+    ^^^
+
+SyntaxError: Unexpected strict mode reserved word
+
+Node.js v22.22.0
+
+== esm-import-redeclared-function.mjs (1)
+file://DIR/esm-import-redeclared-function.mjs:2
+function a() {}
+^
+
+SyntaxError: Identifier 'a' has already been declared
+
+Node.js v22.22.0
+
+== cjs-redeclared-async-function.js (1)
+DIR/cjs-redeclared-async-function.js:2
+async function a() {}
+^
+
+SyntaxError: Identifier 'a' has already been declared
+
+Node.js v22.22.0
+
+== cjs-redeclared-generator.js (1)
+DIR/cjs-redeclared-generator.js:2
+function* a() {}
+^
+
+SyntaxError: Identifier 'a' has already been declared
+
+Node.js v22.22.0
+
+== cjs-redeclared-class.js (1)
+DIR/cjs-redeclared-class.js:2
+class a extends Object { m() { return `${1}`; } }
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+SyntaxError: Identifier 'a' has already been declared
+
+Node.js v22.22.0
+

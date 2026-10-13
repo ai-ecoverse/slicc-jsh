@@ -29,6 +29,14 @@ const cases = [
   ['cjs-regexp.js', 'const r = /a(/;\n'],
   ['esm-regexp.mjs', 'const r = /a(/;\n'],
   ['cjs-regexp-unterminated.js', 'const r = /ab;\n'],
+  ['esm-after-import-meta.mjs', 'console.log(import.meta);\nlet static = 1;\n'],
+  ['esm-import-redeclared.mjs', "import x from 'x';\nlet x;\nconst y = ;\n"],
+  ['esm-import-attributes-multiline.mjs', "import x from './x.json' with {\n type: 'json'\n};\nconst y = 1 2;\n"],
+  ['esm-module-syntax-mix.mjs', "import d, { a as b, c } from 'm';\nimport * as ns from 'n';\nimport 'side';\nexport * from 'q';\nexport * as w from 'q';\nexport { b as bb };\nexport const e = `${import.meta.url}`;\nexport default function () {}\nlet let = 3;\n"],
+  ['esm-import-redeclared-function.mjs', "import { a } from 'm';\nfunction a() {}\n"],
+  ['cjs-redeclared-async-function.js', 'let a;\nasync function a() {}\n'],
+  ['cjs-redeclared-generator.js', 'let a;\nfunction* a() {}\n'],
+  ['cjs-redeclared-class.js', 'let a;\nclass a extends Object { m() { return `${1}`; } }\n'],
 ];
 for (const [file, src] of cases) {
   const p = path.join(dir, file);
