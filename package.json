@@ -59,7 +59,7 @@
     "lint": "node scripts/lint.mjs",
     "test": "npm run test:golden && npm run test:jsh && npm run test:integration",
     "test:golden": "node --max-old-space-size=512 scripts/golden.mjs check",
-    "test:integration": "node --max-old-space-size=512 --test --test-timeout=120000 test/integration/*.test.mjs",
+    "test:integration": "node --max-old-space-size=512 --test --test-concurrency=3 --test-timeout=120000 test/integration/*.test.mjs",
     "test:cert": "node --max-old-space-size=512 test/integration/cert/run.mjs",
     "test:node-parallel": "node --max-old-space-size=512 test/node-parallel/run.mjs",
     "golden:record": "node --max-old-space-size=512 scripts/golden.mjs record",
