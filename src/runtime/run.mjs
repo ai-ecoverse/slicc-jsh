@@ -155,6 +155,7 @@ export async function runNode(ctx, options = {}) {
    * Returns the status the listeners leave.
    */
   let finishExitRef;
+  let nextTickRef;
   const dieUncaught = (report, status = 1) => {
     const code = finishExitRef(status);
     try {
@@ -162,6 +163,8 @@ export async function runNode(ctx, options = {}) {
     } catch {
       /* ignore */
     }
+    // The program is over: no tick queued before or during this runs (Node).
+    nextTickRef?.stop();
     return code;
   };
 
@@ -246,9 +249,17 @@ export async function runNode(ctx, options = {}) {
     },
   });
   finishExitRef = finishExit;
+  nextTickRef = nextTick;
   processRef = process;
   process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
   process._setupWarnings();
+  // Node ignores SIGPIPE from the start: a write to a pipe with no reader
+  // fails with EPIPE instead of ending the program.
+  try {
+    Promise.resolve(ctx.signals?.ignore?.('SIGPIPE')).catch(() => {});
+  } catch {
+    /* no signals */
+  }
   if (parsed.mode === 'eval') {
     process._evalCode = parsed.code;
     lastEvalCode = parsed.code;
@@ -669,6 +680,7 @@ export async function runNode(ctx, options = {}) {
       },
       shouldStop: () => getDidExit() || exitStatus !== undefined,
       weakPending: () => entry?.pending === true,
+      onTickError: (err) => exceptionHandler(err),
     });
     loopEnded = true;
 
@@ -701,12 +713,13 @@ export async function runNode(ctx, options = {}) {
       timers.clearPending();
       return getDidExit() ? getExitCode() : err.code;
     }
-    try {
-      printUncaught(err);
-    } catch {
-      await ctx.write(2, `${err}\n`);
-    }
-    return finishExit(1);
+    return dieUncaught(() => {
+      try {
+        printUncaught(err);
+      } catch {
+        writeStderr(`${err}\n`);
+      }
+    });
   } finally {
     timers.clearPending();
     // Drop hooks only after the turn above; worker teardown follows. After

@@ -59,6 +59,22 @@ describe('event loop and exit (kernel)', () => {
     return jsh.run(argv ?? ['jsh', name], { env: { COMPARE_HTTP: url } });
   };
 
+  it('a nextTick that throws with no uncaughtException handler ends the program: nothing queued after it runs (Node)', async () => {
+    const body =
+      "process.on('exit', (c) => console.log('exit', c));\n" +
+      "const go = () => { process.nextTick(() => { throw new Error('t1'); }); process.nextTick(() => console.log('t2 must not run')); Promise.resolve().then(() => process.nextTick(() => console.log('t3 must not run'))); setTimeout(() => console.log('timer must not run'), 5); };\n";
+    for (const [name, src] of [
+      ['tick-fatal-main.js', body + 'go();\n'],
+      ['tick-fatal-timer.js', body + 'setTimeout(go, 5);\n'],
+      ['tick-fatal-esm.mjs', body + 'await null;\ngo();\n'],
+    ]) {
+      const r = await run(name, src, ['node', name]);
+      assert.equal(r.status, 1, name);
+      assert.equal(r.stdout, 'exit 1\n', name);
+      assert.match(r.stderr, /Error: t1/, name);
+    }
+  });
+
   it('a floating fetch keeps the program alive until its body is read', async () => {
     const r = await run(
       'floating-fetch.jsh',

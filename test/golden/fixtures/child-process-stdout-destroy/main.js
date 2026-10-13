@@ -29,4 +29,16 @@ function run(label, src, slot, destroy) {
   await run('stdout destroyed after data', loop(1), 'stdout', (s) => s.once('data', () => s.destroy()));
   await run('stderr destroyed at once', once(2), 'stderr', (s) => s.destroy());
   await run('stderr destroyed after data', loop(2), 'stderr', (s) => s.once('data', () => s.destroy()));
+  // No SIGPIPE handler: Node ignores SIGPIPE, the write fails with EPIPE, the
+  // unhandled 'error' ends the child with 1 (not killed by SIGPIPE).
+  await new Promise((resolve) => {
+    const c = cp.spawn('node', ['-e', 'setInterval(() => process.stdout.write("x" + String.fromCharCode(10)), 2)'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let err = '';
+    c.stderr.on('data', (d) => (err += d));
+    c.stdout.once('data', () => c.stdout.destroy());
+    c.on('close', (code, sig) => {
+      console.log('no SIGPIPE handler, unhandled EPIPE', code, sig, /Error: write EPIPE/.test(err), /code: 'EPIPE'/.test(err));
+      resolve();
+    });
+  });
 })();

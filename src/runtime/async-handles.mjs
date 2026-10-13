@@ -32,11 +32,18 @@ function afterMicrotasks() {
  * Nested `.then` queued inside a promise job must run before nextTick queued
  * from that same job (Node: micro, then tick).
  */
-async function checkpoint(nextTick) {
+async function checkpoint(nextTick, onTickError) {
   let idle = 0;
   for (let i = 0; i < 256; i++) {
     await afterMicrotasks();
-    nextTick.flushSync();
+    // A tick that throws is an uncaught exception (Node's), handled as one,
+    // and the loop goes on.
+    try {
+      nextTick.flushSync();
+    } catch (err) {
+      if (!onTickError) throw err;
+      onTickError(err);
+    }
     if (nextTick.depth > 0) {
       idle = 0;
       continue;
@@ -74,9 +81,9 @@ function macrotask() {
  * does not keep the program alive: the loop ends once nothing is ref'd, after
  * the short grace above.
  */
-export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, weakPending } = {}) {
+export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, weakPending, onTickError } = {}) {
   for (;;) {
-    await checkpoint(nextTick);
+    await checkpoint(nextTick, onTickError);
     // process.exit() from a timer must unwind even while a server is listening.
     if (shouldStop?.()) return;
     if (handles.refCount > 0) {
@@ -84,13 +91,13 @@ export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, w
       if (shouldStop?.()) return;
       // I/O continuations often run as microtasks during the await above and
       // queue nextTicks; drain those before waiting again.
-      await checkpoint(nextTick);
+      await checkpoint(nextTick, onTickError);
       continue;
     }
     if (weakPending?.()) {
       for (let i = 0; i < ENTRY_GRACE_TURNS; i++) {
         await macrotask();
-        await checkpoint(nextTick);
+        await checkpoint(nextTick, onTickError);
         if (shouldStop?.() || handles.refCount > 0 || !weakPending()) break;
       }
       if (shouldStop?.()) return;
@@ -98,7 +105,7 @@ export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, w
     }
     if (onBeforeExit) {
       onBeforeExit();
-      await checkpoint(nextTick);
+      await checkpoint(nextTick, onTickError);
       if (shouldStop?.()) return;
       if (handles.refCount > 0) continue;
     }

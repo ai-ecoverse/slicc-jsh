@@ -2,3 +2,4 @@ stdout destroyed at once 0 null "child EPIPE" true
 stdout destroyed after data 0 null "child EPIPE" true
 stderr destroyed at once 0 null "child EPIPE" true
 stderr destroyed after data 0 null "child EPIPE" true
+no SIGPIPE handler, unhandled EPIPE 1 null true true
