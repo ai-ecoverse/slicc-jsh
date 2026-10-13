@@ -1,5 +1,6 @@
 import { installJshHandoff } from '../jsh/kernel.mjs';
 import { drainLoop, trackPromise } from './async-handles.mjs';
+import nodeInspect from 'node-inspect-extracted';
 import { createBuffer } from './buffer.mjs';
 import { createUtil } from './builtins/util.mjs';
 import { createCjs } from './cjs/loader.mjs';
@@ -21,6 +22,15 @@ import { createFetch } from './web/fetch.mjs';
 import { createWebSocket } from './web/websocket.mjs';
 
 const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
+
+let TrackingProxy;
+function trackingProxy() {
+  if (!TrackingProxy) {
+    TrackingProxy = nodeInspect.Proxy;
+    Object.defineProperty(TrackingProxy, 'name', { value: 'Proxy' });
+  }
+  return TrackingProxy;
+}
 
 const decoder = new TextDecoder();
 
@@ -280,6 +290,9 @@ export async function runNode(ctx, options = {}) {
     clearImmediate: timers.clearImmediate,
     fetch,
     WebSocket,
+    // A Proxy that remembers its target and handler (node-inspect-extracted's),
+    // so util.types.isProxy and inspect's showProxy / <Revoked Proxy> are Node's.
+    Proxy: trackingProxy(),
   });
 
   const fatal = (err) => {

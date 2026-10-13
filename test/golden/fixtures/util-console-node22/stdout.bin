@@ -47,6 +47,7 @@ types [
   true, true, true,
   true
 ]
+proxy [ true, false, 'Proxy [ { a: 1 }, {} ]', '<Revoked Proxy>', 'Proxy' ]
 legacy [ true, true, true, { a: 1, b: 2 } ]
 callbackify function
 isDeepStrictEqual [ true, false, true, true, false ]

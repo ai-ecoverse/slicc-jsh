@@ -3,6 +3,7 @@
  * what Node's C++ gives them, made here over the kernel process (its env,
  * uid/gid) and the platform. Only what those files ask for.
  */
+import nodeInspect from 'node-inspect-extracted';
 import { SIGNALS } from './signals.mjs';
 
 const proc = () => globalThis.process;
@@ -317,7 +318,8 @@ const types = {
     brand((x) => Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength').get.call(x))(v),
   isAnyArrayBuffer: (v) => types.isArrayBuffer(v) || types.isSharedArrayBuffer(v),
   isDataView: brand((v) => Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength').get.call(v)),
-  isProxy: () => false,
+  // Proxies made through the runtime's global Proxy (run.mjs) are known.
+  isProxy: (v) => nodeInspect.Proxy.getProxyDetails(v, false) !== undefined,
   isModuleNamespaceObject: (v) =>
     v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === null && v[Symbol.toStringTag] === 'Module',
 };
