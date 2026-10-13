@@ -182,5 +182,8 @@ for (const file of files) {
 rmSync(kernelCopy, { recursive: true, force: true });
 writeFileSync(process.env.NP_RESULTS, JSON.stringify(results));
 await k.terminate();
-// The kernel's workers may keep the loop alive a while after terminate().
+// The kernel's workers may keep the loop alive a while after terminate():
+// exit once what this batch printed is written (stdout may be a pipe).
+await new Promise((resolve) => process.stdout.write('', resolve));
+await new Promise((resolve) => process.stderr.write('', resolve));
 process.exit(0);
