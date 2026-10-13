@@ -1,5 +1,5 @@
 {
   "status": 0,
-  "stdout": "join: \"b/c/\"\nresolve relative = cwd + x: true\nresolve abs: \"/a/c\"\nrelative: \"../../d\"\nparse: {\"root\":\"/\",\"dir\":\"/home/u\",\"base\":\"file.tar.gz\",\"ext\":\".gz\",\"name\":\"file.tar\"}\nformat: \"/x/n.e\"\nposix === path: true\nwin32.join: undefined\nsep, delimiter: [\"/\",\":\"]\ntoNamespacedPath: \"undefined\"\nmatchesGlob: \"undefined\"\n",
+  "stdout": "join: \"b/c/\"\nresolve relative = cwd + x: true\nresolve abs: \"/a/c\"\nrelative: \"../../d\"\nparse: {\"root\":\"/\",\"dir\":\"/home/u\",\"base\":\"file.tar.gz\",\"ext\":\".gz\",\"name\":\"file.tar\"}\nformat: \"/x/n.e\"\nposix === path: true\nwin32.join: \"a\\\\b\"\nsep, delimiter: [\"/\",\":\"]\ntoNamespacedPath: \"function\"\nmatchesGlob: \"function\"\n",
   "stderr": ""
 }
