@@ -148,8 +148,17 @@ function parseScript(code, filename, lineOffset) {
   }
 }
 
+/** The runner's own names (vm contexts), and a suffix that keeps them off every name in `code`. */
+const RUNNER_BASES = ['__jsh_vm_scope__', '__jsh_vm_code__', '__jsh_vm_fns__', '__jsh_vm_n__', '__jsh_vm_import__'];
+function runnerSuffix(code) {
+  let suffix = '';
+  for (let n = 1; RUNNER_BASES.some((b) => code.includes(`${b}${suffix}`)); n++) suffix = `$${n}`;
+  return suffix;
+}
+
 function compile(code, filename, lineOffset, scriptId, mode = 'this', ast = parseScript(code, filename, lineOffset)) {
   const edits = [];
+  const suffix = mode === 'context' ? runnerSuffix(code) : '';
   const names = new Set();
   const functions = new Set();
   // A context's let / const / class (V8: not properties of its object) and
@@ -189,7 +198,10 @@ function compile(code, filename, lineOffset, scriptId, mode = 'this', ast = pars
   const walk = (node) => {
     if (!node || typeof node.type !== 'string') return;
     if (node.type === 'ImportExpression') {
-      edits.push({ start: node.start, end: node.source.start, text: `globalThis[Symbol.for('slicc-jsh.vmImport')](${scriptId}, ` });
+      // In a context, `globalThis` is the context's: the runner hands the
+      // loader in as a parameter there.
+      const call = mode === 'context' ? `__jsh_vm_import__${suffix}` : "globalThis[Symbol.for('slicc-jsh.vmImport')]";
+      edits.push({ start: node.start, end: node.source.start, text: `${call}(${scriptId}, ` });
     }
     if (mode === 'context') {
       // Names a script assigns without declaring: the context's (sloppy globals).
@@ -213,7 +225,7 @@ function compile(code, filename, lineOffset, scriptId, mode = 'this', ast = pars
   }
   for (const f of functions) names.delete(f);
   // Line numbers in the stack: the script's own (offset), named as its file.
-  return { body: out, lines: '\n'.repeat(Math.max(0, lineOffset)), sourceURL: `\n//# sourceURL=${filename}`, names, functions, lexical, bareVars };
+  return { body: out, lines: '\n'.repeat(Math.max(0, lineOffset)), sourceURL: `\n//# sourceURL=${filename}`, names, functions, lexical, bareVars, suffix };
 }
 
 /** The source as run in this context: in the `with` over the overlay when there is one (first-line columns shifted by it). */
@@ -280,15 +292,15 @@ export function createVm({
    * declarations aren't either while it runs: they are its own, hoisted.
    */
   const esGlobals = new Set(ES_GLOBALS);
-  const RUNNER_NAMES = new Set(['__jsh_vm_scope__', '__jsh_vm_code__', '__jsh_vm_fns__', '__jsh_vm_n__']);
+
   function scopeOf(sandbox) {
     let state = contexts.get(sandbox);
     if (state) return state;
     // hidden: the context's lexical bindings (and bare vars), off its object.
-    state = { names: new Set(), functions: new Set(), lexical: new Set(), bareVars: new Set(), hidden: new Map() };
+    state = { names: new Set(), functions: new Set(), lexical: new Set(), bareVars: new Set(), hidden: new Map(), reserved: new Set() };
     state.scope = new Proxy(sandbox, {
       has: (target, key) => {
-        if (typeof key !== 'string' || RUNNER_NAMES.has(key) || state.functions.has(key)) return false;
+        if (typeof key !== 'string' || state.reserved.has(key) || state.functions.has(key)) return false;
         return (
           state.hidden.has(key) || key in target || state.names.has(key) || esGlobals.has(key) || key === 'globalThis' || key in globalThis
         );
@@ -321,19 +333,33 @@ export function createVm({
   // Sloppy direct eval inside `with`: the script's assignments go to the
   // context (see compile); its function declarations land in this
   // function's scope, and are copied to the context afterwards.
-  // eslint-disable-next-line no-new-func
-  const runner = new Function(
-    '__jsh_vm_scope__',
-    '__jsh_vm_code__',
-    '__jsh_vm_fns__',
-    'try { with (__jsh_vm_scope__) { return eval(__jsh_vm_code__); } } finally { for (const __jsh_vm_n__ of __jsh_vm_fns__) { try { __jsh_vm_scope__[__jsh_vm_n__] = eval(__jsh_vm_n__); } catch {} } }'
-  );
+  // Its parameter names carry the script's suffix, so no name of the
+  // script's is one of them (see runnerSuffix).
+  const runners = new Map();
+  const runnerFor = (suffix) => {
+    let run = runners.get(suffix);
+    if (!run) {
+      const [scope, code, fns, n, imp] = RUNNER_BASES.map((b) => `${b}${suffix}`);
+      // eslint-disable-next-line no-new-func
+      run = new Function(
+        scope,
+        code,
+        fns,
+        imp,
+        `try { with (${scope}) { return eval(${code}); } } finally { for (const ${n} of ${fns}) { try { ${scope}[${n}] = eval(${n}); } catch {} } }`
+      );
+      runners.set(suffix, run);
+    }
+    return run;
+  };
+  const reservedFor = (suffix) => new Set(RUNNER_BASES.map((b) => `${b}${suffix}`));
 
   function runInScope(compiled, filename, sandbox) {
     const state = scopeOf(sandbox);
-    const saved = [state.names, state.functions];
+    const saved = [state.names, state.functions, state.reserved];
     state.names = compiled.names;
     state.functions = compiled.functions;
+    state.reserved = reservedFor(compiled.suffix);
     for (const n of compiled.lexical) state.lexical.add(n);
     // Function declarations are the context's first (V8 declares them before the run).
     for (const n of compiled.functions) if (!(n in sandbox)) sandbox[n] = undefined;
@@ -346,9 +372,15 @@ export function createVm({
     registerVmFile(filename, 0);
     try {
       // Top-level `this` is the context's global, as globalThis is.
-      return runner.call(sandbox, state.scope, `${compiled.lines}${compiled.body}${compiled.sourceURL}`, [...compiled.functions]);
+      return runnerFor(compiled.suffix).call(
+        sandbox,
+        state.scope,
+        `${compiled.lines}${compiled.body}${compiled.sourceURL}`,
+        [...compiled.functions],
+        globalThis[VM_IMPORT]
+      );
     } finally {
-      [state.names, state.functions] = saved;
+      [state.names, state.functions, state.reserved] = saved;
     }
   }
 
@@ -447,7 +479,14 @@ export function createVm({
     }
     const state = scopeOf(ctx);
     const source = `(function (${params.join(', ')}) {\n${code}\n})`;
-    return runner.call(ctx, state.scope, source, []);
+    const suffix = runnerSuffix(source);
+    const saved = state.reserved;
+    state.reserved = reservedFor(suffix);
+    try {
+      return runnerFor(suffix).call(ctx, state.scope, source, []);
+    } finally {
+      state.reserved = saved;
+    }
   }
 
   const vm = {

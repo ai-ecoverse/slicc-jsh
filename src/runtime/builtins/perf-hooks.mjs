@@ -263,8 +263,46 @@ function monitorEventLoopDelay(options = {}) {
   return new ELDHistogram(newState(), resolution);
 }
 
+/**
+ * Node's performance extras where the platform's object lacks them (a
+ * browser's): timerify (lib/internal/perf/timerify.js: the call itself; no
+ * 'function' entries, nothing observes them here) and eventLoopUtilization
+ * (the loop's idle time isn't known here: all of it counts as active).
+ */
+function addNodeExtras(perf) {
+  const define = (name, value) => {
+    if (typeof perf[name] === 'function') return;
+    try {
+      Object.defineProperty(perf, name, { value, writable: true, configurable: true, enumerable: true });
+    } catch {
+      /* frozen */
+    }
+  };
+  define('timerify', function timerify(fn, options = {}) {
+    if (typeof fn !== 'function') throw ERR_INVALID_ARG_TYPE('fn', 'function', fn);
+    validateObject(options, 'options');
+    function timerified(...args) {
+      return new.target ? Reflect.construct(fn, args, fn) : Reflect.apply(fn, this, args);
+    }
+    Object.defineProperties(timerified, {
+      length: { configurable: false, enumerable: true, value: fn.length },
+      name: { configurable: false, enumerable: true, value: `timerified ${fn.name}` },
+    });
+    return timerified;
+  });
+  define('eventLoopUtilization', function eventLoopUtilization(util1, util2) {
+    const now = { idle: 0, active: perf.now(), utilization: 1 };
+    if (!util1) return now;
+    const base = util2 ?? now;
+    const active = Math.abs(base.active - util1.active);
+    const idle = Math.abs(base.idle - util1.idle);
+    return { idle, active, utilization: active + idle === 0 ? 0 : active / (active + idle) };
+  });
+}
+
 export function createPerfHooks() {
   const perf = globalThis.performance;
+  if (perf) addNodeExtras(perf);
   return {
     Performance: perf ? Object.getPrototypeOf(perf).constructor : undefined,
     PerformanceEntry: globalThis.PerformanceEntry,

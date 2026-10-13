@@ -368,6 +368,7 @@ export function loadNodeLib({ ctx, process } = {}) {
           list.pop();
         },
         decorateErrorStack,
+        normalizeEncoding: errors.normalizeEncoding,
         // Node runs these in a realm of their own so RegExp.$1… stay the
         // program's; here they are the plain methods.
         SideEffectFreeRegExpPrototypeSymbolReplace: (regex, string, replacement) =>
@@ -418,10 +419,35 @@ export function loadNodeLib({ ctx, process } = {}) {
       'internal/options': { getOptionValue },
       'internal/streams/utils': lazy(() => ({
         isWritable: builtin('stream').isWritable,
+        isReadable: builtin('stream').isReadable,
+        isDestroyed: builtin('stream').isDestroyed,
+        // lib/internal/streams/utils.js's.
+        isWritableEnded(stream) {
+          if (stream.writableEnded === true) return true;
+          const wState = stream._writableState;
+          if (wState?.errored) return false;
+          if (typeof wState?.ended !== 'boolean') return null;
+          return wState.ended;
+        },
         isNodeStream,
         isReadableStream,
         isWritableStream,
       })),
+      'internal/streams/end-of-stream': lazy(() => builtin('stream').finished),
+      // Readable/Writable/Duplex.fromWeb and toWeb (lib/internal/webstreams/adapters.js): the platform's streams.
+      'internal/webstreams/readablestream': {
+        ReadableStream: globalThis.ReadableStream,
+        isReadableStream: (v) => typeof globalThis.ReadableStream === 'function' && v instanceof globalThis.ReadableStream,
+      },
+      'internal/webstreams/writablestream': {
+        WritableStream: globalThis.WritableStream,
+        isWritableStream: (v) => typeof globalThis.WritableStream === 'function' && v instanceof globalThis.WritableStream,
+      },
+      'internal/webstreams/queuingstrategies': {
+        CountQueuingStrategy: globalThis.CountQueuingStrategy,
+        ByteLengthQueuingStrategy: globalThis.ByteLengthQueuingStrategy,
+      },
+      stream: lazy(() => builtin('stream')),
       string_decoder: lazy(() => builtin('string_decoder')),
       timers: lazy(() => builtin('timers')),
       // The REPL's (src/node-lib/lib/repl.js and internal/repl/*).

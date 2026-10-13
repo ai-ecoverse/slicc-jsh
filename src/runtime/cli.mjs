@@ -35,6 +35,9 @@ export function parseNodeArgv(argv) {
   let script;
   const userArgs = [];
   let interactive = false;
+  // -r / --require modules, in order; `node -`: the program from stdin.
+  const preload = [];
+  let stdinScript = false;
   // Options that only set behaviour; kept in execArgv as Node does.
   const flags = [];
   let i = 0;
@@ -87,6 +90,35 @@ export function parseNodeArgv(argv) {
       flags.push('-p', evalCode);
       i += 1;
       continue;
+    }
+    if (arg === '-r' || arg === '--require') {
+      if (i + 1 >= args.length) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      preload.push(args[i + 1]);
+      flags.push(arg, args[i + 1]);
+      i += 2;
+      continue;
+    }
+    if (arg.startsWith('--require=')) {
+      preload.push(arg.slice(10));
+      flags.push(arg);
+      i += 1;
+      continue;
+    }
+    // V8's --stack-trace-limit=N (only that form; V8 reads its own flags).
+    if (arg === '--stack-trace-limit' || arg.startsWith('--stack-trace-limit=')) {
+      const value = arg.slice(20);
+      if (!/^-?\d+$/.test(value)) {
+        return { error: 'Error: illegal value for flag --stack-trace-limit of type int\nTry --help for options', status: 9 };
+      }
+      flags.push(arg);
+      i += 1;
+      continue;
+    }
+    // `node -`: the program is stdin (even a terminal), `-` its argv[1].
+    if (arg === '-' && evalCode === undefined) {
+      stdinScript = true;
+      userArgs.push(...args.slice(i + 1));
+      break;
     }
     if (arg === '-i' || arg === '--interactive') {
       // The REPL even if stdin isn't a terminal (Node's -i); kept in execArgv.
@@ -149,6 +181,7 @@ export function parseNodeArgv(argv) {
       // In Node's order: the options as given, the code where it was.
       execArgv: [...flags],
       interactive,
+      preload,
     };
   }
 
@@ -158,13 +191,16 @@ export function parseNodeArgv(argv) {
       script,
       processArgv: [argv0, script, ...userArgs],
       execArgv: [...flags],
+      preload,
     };
   }
 
   return {
     mode: 'empty',
-    processArgv: [argv0],
+    processArgv: stdinScript ? [argv0, '-', ...userArgs] : [argv0],
     execArgv: [...flags],
     interactive,
+    preload,
+    stdinScript,
   };
 }

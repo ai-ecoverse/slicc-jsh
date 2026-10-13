@@ -41,6 +41,10 @@ module.exports = {
   get util() {
     return require('util');
   },
+  /** Readable/Writable/Duplex.fromWeb and toWeb. */
+  get webstreamsAdapters() {
+    return require('internal/webstreams/adapters');
+  },
   /** require('repl'): lib/repl.js. */
   get replModule() {
     return require('repl');

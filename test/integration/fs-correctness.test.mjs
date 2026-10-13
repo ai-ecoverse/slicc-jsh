@@ -11,6 +11,15 @@ describe('fs never deletes more than Node (kernel)', () => {
   });
   after(() => jsh?.close());
 
+  it("an append descriptor writes at the end whatever the position (Linux's O_APPEND; macOS's pwrite differs)", async () => {
+    const r = await jsh.run([
+      'node',
+      '-e',
+      "const fs=require('fs'); fs.writeFileSync('ap.txt','abc'); let fd=fs.openSync('ap.txt','a'); fs.writeSync(fd,'X',0); fs.closeSync(fd); fd=fs.openSync('ap.txt', fs.constants.O_WRONLY | fs.constants.O_APPEND); fs.writeSync(fd,'Y',1); fs.closeSync(fd); console.log(fs.readFileSync('ap.txt','utf8'))",
+    ]);
+    assert.equal(r.stdout, 'abcXY\n');
+  });
+
   it('rmdirSync(file, { recursive: true }) is ENOTDIR and keeps the file', async () => {
     await jsh.kernel.writeFile('/os/keep.txt', 'keep\n');
     await jsh.kernel.writeFile(

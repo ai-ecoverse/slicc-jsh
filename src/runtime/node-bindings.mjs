@@ -98,6 +98,21 @@ const bindings = {
     get os() {
       return getOsConstants();
     },
+    // The webstreams adapters' zlib failures (the negative codes).
+    get zlib() {
+      return globalThis.process?._builtin?.('zlib').constants ?? {};
+    },
+  },
+  uv: { UV_EOF: -4095 },
+  // For a libuv stream handle's web streams (net / fs handles); none here.
+  stream_wrap: {
+    WriteWrap: class WriteWrap {},
+    ShutdownWrap: class ShutdownWrap {},
+    kReadBytesOrError: 0,
+    kArrayBufferOffset: 1,
+    kBytesWritten: 2,
+    kLastWriteWasAsync: 3,
+    streamBaseState: new Int32Array(5),
   },
   os: {
     getHostname: () => 'slicc',
