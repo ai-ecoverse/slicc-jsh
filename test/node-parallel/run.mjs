@@ -5,8 +5,14 @@
  *
  * Usage: node test/node-parallel/run.mjs
  * skip() → SKIP (not PASS). STRICT=1 exits 1 on any FAIL.
+ *
+ * The files run in batches of BATCH (default 40), each batch in a process
+ * (and kernel) of its own, one after another: in one process the kernel's
+ * memory for all of them (test-string-decoder alone takes a 512 MB Buffer)
+ * grows past mem-guard's 2 GB per process.
  */
-import { readdirSync, readFileSync, mkdtempSync, cpSync, rmSync, existsSync, statSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readdirSync, readFileSync, writeFileSync, mkdtempSync, cpSync, rmSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -17,6 +23,46 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(here, 'fixtures');
 const nodeCommonDir = join(here, 'node-common');
 const TIMEOUT_MS = 20_000;
+const BATCH = Math.max(1, Number(process.env.BATCH) || 40);
+
+const allFiles = readdirSync(fixturesDir)
+  .filter((f) => f.startsWith('test-') && f.endsWith('.js'))
+  // ONLY=<regex> runs a subset (e.g. ONLY=crypto).
+  .filter((f) => !process.env.ONLY || new RegExp(process.env.ONLY).test(f))
+  .sort();
+
+// The parent: each batch in a child process (this file, with NP_FILES).
+if (!process.env.NP_FILES) {
+  const results = [];
+  const scratch = mkdtempSync(join(tmpdir(), 'node-parallel-'));
+  for (let start = 0; start < allFiles.length; start += BATCH) {
+    const out = join(scratch, `batch-${start}.json`);
+    const r = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], {
+      env: { ...process.env, NP_FILES: JSON.stringify(allFiles.slice(start, start + BATCH)), NP_RESULTS: out },
+      stdio: ['ignore', 'inherit', 'inherit'],
+    });
+    if (r.status !== 0 || !existsSync(out)) {
+      console.error(`node-parallel: batch from ${allFiles[start]} ended with ${r.status ?? r.signal}`);
+      process.exit(1);
+    }
+    results.push(...JSON.parse(readFileSync(out, 'utf8')));
+  }
+  rmSync(scratch, { recursive: true, force: true });
+
+  const pass = results.filter((r) => r.status === 'PASS');
+  const fail = results.filter((r) => r.status === 'FAIL');
+  const skip = results.filter((r) => r.status === 'SKIP');
+
+  console.log('');
+  console.log('node-parallel summary (Node v22.22.0 fixtures + real test/common):');
+  for (const r of results) {
+    console.log(`  ${r.status.padEnd(4)} ${r.file}${r.detail ? ` — ${r.detail}` : ''}`);
+  }
+  console.log(`totals: PASS=${pass.length} FAIL=${fail.length} SKIP=${skip.length} of ${results.length}`);
+
+  if (process.env.STRICT === '1' && fail.length) process.exit(1);
+  process.exit(0);
+}
 
 if (!existsSync(join(nodeCommonDir, 'index.js'))) {
   console.error('missing test/node-parallel/node-common (Node v22.22.0 test/common)');
@@ -86,11 +132,8 @@ const copyFixtures = async (dir, rel) => {
 };
 await copyFixtures(nodeFixturesDir, '');
 
-const files = readdirSync(fixturesDir)
-  .filter((f) => f.startsWith('test-') && f.endsWith('.js'))
-  // ONLY=<regex> runs a subset (e.g. ONLY=crypto).
-  .filter((f) => !process.env.ONLY || new RegExp(process.env.ONLY).test(f))
-  .sort();
+// A batch (a child of the parent above): its files, in one kernel.
+const files = JSON.parse(process.env.NP_FILES);
 
 // A test's `// Flags: …` line, as Node's test runner passes them (else
 // test/common re-spawns itself with them through child_process).
@@ -137,18 +180,10 @@ for (const file of files) {
 }
 
 rmSync(kernelCopy, { recursive: true, force: true });
-
-const pass = results.filter((r) => r.status === 'PASS');
-const fail = results.filter((r) => r.status === 'FAIL');
-const skip = results.filter((r) => r.status === 'SKIP');
-
-console.log('');
-console.log('node-parallel summary (Node v22.22.0 fixtures + real test/common):');
-for (const r of results) {
-  console.log(`  ${r.status.padEnd(4)} ${r.file}${r.detail ? ` — ${r.detail}` : ''}`);
-}
-console.log(
-  `totals: PASS=${pass.length} FAIL=${fail.length} SKIP=${skip.length} of ${results.length}`
-);
-
-if (process.env.STRICT === '1' && fail.length) process.exit(1);
+writeFileSync(process.env.NP_RESULTS, JSON.stringify(results));
+await k.terminate();
+// The kernel's workers may keep the loop alive a while after terminate():
+// exit once what this batch printed is written (stdout may be a pipe).
+await new Promise((resolve) => process.stdout.write('', resolve));
+await new Promise((resolve) => process.stderr.write('', resolve));
+process.exit(0);
