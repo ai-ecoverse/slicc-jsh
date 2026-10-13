@@ -1,0 +1,5 @@
+{
+  "description": "child_process detached: true leads a new session and group (setsid), so kill(-pid) reaches it and its kill(0) spares the parent; without it, no such group; detached validated (Node 22; slicc-kernel 1.74.0)",
+  "argv": ["main.js"],
+  "shim": true
+}
