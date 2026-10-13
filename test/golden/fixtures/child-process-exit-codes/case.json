@@ -1,0 +1,6 @@
+{
+  "description": "child_process: an exit status of 128+n is a code, not a signal; a child killed by a signal (or killing itself) reports the signal (async and sync; Node 22; /bin/sh from wasm-bash in the shim)",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-bash"]
+}
