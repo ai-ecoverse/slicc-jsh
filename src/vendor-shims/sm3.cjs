@@ -4,8 +4,8 @@
  * lists in crypto.getHashes()), on @noble/hashes' Merkle–Damgård base, the
  * way noble writes SHA-256.
  */
-const { HashMD } = require('@noble/hashes/_md');
-const { clean, createHasher, rotl } = require('@noble/hashes/utils');
+const { HashMD } = require('@noble/hashes/_md.js');
+const { clean, createHasher, rotl } = require('@noble/hashes/utils.js');
 
 const IV = Uint32Array.from([
   0x7380166f, 0x4914b2b9, 0x172442d7, 0xda8a0600, 0xa96f30bc, 0x163138aa, 0xe38dee4d, 0xb0fb0e4e,
@@ -58,6 +58,12 @@ class SM3 extends HashMD {
       E = P0(TT2);
     }
     this.set(A ^ this.A, B ^ this.B, C ^ this.C, D ^ this.D, E ^ this.E, F ^ this.F, G ^ this.G, H ^ this.H);
+  }
+  // noble 2's HashMD leaves the state copy to each hash (its _cloneIntoMeta
+  // copies the buffer and counters), as its SHA-256 does.
+  _cloneInto(to) {
+    (to ||= new this.constructor()).set(...this.get());
+    return this._cloneIntoMeta(to);
   }
   roundClean() {
     clean(W);

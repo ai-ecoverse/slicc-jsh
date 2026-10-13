@@ -5,15 +5,15 @@
  * @noble/hashes for digests, HMAC and the KDFs; browserify-aes and
  * browserify-des for the block ciphers; SM3 in ./sm3.cjs on noble's base.
  */
-const legacy = require('@noble/hashes/legacy');
-const sha2 = require('@noble/hashes/sha2');
-const sha3 = require('@noble/hashes/sha3');
-const { blake2b } = require('@noble/hashes/blake2b');
-const { blake2s } = require('@noble/hashes/blake2s');
-const { hmac } = require('@noble/hashes/hmac');
-const { pbkdf2, pbkdf2Async } = require('@noble/hashes/pbkdf2');
-const { hkdf } = require('@noble/hashes/hkdf');
-const { scrypt, scryptAsync } = require('@noble/hashes/scrypt');
+// @noble/hashes 2 is ESM with explicit `.js` subpaths (esbuild bundles it).
+const legacy = require('@noble/hashes/legacy.js');
+const sha2 = require('@noble/hashes/sha2.js');
+const sha3 = require('@noble/hashes/sha3.js');
+const { blake2b, blake2s } = require('@noble/hashes/blake2.js');
+const { hmac } = require('@noble/hashes/hmac.js');
+const { pbkdf2, pbkdf2Async } = require('@noble/hashes/pbkdf2.js');
+const { hkdf } = require('@noble/hashes/hkdf.js');
+const { scrypt, scryptAsync } = require('@noble/hashes/scrypt.js');
 const { sm3 } = require('./sm3.cjs');
 const aes = require('browserify-aes/browser');
 const DES = require('browserify-des');
