@@ -14,16 +14,56 @@ const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
 const atEnd = (code, pos) => code.slice(pos).trim() === '';
 
-/** The end of the token at `pos` (for the carets): an invalid one runs to the end of its line, as V8 marks it. */
-function tokenEnd(code, pos) {
-  try {
-    const t = acorn.tokenizer(code.slice(pos), { ecmaVersion: 'latest', allowHashBang: true }).getToken();
-    if (t.end > t.start) return pos + t.end;
-  } catch {
+/**
+ * The span V8 marks for an error at acorn's `pos`, as [start, end].
+ * - A token V8 could read: that token.
+ * - An invalid one ("Invalid or unexpected token", a regular expression):
+ *   V8 marks from where the token starts (acorn points past its start, as in
+ *   `0x`, `1n2`, `#`, `/ab`) up to where its scanner gave up — an escape
+ *   (`\u{110000}`) to its end, a string or template to the line's end, a
+ *   regular expression its first character.
+ */
+const WORDISH = /[\w$\\{}]/;
+function markSpan(code, pos, message) {
+  const invalid = /^(Invalid or unexpected token|Invalid regular expression|Undefined Unicode code-point|Invalid (Unicode|hexadecimal) escape sequence)/.test(
+    message
+  );
+  if (!invalid) {
+    try {
+      const t = acorn.tokenizer(code.slice(pos), { ecmaVersion: 'latest', allowHashBang: true }).getToken();
+      if (t.end > t.start) return [pos + t.start, pos + t.end];
+    } catch {
+      /* invalid after all */
+    }
+  }
+  const lineEnd = (() => {
     const nl = code.indexOf('\n', pos);
     return nl === -1 ? code.length : nl;
+  })();
+  let start = pos;
+  while (start > 0 && WORDISH.test(code[start - 1])) start--;
+  // The character the token starts with (`#`, `/`, a quote, …), if acorn is past it.
+  if (start > 0 && !/[\s;,)\]}]/.test(code[start - 1]) && !WORDISH.test(code[start - 1]) && start === pos) start--;
+  if (/['"`]/.test(code[start] ?? '')) return [start, lineEnd];
+  if (/^Invalid regular expression/.test(message)) return [start, start + 1];
+  let runEnd = start;
+  while (runEnd < code.length && WORDISH.test(code[runEnd])) runEnd++;
+  // An escape: V8 marks what it scanned of it, `\u{110000` (not the
+  // closing brace), `\x4"` (through the character that ended it).
+  const esc = code.indexOf('\\', Math.max(0, start - 1));
+  if (esc !== -1 && esc < Math.max(runEnd, pos + 1)) {
+    if (code.startsWith('\\u{', esc)) {
+      const close = code.indexOf('}', esc);
+      return [esc, close === -1 ? runEnd : close];
+    }
+    if (/^\\[xu]/.test(code.slice(esc))) {
+      let k = esc + 2;
+      while (/[0-9a-fA-F]/.test(code[k] ?? '')) k++;
+      return [esc, k + 1];
+    }
+    return [start, runEnd];
   }
-  return pos + 1;
+  return [start, Math.max(pos, start + 1)];
 }
 
 /** acorn's message as V8 words it (the common cases). */
@@ -73,7 +113,7 @@ export function syntaxReport(source, { kind, filename, error }) {
     return null;
   } catch (e) {
     if (!(e instanceof SyntaxError) || e.pos === undefined) return null;
-    const pos = e.pos;
+    let pos = e.pos;
     // The engine's own message where it compiled the source as such (a
     // script, a CommonJS wrapper, a .jsh body); an ES module was parsed by
     // acorn, so V8's comes from the same source as an async function body,
@@ -83,8 +123,11 @@ export function syntaxReport(source, { kind, filename, error }) {
     let message = module || atEnd(source, pos) ? undefined : error?.message;
     if (!message) {
       try {
+        // A module is strict code.
         // eslint-disable-next-line no-new-func
-        if (kind === 'jsh' || module) new AsyncFunction(source);
+        if (module) new AsyncFunction(`'use strict';${source}`);
+        // eslint-disable-next-line no-new-func
+        else if (kind === 'jsh') new AsyncFunction(source);
         // eslint-disable-next-line no-new-func
         else new Function(source);
       } catch (v8err) {
@@ -95,17 +138,26 @@ export function syntaxReport(source, { kind, filename, error }) {
     }
     if (atEnd(source, pos)) message = 'Unexpected end of input';
     message ??= v8Message(e.message, source, pos);
+    // The end of the input is where V8 reports that (the last line, after
+    // a final newline an empty one), whatever acorn's place.
+    const eoiAt = message === 'Unexpected end of input' && pos < source.length;
+    if (eoiAt) pos = source.length;
     const lineStart = source.lastIndexOf('\n', pos - 1) + 1;
     let lineEnd = source.indexOf('\n', pos);
     if (lineEnd === -1) lineEnd = source.length;
+    // A BOM the file starts with stays in the line shown, and counts as a column (Node's).
     const text = source.slice(lineStart, lineEnd);
-    const end = Math.min(tokenEnd(source, pos), lineEnd);
-    const carets = pos >= lineEnd ? '' : '^'.repeat(Math.max(1, end - pos));
-    const line = e.loc?.line ?? source.slice(0, pos).split('\n').length;
+    const [start, spanEnd] = markSpan(source, pos, message);
+    const from = Math.max(lineStart, Math.min(start, pos));
+    const end = Math.min(spanEnd, lineEnd);
+    // At the end of the input V8 marks nothing (an unterminated template too).
+    const eoi = message === 'Unexpected end of input';
+    const carets = pos >= lineEnd || eoi ? '' : '^'.repeat(Math.max(1, end - from));
+    const line = (!eoiAt && e.loc?.line) || source.slice(0, pos).split('\n').length;
     return {
       line,
       message,
-      stack: `${filename}:${line}\n${text}\n${' '.repeat(pos - lineStart)}${carets}\n\nSyntaxError: ${message}`,
+      stack: `${filename}:${line}\n${text}\n${eoi && pos < lineEnd ? '' : ' '.repeat((pos >= lineEnd ? pos : from) - lineStart)}${carets}\n\nSyntaxError: ${message}`,
     };
   }
 }

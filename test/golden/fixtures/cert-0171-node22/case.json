@@ -1,0 +1,13 @@
+{
+  "description": "cert A2 findings on 0.17.1: SyntaxError reports for -p, an ES module -e, a BOM file, an invalid character, a module's strict words; HMAC/pbkdf2/hkdf over md5-sha1 and the XOFs",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

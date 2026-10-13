@@ -375,7 +375,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
         if (!canon && isLegacyDigest(algorithm)) throw evpUnsupported(true);
         if (!canon) throw nativeError(Error, undefined, 'Digest method not supported');
         this.canon = canon;
-        this.h = canon === 'md5-sha1' ? md5sha1() : lib.hashes[canon].create();
+        this.h = lib.hashes[canon].create();
       }
       if (this.canon === 'shake128' || this.canon === 'shake256') {
         this.xofLen = xofLen ?? (this.canon === 'shake128' ? 16 : 32);
@@ -402,29 +402,6 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
       return encodeOutput(Buffer.from(this.md), outputEncoding);
     }
   }
-  function md5sha1() {
-    const a = lib.hashes.md5.create();
-    const b = lib.hashes.sha1.create();
-    const pair = (x, y) => ({
-      update(d) {
-        x.update(d);
-        y.update(d);
-        return this;
-      },
-      digest() {
-        const p = x.digest();
-        const q = y.digest();
-        const out = new Uint8Array(p.length + q.length);
-        out.set(p);
-        out.set(q, p.length);
-        return out;
-      },
-      outputLen: 36,
-      clone: () => pair(x.clone(), y.clone()),
-    });
-    return pair(a, b);
-  }
-
   function Hash(algorithm, options) {
     if (!new.target) return new Hash(algorithm, options);
     const isCopy = algorithm instanceof HashHandle;
@@ -471,7 +448,9 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     init(hmac, key) {
       const canon = digestOf(hmac);
       if (!canon && isLegacyDigest(hmac)) throw evpUnsupported(false);
-      if (!canon || canon === 'md5-sha1' || canon.startsWith('shake')) throw invalidDigest(hmac);
+      if (!canon) throw invalidDigest(hmac);
+      // An XOF has no HMAC: OpenSSL fails its init, with no reason (Node 22.22's message).
+      if (canon.startsWith('shake')) throw nativeError(Error, undefined, 'error:00000000:lib(0)::reason(0)');
       this.h = lib.hmac.create(lib.hashes[canon], key);
     }
     update(data, encoding) {
@@ -803,8 +782,9 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     validateInt32(keylen, 'keylen', 0);
     const canon = digestOf(digest);
     // A legacy-provider digest is known, so the job starts and then fails.
-    if (!canon && isLegacyDigest(digest)) return { failed: true };
-    if (!canon || canon === 'md5-sha1' || canon.startsWith('shake')) throw invalidDigest(digest);
+    // A legacy-provider digest or an XOF is known, so the job starts and then fails.
+    if ((!canon && isLegacyDigest(digest)) || canon?.startsWith('shake')) return { failed: true };
+    if (!canon) throw invalidDigest(digest);
     return { password: toU8(password), salt: toU8(salt), iterations, keylen, fn: lib.hashes[canon] };
   }
   // Node 22.22's PBKDF2Job fails a zero-length key ("Deriving bits failed").
@@ -850,8 +830,8 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
       throw ERR_OUT_OF_RANGE('info', 'must not contain more than 1024 bytes', info.byteLength);
     }
     const canon = digestOf(digest);
-    if (!canon && isLegacyDigest(digest)) return { failed: true };
-    if (!canon || canon === 'md5-sha1' || canon.startsWith('shake')) throw invalidDigest(digest);
+    if ((!canon && isLegacyDigest(digest)) || canon?.startsWith('shake')) return { failed: true };
+    if (!canon) throw invalidDigest(digest);
     const fn = lib.hashes[canon];
     if (length > 255 * fn.outputLen) throw nativeError(RangeError, 'ERR_CRYPTO_INVALID_KEYLEN', 'Invalid key length');
     return { fn, key, salt, info, length };
