@@ -1,0 +1,8 @@
+write null undefined
+read null ""
+zero [4,[0,0,0,0]]
+urandom [16,true]
+link to a device [3,[0,0,0]]
+stat null [true,false]
+exists [true,true,true,false]
+nope THROWS ENOENT ENOENT: no such file or directory, open '/dev/nope'

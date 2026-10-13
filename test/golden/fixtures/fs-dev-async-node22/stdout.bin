@@ -1,0 +1,3 @@
+p.writeFile null undefined
+p.readFile null ""
+p.open zero [3,[0,0,0]]

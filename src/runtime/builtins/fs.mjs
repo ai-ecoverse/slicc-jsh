@@ -4,41 +4,14 @@
  */
 import { trackPromise } from '../async-handles.mjs';
 import { createCp } from './fs-cp.mjs';
+import { UV_ERRORS } from '../node-bindings.mjs';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const ERRNO = {
-  ENOENT: -2,
-  EEXIST: -17,
-  EISDIR: -21,
-  ENOTDIR: -20,
-  EPERM: -1,
-  EACCES: -13,
-  EINVAL: -22,
-  EIO: -5,
-  ENOTEMPTY: -39, // Linux (the shim's process.platform)
-  EBADF: -9,
-  ENOTSUP: -45,
-  EXDEV: -18,
-  ELOOP: -40,
-};
-
-const DESCRIPTIONS = {
-  ENOENT: 'no such file or directory',
-  EEXIST: 'file already exists',
-  EISDIR: 'illegal operation on a directory',
-  ENOTDIR: 'not a directory',
-  EPERM: 'operation not permitted',
-  EACCES: 'permission denied',
-  EINVAL: 'invalid argument',
-  EIO: 'i/o error',
-  ENOTEMPTY: 'directory not empty',
-  EBADF: 'bad file descriptor',
-  ENOTSUP: 'operation not supported',
-  EXDEV: 'cross-device link not permitted',
-  ELOOP: 'too many symbolic links encountered',
-};
+// libuv's error names, numbers (Linux) and messages, as Node's fs errors carry them.
+const ERRNO = Object.fromEntries(UV_ERRORS.map(([n, name]) => [name, n]));
+const DESCRIPTIONS = Object.fromEntries(UV_ERRORS.map(([, name, msg]) => [name, msg]));
 
 function nodeFsError(code, syscall, pathArg, err, dest) {
   const c = typeof code === 'string' ? code : err?.code || 'EIO';
@@ -105,16 +78,16 @@ class Stats {
     return modeType(this.mode) === S_IFLNK;
   }
   isBlockDevice() {
-    return false;
+    return modeType(this.mode) === 0o060000;
   }
   isCharacterDevice() {
-    return false;
+    return modeType(this.mode) === 0o020000;
   }
   isFIFO() {
-    return false;
+    return modeType(this.mode) === 0o010000;
   }
   isSocket() {
-    return false;
+    return modeType(this.mode) === 0o140000;
   }
 }
 
@@ -137,7 +110,9 @@ function statView(st, bigint = false) {
   const mtimeMs = st.mtimeMs ?? (st.mtime ? Number(st.mtime) : 0);
   const atimeMs = st.atimeMs ?? mtimeMs;
   const ctimeMs = st.ctimeMs ?? mtimeMs;
-  const type = st.isDirectory ? S_IFDIR : st.isSymbolicLink ? S_IFLNK : S_IFREG;
+  // The kernel's mode carries the file type (character devices, FIFOs, …).
+  const kernelType = typeof st.mode === 'number' ? st.mode & S_IFMT : 0;
+  const type = kernelType || (st.isDirectory ? S_IFDIR : st.isSymbolicLink ? S_IFLNK : S_IFREG);
   const perm = typeof st.mode === 'number' ? st.mode & ~S_IFMT : st.isDirectory ? 0o755 : 0o644;
   const size = st.size ?? 0;
   if (bigint) {
@@ -340,6 +315,52 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       slice = toBytes(data).subarray(bufOffset, bufOffset + len);
     }
     return { bytes: slice, filePosition };
+  }
+
+  /**
+   * A path in /dev the kernel opens as a device (1.69+: ctx.sync.open sees
+   * /dev). /dev/stdin and /dev/fd/0 stay process.stdin's (see openSync).
+   */
+  /**
+   * The path to open as a device (null when it isn't one): by what it is,
+   * not how it's spelled. The kernel shows /dev only by its own paths, so a
+   * link to a device is followed here first.
+   */
+  function devicePathOf(target) {
+    if (typeof ctx.sync?.open !== 'function') return null;
+    let real = target;
+    if (!target.startsWith('/dev/')) {
+      try {
+        // Follow the links by hand: the kernel's stat of one to /dev is ENOENT.
+        for (let hops = 0; syncFs.lstat?.(real)?.isSymbolicLink; hops++) {
+          if (hops >= 40) return null;
+          real = path.resolve(path.dirname(real), syncFs.readlink(real));
+          if (real.startsWith('/dev/')) break;
+        }
+      } catch {
+        return null;
+      }
+      if (real === target) return null;
+    }
+    if (real === '/dev/stdin' || real === '/dev/fd/0') return null;
+    try {
+      const st = syncFs.stat(real);
+      return !st.isFile && !st.isDirectory ? real : null;
+    } catch {
+      return null;
+    }
+  }
+  const isDevicePath = (target) => devicePathOf(target) !== null;
+
+  /** writeFileSync / appendFileSync of a device: open, write, close, as Node's do. */
+  function writeThroughDescriptor(p, bytes, flag) {
+    const fd = syncApi.openSync(p, flag);
+    try {
+      let off = 0;
+      while (off < bytes.byteLength) off += syncApi.writeSync(fd, bytes, off, bytes.byteLength - off);
+    } finally {
+      syncApi.closeSync(fd);
+    }
   }
 
   function writeBytesAtPath(ent, bytes, filePosition) {
@@ -633,6 +654,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
       const pathArg = p;
       const target = abs(p);
+      if (isDevicePath(target)) return writeThroughDescriptor(p, bytes, flag);
       if (flag.includes('x') && syncFs.exists(target)) throw nodeFsError('EEXIST', 'open', pathArg);
       if (flag.startsWith('r')) {
         // r+: the file must exist; write from the start, keep what's beyond.
@@ -681,6 +703,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
       const pathArg = p;
       const target = abs(p);
+      if (isDevicePath(target)) return writeThroughDescriptor(p, next, flag);
       try {
         let prev = new Uint8Array(0);
         if (syncFs.exists(target)) prev = syncFs.readFile(target);
@@ -816,6 +839,28 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
       const fl = parseFlags(flags);
       const target = abs(p);
+      // A device (/dev/null, /dev/zero, /dev/urandom, /dev/stdout, /dev/fd/N, …):
+      // a kernel descriptor on it (slicc-kernel 1.69+), read and written as a
+      // stream, never whole.
+      const device = devicePathOf(target);
+      if (device) {
+        let file;
+        try {
+          file = ctx.sync.open(device, {
+            read: fl.readable || fl.raw === 'r',
+            write: fl.writable,
+            append: fl.append,
+            create: fl.create,
+            exclusive: fl.exclusive,
+            truncate: fl.truncate,
+          });
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
+        }
+        const fd = nextFd++;
+        fdTable.set(fd, { path: target, flags: fl.raw, pos: 0, readable: fl.readable || fl.raw === 'r', writable: fl.writable, device: file });
+        return fd;
+      }
       const exists = syncFs.exists(target);
       if (fl.exclusive && exists) throw nodeFsError('EEXIST', 'open', pathArg);
       if (!exists) {
@@ -866,6 +911,16 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
       const ent = fdTable.get(fd);
       if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
+      if (ent.device) {
+        try {
+          const chunk = ent.device.read(0, len);
+          const n = Math.min(len, chunk?.length ?? 0);
+          if (n) buffer.set(chunk.subarray(0, n), bufOffset);
+          return n;
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'read', undefined, err);
+        }
+      }
       try {
         const bytes = syncFs.readFile(ent.path);
         const pos = filePosition == null ? ent.pos : filePosition;
@@ -887,6 +942,14 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       // A descriptor opened read-only cannot be written (Node: EBADF).
       if (!ent || !ent.writable) throw nodeFsError('EBADF', 'write', undefined);
       const { bytes, filePosition } = parseWriteSyncArgs(data, offset, length, position);
+      if (ent.device) {
+        try {
+          const n = ent.device.write(0, bytes);
+          return typeof n === 'number' ? n : bytes.byteLength;
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'write', undefined, err);
+        }
+      }
       try {
         return writeBytesAtPath(ent, bytes, filePosition);
       } catch (err) {
@@ -922,7 +985,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     closeSync(fd) {
       if (fd === 0 || fd === 1 || fd === 2) return;
       if (!fdTable.has(fd)) throw nodeFsError('EBADF', 'close', undefined);
+      const ent = fdTable.get(fd);
       fdTable.delete(fd);
+      try {
+        ent.device?.close();
+      } catch {
+        /* closed */
+      }
     },
     symlinkSync(target, p) {
       try {
@@ -1607,6 +1676,35 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   function openFileOf(fd) {
     const ent = fdTable.get(fd);
     if (!ent) return null;
+    if (ent.device) {
+      // A device: its kernel descriptor (kernelFd) can be a child's stdio as
+      // it is; fed and drained here, it streams, up to the kernel's 64 MiB.
+      return {
+        kernelFd: ent.device.fd,
+        write(bytes) {
+          let off = 0;
+          while (bytes?.length && off < bytes.length) off += ent.device.write(0, bytes.subarray(off)) || bytes.length - off;
+        },
+        readRest() {
+          const chunks = [];
+          let total = 0;
+          for (;;) {
+            const chunk = ent.device.read(0, 64 * 1024);
+            if (!chunk?.length) break;
+            chunks.push(chunk);
+            total += chunk.length;
+            if (total > 64 * 1024 * 1024) throw nodeFsError('EFBIG', 'read', undefined);
+          }
+          const out = new Uint8Array(total);
+          let at = 0;
+          for (const c of chunks) {
+            out.set(c, at);
+            at += c.length;
+          }
+          return out;
+        },
+      };
+    }
     return {
       write(bytes) {
         if (bytes?.length) writeBytesAtPath(ent, bytes, null);
