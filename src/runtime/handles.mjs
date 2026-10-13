@@ -17,6 +17,10 @@ export function createHandleTable() {
     get refCount() {
       return refed.size;
     },
+    /** The ref'd handles (process.getActiveResourcesInfo). */
+    list() {
+      return [...refed];
+    },
     add(handle) {
       refed.add(handle);
     },

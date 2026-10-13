@@ -1,0 +1,8 @@
+{
+  "description": "process.getActiveResourcesInfo(): the ref'd timers and immediates (an unref'd timer isn't one); stdio's own wraps left out",
+  "argv": [
+    "-e",
+    "const info = () => process.getActiveResourcesInfo().filter((k) => k === 'Timeout' || k === 'Immediate'); setTimeout(() => {}, 1000).unref(); const t = setTimeout(() => {}, 100); setImmediate(() => {}); console.log(info()); clearTimeout(t); setImmediate(() => console.log(info()));"
+  ],
+  "shim": true
+}

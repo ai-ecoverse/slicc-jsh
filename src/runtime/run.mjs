@@ -155,8 +155,8 @@ export async function runNode(ctx, options = {}) {
    * Returns the status the listeners leave.
    */
   let finishExitRef;
-  const dieUncaught = (report) => {
-    const code = finishExitRef(1);
+  const dieUncaught = (report, status = 1) => {
+    const code = finishExitRef(status);
     try {
       report();
     } catch {
@@ -173,15 +173,23 @@ export async function runNode(ctx, options = {}) {
   let processRef;
   const handleUncaught = (err) => {
     const p = processRef;
-    if (typeof p?._uncaughtCapture === 'function') {
-      p._uncaughtCapture(err);
-      return true;
+    const capture = typeof p?._uncaughtCapture === 'function';
+    if (!capture && !(p && p.listenerCount('uncaughtException') > 0)) return false;
+    try {
+      if (capture) p._uncaughtCapture(err);
+      else p.emit('uncaughtException', err, 'uncaughtException');
+    } catch (handlerError) {
+      if (isExitError(handlerError)) throw handlerError;
+      // Node: a handler that throws is fatal, reported as itself, status 7.
+      exitStatus = dieUncaught(() => printUncaught(handlerError), 7);
+      try {
+        timers.stop();
+        ctx.exit?.(exitStatus);
+      } catch {
+        /* JsExit */
+      }
     }
-    if (p && p.listenerCount('uncaughtException') > 0) {
-      p.emit('uncaughtException', err, 'uncaughtException');
-      return true;
-    }
-    return false;
+    return true;
   };
 
   const parsed = parseNodeArgv([...ctx.argv]);

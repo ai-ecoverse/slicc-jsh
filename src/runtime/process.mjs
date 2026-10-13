@@ -254,6 +254,7 @@ class Process extends EventEmitter {
 
     // process.stdin / stdout / stderr: Node's streams, made on first access.
     this._Buffer = Buffer;
+    this._handles = handles;
     const io = createStdio({ ctx, process: this, Buffer, handles, info: stdio });
     this._stdio = io;
     for (const [name, get] of [
@@ -438,7 +439,16 @@ class Process extends EventEmitter {
 
   /** Node's: the kinds of what keeps the loop alive ('Timeout', 'FSReqCallback', …). */
   getActiveResourcesInfo() {
-    return [];
+    // Node's order: requests, handles, then timers and immediates.
+    const NAMES = { promise: 'FSReqCallback', stdin: 'TTYWrap', child: 'ProcessWrap', socket: 'TCPWrap', server: 'TCPServerWrap' };
+    const out = [];
+    const timers = [];
+    for (const h of this._handles?.list?.() ?? []) {
+      if (h.kind === 'Timeout' || h.kind === 'Immediate') timers.push(h.kind);
+      else if (h.kind === 'stdin') out.push(this._stdio?.isatty?.(0) ? 'TTYWrap' : 'PipeWrap');
+      else if (NAMES[h.kind]) out.push(NAMES[h.kind]);
+    }
+    return [...out, ...timers.filter((k) => k === 'Timeout'), ...timers.filter((k) => k === 'Immediate')];
   }
 
   _getActiveHandles() {
@@ -489,9 +499,15 @@ class Process extends EventEmitter {
     if (typeof maybeRefable?.unref === 'function') maybeRefable.unref();
   }
 
-  /** process.abort(): SIGABRT's default action (the program dies of it). */
+  /** process.abort(): SIGABRT's default action, whatever listens for it (Node's abort()). */
   abort() {
-    this.kill(this.pid, 'SIGABRT');
+    // A JS SIGABRT listener doesn't catch it: the kernel's handler goes first.
+    try {
+      Promise.resolve(this._ctx.signals?.reset?.('SIGABRT')).catch(() => {});
+    } catch {
+      /* no signals */
+    }
+    this._defaultSignalAction('SIGABRT', SIGNALS.SIGABRT);
   }
 
   /** process.loadEnvFile(path = './.env'): its variables, those not already set. */
@@ -608,8 +624,14 @@ class Process extends EventEmitter {
       }
       return true;
     }
-    // Default action: the program dies of the signal now, as Node's does
-    // (its parent sees the signal, not a status); nothing more runs.
+    this._defaultSignalAction(name, num);
+  }
+
+  /**
+   * A signal's default action on this process: it dies of it now, as Node's
+   * does (its parent sees the signal, not a status); nothing more runs.
+   */
+  _defaultSignalAction(name, num) {
     const code = 128 + num;
     this._recordExit(code);
     this._silenced = true;
