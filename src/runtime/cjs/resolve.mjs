@@ -10,7 +10,8 @@ import { moduleNotFound, packagePathNotExported } from './errors.mjs';
 // `sliccy-<name>` package that differs from its host build); host Node never
 // sets it. See docs/design/run-outside-slicc.md.
 const REQUIRE_CONDITIONS = ['slicc', 'require', 'node', 'default'];
-const DEFAULT_EXTENSIONS = ['.js', '.cjs', '.json'];
+// Node's require() tries .js, .json and .node (no .cjs).
+const DEFAULT_EXTENSIONS = ['.js', '.json'];
 
 export function createResolver({
   exposeInternals,
@@ -366,6 +367,7 @@ const BUILTIN_NAMES = new Set([
   'tls',
   'cluster',
   'vm',
+  'v8',
 ]);
 
 function isBuiltinName(name) {

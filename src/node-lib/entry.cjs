@@ -41,6 +41,10 @@ module.exports = {
   get util() {
     return require('util');
   },
+  /** cjs-module-lexer: the names Node gives a CommonJS module imported from ESM. */
+  get cjsLexer() {
+    return require('internal/deps/cjs-module-lexer/lexer');
+  },
   /** The global console (Node's), its streams the program's process.stdout / stderr, bound lazily. */
   consoleFor(proc) {
     const globalConsole = require('internal/console/global');

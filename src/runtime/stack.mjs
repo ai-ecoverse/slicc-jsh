@@ -25,6 +25,11 @@ function isLoaderImplFrame(frame) {
 
 function isKernelFrame(frame) {
   if (isLoaderImplFrame(frame)) return true;
+  // An ES module's loader lines (export getters, hoisted imports) come
+  // before its own first line: they are the runtime's, not the file's.
+  const esmFile = resolveFile(frame, parseSite(frame));
+  const esmExtra = esmFile ? esmFrames.get(esmFile) : undefined;
+  if (esmExtra !== undefined && adjustLine(frame.getLineNumber?.()) - esmExtra < 1) return true;
   const file = frame.getFileName?.() || '';
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
   const fn = frame.getFunctionName?.() || '';

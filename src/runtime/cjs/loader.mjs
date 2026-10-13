@@ -448,7 +448,7 @@ export function createCjs({
       get: () => mainModule,
       configurable: true,
     });
-    require.extensions = { '.js': true, '.cjs': true, '.json': true };
+    require.extensions = Module._extensions;
     return require;
   }
 

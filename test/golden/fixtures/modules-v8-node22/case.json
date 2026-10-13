@@ -1,0 +1,13 @@
+{
+  "description": "node: specifiers that aren't builtins (ERR_UNKNOWN_BUILTIN_MODULE), require() not trying .cjs, the names cjs-module-lexer gives an imported CommonJS module, Node's missing-named-export messages, fs streams' fd and pending, the v8 module",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

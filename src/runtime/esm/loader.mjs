@@ -56,6 +56,22 @@ function finalizeNamespace(exportsObj) {
   return ns;
 }
 
+/** Namespaces of CommonJS modules (for the missing-named-export message). */
+const cjsNamespaces = new WeakSet();
+
+/**
+ * A static import of a name the module doesn't export: Node's SyntaxError,
+ * worded for a CommonJS module or for any other.
+ */
+function missingExport(ns, spec, name) {
+  if (cjsNamespaces.has(ns)) {
+    throw new SyntaxError(
+      `Named export '${name}' not found. The requested module '${spec}' is a CommonJS module, which may not support all module.exports as named exports.\nCommonJS modules can always be imported via the default export, for example using:\n\nimport pkg from '${spec}';\nconst { ${name} } = pkg;\n`
+    );
+  }
+  throw new SyntaxError(`The requested module '${spec}' does not provide an export named '${name}'`);
+}
+
 /** ERR_REQUIRE_ASYNC_MODULEs from inside a graph, renamed by requireEsm(). */
 const deepAsync = new WeakSet();
 
@@ -425,9 +441,13 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
     const __meta = makeImportMeta(filename);
     const __importSync = (spec, attributes) => resolveAndLoadSync(spec, filename, attributes);
+    __importSync.missing = missingExport;
     const __import = (spec, options) => {
+      // A module still evaluating: its own promise, which doesn't keep the program alive.
+      const pending = evaluatingDone(spec, filename);
+      if (pending) return pending;
       // Dynamic import must support TLA modules (async evaluation).
-      const p = Promise.resolve().then(() => importModule(String(spec), filename, attributesOf(options)));
+      const p = Promise.resolve().then(() => importModule(String(spec), filename, attributesOf(options), true));
       if (trackPromise && handles) return trackPromise(handles, p);
       return p;
     };
@@ -468,14 +488,23 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     );
     const exportsObj = Object.create(null);
     const entry = { evaluating: true, exportsObj };
+    let settle;
+    entry.done = new Promise((resolve, reject) => {
+      settle = { resolve, reject };
+    });
+    entry.done.catch(() => {});
     cache.set(filename, entry);
     evaluatingStack.add(filename);
 
     try {
       const __meta = makeImportMeta(filename);
       const __importSync = (spec, attributes) => resolveAndLoadSync(spec, filename, attributes);
+      __importSync.missing = missingExport;
       const __import = (spec, options) => {
-        const p = Promise.resolve().then(() => importModule(String(spec), filename, attributesOf(options)));
+        // A module still evaluating: its own promise, which doesn't keep the program alive.
+        const pending = evaluatingDone(spec, filename);
+        if (pending) return pending;
+        const p = Promise.resolve().then(() => importModule(String(spec), filename, attributesOf(options), true));
         if (trackPromise && handles) return trackPromise(handles, p);
         return p;
       };
@@ -514,7 +543,11 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       const ns = finalizeNamespace(exportsObj);
       entry.namespace = ns;
       entry.evaluating = false;
+      settle.resolve(ns);
       return ns;
+    } catch (err) {
+      settle.reject(err);
+      throw err;
     } finally {
       evaluatingStack.delete(filename);
     }
@@ -530,11 +563,67 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const source = decoder.decode(fs.readFile(file));
     if (!isEsmFilename(file, source)) {
       const exports = cjs.loadFile(file);
-      const ns = cjsToNamespace(exports);
+      const ns = cjsFileNamespace(file, source, exports);
       cache.set(filename, { namespace: ns });
       return ns;
     }
     return evaluateEsm(filename, source);
+  }
+
+  /**
+   * The names a CommonJS module has when imported (Node's
+   * cjsPreparseModuleExports): what cjs-module-lexer finds in its source,
+   * plus, for each `module.exports = require('…')`-style re-export, that
+   * module's names (resolved as require() would, .js files only).
+   */
+  const cjsNames = new Map();
+  function cjsExportNames(file, source) {
+    if (cjsNames.has(file)) return cjsNames.get(file);
+    // Cached (and filled in place) before the re-exports are followed, as in
+    // Node: a re-export cycle gives each module what the other has so far.
+    const names = new Set();
+    cjsNames.set(file, names);
+    let parsed;
+    try {
+      parsed = process._nodeLib().cjsLexer.parse(source ?? decoder.decode(fs.readFile(file)));
+    } catch {
+      parsed = { exports: [], reexports: [] };
+    }
+    for (const n of parsed.exports) names.add(n);
+    for (const spec of parsed.reexports) {
+      try {
+        const target = cjs.makeRequire(file).resolve(spec);
+        if (typeof target !== 'string' || !target.startsWith('/')) continue;
+        if (!(target.endsWith('.js') || target.endsWith('.cjs')) || isEsmFilename(target)) continue;
+        for (const n of cjsExportNames(target)) names.add(n);
+      } catch {
+        /* unresolvable: no names from it */
+      }
+    }
+    return names;
+  }
+
+  /** Node's namespace of an imported CommonJS module (after it ran): default is module.exports, plus the lexer's names. */
+  function cjsFileNamespace(file, source, exports) {
+    const ns = Object.create(null);
+    const names = [...cjsExportNames(file, source)].filter((n) => n !== 'default').sort();
+    const isObj = exports !== null && (typeof exports === 'object' || typeof exports === 'function');
+    // The named exports are their values now (Node takes them once, after
+    // the module ran); only default, module.exports itself, stays live.
+    for (const name of ['default', ...names].sort()) {
+      let value = exports;
+      if (name !== 'default') {
+        try {
+          value = isObj ? exports[name] : undefined;
+        } catch {
+          value = undefined;
+        }
+      }
+      Object.defineProperty(ns, name, { enumerable: true, get: () => value });
+    }
+    Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
+    cjsNamespaces.add(ns);
+    return Object.preventExtensions(ns);
   }
 
   /** A JSON module: its default export is the parsed file, once per id. */
@@ -563,7 +652,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const source = decoder.decode(fs.readFile(file));
     if (!isEsmFilename(file, source)) {
       const exports = cjs.loadFile(file);
-      const ns = cjsToNamespace(exports);
+      const ns = cjsFileNamespace(file, source, exports);
       cache.set(filename, { namespace: ns });
       return ns;
     }
@@ -571,7 +660,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     return evaluateEsmAsync(filename, source);
   }
 
-  async function importModule(specifier, parentFilename = `${process.cwd()}/`, attributes) {
+  async function importModule(specifier, parentFilename = `${process.cwd()}/`, attributes, dynamic = false) {
     const resolved = esmResolve(specifier, parentFilename);
     if (resolved.type !== 'builtin') checkAttributes(urlOfResolved(resolved), isJsonResolved(resolved), attributes);
     if (resolved.type === 'data') {
@@ -585,6 +674,9 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const cached = cache.get(filename);
     if (cached?.namespace) return cached.namespace;
     if (cached?.promise) return cached.promise;
+    // A dynamic import() of a module still evaluating waits for it, as in Node
+    // (a module that imports itself under top-level await never settles).
+    if (dynamic && cached?.evaluating && cached.done) return cached.done;
     // Cycle: live exports. Concurrent non-cycle evaluation: wait on promise below.
     if (cached?.evaluating && evaluatingStack.has(filename)) return cached.exportsObj;
 
@@ -639,9 +731,21 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     }
   }
 
+  /** The evaluation promise of the module `spec` names, if it is still evaluating. */
+  function evaluatingDone(spec, parentFilename) {
+    try {
+      const r = esmResolve(String(spec), parentFilename);
+      if (r.type !== 'file') return undefined;
+      const c = cache.get(r.filename);
+      return c?.evaluating && !c.namespace && c.done ? c.done : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** import(specifier, options) from outside a module (CommonJS, .jsh, new Function). */
   function importDynamic(specifier, parentFilename, options) {
-    return Promise.resolve().then(() => importModule(String(specifier), parentFilename, attributesOf(options)));
+    return Promise.resolve().then(() => importModule(String(specifier), parentFilename, attributesOf(options), true));
   }
 
   return {

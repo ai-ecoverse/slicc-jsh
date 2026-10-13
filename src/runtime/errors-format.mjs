@@ -199,6 +199,26 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPro
   const rawStack = sanitizeStack(err.stack) || `${err.name}: ${err.message}`;
   let head = '';
 
+  // The ESM resolver's errors: Node's header (where its resolver throws them);
+  // the frames are Node's own, so none here; then the props block.
+  if (
+    (err.code === 'ERR_MODULE_NOT_FOUND' || err.code === 'ERR_UNSUPPORTED_DIR_IMPORT') &&
+    / imported from /.test(String(err.message)) &&
+    !/\n {4}at /.test(rawStack)
+  ) {
+    const props = [`  code: '${err.code}'`];
+    if (err.url !== undefined) props.push(`  url: '${err.url}'`);
+    const head =
+      err.code === 'ERR_MODULE_NOT_FOUND'
+        ? 'node:internal/modules/esm/resolve:274\n    throw new ERR_MODULE_NOT_FOUND(\n          ^\n\n'
+        : 'node:internal/modules/esm/resolve:262\n    throw new ERR_UNSUPPORTED_DIR_IMPORT(path, basePath, String(resolved));\n          ^\n\n';
+    return {
+      body:
+        head +
+        `${err.name} [${err.code}]: ${err.message} {\n${props.join(',\n')}\n}\n${trailer}`,
+    };
+  }
+
   if (err.code === 'MODULE_NOT_FOUND') {
     head = `node:internal/modules/cjs/loader:1386\n  throw err;\n  ^\n\n`;
     const rs = err.requireStack?.[0];

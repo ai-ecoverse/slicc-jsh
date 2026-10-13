@@ -99,7 +99,10 @@ describe('ESM (M3)', () => {
   it('imports CJS from ESM (default + named)', async () => {
     const { kernel, run, close } = await withJsh();
     try {
-      await kernel.writeFile('/os/cjs.js', "module.exports = { hello: 'world', n: 1 };\n");
+      // Named exports are what cjs-module-lexer finds, as in Node: exports.x
+      // assignments (a `module.exports = { hello: 'world' }` literal with
+      // non-identifier values gives only the default).
+      await kernel.writeFile('/os/cjs.js', "exports.hello = 'world';\nexports.n = 1;\n");
       await kernel.writeFile(
         '/os/main.mjs',
         "import cjs, { hello, n } from './cjs.js';\nconsole.log(cjs.hello, hello, n);\n"
