@@ -20,5 +20,8 @@ json 200 "OK" [["content-type","application/json"]] false http://127.0.0.1:PORT/
 a body stream 200 "OK" [["content-type","text/plain"]] false http://127.0.0.1:PORT/chunks true "one,two"
 aborted THROWS AbortError This operation was aborted undefined
 aborted in flight THROWS AbortError This operation was aborted undefined
+aborted while the body is read THROWS AbortError This operation was aborted undefined
+cross-origin redirect 200 "OK" [] true http://localhost:PORT/far true "[\"host\",\"x-keep\",\"accept\",\"accept-language\",\"sec-fetch-mode\",\"user-agent\",\"accept-encoding\"]"
+same-origin redirect 201 "Made" [["content-type","application/json"],["x-multi","a, b"]] true http://127.0.0.1:PORT/echo true {"authorization":"Bearer s","cookie":"c=1","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate"}
 refused THROWS TypeError fetch failed ECONNREFUSED
 refused, again THROWS TypeError fetch failed ECONNREFUSED

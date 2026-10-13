@@ -149,8 +149,15 @@ async function loopbackFetch(getHttp, request, target, initHeaders) {
       res.resume();
       if (request.redirect === 'error') throw fetchFailed(new TypeError('unexpected redirect'));
       if (hops >= 20) throw fetchFailed(new TypeError('redirect count exceeded'));
+      const from = url;
       url = new URL(location, url);
       redirected = true;
+      // Another origin gets no credentials (undici, after the fetch spec).
+      if (url.origin !== from.origin) {
+        for (let i = headers.length - 1; i >= 0; i--) {
+          if (/^(authorization|proxy-authorization|cookie|host)$/.test(headers[i][0])) headers.splice(i, 1);
+        }
+      }
       // 303, and 301/302 from a POST: a GET without the body (the fetch spec).
       if (status === 303 ? method !== 'HEAD' : (status === 301 || status === 302) && method === 'POST') {
         method = 'GET';
@@ -167,22 +174,47 @@ async function loopbackFetch(getHttp, request, target, initHeaders) {
       addr = next;
       continue;
     }
-    return { response: toResponse(res, request, url, redirected) };
+    return { response: toResponse(res, { method, signal }, url, redirected) };
   }
 }
 
-function toResponse(res, request, url, redirected) {
+function toResponse(res, { method, signal }, url, redirected) {
   const headers = new Headers();
   for (let i = 0; i < res.rawHeaders.length; i += 2) headers.append(res.rawHeaders[i], res.rawHeaders[i + 1]);
   let stream = null;
-  if (!NULL_BODY.has(res.statusCode) && request.method !== 'HEAD') {
+  if (!NULL_BODY.has(res.statusCode) && method !== 'HEAD') {
+    let onAbort;
+    let settled = false;
+    const done = () => {
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+    };
     stream = new ReadableStream({
       start(controller) {
-        res.on('data', (chunk) => controller.enqueue(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)));
-        res.on('end', () => controller.close());
-        res.on('error', (err) => controller.error(fetchFailed(err)));
+        // An abort while the body is read ends it with the signal's reason.
+        onAbort = () => {
+          if (settled) return;
+          done();
+          res.destroy();
+          controller.error(signal.reason);
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+        res.on('data', (chunk) => {
+          if (!settled) controller.enqueue(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+        });
+        res.on('end', () => {
+          if (settled) return;
+          done();
+          controller.close();
+        });
+        res.on('error', (err) => {
+          if (settled) return;
+          done();
+          controller.error(fetchFailed(err));
+        });
       },
       cancel() {
+        done();
         res.destroy();
       },
     });
