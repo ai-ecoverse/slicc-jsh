@@ -1,4 +1,5 @@
 import { rewriteDynamicImports } from '../esm/transform.mjs';
+import { syntaxReport } from '../syntax-report.mjs';
 import { createPath } from '../path.mjs';
 import { createBuiltins } from './builtins.mjs';
 import { createResolver, isBuiltinName } from './resolve.mjs';
@@ -323,13 +324,20 @@ export function createCjs({
             /* ignore */
           }
         }
+        // Node's report: file:line, the line, carets under the token.
+        const report = syntaxReport(body, { kind: 'commonjs', filename, error: err });
+        if (report && !wrapperRedeclare) {
+          Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
+          err.stack = report.stack;
+          throw err;
+        }
         const first = body.split('\n')[0] ?? '';
         const named = /\b(exports|require|module|__filename|__dirname)\b/.exec(first);
         let caretAt = named ? named.index : first.indexOf(';');
         if (caretAt < 0) caretAt = Math.max(0, first.length - 1);
         const caret = `${' '.repeat(caretAt)}^`;
         const pretty = `${filename}:1\n${first}\n${caret}\n\n${err.name}: ${err.message}`;
-        err._prettyStack = pretty;
+        Object.defineProperty(err, '_prettyStack', { value: pretty, configurable: true, writable: true });
         err.stack = pretty;
       }
       throw err;

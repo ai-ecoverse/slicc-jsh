@@ -129,10 +129,10 @@ stderr (stack frames ignored), `≠` different, `–` not run. `node` is the pla
 | [wrapper-return-promise](wrapper-return-promise) | wrapper | = | = | = | same | 0 / 0 / 0 / 0 |
 | [wrapper-shebang](wrapper-shebang) | wrapper | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
 | [wrapper-sloppy](wrapper-sloppy) | wrapper | ≠ | = | = | six≠node | 0 / 0 / 0 / 0 |
-| [wrapper-static-import](wrapper-static-import) | wrapper | ≠ | ≠ | ≠ | all differ | 0 / 1 / 1 / 0 |
-| [wrapper-static-import-sliccy](wrapper-static-import-sliccy) | wrapper | ≠ | ≠ | – | all differ | 0 / 1 / 1 / – |
+| [wrapper-static-import](wrapper-static-import) | wrapper | ≠ | = | ≠ | six≠node | 0 / 1 / 1 / 0 |
+| [wrapper-static-import-sliccy](wrapper-static-import-sliccy) | wrapper | ≠ | = | – | six≠node | 0 / 1 / 1 / – |
 | [wrapper-strict-after-import](wrapper-strict-after-import) | wrapper | ≠ | = | ≠ | six≠node | 0 / 0 / 0 / 0 |
-| [wrapper-syntax-error](wrapper-syntax-error) | exit | ≠ | ≠ | ≠ | all differ | 1 / 1 / 1 / 1 |
+| [wrapper-syntax-error](wrapper-syntax-error) | exit | ≠ | = | ≠ | six≠node | 1 / 1 / 1 / 1 |
 | [wrapper-top-level-await](wrapper-top-level-await) | wrapper | = | = | = | same | 0 / 0 / 0 / 0 |
 | [wrapper-top-level-return](wrapper-top-level-return) | wrapper | = | = | = | same | 0 / 0 / 0 / 0 |
 | [zlib](zlib) | builtins | ≠ | ≠ | = | all differ | 0 / 0 / 0 / 0 |

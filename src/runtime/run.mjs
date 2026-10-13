@@ -17,6 +17,7 @@ import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
 import { probeStdio } from './stdio.mjs';
 import { installFunctionImport } from './function-import.mjs';
 import { patchReplServer } from './node-lib.mjs';
+import { syntaxReport } from './syntax-report.mjs';
 import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
@@ -723,7 +724,18 @@ export async function runNode(ctx, options = {}) {
             args.push(importBinding);
             values.push(dynImport);
           }
-          const fn = new Function(...args, body);
+          let fn;
+          try {
+            fn = new Function(...args, body);
+          } catch (err) {
+            // Node's report: [eval]:line, the line, carets under the token.
+            const report = err instanceof SyntaxError && !parsed.print && syntaxReport(parsed.code, { kind: 'commonjs', filename: '[eval]', error: err });
+            if (report) {
+              Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
+              err.stack = report.stack;
+            }
+            throw err;
+          }
           const result = fn(...values);
           // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
           if (result != null && typeof result.then === 'function') {

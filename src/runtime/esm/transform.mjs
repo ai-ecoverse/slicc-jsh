@@ -4,6 +4,10 @@
  * body (and before import evaluation) so cycles see the bindings.
  */
 import * as acorn from 'acorn';
+import { encodeFilePath } from '../builtins/url.mjs';
+import { syntaxReport } from '../syntax-report.mjs';
+
+const fileUrlOf = (p) => (typeof p === 'string' && p.startsWith('/') ? `file://${encodeFilePath(p)}` : p);
 
 function stripHashbang(source) {
   if (source.startsWith('#!')) {
@@ -71,6 +75,14 @@ export function transformEsm(source, filename) {
       allowAwaitOutsideFunction: true,
     });
   } catch (err) {
+    // Node's: V8's SyntaxError, reported at the file: URL's line, with carets.
+    const report = err instanceof SyntaxError && syntaxReport(body, { kind: 'module', filename: fileUrlOf(filename) });
+    if (report) {
+      const e = new SyntaxError(report.message);
+      Object.defineProperty(e, '_prettyStack', { value: report.stack, configurable: true, writable: true });
+      e.stack = report.stack;
+      throw e;
+    }
     const e = err instanceof Error ? err : new Error(String(err));
     e.message = `${filename}: ${e.message}`;
     throw e;

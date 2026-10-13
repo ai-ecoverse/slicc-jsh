@@ -2198,9 +2198,9 @@
         "node": 0
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "≠",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "wrapper-static-import-sliccy",
@@ -2216,9 +2216,9 @@
         "node": null
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "–",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "wrapper-strict-after-import",
@@ -2250,9 +2250,9 @@
         "node": 1
       },
       "six": "≠",
-      "seven": "≠",
+      "seven": "=",
       "node": "≠",
-      "auto": "all differ"
+      "auto": "six≠node"
     },
     {
       "name": "wrapper-top-level-await",
