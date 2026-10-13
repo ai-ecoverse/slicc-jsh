@@ -424,24 +424,40 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
   /** Create pipe Readable immediately (Node exposes .stdout before spawn finishes). */
   function createPipeReadable() {
     const { Readable } = getStream();
-    const r = new Readable({ read() {} });
+    let reader = null;
+    let gone = false;
+    const r = new Readable({
+      read() {},
+      // Node: destroying child.stdout closes the parent's read end, so the
+      // child's next write fails with EPIPE. Cancelling the kernel stream
+      // closes our end of the pipe.
+      destroy(err, cb) {
+        gone = true;
+        reader?.cancel().catch(() => {});
+        cb(err);
+      },
+    });
     r._sliccPump = async (webStream) => {
       if (!webStream) {
-        r.push(null);
+        if (!gone) r.push(null);
+        return;
+      }
+      if (gone) {
+        webStream.cancel().catch(() => {});
         return;
       }
       try {
-        const reader = webStream.getReader();
+        reader = webStream.getReader();
         for (;;) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done || gone) break;
           const chunk =
             value instanceof Uint8Array ? Buffer.from(value) : Buffer.from(String(value));
           r.push(chunk);
         }
-        r.push(null);
+        if (!gone) r.push(null);
       } catch (err) {
-        r.destroy(err);
+        if (!gone) r.destroy(err);
       }
     };
     return r;
