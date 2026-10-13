@@ -272,6 +272,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         append: !!(flags & 0o2000),
         truncate: !!(flags & 0o1000),
         create: !!(flags & 0o100),
+        directory: !!(flags & 0o200000),
+        nofollow: !!(flags & 0o400000),
       };
     }
     const f = flags == null ? 'r' : String(flags);
@@ -397,12 +399,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     } catch {
       cur = new Uint8Array(0);
     }
-    const pos =
-      filePosition == null
-        ? ent.append ?? String(ent.flags).includes('a')
-          ? cur.length
-          : ent.pos
-        : filePosition;
+    // An append descriptor writes at the end whatever the position (Linux's O_APPEND).
+    const append = ent.append ?? String(ent.flags).includes('a');
+    const pos = append ? cur.length : filePosition == null ? ent.pos : filePosition;
     const out = new Uint8Array(Math.max(cur.length, pos + bytes.length));
     out.set(cur, 0);
     out.set(bytes, pos);
@@ -914,7 +913,21 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         fdTable.set(fd, { path: target, flags: fl.raw, pos: 0, readable: fl.readable || fl.raw === 'r', writable: fl.writable, device: file });
         return fd;
       }
+      // O_NOFOLLOW: a link is ELOOP; O_DIRECTORY: anything but a directory is ENOTDIR.
+      if (fl.nofollow) {
+        let lst;
+        try {
+          lst = syncFs.lstat(target);
+        } catch {
+          lst = undefined;
+        }
+        if (lst?.isSymbolicLink) throw nodeFsError('ELOOP', 'open', pathArg);
+      }
       const exists = syncFs.exists(target);
+      if (fl.directory) {
+        if (!exists) throw nodeFsError('ENOENT', 'open', pathArg);
+        if (!syncFs.stat(target).isDirectory) throw nodeFsError('ENOTDIR', 'open', pathArg);
+      }
       if (fl.exclusive && exists) throw nodeFsError('EEXIST', 'open', pathArg);
       if (!exists) {
         if (!fl.create) throw nodeFsError('ENOENT', 'open', pathArg);
@@ -1577,8 +1590,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   }
 
   function createReadStream(p, options = {}) {
-    // Node: a string is the encoding.
+    // Node: a string is the encoding, checked as Node's assertEncoding does.
     if (typeof options === 'string') options = { encoding: options };
+    checkEncoding(options?.encoding);
     const stream = getStream?.();
     if (!stream) throw new Error('fs.createReadStream: stream not available');
     const { Readable } = stream;
@@ -1681,6 +1695,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
 
   function createWriteStream(p, options = {}) {
     if (typeof options === 'string') options = { encoding: options };
+    checkEncoding(options?.encoding);
     const stream = getStream?.();
     if (!stream) throw new Error('fs.createWriteStream: stream not available');
     const { Writable } = stream;

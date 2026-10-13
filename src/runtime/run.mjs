@@ -657,7 +657,8 @@ export async function runNode(ctx, options = {}) {
       } catch {
         /* EOF / no stdin */
       }
-      if (chunks.length === 0) return 0;
+      // Nothing piped: no program, but what -r loaded still runs its loop.
+      if (chunks.length === 0 && !(parsed.preload?.length > 0)) return 0;
       let total = 0;
       for (const c of chunks) total += c.byteLength;
       const merged = new Uint8Array(total);

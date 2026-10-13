@@ -356,6 +356,8 @@ export function errorCodes() {
             : ''
         }`
       ),
+    ERR_INVALID_STATE: (msg) => nodeError(Error, 'ERR_INVALID_STATE', `Invalid state: ${msg}`),
+    ERR_STREAM_PREMATURE_CLOSE: () => nodeError(Error, 'ERR_STREAM_PREMATURE_CLOSE', 'Premature close'),
     // The REPL's and domain's (lib/repl.js, lib/domain.js).
     ERR_CANNOT_WATCH_SIGINT: () => nodeError(Error, 'ERR_CANNOT_WATCH_SIGINT', 'Cannot watch for SIGINT signals'),
     ERR_DOMAIN_CALLBACK_NOT_AVAILABLE: () =>

@@ -446,11 +446,15 @@ export function createCjs({
 
   let mainModule = null;
 
+  let preloadParent;
   function makeRequire(parentFilename, parentModule) {
     // Node's requireStack: this file, then the files that required it.
     const stackOf = () => {
       const stack = [parentFilename];
-      for (let m = parentModule?.parent; m; m = m.parent) if (m.filename && !stack.includes(m.filename)) stack.push(m.filename);
+      for (let m = parentModule?.parent; m; m = m.parent) {
+        const name = m.filename || m.id;
+        if (name && !stack.includes(name)) stack.push(name);
+      }
       return stack;
     };
     const require = (request) => {
@@ -505,9 +509,12 @@ export function createCjs({
     loadFile,
     /** node -r / --require: a module loaded before the entry, from the working directory (require stack: internal/preload). */
     preload(request) {
+      // Node's: a module with no file, id internal/preload, the parent of
+      // what it requires.
+      preloadParent ??= Object.assign(new Module('internal/preload', null), { filename: null, paths: nodeModulePaths(process.cwd()) });
       const resolved = resolver.resolve(request, `${process.cwd()}/`, ['internal/preload']);
       if (resolved.type === 'builtin') return builtins.load(resolved.id);
-      return loadFile(resolved.filename, null);
+      return loadFile(resolved.filename, preloadParent);
     },
     setRequireEsmHook,
     setImportModuleHook,
