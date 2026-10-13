@@ -112,7 +112,7 @@ The case name is given for every row below.
 | `#!` line ignored, BOM dropped | yes | yes | yes | same | 1 | wrapper-shebang, wrapper-bom |
 | stack frames name the script and its line | no (`eval at construct (…just-bash…), <anonymous>:4:10`) | `/…/main.jsh:2:10` | same | six≠node, seven=node | — | error-line-numbers, wrapper-shebang |
 | static `import … from` | lowered to CJS; `__filename` then undefined | SyntaxError | SyntaxError / works as ESM | six-only (0 scripts): keep the SyntaxError | 0 | wrapper-static-import, wrapper-static-import-sliccy |
-| `import('./x.mjs')`, `import('pkg')`, `import('node:fs')` | yes | yes | yes | same (seven and six also list `value` as a named export of a CJS `module.exports = { value }`; Node lists only `default`) | 4 | import-relative, import-package, import-builtin |
+| `import('./x.mjs')`, `import('pkg')`, `import('node:fs')` | yes | yes | yes | same (six also lists `value` as a named export of a CJS `module.exports = { value }`; Node, and seven since #116's cjs-module-lexer, list only `default`) | 4 | import-relative, import-package, import-builtin |
 | `import('sliccy:exec')` | works | `Cannot find module 'sliccy:exec'` | `ERR_UNSUPPORTED_ESM_URL_SCHEME` | six-only; the two jsh engines fail differently | 0 | require-sliccy-esm |
 | `import('https://…')` (pdf, pptx2pdf use esm.sh) | `Cannot find module … (run: ipk install http:)` | `MODULE_NOT_FOUND` | `ERR_UNSUPPORTED_ESM_URL_SCHEME` | same (all reject; those 2 scripts are broken on six today too) | 2 | import-url |
 | `new Function('u', 'return import(u)')` (vpod) | unknown *(harness)* | works: `import()` in a Function body goes through the runtime's loader, resolved against the calling script (#99, `function-import.mjs`) | works | six unknown, seven=node | 1 | import-in-function-ctor |
@@ -265,7 +265,7 @@ The 16 cases where seven's recording differs from the host `jsh` on Node (re-rec
 |---|---|---|
 | process-argv | `argv[0]`/`argv0` are `jsh`, Node's are `process.execPath` | by design (the command is `jsh`) |
 | require-node-modules | the `slicc` export condition wins | by design |
-| require-builtins, misc-builtins | 17 builtins missing: sockets (`dgram`, `dns`, `tls`, `http2`, `cluster`), workers (`worker_threads`), the inspector (`inspector`, `trace_events`), `wasi`, `domain`, `repl`, `sys`, `perf_hooks`, `diagnostics_channel`, `stream/web`, `stream/consumers` | gap: the cheap ones (`sys`, `repl`, `diagnostics_channel`, `perf_hooks`, `stream/web`, `stream/consumers`, `domain`) are next |
+| require-builtins, misc-builtins | 17 builtins missing: sockets (`dgram`, `dns`, `dns/promises`, `tls`, `http2`, `cluster`), workers (`worker_threads`), the inspector (`inspector`, `trace_events`), `wasi`, `domain`, `repl`, `sys`, `perf_hooks`, `diagnostics_channel`, `stream/web`, `stream/consumers` | gap: the cheap ones (`sys`, `repl`, `diagnostics_channel`, `perf_hooks`, `stream/web`, `stream/consumers`, `domain`) are next |
 | stream | `stream/web` missing | gap (as above) |
 | fs-surface | `statfs`, `watch`, `watchFile`, `unwatchFile` missing | gap (`watch` needs kernel change events) |
 | zlib | Brotli/Zstd throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` | gap (no pure-JS Brotli encoder is bundled) |
