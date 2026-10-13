@@ -331,6 +331,7 @@ const BUILTIN_NAMES = new Set([
   'async_hooks',
   'buffer',
   'console',
+  'constants',
   'events',
   'fs',
   'fs/promises',

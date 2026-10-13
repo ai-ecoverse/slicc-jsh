@@ -1,0 +1,10 @@
+{
+  "description": "cert 0.14.3 findings: fs path arguments as file: URLs (sync, promises, callbacks, streams; Node's errors for another scheme, a host, an encoded slash), the constants builtin, the column of a frame on a line with an imported binding",
+  "argv": ["script.mjs"],
+  "shim": true,
+  "files": [
+    { "path": "/os/script.mjs", "from": "script.mjs" },
+    { "path": "/os/package.json", "from": "package.json" },
+    { "path": "/os/lib/mod.mjs", "from": "lib/mod.mjs" }
+  ]
+}

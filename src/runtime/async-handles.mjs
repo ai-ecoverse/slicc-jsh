@@ -37,12 +37,16 @@ async function checkpoint(nextTick, onTickError) {
   for (let i = 0; i < 256; i++) {
     await afterMicrotasks();
     // A tick that throws is an uncaught exception (Node's), handled as one,
-    // and the loop goes on.
-    try {
-      nextTick.flushSync();
-    } catch (err) {
-      if (!onTickError) throw err;
-      onTickError(err);
+    // and the rest of the queue runs on before any promise job (Node's
+    // processTicksAndRejections goes on with it).
+    for (;;) {
+      try {
+        nextTick.flushSync();
+        break;
+      } catch (err) {
+        if (!onTickError) throw err;
+        onTickError(err);
+      }
     }
     if (nextTick.depth > 0) {
       idle = 0;
