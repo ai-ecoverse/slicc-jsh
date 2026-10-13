@@ -325,7 +325,15 @@ export function createCjs({
           }
         }
         // Node's report: file:line, the line, carets under the token.
-        const report = syntaxReport(source, { kind: 'commonjs', filename, error: err });
+        // The file as it is: a BOM (which the decoder dropped) shows, and counts, as in Node.
+        let bom = '';
+        try {
+          const raw = fs.readFile(filename);
+          if (raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf) bom = '\uFEFF';
+        } catch {
+          /* not a file */
+        }
+        const report = syntaxReport(`${bom}${source}`, { kind: 'commonjs', filename, error: err });
         if (report && !wrapperRedeclare) {
           Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
           err.stack = report.stack;

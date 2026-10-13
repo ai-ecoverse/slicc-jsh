@@ -746,7 +746,11 @@ export async function runNode(ctx, options = {}) {
             fn = new Function(...args, body);
           } catch (err) {
             // Node's report: [eval]:line, the line, carets under the token.
-            const report = err instanceof SyntaxError && !parsed.print && syntaxReport(parsed.code, { kind: 'commonjs', filename: '[eval]', error: err });
+            // -p compiled the code as an expression: its own message is V8's for
+            // the code itself (not for the `return (…)` around it).
+            const report =
+              err instanceof SyntaxError &&
+              syntaxReport(parsed.code, { kind: 'commonjs', filename: '[eval]', error: parsed.print ? undefined : err });
             if (report) {
               Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
               err.stack = report.stack;

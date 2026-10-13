@@ -7,7 +7,12 @@ import * as acorn from 'acorn';
 import { encodeFilePath } from '../builtins/url.mjs';
 import { syntaxReport } from '../syntax-report.mjs';
 
-const fileUrlOf = (p) => (typeof p === 'string' && p.startsWith('/') ? `file://${encodeFilePath(p)}` : p);
+// Node keeps [eval1]'s brackets in its URL (as stack.mjs does).
+const fileUrlOf = (p) => {
+  if (typeof p !== 'string' || !p.startsWith('/')) return p;
+  if (p.endsWith('/[eval1]')) return `file://${encodeFilePath(p.slice(0, -8))}/[eval1]`;
+  return `file://${encodeFilePath(p)}`;
+};
 
 function stripHashbang(source) {
   if (source.startsWith('#!')) {

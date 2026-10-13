@@ -18,7 +18,53 @@ const { sm3 } = require('./sm3.cjs');
 const aes = require('browserify-aes/browser');
 const DES = require('browserify-des');
 
+/**
+ * OpenSSL's md5-sha1 (MD5 then SHA-1 of the same input, 36 bytes, a 64-byte
+ * block) as a noble hash, so HMAC and the KDFs take it as Node's do.
+ */
+class MD5SHA1 {
+  constructor() {
+    this.md5 = legacy.md5.create();
+    this.sha1 = legacy.sha1.create();
+    this.blockLen = 64;
+    this.outputLen = 36;
+  }
+  update(data) {
+    this.md5.update(data);
+    this.sha1.update(data);
+    return this;
+  }
+  digestInto(out) {
+    out.set(this.md5.digest(), 0);
+    out.set(this.sha1.digest(), 16);
+  }
+  digest() {
+    const out = new Uint8Array(36);
+    this.digestInto(out);
+    return out;
+  }
+  destroy() {
+    this.md5.destroy();
+    this.sha1.destroy();
+  }
+  _cloneInto(to) {
+    to ||= new MD5SHA1();
+    to.md5 = this.md5._cloneInto(to.md5);
+    to.sha1 = this.sha1._cloneInto(to.sha1);
+    return to;
+  }
+  clone() {
+    return this._cloneInto();
+  }
+}
+const md5sha1 = Object.assign((msg) => new MD5SHA1().update(msg).digest(), {
+  create: () => new MD5SHA1(),
+  outputLen: 36,
+  blockLen: 64,
+});
+
 exports.hashes = {
+  'md5-sha1': md5sha1,
   md5: legacy.md5,
   sha1: legacy.sha1,
   ripemd160: legacy.ripemd160,

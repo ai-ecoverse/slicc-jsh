@@ -1,0 +1,84 @@
+== -p "1 +" (1)
+[eval]:1
+1 +
+   
+
+SyntaxError: Unexpected end of input
+
+Node.js v22.22.0
+
+== -p "a b" (1)
+[eval]:1
+a b
+  ^
+
+SyntaxError: Unexpected identifier 'b'
+
+Node.js v22.22.0
+
+== ESM -e (1)
+file://DIR/[eval1]:1
+let let = 1
+    ^^^
+
+SyntaxError: Unexpected strict mode reserved word
+
+Node.js v22.22.0
+
+== BOM, CommonJS (1)
+DIR/bom.js:1
+﻿const x = ;
+           ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== BOM, ES module (1)
+file://DIR/bom.mjs:1
+const x = ;
+          ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== an invalid character (1)
+DIR/at.js:1
+const a = @;
+          ^
+
+SyntaxError: Invalid or unexpected token
+
+Node.js v22.22.0
+
+== an unterminated string (1)
+DIR/str.js:1
+const s = 'open
+          ^^^^^
+
+SyntaxError: Invalid or unexpected token
+
+Node.js v22.22.0
+
+== a module's strict word (1)
+file://DIR/ll.mjs:1
+let let = 1;
+    ^^^
+
+SyntaxError: Unexpected strict mode reserved word
+
+Node.js v22.22.0
+
+md5-sha1 hmac e05460e72c196a1ae05e0c8fa96749bde515e4805471f3ea4089ae2f86961cbb6446deca
+md5-sha1 hmac, a key past the block 5d0221740cd949ab5944a61f02349db9a80dd8d4e6d653ad01b28f8cdc60a52297600838
+md5-sha1 pbkdf2 00f73d5b433e38c7a5613fb653bbd9bdbe679b536bedee054a5927a9ba0fbe3633fbb73d0d4a4eb5
+md5-sha1 hkdf 5671abc8e3027e56
+shake128 hmac THROWS Error undefined error:00000000:lib(0)::reason(0)
+shake128 hmac, a key past the block THROWS Error undefined error:00000000:lib(0)::reason(0)
+shake128 pbkdf2 THROWS Error undefined Deriving bits failed
+shake128 hkdf THROWS Error undefined Deriving bits failed
+shake256 hmac THROWS Error undefined error:00000000:lib(0)::reason(0)
+shake256 hmac, a key past the block THROWS Error undefined error:00000000:lib(0)::reason(0)
+shake256 pbkdf2 THROWS Error undefined Deriving bits failed
+shake256 hkdf THROWS Error undefined Deriving bits failed

@@ -20,6 +20,9 @@ function tokenEnd(code, pos) {
     const t = acorn.tokenizer(code.slice(pos), { ecmaVersion: 'latest', allowHashBang: true }).getToken();
     if (t.end > t.start) return pos + t.end;
   } catch {
+    // An unterminated string or template runs to its line's end (V8 marks
+    // all of it); any other invalid character is one.
+    if (!/['"`]/.test(code[pos] ?? '')) return pos + 1;
     const nl = code.indexOf('\n', pos);
     return nl === -1 ? code.length : nl;
   }
@@ -83,8 +86,11 @@ export function syntaxReport(source, { kind, filename, error }) {
     let message = module || atEnd(source, pos) ? undefined : error?.message;
     if (!message) {
       try {
+        // A module is strict code.
         // eslint-disable-next-line no-new-func
-        if (kind === 'jsh' || module) new AsyncFunction(source);
+        if (module) new AsyncFunction(`'use strict';${source}`);
+        // eslint-disable-next-line no-new-func
+        else if (kind === 'jsh') new AsyncFunction(source);
         // eslint-disable-next-line no-new-func
         else new Function(source);
       } catch (v8err) {
@@ -98,6 +104,7 @@ export function syntaxReport(source, { kind, filename, error }) {
     const lineStart = source.lastIndexOf('\n', pos - 1) + 1;
     let lineEnd = source.indexOf('\n', pos);
     if (lineEnd === -1) lineEnd = source.length;
+    // A BOM the file starts with stays in the line shown, and counts as a column (Node's).
     const text = source.slice(lineStart, lineEnd);
     const end = Math.min(tokenEnd(source, pos), lineEnd);
     const carets = pos >= lineEnd ? '' : '^'.repeat(Math.max(1, end - pos));
