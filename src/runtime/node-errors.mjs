@@ -356,6 +356,26 @@ export function errorCodes() {
             : ''
         }`
       ),
+    // The REPL's and domain's (lib/repl.js, lib/domain.js).
+    ERR_CANNOT_WATCH_SIGINT: () => nodeError(Error, 'ERR_CANNOT_WATCH_SIGINT', 'Cannot watch for SIGINT signals'),
+    ERR_DOMAIN_CALLBACK_NOT_AVAILABLE: () =>
+      nodeError(
+        Error,
+        'ERR_DOMAIN_CALLBACK_NOT_AVAILABLE',
+        'A callback was registered through process.setUncaughtExceptionCaptureCallback(), which is mutually exclusive with using the `domain` module'
+      ),
+    ERR_DOMAIN_CANNOT_SET_UNCAUGHT_EXCEPTION_CAPTURE: () =>
+      nodeError(
+        Error,
+        'ERR_DOMAIN_CANNOT_SET_UNCAUGHT_EXCEPTION_CAPTURE',
+        'The `domain` module is in use, which is mutually exclusive with calling process.setUncaughtExceptionCaptureCallback()'
+      ),
+    ERR_INSPECTOR_NOT_AVAILABLE: () => nodeError(Error, 'ERR_INSPECTOR_NOT_AVAILABLE', 'Inspector is not available'),
+    ERR_INVALID_REPL_EVAL_CONFIG: () =>
+      nodeError(TypeError, 'ERR_INVALID_REPL_EVAL_CONFIG', 'Cannot specify both "breakEvalOnSigint" and "eval" for REPL'),
+    ERR_INVALID_REPL_INPUT: (msg) => nodeError(TypeError, 'ERR_INVALID_REPL_INPUT', String(msg)),
+    ERR_SCRIPT_EXECUTION_INTERRUPTED: () =>
+      nodeError(Error, 'ERR_SCRIPT_EXECUTION_INTERRUPTED', 'Script execution was interrupted by `SIGINT`'),
   };
   const codes = {};
   for (const [name, make] of Object.entries(factories)) {

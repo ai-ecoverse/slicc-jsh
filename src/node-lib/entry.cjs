@@ -41,6 +41,10 @@ module.exports = {
   get util() {
     return require('util');
   },
+  /** Node's REPL (lib/internal/repl.js: createInternalRepl, and lib/repl.js through it). */
+  get repl() {
+    return require('internal/repl');
+  },
   /** cjs-module-lexer: the names Node gives a CommonJS module imported from ESM. */
   get cjsLexer() {
     return require('internal/deps/cjs-module-lexer/lexer');

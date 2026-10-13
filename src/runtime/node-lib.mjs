@@ -19,6 +19,9 @@ import {
 } from './node-bindings.mjs';
 import { createUtil } from './builtins/util.mjs';
 import { createUrlInternals, urlBindings } from './builtins/url-internal.mjs';
+import * as acorn from 'acorn';
+import { decorateErrorStack, makeContextifyScriptWith } from './builtins/vm.mjs';
+import { ErrorPrepareStackTrace, overrideStackTrace } from './stack.mjs';
 
 for (const [name, value] of Object.entries(urlBindings)) setBinding(name, value);
 
@@ -30,8 +33,12 @@ let programProcess;
 const proc = () => programProcess ?? globalThis.process;
 
 /** internal/options getOptionValue, over process.execArgv (`--x=v` or `--x v`). */
+/** Options Node turns on unless their --no- form is given. */
+const DEFAULT_ON = new Set(['--experimental-repl-await']);
+
 function getOptionValue(name) {
   const argv = proc()?.execArgv ?? [];
+  if (DEFAULT_ON.has(name)) return !argv.includes(`--no-${name.slice(2)}`);
   const values = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -168,6 +175,62 @@ function getCIDR(address, netmask, family) {
   return `${address}/${ones}`;
 }
 
+/** internal/util's WeakReference: a weak ref that holds on while counted. */
+class WeakReference {
+  #weak;
+  #strong = null;
+  #count = 0;
+  constructor(object) {
+    this.#weak = new WeakRef(object);
+  }
+  incRef() {
+    if (++this.#count === 1) this.#strong = this.#weak.deref();
+    return this.#count;
+  }
+  decRef() {
+    if (--this.#count === 0) this.#strong = null;
+    return this.#count;
+  }
+  get() {
+    return this.#weak.deref();
+  }
+}
+
+/** internal/modules/helpers' makeRequireFunction: a require for `mod` (the REPL's: from the working directory). */
+export function makeRequireFunction(mod) {
+  const Module = builtin('module');
+  const from = mod?.filename ?? builtin('path').resolve(proc().cwd(), 'repl');
+  const require = Module.createRequire(from.startsWith('/') ? from : builtin('path').resolve(proc().cwd(), 'repl'));
+  return require;
+}
+
+/** internal/modules/helpers' addBuiltinLibsToObject: each builtin as a lazy global (the REPL's `fs`, `path`, …). */
+export function addBuiltinLibsToObject(object, dummyModuleName) {
+  const { builtinModules } = builtin('module');
+  for (const name of builtinModules) {
+    if (name.startsWith('_') || name.includes('/') || Object.prototype.hasOwnProperty.call(object, name)) continue;
+    const setReal = (val) => {
+      delete object[name];
+      object[name] = val;
+    };
+    Object.defineProperty(object, name, {
+      get: () => {
+        const lib = builtin(name);
+        try {
+          Object.defineProperty(object, name, { get: () => lib, set: setReal, configurable: true, enumerable: false });
+        } catch {
+          /* non-configurable now */
+        }
+        return lib;
+      },
+      set: setReal,
+      configurable: true,
+      enumerable: false,
+    });
+  }
+  void dummyModuleName;
+}
+
 export function loadNodeLib({ ctx, process } = {}) {
   if (process) programProcess = process;
   return loadVendorCjs({
@@ -189,6 +252,8 @@ export function loadNodeLib({ ctx, process } = {}) {
           return Object.assign(new Error(message), errorProperties);
         },
         kEnhanceStackBeforeInspector,
+        ErrorPrepareStackTrace,
+        overrideStackTrace,
       },
       'internal/validators': {
         validateAbortSignal: errors.validateAbortSignal,
@@ -252,6 +317,14 @@ export function loadNodeLib({ ctx, process } = {}) {
           for (; index + 1 < list.length; index++) list[index] = list[index + 1];
           list.pop();
         },
+        decorateErrorStack,
+        // Node runs these in a realm of their own so RegExp.$1… stay the
+        // program's; here they are the plain methods.
+        SideEffectFreeRegExpPrototypeSymbolReplace: (regex, string, replacement) =>
+          RegExp.prototype[Symbol.replace].call(regex, string, replacement),
+        SideEffectFreeRegExpPrototypeSymbolSplit: (regex, string, limit) =>
+          RegExp.prototype[Symbol.split].call(regex, string, limit),
+        WeakReference,
       },
       'internal/util/inspect': {
         get inspect() {
@@ -303,6 +376,31 @@ export function loadNodeLib({ ctx, process } = {}) {
       })),
       string_decoder: lazy(() => builtin('string_decoder')),
       timers: lazy(() => builtin('timers')),
+      // The REPL's (src/node-lib/lib/repl.js and internal/repl/*).
+      'internal/deps/acorn/acorn/dist/acorn': acorn,
+      vm: lazy(() => builtin('vm')),
+      'internal/vm': lazy(() => ({ makeContextifyScript: makeContextifyScriptWith(builtin('vm')) })),
+      'internal/async_hooks': { useDomainTrampoline() {} },
+      'internal/bootstrap/realm': {
+        // Node's scheme-only builtins (node:sea, node:sqlite, node:test, …): none here.
+        BuiltinModule: { getSchemeOnlyModuleNames: () => [] },
+      },
+      'internal/modules/cjs/loader': lazy(() => ({ Module: builtin('module') })),
+      'internal/modules/esm/formats': {
+        extensionFormatMap: { __proto__: null, '.cjs': 'commonjs', '.js': 'module', '.json': 'json', '.mjs': 'module' },
+      },
+      'internal/modules/esm/loader': {
+        getOrInitializeCascadedLoader: () => ({
+          import: (specifier, parentURL, attributes) =>
+            proc()._importFrom(specifier, decodeURIComponent(new URL(parentURL).pathname), { with: attributes }),
+        }),
+      },
+      'internal/modules/helpers': lazy(() => ({ makeRequireFunction, addBuiltinLibsToObject })),
+      'internal/process/permission': { isEnabled: () => false, has: () => true },
+      'internal/util/inspector': {
+        // No inspector: what Node does without one.
+        sendInspectorCommand: (cb, onError) => onError?.(),
+      },
       'internal/assert': function assert(value, message) {
         if (!value) throw new Error(message ?? 'Assertion failed');
       },

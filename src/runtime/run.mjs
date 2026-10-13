@@ -16,6 +16,8 @@ import { createNextTick } from './next-tick.mjs';
 import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
 import { probeStdio } from './stdio.mjs';
 import { installFunctionImport } from './function-import.mjs';
+import { addBuiltinLibsToObject, makeRequireFunction } from './node-lib.mjs';
+import { setGlobalOverlay } from './builtins/vm.mjs';
 import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
@@ -174,13 +176,25 @@ export async function runNode(ctx, options = {}) {
    * with origin 'uncaughtException'). False when nothing takes it.
    */
   let processRef;
-  const handleUncaught = (err) => {
+  // The REPL's domain (see runRepl): what nothing else takes is its error,
+  // as Node's domains route a callback's throw to the REPL that started it.
+  let replDomain = null;
+  const handleUncaught = (err, origin = 'uncaughtException') => {
     const p = processRef;
     const capture = typeof p?._uncaughtCapture === 'function';
-    if (!capture && !(p && p.listenerCount('uncaughtException') > 0)) return false;
+    if (!capture && !(p && p.listenerCount('uncaughtException') > 0)) {
+      if (!replDomain) return false;
+      try {
+        replDomain._errorHandler(err);
+      } catch (handlerError) {
+        if (isExitError(handlerError)) throw handlerError;
+        return false;
+      }
+      return true;
+    }
     try {
       if (capture) p._uncaughtCapture(err);
-      else p.emit('uncaughtException', err, 'uncaughtException');
+      else p.emit('uncaughtException', err, origin);
     } catch (handlerError) {
       if (isExitError(handlerError)) throw handlerError;
       // Node: a handler that throws is fatal, reported as itself, status 7.
@@ -362,6 +376,10 @@ export async function runNode(ctx, options = {}) {
       process.emit('unhandledRejection', reason, promise ?? Promise.resolve());
       return;
     }
+    // Node's default (--unhandled-rejections=throw): the rejection is raised
+    // as an uncaught exception first, which a capture callback or an
+    // 'uncaughtException' listener (origin 'unhandledRejection') may take.
+    if (handleUncaught(rejectionError(reason), 'unhandledRejection')) return;
     const { body } = formatUnhandledRejection(reason, {
       ctx,
       util,
@@ -375,6 +393,30 @@ export async function runNode(ctx, options = {}) {
     } catch {
       /* JsExit */
     }
+  };
+  /** Node's throwUnhandledRejectionsMode: the reason itself if error-like, else an UnhandledPromiseRejection. */
+  const rejectionError = (reason) => {
+    if (typeof reason === 'object' && reason !== null && Object.prototype.hasOwnProperty.call(reason, 'stack')) return reason;
+    let short;
+    try {
+      short = typeof reason === 'object' && reason !== null ? '#<Object>' : String(reason);
+    } catch {
+      short = '[object]';
+    }
+    class UnhandledPromiseRejection extends Error {
+      code = 'ERR_UNHANDLED_REJECTION';
+    }
+    const err = new UnhandledPromiseRejection(
+      'This error originated either by throwing inside of an async function without a catch block, ' +
+        `or by rejecting a promise which was not handled with .catch(). The promise rejected with the reason "${short}".`
+    );
+    Object.defineProperty(err, 'name', { value: 'UnhandledPromiseRejection', configurable: true, writable: true });
+    err.stack =
+      `UnhandledPromiseRejection: ${err.message}\n` +
+      '    at throwUnhandledRejectionsMode (node:internal/process/promises:392:7)\n' +
+      '    at processPromiseRejections (node:internal/process/promises:475:17)\n' +
+      '    at process.processTicksAndRejections (node:internal/process/task_queues:106:32)';
+    return err;
   };
   const exceptionHandler = (err) => {
     if (isExit(err)) {
@@ -456,6 +498,59 @@ export async function runNode(ctx, options = {}) {
     importFrom: (specifier, referrer, options) => trackPromise(handles, esm.importDynamic(specifier, referrer, options)),
     cwd: () => process.cwd(),
   });
+  // The program's loader for vm scripts (USE_MAIN_CONTEXT_DEFAULT_LOADER) and the REPL.
+  Object.defineProperty(process, '_importFrom', {
+    value: (specifier, referrer, options) => trackPromise(handles, esm.importDynamic(specifier, referrer, options)),
+    configurable: true,
+    writable: true,
+  });
+
+  /**
+   * Node's internal/main/repl.js: the banner, then lib/internal/repl.js's
+   * createInternalRepl (history from NODE_REPL_HISTORY, NODE_REPL_MODE, …);
+   * its 'exit' ends the program. A status to return when it can't start.
+   */
+  const startRepl = () => {
+    if (inputTypeOf(process.execArgv)) {
+      console.error('Cannot specify --input-type for REPL');
+      return 9;
+    }
+    console.log(`Welcome to Node.js ${process.version}.\nType ".help" for more information.`);
+    const cliRepl = process._nodeLib().repl;
+    // The Node-hosted kernel locks `module` and `require` on globalThis, so
+    // Node's createContext (which defines them there) can't run as is: the
+    // same context, with those two in the scope REPL scripts see.
+    const { REPLServer } = cliRepl;
+    const nodeCreateContext = REPLServer.prototype.createContext;
+    REPLServer.prototype.createContext = function createContext() {
+      const locked = ['module', 'require'].some((n) => Object.getOwnPropertyDescriptor(globalThis, n)?.configurable === false);
+      if (!this.useGlobal || !locked) return nodeCreateContext.call(this);
+      const Module = nodeRequire('module');
+      const replModule = new Module('<repl>');
+      replModule.paths = Module._resolveLookupPaths('<repl>', { paths: Module._nodeModulePaths(process.cwd()) });
+      const overlay = Object.create(null);
+      overlay.module = replModule;
+      overlay.require = makeRequireFunction(replModule);
+      setGlobalOverlay(overlay);
+      addBuiltinLibsToObject(globalThis, '<REPL>');
+      return globalThis;
+    };
+    cliRepl.createInternalRepl(process.env, (err, repl) => {
+      if (err) throw err;
+      repl.on('exit', () => {
+        if (repl._flushing) {
+          repl.pause();
+          return repl.once('flushHistory', () => {
+            process.exit();
+          });
+        }
+        process.exit();
+      });
+    });
+    // lib/repl.js keeps the standalone REPL as its `repl` export.
+    replDomain = cliRepl.repl?._domain ?? null;
+    return undefined;
+  };
 
   /**
    * The entry promise: a `.jsh` body or an ES module's top-level await. It
@@ -521,6 +616,10 @@ export async function runNode(ctx, options = {}) {
           return dieUncaught(() => printUncaught(err));
         }
       }
+    } else if (parsed.mode === 'empty' && (parsed.interactive || process.stdin.isTTY)) {
+      // Node's REPL: no script, and stdin a terminal (or -i).
+      const status = startRepl();
+      if (status !== undefined) return status;
     } else if (parsed.mode === 'empty') {
       // Node: `echo '…' | node` runs the piped script as the main module ([stdin]).
       const chunks = [];
@@ -577,6 +676,11 @@ export async function runNode(ctx, options = {}) {
         }
       }
     } else if (parsed.mode === 'eval') {
+      // -i with -e / -p: the REPL starts, then the code runs (Node's order).
+      if (parsed.interactive) {
+        const status = startRepl();
+        if (status !== undefined) return status;
+      }
       lastEvalCode = parsed.code;
       // --input-type, else Node's detect-module: CJS unless ESM-only syntax
       // (not mere import()).

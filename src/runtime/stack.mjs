@@ -24,6 +24,7 @@ function isLoaderImplFrame(frame) {
 }
 
 function isKernelFrame(frame) {
+  if (frame?.[kWrapped]) return false;
   if (isLoaderImplFrame(frame)) return true;
   // An ES module's loader lines (export getters, hoisted imports) come
   // before its own first line: they are the runtime's, not the file's.
@@ -35,6 +36,8 @@ function isKernelFrame(frame) {
   const fn = frame.getFunctionName?.() || '';
   if (KERNEL_HINT.test(file) || KERNEL_HINT.test(text) || KERNEL_HINT.test(fn)) return true;
   if (file.startsWith('data:')) return true;
+  // An eval of the runtime's own (no file, no line, no name): a vm script's caller.
+  if (!file && frame.getLineNumber?.() == null && (!fn || fn === 'eval')) return true;
   // Never surface fabricated or accidental node:internal frames from the shim.
   if (file.startsWith('node:internal')) return true;
   if (text.includes('node:internal')) return true;
@@ -51,6 +54,17 @@ const esmFrames = new Map();
 export function registerEsmFrames(filename, extraLines) {
   if (typeof filename === 'string' && filename.startsWith('/')) esmFrames.set(filename, extraLines);
 }
+/**
+ * vm scripts (indirect eval with their filename as sourceURL): their lines
+ * are their own (no Function wrapper), and their frames are V8's script
+ * frames, as Node prints them (`at REPL1:1:7`).
+ */
+const vmFiles = new Map();
+/** `firstLineShift`: columns the runtime's own text adds to the script's first line. */
+export function registerVmFile(filename, firstLineShift = 0) {
+  if (typeof filename === 'string' && filename) vmFiles.set(filename, firstLineShift);
+}
+
 // Node keeps [eval1]'s brackets in its URL.
 const fileUrl = (p) =>
   p.endsWith('/[eval1]') ? `file://${encodeFilePath(p.slice(0, -8))}/[eval1]` : `file://${encodeFilePath(p)}`;
@@ -112,11 +126,21 @@ function resolveFile(frame, parsed) {
   );
 }
 
+/** Marks a CallSite this module made (wrapping it again would remap it twice). */
+const kWrapped = Symbol('slicc-jsh.wrappedCallSite');
+
 /** Wrap a V8 CallSite so getters match err.stack remapping. */
 export function wrapCallSite(frame) {
+  if (frame?.[kWrapped]) return frame;
+  return Object.assign(wrapRaw(frame), { [kWrapped]: true });
+}
+
+function wrapRaw(frame) {
   const parsed = parseSite(frame);
   const resolved = resolveFile(frame, parsed);
   const rawLine = frame.getLineNumber?.() ?? parsed?.line;
+  const vmFile = frame.getFileName?.() || scriptUrlFromOrigin(frame.getEvalOrigin?.()) || frame.getEvalOrigin?.();
+  if (vmFile && vmFiles.has(vmFile)) return wrapVmCallSite(frame, vmFile);
   const esmExtra = resolved ? esmFrames.get(resolved) : undefined;
   if (esmExtra !== undefined) return wrapEsmCallSite(frame, resolved, adjustLine(rawLine) - esmExtra);
   const file = resolved;
@@ -253,6 +277,56 @@ function wrapEsmCallSite(frame, path, line) {
   };
 }
 
+/** A frame in a vm script: V8's own shape, under the script's filename. */
+function wrapVmCallSite(frame, file) {
+  const line = frame.getLineNumber?.();
+  const rawCol = frame.getColumnNumber?.() ?? 0;
+  const col = line === 1 ? Math.max(1, rawCol - (vmFiles.get(file) ?? 0)) : rawCol;
+  const ctor = typeof frame.isConstructor === 'function' ? frame.isConstructor() : false;
+  let fn = frame.getFunctionName?.() || null;
+  if (fn === 'eval') fn = null;
+  const method = frame.getMethodName?.();
+  const typeName = frame.getTypeName?.();
+  // A script's own code (no function name) is top level, whatever its `this`
+  // (a context's script runs with its object as `this`).
+  const top = !fn || (typeof frame.isToplevel === 'function' ? frame.isToplevel() : !typeName);
+  if (!top && typeName && !ctor) {
+    let name = fn ?? '<anonymous>';
+    if (!name.startsWith(`${typeName}.`)) name = `${typeName}.${name}`;
+    if (method && fn !== method && !(fn ?? '').endsWith(`.${method}`)) name += ` [as ${method}]`;
+    fn = name;
+  }
+  const isAsync = frame.isAsync?.() ?? false;
+  return {
+    getThis: () => frame.getThis?.(),
+    getTypeName: () => typeName,
+    getFunction: () => frame.getFunction?.(),
+    getFunctionName: () => {
+      const name = frame.getFunctionName?.() || null;
+      return name === 'eval' ? null : name;
+    },
+    getMethodName: () => method,
+    getFileName: () => file,
+    getLineNumber: () => line,
+    getColumnNumber: () => col,
+    getEvalOrigin: () => frame.getEvalOrigin?.(),
+    getScriptId: () => frame.getScriptId?.(),
+    isToplevel: () => !!top,
+    isEval: () => false,
+    isNative: () => false,
+    isConstructor: () => !!ctor,
+    isAsync: () => isAsync,
+    isPromiseAll: () => frame.isPromiseAll?.() ?? false,
+    getPromiseIndex: () => frame.getPromiseIndex?.(),
+    toString() {
+      const pos = `${file}:${line}:${col}`;
+      const prefix = isAsync ? 'async ' : '';
+      if (!fn) return `${prefix}${pos}`;
+      return `${prefix}${ctor ? 'new ' : ''}${fn} (${pos})`;
+    },
+  };
+}
+
 function formatFrame(frame) {
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
   if (/^\[eval\]:\d+:\d+$/.test(text)) return `    at ${text}`;
@@ -267,6 +341,31 @@ function stackHeader(err) {
   return `${name}: ${msg}`;
 }
 
+/**
+ * internal/errors' overrideStackTrace: a formatter for one error's stack
+ * (the REPL trims its own frames with it), used once, on its first read.
+ */
+export const overrideStackTrace = new WeakMap();
+
+/** internal/errors' ErrorPrepareStackTrace: V8's default format of `trace`. */
+export function ErrorPrepareStackTrace(error, trace) {
+  let header;
+  try {
+    header = Error.prototype.toString.call(error);
+  } catch {
+    header = '<error>';
+  }
+  if (!trace || trace.length === 0) return header;
+  return `${header}\n    at ${trace.join('\n    at ')}`;
+}
+
+function takeOverride(err, frames) {
+  const override = err && typeof err === 'object' ? overrideStackTrace.get(err) : undefined;
+  if (!override) return undefined;
+  overrideStackTrace.delete(err);
+  return { value: override(err, frames.filter((f) => !isKernelFrame(f)).map(wrapCallSite)) };
+}
+
 function defaultPrepare(err, frames) {
   if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
   const kept = frames.filter((f) => !isKernelFrame(f));
@@ -279,6 +378,8 @@ export function installStackPrepare() {
 
   function prepareWith(user) {
     return function prepare(err, frames) {
+      const overridden = takeOverride(err, frames);
+      if (overridden) return overridden.value;
       if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
       if (typeof user === 'function') return user(err, frames.filter((f) => !isKernelFrame(f)).map(wrapCallSite));
       return defaultPrepare(err, frames);

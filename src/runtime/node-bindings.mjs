@@ -154,6 +154,12 @@ const bindings = {
     },
     isBigEndian: false,
   },
+  // The REPL's ^C watchdog (breakEvalOnSigint): a running script can't be
+  // interrupted here, so it starts (nothing to watch) and has seen no SIGINT.
+  contextify: {
+    startSigintWatchdog: () => true,
+    stopSigintWatchdog: () => false,
+  },
   util: {
     // punycode's deprecation check (DEP0040): a caller under node_modules.
     isInsideNodeModules() {

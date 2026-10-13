@@ -178,6 +178,11 @@ const nodeLib = await esbuild.build({
           if (args.path === 'internal/deps/cjs-module-lexer/lexer') {
             return { path: join(root, 'node_modules/cjs-module-lexer/lexer.js') };
           }
+          // Node's own acorn-walk (deps/acorn/acorn-walk, 8.3.4): the npm package.
+          // (acorn itself is the runtime's, handed in by node-lib.mjs.)
+          if (args.path === 'internal/deps/acorn/acorn-walk/dist/walk') {
+            return { path: join(root, 'node_modules/acorn-walk/dist/walk.js') };
+          }
           // What a bundled npm package requires (minimatch's brace expansion).
           if (args.importer.includes('/node_modules/')) return undefined;
           const file = join(nodeLibRoot, `${args.path}.js`);

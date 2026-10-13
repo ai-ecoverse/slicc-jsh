@@ -1,0 +1,8 @@
+{
+  "description": "node -i with stdin a pipe: the REPL (Node's lib/repl.js) reads lines, prints results with inspect, keeps declarations across lines (let/const/class/function), multi-line input, _ and _error, Uncaught errors (a SyntaxError with its arrow), the builtins as globals, .break/.help/.exit",
+  "argv": [
+    "-i"
+  ],
+  "stdin": "let x = 1\nx + 1\nconst o = {a: 1, b: [1, 2]}\no\nfunction f() {\n  return 2\n}\nf()\nclass A { m() { return 3 } }\nnew A().m()\nvar v = 'v'; v\n[1, 2].map(n => n * 2)\n_\n_ + 1\nthrow new Error('boom')\n_error.message\nfoo bar\n{ a: 1 }\nundefinedVar\nnull.x\ntypeof require\ntypeof module\nrequire('path').basename('/a/b')\npath.join('a', 'b')\ntypeof fs.readFileSync\n'str'\n`multi\nline`\n(function () {\n  return 'iife'\n})()\n.break\n1 +\n.break\nx = 10\nx\n.help\nprocess.exitCode = 3\n.exit\nconsole.log('not reached by .exit when piped')\n",
+  "shim": true
+}

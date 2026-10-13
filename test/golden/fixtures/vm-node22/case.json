@@ -1,0 +1,13 @@
+{
+  "description": "vm in the program context: declarations kept across scripts, contexts, V8 SyntaxErrors with their arrow, frames named by the script filename, import() and importModuleDynamically",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
