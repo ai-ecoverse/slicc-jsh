@@ -60,3 +60,13 @@ t('indexOf object', () => b.indexOf({}));
 const u = Buffer.from('abcd', 'ucs2');
 t('ucs2 search', () => [u.indexOf('c', 'ucs2'), u.indexOf('c', 0, 'ucs2'), u.lastIndexOf('a', 'ucs2'), u.indexOf('\u6300', 'ucs2'), u.indexOf('c', 3, 'ucs2'), u.lastIndexOf('b', 3, 'ucs2'), u.indexOf(Buffer.from([0, 0x63]), 0, 'ucs2')]);
 t('hex search', () => [b.indexOf('6263', 'hex'), b.indexOf('YmM=', 'base64')]);
+// fill with a pattern across lengths (written once, then doubled), the class's name
+t('fill patterns', () => [1, 2, 3, 7, 8, 17].map((n) => [Buffer.alloc(n, 'abc').toString(), Buffer.alloc(n).fill('xy', 1, n).toString('hex'), Buffer.alloc(n, '€').toString('hex')]));
+t('fill number / buffer', () => [Buffer.alloc(5, 0x101).toString('hex'), Buffer.alloc(5, Buffer.from([1, 2])).toString('hex'), Buffer.allocUnsafe(3).fill(7).toString('hex')]);
+t('constructor name', () => [Buffer.name, Buffer.alloc(1).constructor.name, Buffer.allocUnsafe(1).constructor.name, Buffer.from('a').constructor.name]);
+// Node refuses a string longer than kMaxLength before decoding (the buffer's pages are never touched)
+{
+  const big = Buffer.alloc(0x0ffffff5);
+  t('too long hex', () => big.toString('hex'));
+  t('hex of a part', () => big.toString('hex', 0, 3));
+}
