@@ -1,0 +1,13 @@
+{
+  "description": "SyntaxError reports as Node prints them (file:line, the source line, carets under the token, V8's message) for CommonJS files and ES modules",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "description": "A syntax error is reported and exits 1; static import is not supported",
+  "description": "A syntax error is reported as Node reports a script's (file:line, the line, carets under the token) and exits 1; static import is not supported",
   "args": [],
-  "stderr": "error-line"
+  "stderr": "no-frames"
 }

@@ -7,6 +7,7 @@
  * through pnpm's global bin inside the kernel is still the kernel jsh.
  */
 import { realMainPath } from '../runtime/realpath.mjs';
+import { syntaxReport } from '../runtime/syntax-report.mjs';
 import { sliccyNamespace } from './sliccy/index.mjs';
 import { JSH_PARAMS, JSH_USAGE, JSH_VERSION, parseJshArgv, runJsh } from './run.mjs';
 
@@ -97,7 +98,18 @@ function compiler(rt) {
     );
     const text = changed ? code.slice(head.length, -3) : body;
     const params = changed ? [...JSH_PARAMS, binding] : [...JSH_PARAMS];
-    const fn = new AsyncFunction(...params, `${text}\n//# sourceURL=${filename}`);
+    let fn;
+    try {
+      fn = new AsyncFunction(...params, `${text}\n//# sourceURL=${filename}`);
+    } catch (err) {
+      // Node's report: file:line, the line, carets under the token.
+      const report = err instanceof SyntaxError && syntaxReport(body, { kind: 'jsh', filename, error: err });
+      if (report) {
+        Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
+        err.stack = report.stack;
+      }
+      throw err;
+    }
     if (!changed) return fn;
     // One namespace per name, as a module is evaluated once.
     const sliccyNamespaces = new Map();

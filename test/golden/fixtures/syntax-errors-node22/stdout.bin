@@ -1,0 +1,119 @@
+== cjs-token.js (1)
+DIR/cjs-token.js:2
+const x = ;
+          ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== cjs-ident.js (1)
+DIR/cjs-ident.js:2
+  foo bar
+      ^^^
+
+SyntaxError: Unexpected identifier 'bar'
+
+Node.js v22.22.0
+
+== cjs-eof.js (1)
+DIR/cjs-eof.js:3
+
+
+
+SyntaxError: Unexpected end of input
+
+Node.js v22.22.0
+
+== cjs-string.js (1)
+DIR/cjs-string.js:1
+const s = 'open
+          ^^^^^
+
+SyntaxError: Invalid or unexpected token
+
+Node.js v22.22.0
+
+== cjs-redeclare.js (1)
+DIR/cjs-redeclare.js:2
+let a = 2;
+    ^
+
+SyntaxError: Identifier 'a' has already been declared
+
+Node.js v22.22.0
+
+== cjs-import.js (0)
+
+== cjs-hashbang.js (1)
+DIR/cjs-hashbang.js:3
+const x = ;
+          ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== cjs-with-import-call.js (1)
+DIR/cjs-with-import-call.js:2
+const x = ;
+          ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== esm-hashbang.mjs (1)
+file://DIR/esm-hashbang.mjs:3
+const x = ;
+          ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== esm-token.mjs (1)
+file://DIR/esm-token.mjs:3
+const x = ;
+          ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== esm-ident.mjs (1)
+file://DIR/esm-ident.mjs:2
+foo bar
+    ^^^
+
+SyntaxError: Unexpected identifier 'bar'
+
+Node.js v22.22.0
+
+== esm-return.mjs (1)
+file://DIR/esm-return.mjs:1
+return 1;
+^^^^^^
+
+SyntaxError: Illegal return statement
+
+Node.js v22.22.0
+
+== esm-number.mjs (1)
+file://DIR/esm-number.mjs:1
+const n = 1 2;
+            ^
+
+SyntaxError: Unexpected number
+
+Node.js v22.22.0
+
+== esm-eof.mjs (1)
+file://DIR/esm-eof.mjs:2
+
+
+
+SyntaxError: Unexpected end of input
+
+Node.js v22.22.0
+

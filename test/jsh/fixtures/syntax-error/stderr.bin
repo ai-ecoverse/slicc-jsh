@@ -1,1 +1,7 @@
+/os/main.jsh:1
+import fs from 'fs';
+^^^^^^
+
 SyntaxError: Cannot use import statement outside a module
+
+Node.js v22.22.0

@@ -116,7 +116,7 @@ The case name is given for every row below.
 | `import('sliccy:exec')` | works | `Cannot find module 'sliccy:exec'` | `ERR_UNSUPPORTED_ESM_URL_SCHEME` | six-only; the two jsh engines fail differently | 0 | require-sliccy-esm |
 | `import('https://…')` (pdf, pptx2pdf use esm.sh) | `Cannot find module … (run: ipk install http:)` | `MODULE_NOT_FOUND` | `ERR_UNSUPPORTED_ESM_URL_SCHEME` | same (all reject; those 2 scripts are broken on six today too) | 2 | import-url |
 | `new Function('u', 'return import(u)')` (vpod) | unknown *(harness)* | works: `import()` in a Function body goes through the runtime's loader, resolved against the calling script (#99, `function-import.mjs`) | works | six unknown, seven=node | 1 | import-in-function-ctor |
-| syntax error report | message only | `SyntaxError: …` with its message; no file:line or caret | file:line, caret, message | seven≠node (cosmetic) | — | wrapper-syntax-error |
+| syntax error report | message only | `file:line`, the line, carets under the token, then V8's message (as for CommonJS, ES modules and `-e`) | file:line, caret, message | six≠node, seven=node | — | wrapper-syntax-error |
 
 ### `process`
 
@@ -259,7 +259,7 @@ The case name is given for every row below.
 
 ## Where seven still differs from Node
 
-The 16 cases where seven's recording differs from the host `jsh` on Node (re-recorded 2026-10-13; `node test/compare/show.mjs <case>` shows each):
+The 13 cases where seven's recording differs from the host `jsh` on Node (re-recorded 2026-10-13, and again for the SyntaxError report; `node test/compare/show.mjs <case>` shows each):
 
 | case | what differs | kind |
 |---|---|---|
@@ -275,7 +275,6 @@ The 16 cases where seven's recording differs from the host `jsh` on Node (re-rec
 | fetch | a refused `fetch`'s `err.cause.code` is `ECONNREFUSED`; the host's undici gives none | seven is more specific |
 | http-module | the `http.get` of the *host's* compare server is refused | environment: the kernel's sockets are on its own loopback |
 | globals | no `BroadcastChannel` | by design (the kernel withholds it from programs) |
-| wrapper-syntax-error, wrapper-static-import, wrapper-static-import-sliccy | a `.jsh` body's SyntaxError has no `file:line`, source line and caret above it | gap (cosmetic) |
 
 ## Proposed fixes, ordered by corpus impact
 

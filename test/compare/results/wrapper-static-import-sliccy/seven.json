@@ -1,5 +1,5 @@
 {
   "status": 1,
   "stdout": "",
-  "stderr": "SyntaxError: Cannot use import statement outside a module\n    at <internal>\n\nNode.js v22.22.0\n"
+  "stderr": "$CASE/main.jsh:1\nimport cli from 'sliccy:cli';\n^^^^^^\n\nSyntaxError: Cannot use import statement outside a module\n\nNode.js v22.22.0\n"
 }
