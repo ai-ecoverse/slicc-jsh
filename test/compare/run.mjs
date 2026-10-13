@@ -57,6 +57,7 @@ import { fileURLToPath } from 'node:url';
 import { createNodeKernel, nodeTransport } from '@ai-ecoverse/slicc-kernel/node';
 import { WebSocketServer } from 'ws';
 import { packageFiles } from '../integration/helpers.mjs';
+import { node22Bin } from '../../scripts/node22.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '../..');
@@ -211,12 +212,7 @@ function normalise(text, { caseRoots, port }) {
 
 let node22;
 function resolveNode22() {
-  const r = spawnSync('npx', ['-y', `node@${NODE_VERSION}`, '-p', 'process.execPath'], {
-    encoding: 'utf8',
-    env: { ...process.env, npm_config_yes: 'true' },
-  });
-  if (r.status !== 0) throw new Error(`cannot get node@${NODE_VERSION}: ${r.stderr}`);
-  return r.stdout.trim();
+  return node22Bin();
 }
 
 function hostEnv(extra) {

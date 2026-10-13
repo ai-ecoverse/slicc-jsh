@@ -4,7 +4,8 @@
  * case.json has `"shim": true`) under the slicc-jsh shim in slicc-kernel's
  * Node entry. stdout/stderr/status compared byte-for-byte.
  *
- * Always invoke Node 22 via `npx -y node@22.22.0` so host major cannot poison
+ * Always run host Node 22.22.0 (scripts/node22.mjs: $NODE22, else fetched once
+ * with `npx -y node@22.22.0`) so host major cannot poison
  * goldens. Fixtures live under test/golden/fixtures/ and are not published.
  *
  * Usage:
@@ -23,6 +24,7 @@ import {
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
+import { node22Bin } from './node22.mjs';
 import { devPackageFiles, packageFiles } from '../test/integration/helpers.mjs';
 
 const SKIP_NAMES = new Set([
@@ -80,7 +82,9 @@ function withoutColorEnv(env) {
 }
 
 function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
-  const result = spawnSync('npx', ['-y', 'node@22.22.0', ...argv], {
+  const result = spawnSync(node22Bin(), argv, {
+    // As under npx: Node's own messages name it `node`.
+    argv0: 'node',
     cwd: cwd ?? root,
     // case.json `stdin`: a pipe with that text (else none, as before).
     ...(stdin !== undefined ? { input: Buffer.from(stdin) } : {}),
