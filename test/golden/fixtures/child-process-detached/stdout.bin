@@ -1,0 +1,10 @@
+kill(-pid) false ESRCH
+exit false null SIGTERM
+kill(-pid) true true
+exit true null SIGTERM
+spawnSync detached kill(0) null SIGTERM
+parent still here
+ERR_INVALID_ARG_TYPE The "options.detached" property must be of type boolean. Received type string ('yes')
+env taken at spawn() before
+detached taken at spawn() true
+exit null SIGTERM

@@ -645,6 +645,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       stdin: direct[0] ?? kernelStdio(stdio[0], served[0]),
       stdout: direct[1] ?? kernelStdio(stdio[1], served[1]),
       stderr: direct[2] ?? kernelStdio(stdio[2], served[2]),
+      // Node's detached on POSIX is setsid(): a new session and group, no
+      // controlling terminal (slicc-kernel 1.74.0+; older kernels ignore it,
+      // and the child stays in the program's group, as before).
+      ...(options.detached ? { session: true } : {}),
     });
     trackPromise(handles, spawnPromise);
     spawnPromise.then(releaseAll, releaseAll);
@@ -723,6 +727,11 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     argv = Array.isArray(argv) ? argv.map(String) : [];
     opts = opts && typeof opts === 'object' ? opts : {};
     file = String(file);
+    if (opts.detached != null) validateBoolean(opts.detached, 'options.detached');
+    // Node takes the options (and the environment) in spawn() itself: a
+    // change to them after it returns doesn't reach the child, which starts
+    // a tick later here.
+    opts = { ...opts, env: { ...(opts.env || process.env) } };
 
     if (opts.shell) {
       // Node on Unix defaults shell:true to /bin/sh (errors say `spawn /bin/sh`).
@@ -1139,6 +1148,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
           req.input = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
         }
         if (options.timeout > 0) req.timeout = options.timeout;
+        // detached: setsid(), as in Node (slicc-kernel 1.74.0+; ignored before).
+        if (options.detached) req.session = true;
         return req;
       };
       let req = request(syncRunTakesFds !== false);
