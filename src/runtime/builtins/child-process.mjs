@@ -812,6 +812,14 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     const norm = normalizeArgs(file, args, options, callback);
     const opts = { ...norm.options };
     if (opts.stdio === undefined) opts.stdio = ['pipe', 'pipe', 'pipe'];
+    // Node's execFile (and exec through it) validates argv0 but doesn't pass
+    // it, or detached, on to spawn(): the child sees the file as argv[0].
+    if (opts.argv0 != null) {
+      validateString(opts.argv0, 'options.argv0');
+      validateArgumentNullCheck(opts.argv0, 'options.argv0');
+    }
+    delete opts.argv0;
+    delete opts.detached;
     const child = spawn(String(file), norm.args, opts);
     if (!norm.callback) return child;
 
