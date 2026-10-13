@@ -1,0 +1,5 @@
+{
+  "description": "child_process: destroying child.stdout / child.stderr closes the parent's read end, so the child's next write fails with EPIPE (Node 22)",
+  "argv": ["main.js"],
+  "shim": true
+}
