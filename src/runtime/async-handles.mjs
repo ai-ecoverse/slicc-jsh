@@ -39,6 +39,7 @@ async function checkpoint(nextTick, onTickError) {
     // A tick that throws is an uncaught exception (Node's), handled as one,
     // and the rest of the queue runs on before any promise job (Node's
     // processTicksAndRejections goes on with it).
+    const before = nextTick.ran;
     for (;;) {
       try {
         nextTick.flushSync();
@@ -48,13 +49,16 @@ async function checkpoint(nextTick, onTickError) {
         onTickError(err);
       }
     }
-    if (nextTick.depth > 0) {
+    // Ticks ran (their promise jobs may queue more): not idle yet.
+    if (nextTick.depth > 0 || nextTick.ran !== before) {
       idle = 0;
       continue;
     }
     idle++;
-    if (idle >= 6) break;
+    if (idle >= 6) return false;
   }
+  // Still running ticks after all its turns.
+  return true;
 }
 
 // Captured before the runtime installs its own (handle-counting) timers.
@@ -87,7 +91,10 @@ function macrotask() {
  */
 export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, weakPending, onTickError } = {}) {
   for (;;) {
-    await checkpoint(nextTick, onTickError);
+    // A long tick / promise-job chain: go on with it (Node runs it to the end).
+    while (await checkpoint(nextTick, onTickError)) {
+      if (shouldStop?.()) return;
+    }
     // process.exit() from a timer must unwind even while a server is listening.
     if (shouldStop?.()) return;
     if (handles.refCount > 0) {

@@ -12,6 +12,8 @@ import { createUtil } from '../builtins/util.mjs';
 import { createAsyncHooks } from '../builtins/async-hooks.mjs';
 import { createV8 } from '../builtins/v8.mjs';
 import { createVm } from '../builtins/vm.mjs';
+import { createPerfHooks, createStreamWeb } from '../builtins/perf-hooks.mjs';
+import { patchReplServer } from '../node-lib.mjs';
 import { CRYPTO_CONSTANTS } from '../builtins/crypto-constants.mjs';
 import { createZlib } from '../builtins/zlib.mjs';
 import { createCrypto } from '../builtins/crypto.mjs';
@@ -26,6 +28,8 @@ const BUILTIN_LIST = [
   'console',
   'constants',
   'crypto',
+  'diagnostics_channel',
+  'domain',
   'events',
   'fs',
   'fs/promises',
@@ -37,14 +41,19 @@ const BUILTIN_LIST = [
   'path',
   'path/posix',
   'path/win32',
+  'perf_hooks',
   'process',
   'punycode',
   'querystring',
   'readline',
   'readline/promises',
+  'repl',
   'stream',
+  'stream/consumers',
   'stream/promises',
+  'stream/web',
   'string_decoder',
+  'sys',
   'timers',
   'timers/promises',
   'tty',
@@ -63,7 +72,6 @@ const NOT_YET = [
   'dns',
   'tls',
   'cluster',
-  'perf_hooks',
   'inspector',
   'trace_events',
   'was',
@@ -234,6 +242,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   let v8;
   let vm;
   let constants;
+  let perfHooks;
+  let streamWeb;
 
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
@@ -261,6 +271,19 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     punycode: () => process._nodeLib().punycode,
     async_hooks: () => (asyncHooks ??= createAsyncHooks()),
     v8: () => (v8 ??= createV8()),
+    // Node's own lib/repl.js, lib/domain.js, lib/sys.js,
+    // lib/diagnostics_channel.js, lib/stream/consumers.js (src/node-lib).
+    repl: () => {
+      const repl = process._nodeLib().replModule;
+      patchReplServer(repl.REPLServer);
+      return repl;
+    },
+    domain: () => process._nodeLib().domain,
+    sys: () => process._nodeLib().sys,
+    diagnostics_channel: () => process._nodeLib().diagnosticsChannel,
+    'stream/consumers': () => process._nodeLib().streamConsumers,
+    perf_hooks: () => (perfHooks ??= createPerfHooks()),
+    'stream/web': () => (streamWeb ??= createStreamWeb()),
     vm: () =>
       (vm ??= createVm({
         cwd: () => process.cwd(),

@@ -50,7 +50,7 @@ export function setGlobalOverlay(names) {
 }
 
 /** V8's own fresh-context globals (Node 22.22.0's vm.runInNewContext('Object.getOwnPropertyNames(globalThis)')). */
-const ES_GLOBALS = [
+export const ES_GLOBALS = [
   'Object', 'Function', 'Array', 'Number', 'parseFloat', 'parseInt', 'Infinity', 'NaN', 'undefined', 'Boolean',
   'String', 'Symbol', 'Date', 'Promise', 'RegExp', 'Error', 'AggregateError', 'EvalError', 'RangeError',
   'ReferenceError', 'SyntaxError', 'TypeError', 'URIError', 'globalThis', 'JSON', 'Math', 'Intl', 'ArrayBuffer',

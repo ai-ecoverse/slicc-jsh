@@ -84,6 +84,17 @@ The WHATWG `URL` is the platform's.
 
 **`vm`:** scripts run in the program's own realm, which is the only one a process has here. `runInThisContext` keeps a script's top-level declarations for the next script, as V8 does. Top-level `let`/`const`/`class` become `var` to do that, so a `const` isn't read-only and a name can be declared twice. A context (`createContext`, `runInContext`, `runInNewContext`) is the object in front of the ECMAScript globals: the names a script declares or assigns go on it. It isn't a separate realm, so its `Object` is the program's. A SyntaxError is V8's, with the arrow under the token. `displayErrors` puts the arrow at the throw site, and a script's frames are named by its `filename`. `import()` goes to `importModuleDynamically`, and `vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER` uses the program's loader. Without one, `import()` fails with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`, and a callback function needs `--experimental-vm-modules`, as in Node. `timeout` and `breakOnSigint` can't interrupt a running script, `vm.Module` isn't there, and `measureMemory` rejects with `ERR_NOT_SUPPORTED`.
 
+**`sys`, `repl`, `domain`, `diagnostics_channel`, `stream/consumers`, `stream/web`, `perf_hooks`:**
+- **Node v22.22.0's own files** (`lib/sys.js`, `lib/repl.js`, `lib/domain.js`, `lib/diagnostics_channel.js`, `lib/stream/consumers.js`, in `src/node-lib`):
+  - `sys` is `util` (with DEP0025);
+  - `repl.start()` runs a REPL over any streams;
+  - `diagnostics_channel` includes `tracingChannel`, and the global console now publishes to it as Node's does.
+- **`domain`** follows a domain into the ticks, timers and immediates queued inside it. That's where Node's async hooks take it. A throw there is the domain's `'error'`, and so is an emitter's `'error'`. Promise jobs are the gap: the runtime can't see them, so a rejection isn't routed to a domain.
+- **`stream/web`** is the platform's WHATWG streams.
+- **`perf_hooks`:**
+  - `performance` and the Performance* classes are the program's own, and `constants` are Node's;
+  - `createHistogram` and `monitorEventLoopDelay` are Node's histograms written in JS. Values are counted exactly, so above 2047 a percentile can differ from Node's 3-significant-figure HDR buckets.
+
 **`v8`:** heap and code statistics (approximate), `cachedDataVersionTag`, `setFlagsFromString` (changes nothing), `startupSnapshot` (never building one), `isStringOneByteRepresentation`, the coverage no-ops. `serialize`/`deserialize`, heap snapshots and `queryObjects` need V8's own bindings: they throw `ERR_NOT_SUPPORTED`.
 
 **`util`, `console`, `async_hooks`:** Node v22.22.0's own `lib/util.js` and console (`lib/internal/console/{constructor,global}.js`, `internal/cli_table`), with `internal/util/{types,debuglog,colors,diff,comparisons,parse_args}` and `internal/mime`, in `src/node-lib`. This brings `parseArgs`, `styleText`, `MIMEType`, `parseEnv`, `getSystemErrorName`/`Map`/`Message` (libuv's errors with Linux numbers), the full `util.types`, `isDeepStrictEqual` (Node's comparisons), `debuglog` (`NODE_DEBUG`), `diff`, the deprecated `util.is*`, and the whole console: `Console`, `timeLog`, colours as Node's `shouldColorize` decides them, and the inspector-only `profile`/`profileEnd`/`timeStamp`/`context`/`createTask`, which do nothing here. `util.inspect` is still node-inspect-extracted, with Node 22's symbol-key and `byteLength` output.

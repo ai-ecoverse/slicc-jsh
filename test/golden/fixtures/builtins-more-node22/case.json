@@ -1,0 +1,14 @@
+{
+  "description": "sys, repl, diagnostics_channel, perf_hooks (histograms, monitorEventLoopDelay), stream/web, stream/consumers, domain",
+  "argv": [
+    "--no-warnings",
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

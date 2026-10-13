@@ -369,6 +369,13 @@ const BUILTIN_NAMES = new Set([
   'cluster',
   'vm',
   'v8',
+  'diagnostics_channel',
+  'domain',
+  'perf_hooks',
+  'repl',
+  'stream/consumers',
+  'stream/web',
+  'sys',
 ]);
 
 function isBuiltinName(name) {
