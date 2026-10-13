@@ -135,6 +135,8 @@ curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/slicc-jsh/main/install.
 - **The `jsh` command.** It writes `~/.local/bin/jsh`, a small `sh` script that runs that Node on the installed jsh. It's a file, not an alias, so `#!/usr/bin/env jsh`, cron and non-interactive shells work. If `~/.local/bin` isn't on `PATH`, it asks before adding one line to your shell's rc file (`.zshrc`, `.bashrc` or `.bash_profile`, fish's `config.fish`, else `.profile`). Without a terminal it prints the line instead.
 - It finishes with `jsh --version`.
 
+It trusts the npm registry and nodejs.org over HTTPS: the hashes it checks come from the same place as the files, and it pins no hash of its own. `--version` pins a version, not a hash. To pin the bytes, use `npm i -g @ai-ecoverse/slicc-jsh@<version>` with a lockfile, or check the tarball's sha256 yourself.
+
 Run it again to upgrade (and to update its private Node to the latest 22). `sliccy:<name>` packages resolve from `~/.jsh/lib/node_modules` as well as from a `node_modules` next to your script; `npm i -g --prefix ~/.jsh sliccy-<name>` puts one there.
 
 | Environment | Default | |
