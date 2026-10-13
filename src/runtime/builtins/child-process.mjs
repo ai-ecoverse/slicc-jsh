@@ -728,6 +728,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     opts = opts && typeof opts === 'object' ? opts : {};
     file = String(file);
     if (opts.detached != null) validateBoolean(opts.detached, 'options.detached');
+    // Node takes the options (and the environment) in spawn() itself: a
+    // change to them after it returns doesn't reach the child, which starts
+    // a tick later here.
+    opts = { ...opts, env: { ...(opts.env || process.env) } };
 
     if (opts.shell) {
       // Node on Unix defaults shell:true to /bin/sh (errors say `spawn /bin/sh`).
