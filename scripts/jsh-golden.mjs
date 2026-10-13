@@ -36,6 +36,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
 import { packageFiles } from '../test/integration/helpers.mjs';
+import { node22Bin, node22Env } from './node22.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixturesDir = join(root, 'test/jsh/fixtures');
@@ -86,13 +87,15 @@ function runHost(dir, meta) {
     delete env.FORCE_COLOR;
     delete env.NO_COLOR;
     Object.assign(env, meta.env ?? {});
-    const result = spawnSync('npx', ['-y', 'node@22.22.0', hostJsh, meta.entry ?? 'main.jsh', ...(meta.args ?? [])], {
+    const result = spawnSync(node22Bin(), [hostJsh, meta.entry ?? 'main.jsh', ...(meta.args ?? [])], {
+      // As under npx: Node's own messages name it `node`.
+      argv0: 'node',
       cwd: work,
       input: Buffer.from(meta.stdin ?? ''),
       encoding: 'buffer',
       timeout: 30_000,
       maxBuffer: 4 * 1024 * 1024,
-      env,
+      env: node22Env(env),
     });
     if (result.error) throw result.error;
     // The kernel runs the case in /os; say the same for the host's copy.

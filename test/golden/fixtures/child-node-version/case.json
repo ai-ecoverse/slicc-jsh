@@ -1,0 +1,5 @@
+{
+  "description": "a child run as `node` (found on PATH) and as process.execPath is Node 22.22.0, on the host baseline as in the shim (the harness puts Node 22 first on the baseline's PATH)",
+  "argv": ["main.js"],
+  "shim": true
+}

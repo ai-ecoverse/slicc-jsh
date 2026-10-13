@@ -15,6 +15,18 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      # The baselines' host Node 22.22.0 (scripts/node22.mjs reads $NODE22),
+      # from the runner's tool cache rather than an npx fetch per run: a
+      # stalled fetch once hung the golden step until its timeout.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.22.0'
+      - name: Host Node 22 for the baselines
+        timeout-minutes: 1
+        run: |
+          set -euo pipefail
+          echo "NODE22=$(command -v node)" >> "$GITHUB_ENV"
+          node --version
       - uses: actions/setup-node@v7
         with:
           node-version: '24.21.0'

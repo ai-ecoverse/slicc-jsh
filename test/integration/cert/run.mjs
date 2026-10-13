@@ -26,6 +26,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { devPackageFiles, packageFiles } from '../helpers.mjs';
+import { node22Bin, node22Env } from '../../../scripts/node22.mjs';
 
 const certDir = dirname(fileURLToPath(import.meta.url));
 const root = join(certDir, '../../..');
@@ -95,10 +96,12 @@ const ACCEPTED_DIFF = new Set([
 ]);
 
 function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {
-  const result = spawnSync('npx', ['-y', 'node@22.22.0', ...argv], {
+  const result = spawnSync(node22Bin(), argv, {
+    // As under npx: Node's own messages name it `node`.
+    argv0: 'node',
     cwd,
     input: stdin ?? '',
-    env: { ...process.env, npm_config_yes: 'true', ...(env ?? {}) },
+    env: node22Env({ ...process.env, npm_config_yes: 'true', ...(env ?? {}) }),
     timeout: timeoutMs,
     encoding: 'utf8',
     maxBuffer: 4 * 1024 * 1024,

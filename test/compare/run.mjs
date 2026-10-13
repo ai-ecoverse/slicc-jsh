@@ -57,6 +57,7 @@ import { fileURLToPath } from 'node:url';
 import { createNodeKernel, nodeTransport } from '@ai-ecoverse/slicc-kernel/node';
 import { WebSocketServer } from 'ws';
 import { packageFiles } from '../integration/helpers.mjs';
+import { node22Bin, node22Env } from '../../scripts/node22.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '../..');
@@ -211,12 +212,7 @@ function normalise(text, { caseRoots, port }) {
 
 let node22;
 function resolveNode22() {
-  const r = spawnSync('npx', ['-y', `node@${NODE_VERSION}`, '-p', 'process.execPath'], {
-    encoding: 'utf8',
-    env: { ...process.env, npm_config_yes: 'true' },
-  });
-  if (r.status !== 0) throw new Error(`cannot get node@${NODE_VERSION}: ${r.stderr}`);
-  return r.stdout.trim();
+  return node22Bin();
 }
 
 function hostEnv(extra) {
@@ -285,7 +281,7 @@ async function runHost(c, system, http) {
       if (!file) return null;
       args = [file, ...c.meta.args];
     }
-    const env = hostEnv({ COMPARE_HTTP: `http://127.0.0.1:${http.port}`, ...c.meta.env });
+    const env = node22Env(hostEnv({ COMPARE_HTTP: `http://127.0.0.1:${http.port}`, ...c.meta.env }));
     const r = await spawnCollect(node22, args, { cwd: work, env, stdin: c.meta.stdin });
     const caseRoots = [work, work.replace(/^\/private/, '')];
     return { ...r, stdout: normalise(r.stdout, { caseRoots, port: http.port }), stderr: normalise(r.stderr, { caseRoots, port: http.port }) };
