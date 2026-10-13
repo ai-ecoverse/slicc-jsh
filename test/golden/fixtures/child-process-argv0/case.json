@@ -1,0 +1,6 @@
+{
+  "description": "child_process argv0: the child's argv[0] is options.argv0, else the file as given (spawn('/bin/sh') shows $0=/bin/sh), for spawn, exec, spawnSync, execSync, execFileSync; spawnargs; validation (Node 22; slicc-kernel 1.76.0; /bin/sh from wasm-bash in the shim)",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-bash"]
+}

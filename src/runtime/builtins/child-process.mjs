@@ -610,8 +610,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     const cwd = resolveSpawnCwd(path, options.cwd);
     const env = options.env ? { ...options.env } : { ...process.env };
     const argv = [file, ...args];
+    // Node's argv0: what the child sees as argv[0] (the file by default).
+    const argv0 = typeof options.argv0 === 'string' ? options.argv0 : file;
     child.spawnfile = file;
-    child.spawnargs = argv;
+    child.spawnargs = [argv0, ...args];
 
     // Re-check in startSpawn so a cwd that vanishes between spawn() and the
     // tick still fails; ENOTDIR already threw from spawn() when applicable.
@@ -649,6 +651,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       // controlling terminal (slicc-kernel 1.74.0+; older kernels ignore it,
       // and the child stays in the program's group, as before).
       ...(options.detached ? { session: true } : {}),
+      // slicc-kernel 1.76.0+ (ai-ecoverse/slicc-kernel#470); older kernels
+      // ignore it and the child sees what the kernel resolved.
+      argv0,
     });
     trackPromise(handles, spawnPromise);
     spawnPromise.then(releaseAll, releaseAll);
@@ -728,6 +733,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     opts = opts && typeof opts === 'object' ? opts : {};
     file = String(file);
     if (opts.detached != null) validateBoolean(opts.detached, 'options.detached');
+    if (opts.argv0 != null) {
+      validateString(opts.argv0, 'options.argv0');
+      validateArgumentNullCheck(opts.argv0, 'options.argv0');
+    }
     // Node takes the options (and the environment) in spawn() itself: a
     // change to them after it returns doesn't reach the child, which starts
     // a tick later here.
@@ -745,7 +754,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     const child = new ChildProcess();
     // Node sets these in spawn() itself, before the process starts.
     child.spawnfile = file;
-    child.spawnargs = [file, ...argv];
+    child.spawnargs = [typeof opts.argv0 === 'string' ? opts.argv0 : file, ...argv];
 
     // Node: missing cwd → async ENOENT on 'error'; file-as-cwd → throw ENOTDIR.
     if (opts.cwd != null) {
@@ -759,7 +768,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
           /* ignore pipe setup when we will fail spawn anyway */
         }
         child.spawnfile = file;
-        child.spawnargs = [file, ...argv];
+        child.spawnargs = [typeof opts.argv0 === 'string' ? opts.argv0 : file, ...argv];
         failSpawnEnoent(child, process, handles, file, argv);
         return child;
       }
@@ -1132,6 +1141,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         const req = {
           // Node's native layer stringifies each argument (null → 'null').
           argv: [file, ...args.slice(1).map((a) => `${a}`)],
+          // What the child sees as argv[0]: options.argv0, else the file, as
+          // Node (slicc-kernel 1.76.0+; ignored before).
+          argv0: args[0],
           env: options.env,
           cwd: resolveSpawnCwd(path, options.cwd),
           stdin: how[0],
