@@ -117,3 +117,66 @@ SyntaxError: Unexpected end of input
 
 Node.js v22.22.0
 
+== esm-reserved-with-import.mjs (1)
+file://DIR/esm-reserved-with-import.mjs:2
+let let = 1;
+    ^^^
+
+SyntaxError: Unexpected strict mode reserved word
+
+Node.js v22.22.0
+
+== esm-reserved-static.mjs (1)
+file://DIR/esm-reserved-static.mjs:3
+let static = 2;
+    ^^^^^^
+
+SyntaxError: Unexpected strict mode reserved word
+
+Node.js v22.22.0
+
+== esm-after-default-function.mjs (1)
+file://DIR/esm-after-default-function.mjs:2
+await = 1;
+      ^
+
+SyntaxError: Unexpected token '='
+
+Node.js v22.22.0
+
+== esm-after-default-class.mjs (1)
+file://DIR/esm-after-default-class.mjs:2
+const q = 1 2;
+            ^
+
+SyntaxError: Unexpected number
+
+Node.js v22.22.0
+
+== cjs-regexp.js (1)
+DIR/cjs-regexp.js:1
+const r = /a(/;
+          ^^^^
+
+SyntaxError: Invalid regular expression: /a(/: Unterminated group
+
+Node.js v22.22.0
+
+== esm-regexp.mjs (1)
+file://DIR/esm-regexp.mjs:1
+const r = /a(/;
+          ^^^^
+
+SyntaxError: Invalid regular expression: /a(/: Unterminated group
+
+Node.js v22.22.0
+
+== cjs-regexp-unterminated.js (1)
+DIR/cjs-regexp-unterminated.js:1
+const r = /ab;
+          ^
+
+SyntaxError: Invalid regular expression: missing /
+
+Node.js v22.22.0
+

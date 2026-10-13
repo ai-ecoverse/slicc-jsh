@@ -15,6 +15,21 @@ const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 const atEnd = (code, pos) => code.slice(pos).trim() === '';
 
 /**
+ * A module's source with its import / export syntax blanked (same length),
+ * so a Function body compiles it for V8's message about everything else.
+ */
+function withoutModuleSyntax(source) {
+  const blank = (m) => m.replace(/[^\n]/g, ' ');
+  return source
+    .replace(/^[ \t]*import\s*(?:[\w$*{}\s,]+from\s*)?['"][^'"\n]*['"][^;\n]*;?/gm, blank)
+    // `export default X` as the expression `void X` (a function or class without a name stays valid).
+    .replace(/^([ \t]*)export\s+default\s+/gm, (m, lead) => `${lead}void${' '.repeat(m.length - lead.length - 4)}`)
+    .replace(/^[ \t]*export\s+(?=(?:async\s+)?(?:function|class|const|let|var)\b)/gm, blank)
+    .replace(/^[ \t]*export\s*\{[^}]*\}(?:\s*from\s*['"][^'"\n]*['"])?[^;\n]*;?/gm, blank)
+    .replace(/\bimport\.meta\b/g, (m) => `(${' '.repeat(m.length - 2)})`);
+}
+
+/**
  * The span V8 marks for an error at acorn's `pos`, as [start, end].
  * - A token V8 could read: that token.
  * - An invalid one ("Invalid or unexpected token", a regular expression):
@@ -45,6 +60,10 @@ function markSpan(code, pos, message) {
   // The character the token starts with (`#`, `/`, a quote, …), if acorn is past it.
   if (start > 0 && !/[\s;,)\]}]/.test(code[start - 1]) && !WORDISH.test(code[start - 1]) && start === pos) start--;
   if (/['"`]/.test(code[start] ?? '')) return [start, lineEnd];
+  // A literal V8 read whole but couldn't compile (`/a(/`): all of it, as its
+  // message quotes it; an unterminated one: its first character.
+  const literal = /^Invalid regular expression: (\/.*\/[a-z]*): /.exec(message);
+  if (literal) return [start, start + literal[1].length];
   if (/^Invalid regular expression/.test(message)) return [start, start + 1];
   let runEnd = start;
   while (runEnd < code.length && WORDISH.test(code[runEnd])) runEnd++;
@@ -71,6 +90,13 @@ function v8Message(acornMessage, code, pos) {
   const msg = String(acornMessage).replace(/ \(\d+:\d+\)$/, '');
   if (code.slice(pos).trim() === '') return 'Unexpected end of input';
   if (/'return' outside of function/.test(msg)) return 'Illegal return statement';
+  // Strict code's reserved words (a module's), as V8 words them.
+  const reserved = /^The keyword '(\w+)' is reserved$/.exec(msg);
+  if (reserved) {
+    return /^(let|static|implements|interface|package|private|protected|public|yield)$/.test(reserved[1])
+      ? 'Unexpected strict mode reserved word'
+      : 'Unexpected reserved word';
+  }
   if (/^'import' and 'export' may appear only with 'sourceType: module'/.test(msg)) {
     return 'Cannot use import statement outside a module';
   }
@@ -125,7 +151,7 @@ export function syntaxReport(source, { kind, filename, error }) {
       try {
         // A module is strict code.
         // eslint-disable-next-line no-new-func
-        if (module) new AsyncFunction(`'use strict';${source}`);
+        if (module) new AsyncFunction(`'use strict';${withoutModuleSyntax(source)}`);
         // eslint-disable-next-line no-new-func
         else if (kind === 'jsh') new AsyncFunction(source);
         // eslint-disable-next-line no-new-func

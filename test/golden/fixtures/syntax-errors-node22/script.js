@@ -22,6 +22,13 @@ const cases = [
   ['esm-return.mjs', 'return 1;\n'],
   ['esm-number.mjs', 'const n = 1 2;\n'],
   ['esm-eof.mjs', 'if (true) {\n'],
+  ['esm-reserved-with-import.mjs', "import fs from 'node:fs';\nlet let = 1;\n"],
+  ['esm-reserved-static.mjs', 'export { a as b };\nconst a = 1;\nlet static = 2;\n'],
+  ['esm-after-default-function.mjs', 'export default function () {}\nawait = 1;\n'],
+  ['esm-after-default-class.mjs', 'export default class {}\nconst q = 1 2;\n'],
+  ['cjs-regexp.js', 'const r = /a(/;\n'],
+  ['esm-regexp.mjs', 'const r = /a(/;\n'],
+  ['cjs-regexp-unterminated.js', 'const r = /ab;\n'],
 ];
 for (const [file, src] of cases) {
   const p = path.join(dir, file);
