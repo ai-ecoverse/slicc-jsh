@@ -210,10 +210,13 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
   // Static imports and import.meta.resolve fail as Node's ESM resolver does.
   /** What Node names the importing module in its errors. */
-  const parentLabel = (parentFilename) =>
-    !parentFilename || parentFilename.startsWith('[') || parentFilename.endsWith('/')
+  const parentLabel = (parentFilename) => {
+    // --import's: the working directory itself (Node's parent URL is it).
+    if (parentFilename?.endsWith('/[import]')) return parentFilename.slice(0, -8);
+    return !parentFilename || parentFilename.startsWith('[') || parentFilename.endsWith('/')
       ? `${process.cwd().replace(/\/$/, '')}/[eval1]`
       : parentFilename;
+  };
 
   /**
    * Node's ESM resolve: URL specifiers (node:, file:, data:; any other scheme

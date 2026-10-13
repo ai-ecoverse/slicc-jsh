@@ -1,0 +1,20 @@
+open ax THROWS Error EEXIST EEXIST: file already exists, open 'DIR/ex.txt'
+open ax+ THROWS Error EEXIST EEXIST: file already exists, open 'DIR/ex.txt'
+open wx THROWS Error EEXIST EEXIST: file already exists, open 'DIR/ex.txt'
+open wx+ THROWS Error EEXIST EEXIST: file already exists, open 'DIR/ex.txt'
+appendFileSync ax THROWS Error EEXIST EEXIST: file already exists, open 'DIR/ex.txt'
+appendFileSync ax, a new file "n"
+promises.appendFile ax THROWS Error EEXIST EEXIST: file already exists, open 'DIR/ex.txt'
+appendFile ax "EEXIST"
+ex.txt is still "a"
+-r then --import [0,"pre-r\nimp true undefined\nimp after await\nmain 1 [\"-r\",\"./pr.js\",\"--import\",\"./imp.mjs\"]\n",""]
+--import= [0,"imp true undefined\nimp after await\neval 1\n",""]
+--import a builtin [0,"main undefined [\"--import\",\"node:path\"]\n",""]
+--import missing [1,"Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'DIR/nope.mjs' imported from DIR/"]
+--import no argument [9,"","NODE: --import requires an argument\n"]
+--max-old-space-size, --trace-uncaught [0,"[\"--max-old-space-size=100\",\"--trace-uncaught\",\"-e\",\"console.log(JSON.stringify(process.execArgv))\"]\n",""]
+bad V8 flag --max-old-space-size 100 [9,"","Error: Value for flag --max-old-space-size of type size_t is out of bounds [0-18446744073709551615]\nError: illegal value for flag --max-old-space-size of type size_t\nTry --help for options\nNODE: bad option: --max-old-space-size\nNODE: bad option: --harmony-import-attributes\nNODE: bad option: --no-harmony-import-assertions\nNODE: bad option: --experimental-wasm-imported-strings\nNODE: bad option: --experimental-wasm-memory64\nNODE: bad option: --experimental-wasm-exnref\n"]
+bad V8 flag --max-old-space-size=-5 [0,"","Error: Value for flag --max-old-space-size=-5 of type size_t is out of bounds [0-18446744073709551615]\nTry --help for options\n"]
+bad V8 flag --max-old-space-size=abc [9,"","Error: Value for flag --max-old-space-size=abc of type size_t is out of bounds [0-18446744073709551615]\nError: illegal value for flag --max-old-space-size=abc of type size_t\nTry --help for options\nNODE: bad option: --max-old-space-size=abc\nNODE: bad option: --harmony-import-attributes\nNODE: bad option: --no-harmony-import-assertions\nNODE: bad option: --experimental-wasm-imported-strings\nNODE: bad option: --experimental-wasm-memory64\nNODE: bad option: --experimental-wasm-exnref\n"]
+bad V8 flag --stack-trace-limit 3 [9,"","Error: illegal value for flag --stack-trace-limit of type int\nTry --help for options\nNODE: bad option: --stack-trace-limit\nNODE: bad option: --harmony-import-attributes\nNODE: bad option: --no-harmony-import-assertions\nNODE: bad option: --experimental-wasm-imported-strings\nNODE: bad option: --experimental-wasm-memory64\nNODE: bad option: --experimental-wasm-exnref\n"]
+bad V8 flag --stack-trace-limit=abc [9,"","Error: illegal value for flag --stack-trace-limit=abc of type int\nTry --help for options\nNODE: bad option: --stack-trace-limit=abc\nNODE: bad option: --harmony-import-attributes\nNODE: bad option: --no-harmony-import-assertions\nNODE: bad option: --experimental-wasm-imported-strings\nNODE: bad option: --experimental-wasm-memory64\nNODE: bad option: --experimental-wasm-exnref\n"]

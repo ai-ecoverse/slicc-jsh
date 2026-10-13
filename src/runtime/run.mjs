@@ -214,6 +214,7 @@ export async function runNode(ctx, options = {}) {
     await ctx.write(2, `${parsed.error}\n`);
     return parsed.status ?? 9;
   }
+  if (parsed.v8Warnings?.length) await ctx.write(2, `${parsed.v8Warnings.join('\n')}\n`);
   if (parsed.mode === 'version') {
     await ctx.write(1, `v${NODE_SHIM_VERSION}\n`);
     return 0;
@@ -614,6 +615,20 @@ export async function runNode(ctx, options = {}) {
           if (!handleUncaught(err)) return dieUncaught(() => printUncaught(err));
         }
       }
+      // --import: ES modules, resolved from the working directory, loaded
+      // (top-level await and all) before the entry, as Node's.
+      for (const specifier of parsed.imports ?? []) {
+        try {
+          uncaughtFromEsm = true;
+          await esm.importDynamic(specifier, `${process.cwd().replace(/\/$/, '')}/[import]`);
+          uncaughtFromEsm = false;
+          flushTicks();
+        } catch (err) {
+          if (isExitError(err)) throw err;
+          if (!handleUncaught(err)) return dieUncaught(() => printUncaught(err));
+          uncaughtFromEsm = false;
+        }
+      }
     }
     if (typeof options.main === 'function') {
       try {
@@ -659,7 +674,7 @@ export async function runNode(ctx, options = {}) {
         /* EOF / no stdin */
       }
       // Nothing piped: no program, but what -r loaded still runs its loop.
-      if (chunks.length === 0 && !(parsed.preload?.length > 0)) return 0;
+      if (chunks.length === 0 && !(parsed.preload?.length > 0) && !(parsed.imports?.length > 0)) return 0;
       let total = 0;
       for (const c of chunks) total += c.byteLength;
       const merged = new Uint8Array(total);
