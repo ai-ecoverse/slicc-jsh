@@ -37,6 +37,10 @@ await t('streams with URLs', () => new Promise((r) => fs.createWriteStream(u('s.
 await t('a URL of another scheme', () => fs.readFileSync(new URL('http://example.com/x')));
 await t('a file URL with a host', () => fs.readFileSync(new URL('file://host/x')));
 await t('a file URL with an encoded slash', () => fs.readFileSync(new URL('file:///a%2Fb')));
+await t('promises reject a bad URL', () => fsp.readFile(new URL('http://example.com/x')).then(() => 'resolved', (e) => ['rejected', e.code]));
+await t('exists / existsSync of a bad URL', () => new Promise((r) => fs.exists(new URL('http://example.com/x'), (v) => r([v, fs.existsSync(new URL('file://host/x')), fs.existsSync(u('a.txt'))]))));
+await t('realpath.native with URLs', () => new Promise((r, j) => fs.realpath.native(u('a.txt'), (e, p) => (e ? j(e) : r([p.endsWith('/a.txt'), fs.realpathSync.native(u('a.txt')).endsWith('/a.txt')])))));
+await t('a callback API throws for a bad URL', () => fs.readFile(new URL('http://example.com/x'), () => {}));
 fs.rmSync(u(''), { recursive: true, force: true });
 const c = require('constants');
 await t('constants', () => [Object.isFrozen(c), c.O_RDONLY, c.O_WRONLY, c.SIGINT, c.SIGTERM, c.ENOENT, c.EACCES, c.S_IFDIR, c.S_IFREG, c.F_OK, c.R_OK, c.RSA_PKCS1_PADDING, c.PRIORITY_LOW, c.COPYFILE_EXCL, require('module').builtinModules.includes('constants')]);

@@ -1925,7 +1925,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     },
   };
   acceptFileUrls(fsModule);
-  acceptFileUrls(promises);
+  acceptFileUrls(promises, { async: true });
   // Not enumerable: require('fs') lists only Node's names.
   Object.defineProperty(fsModule, '_sliccOpenFile', { value: openFileOf });
   return fsModule;
@@ -1942,20 +1942,33 @@ const TWO_PATHS = new Set(['rename', 'link', 'symlink', 'copyFile', 'cp']);
  * `file:` URL (its fileURLToPath, with Node's errors for another scheme, a
  * host, or an encoded `/`). Wraps each function of `api` in place.
  */
-function acceptFileUrls(api) {
+function acceptFileUrls(api, { async = false } = {}) {
   let fileURLToPath;
   const toPath = (value) => {
     if (!isURL(value)) return value;
     fileURLToPath ??= globalThis.process?._builtin?.('url').fileURLToPath;
     return fileURLToPath(value);
   };
-  for (const name of Object.keys(api)) {
-    const fn = api[name];
-    if (typeof fn !== 'function' || /^[A-Z]/.test(name) || name === 'promises') continue;
+  const wrap = (name, fn) => {
     const count = TWO_PATHS.has(name.replace(/Sync$/, '')) ? 2 : 1;
+    // A path Node can't take: fs.promises rejects; exists / existsSync say
+    // false (Node: callback(false)); the rest throw, as Node's do.
+    const onBadPath = async
+      ? (err) => Promise.reject(err)
+      : name === 'existsSync'
+        ? () => false
+        : name === 'exists'
+          ? (err, args) => (typeof args[1] === 'function' ? args[1](false) : undefined)
+          : (err) => {
+              throw err;
+            };
     const wrapped = {
       [name](...args) {
-        for (let i = 0; i < count && i < args.length; i++) args[i] = toPath(args[i]);
+        try {
+          for (let i = 0; i < count && i < args.length; i++) args[i] = toPath(args[i]);
+        } catch (err) {
+          return onBadPath(err, args);
+        }
         return Reflect.apply(fn, this, args);
       },
     }[name];
@@ -1963,11 +1976,19 @@ function acceptFileUrls(api) {
     for (const key of Reflect.ownKeys(fn)) {
       if (key === 'length' || key === 'name' || key === 'prototype') continue;
       try {
-        Object.defineProperty(wrapped, key, Object.getOwnPropertyDescriptor(fn, key));
+        const d = Object.getOwnPropertyDescriptor(fn, key);
+        // realpath.native / realpathSync.native take URLs too.
+        if (key === 'native' && typeof d.value === 'function') d.value = wrap(name, d.value);
+        Object.defineProperty(wrapped, key, d);
       } catch {
         /* non-configurable */
       }
     }
-    api[name] = wrapped;
+    return wrapped;
+  };
+  for (const name of Object.keys(api)) {
+    const fn = api[name];
+    if (typeof fn !== 'function' || /^[A-Z]/.test(name) || name === 'promises') continue;
+    api[name] = wrap(name, fn);
   }
 }
