@@ -34,6 +34,7 @@ const keys = (m) => Object.keys(require(m)).sort();
   h3.record(5n);
   h3.record(5);
   await t('add / reset', () => { const a = [String(h3.percentileBigInt(50)), [...h3.percentiles]]; h.add(h3); const b = [h.count, h.max]; h.reset(); return [a, b, h.count, h.min]; });
+  for (const o of [{ lowest: 10n, highest: 5n }, { lowest: 2, highest: 3n }]) await t('createHistogram bigint bounds', () => createHistogram(o).count);
   for (const o of [{ lowest: 0 }, { highest: 1 }, { figures: 6 }, { lowest: 'x' }]) await t(`createHistogram ${JSON.stringify(o)}`, () => createHistogram(o));
   const m = monitorEventLoopDelay({ resolution: 10 });
   await t('monitorEventLoopDelay', () => [m.enable(), m.enable(), m.disable(), m.disable(), typeof m.count, Object.getPrototypeOf(m).constructor.name]);
@@ -46,6 +47,7 @@ const keys = (m) => Object.keys(require(m)).sort();
   const ch = dc.channel('jsh:test');
   const fn = (msg, name) => seen.push([msg, name]);
   await t('channel', () => { const before = ch.hasSubscribers; dc.subscribe('jsh:test', fn); ch.publish({ a: 1 }); const r = [before, ch.hasSubscribers, dc.hasSubscribers('jsh:test'), dc.channel('jsh:test') === ch, seen]; dc.unsubscribe('jsh:test', fn); return [...r, ch.hasSubscribers]; });
+  await t('a subscriber that throws: uncaught after the ticks queued before', () => new Promise((r) => { const order = []; const h = (e) => { order.push(`uncaught ${e.message}`); }; process.on('uncaughtException', h); dc.subscribe('jsh:throw', () => { throw new Error('sub'); }); process.nextTick(() => order.push('tick')); dc.channel('jsh:throw').publish(1); order.push('after publish'); setTimeout(() => { process.off('uncaughtException', h); r(order); }, 5); }));
   await t('tracingChannel', () => { const tc = dc.tracingChannel('jsh:trace'); const ev = []; tc.subscribe({ start: () => ev.push('start'), end: () => ev.push('end'), asyncStart: () => {}, asyncEnd: () => {}, error: () => ev.push('error') }); const r = tc.traceSync(() => 42, {}); return [r, ev]; });
 
   // stream/web, stream/consumers

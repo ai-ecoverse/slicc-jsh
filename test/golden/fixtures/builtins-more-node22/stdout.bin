@@ -16,6 +16,8 @@ record 0n THROWS RangeError ERR_OUT_OF_RANGE value is out of range
 percentile 0 THROWS RangeError ERR_OUT_OF_RANGE The value of "percentile" is out of range. It must be > 0 && <= 100. Received 0
 exceeds [1,1,7]
 add / reset [["5",[[0,5],[100,5]]],[12,10],0,9223372036854776000]
+createHistogram bigint bounds THROWS RangeError ERR_INVALID_ARG_VALUE The property 'options.highest' is invalid. Received 5n
+createHistogram bigint bounds THROWS TypeError undefined Cannot mix BigInt and other types, use explicit conversions
 createHistogram {"lowest":0} THROWS RangeError ERR_OUT_OF_RANGE The value of "options.lowest" is out of range. It must be >= 1 && <= 9007199254740991. Received 0
 createHistogram {"highest":1} THROWS RangeError ERR_OUT_OF_RANGE The value of "options.highest" is out of range. It must be >= 2 && <= 9007199254740991. Received 1
 createHistogram {"figures":6} THROWS RangeError ERR_OUT_OF_RANGE The value of "options.figures" is out of range. It must be >= 1 && <= 5. Received 6
@@ -24,6 +26,7 @@ monitorEventLoopDelay [true,false,true,false,"number","ELDHistogram"]
 monitorEventLoopDelay resolution 0 THROWS RangeError ERR_OUT_OF_RANGE The value of "options.resolution" is out of range. It must be >= 1 && <= 9007199254740991. Received 0
 inspect "Histogram {\n  min: 9223372036854776000,\n  max: 0,\n  mean: NaN,\n  exceeds: 0,\n  stddev: NaN,\n  count: 0,\n  percentiles: Map(1) { 100 => 0 }\n}"
 channel [false,true,true,true,[[{"a":1},"jsh:test"]],false]
+a subscriber that throws: uncaught after the ticks queued before ["after publish","tick","uncaught sub"]
 tracingChannel [42,["start","end"]]
 stream/web [true,"function","function"]
 consumers ["ab",{"k":1},"xy",1,4,"web"]

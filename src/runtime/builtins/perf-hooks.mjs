@@ -10,7 +10,7 @@
  * and records how late it fired (ns), as Node's ELDHistogram does with its
  * uv timer.
  */
-import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, nodeError, validateObject } from '../node-errors.mjs';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE, nodeError, validateObject } from '../node-errors.mjs';
 
 const MAX_SAFE = Number.MAX_SAFE_INTEGER;
 const kInspect = Symbol.for('nodejs.util.inspect.custom');
@@ -244,8 +244,14 @@ class ELDHistogram extends Histogram {
 function createHistogram(options = {}) {
   validateObject(options, 'options');
   const { lowest = 1, highest = MAX_SAFE, figures = 3 } = options;
+  // lib/internal/histogram.js as it is (mixing a bigint and a number throws
+  // the language's own TypeError there too).
   if (typeof lowest !== 'bigint') intIn(lowest, 'options.lowest', 1);
-  if (typeof highest !== 'bigint') intIn(highest, 'options.highest', 2 * Number(lowest));
+  if (typeof highest !== 'bigint') {
+    intIn(highest, 'options.highest', 2 * lowest);
+  } else if (highest < 2n * lowest) {
+    throw ERR_INVALID_ARG_VALUE('options.highest', highest, 'is invalid', RangeError);
+  }
   intIn(figures, 'options.figures', 1, 5);
   return new RecordableHistogram(newState(Number(lowest), Number(highest)));
 }

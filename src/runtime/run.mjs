@@ -446,7 +446,10 @@ export async function runNode(ctx, options = {}) {
     }
     if (handleUncaught(err)) return;
     fatal(err);
-  };
+  };  // diagnostics_channel's triggerUncaughtException (node-bindings.mjs): a
+  // subscriber's throw, handled as any uncaught exception, at once.
+  Object.defineProperty(process, '_triggerUncaught', { value: (err) => exceptionHandler(err), configurable: true });
+
 
   // #297: prefer ctx.onUncaught / ctx.onUnhandledRejection. While registered, the
   // kernel skips its default (status 1 + message). Fall back to host process /
