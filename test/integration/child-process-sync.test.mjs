@@ -121,7 +121,8 @@ describe('child_process sync forms (kernel)', () => {
       [
         "const cp = require('child_process');",
         "process.on('SIGINT', () => console.log('handler ran'));",
-        // The kernel installs the handler asynchronously (Node: at once).
+        // Installed a turn before the call (works on kernels before 1.69.0
+        // too, where ctx.signals.on took effect asynchronously).
         'setTimeout(() => {',
         "  const r = cp.spawnSync('node', ['-e', 'console.log(\"child up\"); setTimeout(() => {}, 20000)'], { stdio: ['inherit', 'inherit', 'pipe'] });",
         "  console.log('returned', r.status, r.signal);",
@@ -135,6 +136,33 @@ describe('child_process sync forms (kernel)', () => {
     assert.match(out, /returned null SIGINT$/m);
     assert.match(out, /^handler ran$/m);
     assert.ok(out.indexOf('returned') < out.indexOf('handler ran'), out);
+  });
+
+  // slicc-kernel 1.69.0 (ai-ecoverse/slicc-kernel#421): ctx.signals.on takes
+  // effect at once, so a handler installed in the same tick as a blocking
+  // call is in place, as Node's is.
+  it('^C during execSync with a SIGINT handler installed the same tick: the handler catches it, as in Node', async () => {
+    const { out, status } = await onTerminal(
+      [
+        "const cp = require('child_process');",
+        "process.on('SIGINT', () => console.log('handler ran'));",
+        'try {',
+        "  cp.execSync('node -e \\'console.log(\"child up\"); setTimeout(() => {}, 20000)\\'', { stdio: ['inherit', 'inherit', 'pipe'] });",
+        "  console.log('no throw');",
+        '} catch (e) {',
+        "  console.log('threw', e.status, e.signal);",
+        '}',
+        "console.log('still running');",
+        'setTimeout(() => process.exit(0), 200);',
+        '',
+      ].join('\n'),
+      { steps: [{ after: /child up/, do: (t) => t.write('\x03') }] }
+    );
+    assert.equal(status, 0, out);
+    assert.match(out, /threw null SIGINT$/m);
+    assert.match(out, /^still running$/m);
+    assert.match(out, /^handler ran$/m);
+    assert.ok(out.indexOf('still running') < out.indexOf('handler ran'), out);
   });
 
   it('other processes go on while the program blocks; its own timers wait', async () => {

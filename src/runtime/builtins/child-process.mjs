@@ -579,11 +579,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     if (sigNum != null && sigNum !== 0) {
       return { code: null, signal: SIGNAL_BY_NUMBER[sigNum] ?? String(sigNum) };
     }
+    // A plain 128+n is an exit status (`exit 143`), not a signal: Node
+    // reports it as the code. The kernel sets `signal` when one ended it.
     const code = typeof status?.status === 'number' ? status.status : 0;
-    // Kernel may report 128+n without a signal field (WIFSIGNALED).
-    if (code > 128 && code < 128 + 32 && SIGNAL_NAMES[code - 128]) {
-      return { code: null, signal: SIGNAL_NAMES[code - 128] };
-    }
     return { code, signal: null };
   }
 

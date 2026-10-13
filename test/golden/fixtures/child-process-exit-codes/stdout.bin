@@ -1,0 +1,12 @@
+sync exit 143 143 null
+sync exit 130 130 null
+sync exit 137 137 null
+sync self SIGKILL null SIGKILL
+sync self SIGTERM null SIGTERM
+async exit exit 143 143 null 143 null
+async exit exit 130 130 null 130 null
+async exit exit 137 137 null 137 null
+async exit self SIGKILL null SIGKILL null SIGKILL
+async exit self SIGTERM null SIGTERM null SIGTERM
+exec exit 143 143 null false
+kill() null SIGTERM true
