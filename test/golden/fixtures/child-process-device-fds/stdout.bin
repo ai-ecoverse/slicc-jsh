@@ -1,0 +1,6 @@
+sync /dev/zero stdin 0 "read true 0\n" undefined
+sync /dev/null out 0 "done\n" undefined
+sync /dev/null in 0 "eof 0\n"
+async /dev/zero stdin 0 "read true 0\n"
+async /dev/null out 0 "done\n"
+async closed after spawn 0 "got true\n"
