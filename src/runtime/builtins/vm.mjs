@@ -118,34 +118,86 @@ function syntaxError(code, acornErr, filename, lineOffset) {
 }
 
 /**
- * Compile: the parse (V8's errors), then the source as run — top-level
- * lexical declarations as `var` (for the global scope, see above) and
- * import() through the runtime's loader.
+ * Compile: the parse (V8's errors), then the source as run, for the
+ * program's context (`this`: top-level lexical declarations as `var`, which
+ * an indirect eval keeps global) or for a context (`context`: top-level
+ * declarations as assignments, which the scope puts on the context object;
+ * function declarations stay, hoisted, and are copied to it after the run),
+ * with import() through the script's importModuleDynamically.
  */
 const VM_IMPORT = Symbol.for('slicc-jsh.vmImport');
 const scripts = new Map();
 let nextScriptId = 1;
 
-function compile(code, filename, lineOffset, scriptId) {
-  let ast;
+/** The identifiers a binding pattern declares. */
+function patternNames(node, out) {
+  if (!node) return out;
+  if (node.type === 'Identifier') out.add(node.name);
+  else if (node.type === 'ObjectPattern') for (const p of node.properties) patternNames(p.type === 'RestElement' ? p.argument : p.value, out);
+  else if (node.type === 'ArrayPattern') for (const e of node.elements) patternNames(e, out);
+  else if (node.type === 'RestElement') patternNames(node.argument, out);
+  else if (node.type === 'AssignmentPattern') patternNames(node.left, out);
+  return out;
+}
+
+function parseScript(code, filename, lineOffset) {
   try {
-    ast = acorn.parse(code, PARSE);
+    return acorn.parse(code, PARSE);
   } catch (e) {
     throw syntaxError(code, e, filename, lineOffset);
   }
+}
+
+function compile(code, filename, lineOffset, scriptId, mode = 'this', ast = parseScript(code, filename, lineOffset)) {
   const edits = [];
+  const names = new Set();
+  const functions = new Set();
+  // A context's let / const / class (V8: not properties of its object) and
+  // `var x;` without a value (V8: no property until assigned).
+  const lexical = new Set();
+  const bareVars = new Set();
+  const slice = (node) => code.slice(node.start, node.end);
   for (const node of ast.body) {
-    if (node.type === 'VariableDeclaration' && (node.kind === 'let' || node.kind === 'const')) {
-      edits.push({ start: node.start, end: node.start + node.kind.length, text: 'var' });
+    if (mode === 'this') {
+      if (node.type === 'VariableDeclaration' && (node.kind === 'let' || node.kind === 'const')) {
+        edits.push({ start: node.start, end: node.start + node.kind.length, text: 'var' });
+      } else if (node.type === 'ClassDeclaration' && node.id) {
+        edits.push({ start: node.start, end: node.start, text: `var ${node.id.name} = ` });
+        edits.push({ start: node.end, end: node.end, text: ';' });
+      }
+      continue;
+    }
+    if (node.type === 'VariableDeclaration') {
+      const parts = [];
+      for (const d of node.declarations) {
+        patternNames(d.id, names);
+        if (node.kind !== 'var') patternNames(d.id, lexical);
+        if (d.init) parts.push(`(${slice(d.id)} = ${slice(d.init)})`);
+        else if (node.kind !== 'var') parts.push(`(${d.id.name} = undefined)`);
+        else bareVars.add(d.id.name);
+      }
+      edits.push({ start: node.start, end: node.end, text: parts.length ? `void (${parts.join(', ')});` : ';' });
     } else if (node.type === 'ClassDeclaration' && node.id) {
-      edits.push({ start: node.start, end: node.start, text: `var ${node.id.name} = ` });
+      names.add(node.id.name);
+      lexical.add(node.id.name);
+      edits.push({ start: node.start, end: node.start, text: `${node.id.name} = ` });
       edits.push({ start: node.end, end: node.end, text: ';' });
+    } else if (node.type === 'FunctionDeclaration' && node.id) {
+      functions.add(node.id.name);
     }
   }
   const walk = (node) => {
     if (!node || typeof node.type !== 'string') return;
     if (node.type === 'ImportExpression') {
       edits.push({ start: node.start, end: node.source.start, text: `globalThis[Symbol.for('slicc-jsh.vmImport')](${scriptId}, ` });
+    }
+    if (mode === 'context') {
+      // Names a script assigns without declaring: the context's (sloppy globals).
+      if (node.type === 'AssignmentExpression') patternNames(node.left, names);
+      else if (node.type === 'UpdateExpression' && node.argument.type === 'Identifier') names.add(node.argument.name);
+      else if ((node.type === 'ForInStatement' || node.type === 'ForOfStatement') && node.left.type !== 'VariableDeclaration') {
+        patternNames(node.left, names);
+      }
     }
     for (const key of Object.keys(node)) {
       if (key === 'start' || key === 'end' || key === 'loc') continue;
@@ -154,13 +206,14 @@ function compile(code, filename, lineOffset, scriptId) {
       else if (v && typeof v.type === 'string') walk(v);
     }
   };
-  if (/\bimport\s*\(/.test(code)) walk(ast);
+  if (mode === 'context' || /\bimport\s*\(/.test(code)) walk(ast);
   let out = code;
   for (const { start, end, text } of edits.sort((a, b) => b.start - a.start || b.end - a.end)) {
     out = out.slice(0, start) + text + out.slice(end);
   }
+  for (const f of functions) names.delete(f);
   // Line numbers in the stack: the script's own (offset), named as its file.
-  return { body: out, lines: '\n'.repeat(Math.max(0, lineOffset)), sourceURL: `\n//# sourceURL=${filename}` };
+  return { body: out, lines: '\n'.repeat(Math.max(0, lineOffset)), sourceURL: `\n//# sourceURL=${filename}`, names, functions, lexical, bareVars };
 }
 
 /** The source as run in this context: in the `with` over the overlay when there is one (first-line columns shifted by it). */
@@ -219,64 +272,84 @@ export function createVm({
     });
   }
 
-  /** The scope a context's scripts run in: its object, then the ECMAScript globals. */
+  /**
+   * The scope a context's scripts run in: its object, then the ECMAScript
+   * globals. The program's other globals are hidden (undefined); a name
+   * none of them has, nor the script declares or assigns, isn't bound
+   * (a ReferenceError, as in Node). The running script's function
+   * declarations aren't either while it runs: they are its own, hoisted.
+   */
+  const esGlobals = new Set(ES_GLOBALS);
+  const RUNNER_NAMES = new Set(['__jsh_vm_scope__', '__jsh_vm_code__', '__jsh_vm_fns__', '__jsh_vm_n__']);
   function scopeOf(sandbox) {
-    let scope = contexts.get(sandbox);
-    if (scope) return scope;
-    const esGlobals = new Set(ES_GLOBALS);
-    scope = new Proxy(sandbox, {
-      has: (target, key) => key !== Symbol.unscopables && key !== '__jsh_vm_code__',
+    let state = contexts.get(sandbox);
+    if (state) return state;
+    // hidden: the context's lexical bindings (and bare vars), off its object.
+    state = { names: new Set(), functions: new Set(), lexical: new Set(), bareVars: new Set(), hidden: new Map() };
+    state.scope = new Proxy(sandbox, {
+      has: (target, key) => {
+        if (typeof key !== 'string' || RUNNER_NAMES.has(key) || state.functions.has(key)) return false;
+        return (
+          state.hidden.has(key) || key in target || state.names.has(key) || esGlobals.has(key) || key === 'globalThis' || key in globalThis
+        );
+      },
       get: (target, key) => {
         if (key === Symbol.unscopables) return undefined;
+        if (state.hidden.has(key)) return state.hidden.get(key);
         if (key in target) return target[key];
         if (key === 'globalThis') return sandbox;
         if (typeof key === 'string' && esGlobals.has(key)) return globalThis[key];
         return undefined;
       },
       set: (target, key, value) => {
+        if (state.lexical.has(key)) {
+          state.hidden.set(key, value);
+          return true;
+        }
+        if (state.bareVars.has(key)) {
+          state.bareVars.delete(key);
+          state.hidden.delete(key);
+        }
         target[key] = value;
         return true;
       },
     });
-    contexts.set(sandbox, scope);
-    return scope;
+    contexts.set(sandbox, state);
+    return state;
   }
 
-  function runInScope(source, sandbox) {
-    const scope = scopeOf(sandbox);
-    // Sloppy direct eval inside `with`: what the script declares (var /
-    // function) lands in the function's scope, so declarations are turned
-    // into assignments first (they then go on the context).
-    // eslint-disable-next-line no-new-func
-    const run = new Function('__jsh_vm_scope__', '__jsh_vm_code__', 'with (__jsh_vm_scope__) { return eval(__jsh_vm_code__); }');
-    return run(scope, source);
-  }
+  // Sloppy direct eval inside `with`: the script's assignments go to the
+  // context (see compile); its function declarations land in this
+  // function's scope, and are copied to the context afterwards.
+  // eslint-disable-next-line no-new-func
+  const runner = new Function(
+    '__jsh_vm_scope__',
+    '__jsh_vm_code__',
+    '__jsh_vm_fns__',
+    'try { with (__jsh_vm_scope__) { return eval(__jsh_vm_code__); } } finally { for (const __jsh_vm_n__ of __jsh_vm_fns__) { try { __jsh_vm_scope__[__jsh_vm_n__] = eval(__jsh_vm_n__); } catch {} } }'
+  );
 
-  /** Top-level var / function declarations as assignments to the context. */
-  function contextSource(code) {
-    let ast;
-    try {
-      ast = acorn.parse(code, { ecmaVersion: 'latest', sourceType: 'script', allowHashBang: true });
-    } catch {
-      return code;
-    }
-    const edits = [];
-    for (const node of ast.body) {
-      if (node.type === 'VariableDeclaration' && node.kind === 'var') {
-        if (node.declarations.every((d) => d.id.type === 'Identifier')) {
-          const parts = node.declarations.map((d) => (d.init ? `${d.id.name} = ${code.slice(d.init.start, d.init.end)}` : `${d.id.name} = ${d.id.name}`));
-          edits.push({ start: node.start, end: node.end, text: `void (${parts.join(', ')});` });
-        }
-      } else if (node.type === 'FunctionDeclaration' && node.id) {
-        edits.push({ start: node.start, end: node.start, text: `${node.id.name} = ` });
-        edits.push({ start: node.end, end: node.end, text: ';' });
+  function runInScope(compiled, filename, sandbox) {
+    const state = scopeOf(sandbox);
+    const saved = [state.names, state.functions];
+    state.names = compiled.names;
+    state.functions = compiled.functions;
+    for (const n of compiled.lexical) state.lexical.add(n);
+    // Function declarations are the context's first (V8 declares them before the run).
+    for (const n of compiled.functions) if (!(n in sandbox)) sandbox[n] = undefined;
+    for (const n of compiled.bareVars) {
+      if (!(n in sandbox) && !state.hidden.has(n)) {
+        state.bareVars.add(n);
+        state.hidden.set(n, undefined);
       }
     }
-    let out = code;
-    for (const { start, end, text } of edits.sort((a, b) => b.start - a.start || b.end - a.end)) {
-      out = out.slice(0, start) + text + out.slice(end);
+    registerVmFile(filename, 0);
+    try {
+      // Top-level `this` is the context's global, as globalThis is.
+      return runner.call(sandbox, state.scope, `${compiled.lines}${compiled.body}${compiled.sourceURL}`, [...compiled.functions]);
+    } finally {
+      [state.names, state.functions] = saved;
     }
-    return out;
   }
 
   const optionsOf = (options, defaultName) => {
@@ -306,7 +379,9 @@ export function createVm({
         new WeakRef({ script: this, filename, importModuleDynamically: opts.importModuleDynamically, internal: !!opts[kInternalScript] })
       );
       this._importEntry = scripts.get(id).deref();
-      this._compiled = compile(code, filename, lineOffset, id);
+      this._ast = parseScript(code, filename, lineOffset);
+      this._id = id;
+      this._compiled = compile(code, filename, lineOffset, id, 'this', this._ast);
       this.cachedDataRejected = opts.cachedData ? false : undefined;
       if (opts.importModuleDynamically !== undefined && typeof opts.importModuleDynamically !== 'function' && typeof opts.importModuleDynamically !== 'symbol') {
         validateFunction(opts.importModuleDynamically, 'options.importModuleDynamically');
@@ -324,8 +399,9 @@ export function createVm({
       if (contextifiedObject === null || typeof contextifiedObject !== 'object' || !contexts.has(contextifiedObject)) {
         throw ERR_INVALID_ARG_TYPE('contextifiedObject', 'vm.Context', contextifiedObject);
       }
+      this._contextCompiled ??= compile(this._code, this._filename, this._lineOffset, this._id, 'context', this._ast);
       try {
-        return runInScope(contextSource(this._code), contextifiedObject);
+        return runInScope(this._contextCompiled, this._filename, contextifiedObject);
       } catch (err) {
         if (arguments[1]?.displayErrors !== false) decorateThrown(err, this);
         throw err;
@@ -355,17 +431,23 @@ export function createVm({
     return contextObject;
   }
 
+  /**
+   * compileFunction: Function's own compile (its SyntaxErrors), and with a
+   * parsingContext, a closure made inside that context's scope (a direct
+   * eval in its `with`), so the body's free names are the context's.
+   */
   function compileFunction(code, params = [], options = {}) {
     validateString(code, 'code');
     // eslint-disable-next-line no-new-func
     const fn = new Function(...params, code);
-    if (options?.parsingContext && isContext(options.parsingContext)) {
-      const scope = scopeOf(options.parsingContext);
-      // eslint-disable-next-line no-new-func
-      const make = new Function('__jsh_vm_scope__', '__jsh_vm_params__', '__jsh_vm_code__', 'with (__jsh_vm_scope__) { return function (...args) { return Function(...__jsh_vm_params__, __jsh_vm_code__).apply(this, args); }; }');
-      return make(scope, params, code);
+    if (options?.parsingContext === undefined) return fn;
+    const ctx = options.parsingContext;
+    if (ctx === null || typeof ctx !== 'object' || !contexts.has(ctx)) {
+      throw ERR_INVALID_ARG_TYPE('options.parsingContext', 'Context', ctx);
     }
-    return fn;
+    const state = scopeOf(ctx);
+    const source = `(function (${params.join(', ')}) {\n${code}\n})`;
+    return runner.call(ctx, state.scope, source, []);
   }
 
   const vm = {

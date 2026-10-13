@@ -3,6 +3,12 @@ completion value [2,"x",null]
 Script reuse 2
 context ["functionundefined",6,7,"function",true,false]
 runInNewContext 3
+context declarations kept across runs [[3,4,5,6,null,1,7,4,"early",true,2],["x","hoisted","w","implicit","early","v"],false,8]
+context: an unknown name THROWS ReferenceError undefined misspelled is not defined
+context: typeof ["undefined","undefined","function","object"]
+compileFunction parsingContext 11
+compileFunction 42
+context frames ["c.vm:2","throw new Error(\"ctx\")","^","","Error: ctx","    at c.vm:2:7"]
 isContext bad arg THROWS TypeError ERR_INVALID_ARG_TYPE The "object" argument must be of type object. Received type number (1)
 runInContext not a context THROWS TypeError ERR_INVALID_ARG_TYPE The "contextifiedObject" argument must be an vm.Context. Received an instance of Object
 s1.vm SyntaxError Unexpected identifier 'bar' ["s1.vm:1","foo bar","    ^^^",""]

@@ -287,7 +287,9 @@ function wrapVmCallSite(frame, file) {
   if (fn === 'eval') fn = null;
   const method = frame.getMethodName?.();
   const typeName = frame.getTypeName?.();
-  const top = typeof frame.isToplevel === 'function' ? frame.isToplevel() : !typeName;
+  // A script's own code (no function name) is top level, whatever its `this`
+  // (a context's script runs with its object as `this`).
+  const top = !fn || (typeof frame.isToplevel === 'function' ? frame.isToplevel() : !typeName);
   if (!top && typeName && !ctor) {
     let name = fn ?? '<anonymous>';
     if (!name.startsWith(`${typeName}.`)) name = `${typeName}.${name}`;

@@ -1,0 +1,5 @@
+{
+  "description": "options after -e / -p are still node's, up to the first argument (the program's from there), and execArgv keeps their order",
+  "argv": ["--no-deprecation", "-e", "console.log(JSON.stringify([process.execArgv, process.argv.slice(1)]))", "--no-warnings", "x", "-i", "--foo"],
+  "shim": true
+}

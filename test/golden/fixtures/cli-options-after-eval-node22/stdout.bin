@@ -1,0 +1,1 @@
+[["--no-deprecation","-e","console.log(JSON.stringify([process.execArgv, process.argv.slice(1)]))","--no-warnings"],["x","-i","--foo"]]

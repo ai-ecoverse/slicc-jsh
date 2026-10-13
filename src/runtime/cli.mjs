@@ -57,9 +57,11 @@ export function parseNodeArgv(argv) {
         return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
       }
       evalCode = args[i];
+      print = false;
+      flags.push('-e', evalCode);
       i += 1;
-      userArgs.push(...args.slice(i));
-      break;
+      // Node goes on parsing options after the code, up to the first argument.
+      continue;
     }
     if (arg === '-p' || arg === '--print') {
       print = true;
@@ -68,22 +70,23 @@ export function parseNodeArgv(argv) {
         return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
       }
       evalCode = args[i];
+      flags.push('-p', evalCode);
       i += 1;
-      userArgs.push(...args.slice(i));
-      break;
+      continue;
     }
     if (arg.startsWith('-e') && arg.length > 2) {
       evalCode = arg.slice(2);
+      print = false;
+      flags.push('-e', evalCode);
       i += 1;
-      userArgs.push(...args.slice(i));
-      break;
+      continue;
     }
     if (arg.startsWith('-p') && arg.length > 2) {
       print = true;
       evalCode = arg.slice(2);
+      flags.push('-p', evalCode);
       i += 1;
-      userArgs.push(...args.slice(i));
-      break;
+      continue;
     }
     if (arg === '-i' || arg === '--interactive') {
       // The REPL even if stdin isn't a terminal (Node's -i); kept in execArgv.
@@ -116,6 +119,11 @@ export function parseNodeArgv(argv) {
       }
       return { error: `${argv0}: bad option: ${arg}`, status: 9 };
     }
+    // With -e / -p, the first argument and the rest are the program's.
+    if (evalCode !== undefined) {
+      userArgs.push(...args.slice(i));
+      break;
+    }
     script = arg;
     userArgs.push(...args.slice(i + 1));
     break;
@@ -133,13 +141,13 @@ export function parseNodeArgv(argv) {
   }
 
   if (evalCode !== undefined) {
-    const flag = print ? '-p' : '-e';
     return {
       mode: 'eval',
       code: evalCode,
       print,
       processArgv: [argv0, ...userArgs],
-      execArgv: [...flags, flag, evalCode],
+      // In Node's order: the options as given, the code where it was.
+      execArgv: [...flags],
       interactive,
     };
   }

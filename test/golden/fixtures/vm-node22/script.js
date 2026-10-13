@@ -22,6 +22,22 @@ t('context', () => {
   return [r, ctx.y, ctx.z, typeof ctx.g, vm.isContext(ctx), vm.isContext({})];
 });
 t('runInNewContext', () => vm.runInNewContext('a + b', { a: 1, b: 2 }));
+t('context declarations kept across runs', () => {
+  const ctx = vm.createContext({ x: 2 });
+  vm.runInContext('let a = 3; const { b, c: [d] } = { b: 4, c: [5] }; class K { m() { return 6 } }; var v; var w = 1; implicit = 7; function hoisted() { return a + 1 }', ctx);
+  const r = vm.runInContext('[a, b, d, new K().m(), v, w, implicit, hoisted(), early(), this === globalThis, globalThis.x]; function early() { return "early" }', ctx);
+  vm.runInContext('v = 8', ctx);
+  return [r, Object.keys(ctx), 'a' in ctx, ctx.v];
+});
+t('context: an unknown name', () => vm.runInNewContext('misspelled + 1'));
+t('context: typeof', () => vm.runInNewContext('[typeof process, typeof misspelled, typeof Object, typeof console]'));
+t('compileFunction parsingContext', () => vm.compileFunction('return x + y', ['y'], { parsingContext: vm.createContext({ x: 1 }) })(10));
+t('compileFunction', () => vm.compileFunction('return a * 2', ['a'])(21));
+try {
+  vm.runInContext('\nthrow new Error("ctx")', vm.createContext({}), { filename: 'c.vm' });
+} catch (e) {
+  console.log('context frames', JSON.stringify(e.stack.split('\n').slice(0, 6)));
+}
 t('isContext bad arg', () => vm.isContext(1));
 t('runInContext not a context', () => vm.runInContext('1', {}));
 for (const [code, name] of [['foo bar', 's1.vm'], ['let = ;', 's2.vm'], ['return 1', 's3.vm'], ['\n\n  (1 + ', 's4.vm']]) {

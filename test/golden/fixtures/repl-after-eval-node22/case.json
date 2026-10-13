@@ -1,0 +1,6 @@
+{
+  "description": "-e with -i after it: the REPL starts, then the code runs",
+  "argv": ["-e", "globalThis.fromEval = 41; console.log('eval ran')", "-i"],
+  "stdin": "fromEval + 1\n",
+  "shim": true
+}
