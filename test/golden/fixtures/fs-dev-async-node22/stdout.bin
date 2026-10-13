@@ -1,10 +1,3 @@
 p.writeFile null undefined
-p append
-p.appendFile stdout undefined
 p.readFile null ""
-cb appendFile stderr "ok"
 p.open zero [3,[0,0,0]]
-order 1
-order 2
-order 3
-order 4

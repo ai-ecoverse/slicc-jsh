@@ -321,16 +321,36 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
    * A path in /dev the kernel opens as a device (1.69+: ctx.sync.open sees
    * /dev). /dev/stdin and /dev/fd/0 stay process.stdin's (see openSync).
    */
-  function isDevicePath(target) {
-    if (typeof ctx.sync?.open !== 'function' || !target.startsWith('/dev/')) return false;
-    if (target === '/dev/stdin' || target === '/dev/fd/0') return false;
+  /**
+   * The path to open as a device (null when it isn't one): by what it is,
+   * not how it's spelled. The kernel shows /dev only by its own paths, so a
+   * link to a device is followed here first.
+   */
+  function devicePathOf(target) {
+    if (typeof ctx.sync?.open !== 'function') return null;
+    let real = target;
+    if (!target.startsWith('/dev/')) {
+      try {
+        // Follow the links by hand: the kernel's stat of one to /dev is ENOENT.
+        for (let hops = 0; syncFs.lstat?.(real)?.isSymbolicLink; hops++) {
+          if (hops >= 40) return null;
+          real = path.resolve(path.dirname(real), syncFs.readlink(real));
+          if (real.startsWith('/dev/')) break;
+        }
+      } catch {
+        return null;
+      }
+      if (real === target) return null;
+    }
+    if (real === '/dev/stdin' || real === '/dev/fd/0') return null;
     try {
-      const st = syncFs.stat(target);
-      return !st.isFile && !st.isDirectory;
+      const st = syncFs.stat(real);
+      return !st.isFile && !st.isDirectory ? real : null;
     } catch {
-      return false;
+      return null;
     }
   }
+  const isDevicePath = (target) => devicePathOf(target) !== null;
 
   /** writeFileSync / appendFileSync of a device: open, write, close, as Node's do. */
   function writeThroughDescriptor(p, bytes, flag) {
@@ -822,10 +842,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       // A device (/dev/null, /dev/zero, /dev/urandom, /dev/stdout, /dev/fd/N, …):
       // a kernel descriptor on it (slicc-kernel 1.69+), read and written as a
       // stream, never whole.
-      if (isDevicePath(target)) {
+      const device = devicePathOf(target);
+      if (device) {
         let file;
         try {
-          file = ctx.sync.open(target, {
+          file = ctx.sync.open(device, {
             read: fl.readable || fl.raw === 'r',
             write: fl.writable,
             append: fl.append,
@@ -1655,6 +1676,35 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   function openFileOf(fd) {
     const ent = fdTable.get(fd);
     if (!ent) return null;
+    if (ent.device) {
+      // A device: its kernel descriptor (kernelFd) can be a child's stdio as
+      // it is; fed and drained here, it streams, up to the kernel's 64 MiB.
+      return {
+        kernelFd: ent.device.fd,
+        write(bytes) {
+          let off = 0;
+          while (bytes?.length && off < bytes.length) off += ent.device.write(0, bytes.subarray(off)) || bytes.length - off;
+        },
+        readRest() {
+          const chunks = [];
+          let total = 0;
+          for (;;) {
+            const chunk = ent.device.read(0, 64 * 1024);
+            if (!chunk?.length) break;
+            chunks.push(chunk);
+            total += chunk.length;
+            if (total > 64 * 1024 * 1024) throw nodeFsError('EFBIG', 'read', undefined);
+          }
+          const out = new Uint8Array(total);
+          let at = 0;
+          for (const c of chunks) {
+            out.set(c, at);
+            at += c.length;
+          }
+          return out;
+        },
+      };
+    }
     return {
       write(bytes) {
         if (bytes?.length) writeBytesAtPath(ent, bytes, null);

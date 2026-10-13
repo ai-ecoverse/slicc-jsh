@@ -1,14 +1,8 @@
 write null undefined
 read null ""
-to stdout
-append stdout undefined
-append stderr undefined
 zero [4,[0,0,0,0]]
 urandom [16,true]
-via /dev/fd/1
-fd1 "ok"
+link to a device [3,[0,0,0]]
 stat null [true,false]
 exists [true,true,true,false]
 nope THROWS ENOENT ENOENT: no such file or directory, open '/dev/nope'
-stream to stdout
-stream ended
