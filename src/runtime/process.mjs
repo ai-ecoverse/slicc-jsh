@@ -510,6 +510,15 @@ class Process extends EventEmitter {
     } catch {
       /* no signals */
     }
+    // slicc-kernel 1.72.0+: the kernel's own default action, at once (the
+    // reset above takes effect synchronously from 1.69.0 on).
+    if (typeof this._ctx?.sync?.kill === 'function') {
+      try {
+        this._ctx.sync.kill(this._ctx.pid ?? this.pid, 'SIGABRT');
+      } catch {
+        /* fall through */
+      }
+    }
     this._defaultSignalAction('SIGABRT', SIGNALS.SIGABRT);
   }
 
@@ -603,6 +612,8 @@ class Process extends EventEmitter {
       name = sig;
       num = SIGNALS[sig];
     }
+    // slicc-kernel 1.72.0+ (ai-ecoverse/slicc-kernel#444): a synchronous kill.
+    if (typeof this._ctx?.sync?.kill === 'function') return this._killSync(Number(pid), name, num);
     if (Number(pid) !== this.pid) throw uvError('ESRCH', -3, 'kill');
     if (num === 0) return true;
     // Node: a listener under any name of that number (SIGIO/SIGPOLL,
@@ -629,6 +640,39 @@ class Process extends EventEmitter {
       return true;
     }
     this._defaultSignalAction(name, num);
+  }
+
+  /**
+   * process.kill on ctx.sync.kill. A signal that ends this process (itself,
+   * `0` for its group, `-pgid` of its own group) ends it inside the call, as
+   * Node's kill(2) does: its writes reach their descriptors, terminal modes
+   * are put back and the parent sees the signal; no `finally`, microtask,
+   * timer or 'exit' listener runs. A signal with a JS listener runs it
+   * asynchronously, an ignored one does nothing, a stop signal stops it.
+   */
+  _killSync(pid, name, num) {
+    if (pid === this.pid) {
+      if (num === 0) return true;
+      const handled = this.eventNames().filter(
+        (k) => typeof k === 'string' && SIGNALS[k] === num && this.listenerCount(k) > 0
+      );
+      if (handled.length > 0) {
+        const dispatch = this._dispatchSignal ?? ((fn) => queueMicrotask(fn));
+        dispatch(() => {
+          for (const k of handled) if (this.listenerCount(k) > 0) this.emit(k, k, num);
+        });
+        return true;
+      }
+      // SIGUSR1 starts Node's inspector rather than ending it; there is none.
+      if (name === 'SIGUSR1') return true;
+    }
+    try {
+      this._ctx.sync.kill(pid, num === 0 ? 0 : name);
+    } catch (err) {
+      const code = err?.code ?? 'ESRCH';
+      throw uvError(code, { EPERM: -1, ESRCH: -3, EINVAL: -22 }[code] ?? -3, 'kill');
+    }
+    return true;
   }
 
   /**

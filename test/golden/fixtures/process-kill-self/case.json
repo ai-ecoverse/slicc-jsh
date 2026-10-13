@@ -1,0 +1,5 @@
+{
+  "description": "process.kill(process.pid, sig) and process.abort() end the program inside the call: no finally, microtask, timer or 'exit' listener runs, the parent sees the signal; a handled signal returns and its listener runs later; other pids (Node 22; slicc-kernel 1.72.0 ctx.sync.kill)",
+  "argv": ["main.js"],
+  "shim": true
+}
