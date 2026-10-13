@@ -97,6 +97,23 @@ describe('smaller Node 22 gaps (kernel)', () => {
     );
   });
 
+  it('an uncaughtException listener or capture callback that throws is fatal: its own error, status 7', async () => {
+    const a = await node('-e', "process.setUncaughtExceptionCaptureCallback(() => { throw new Error('in cb'); }); throw new Error('orig')");
+    assert.equal(a.status, 7);
+    assert.match(a.stderr, /\nError: in cb\n/);
+    assert.doesNotMatch(a.stderr, /Error: orig/);
+    const b = await node('-e', "process.on('exit', (c) => console.log('exit', c)); process.on('uncaughtException', () => { throw new Error('in listener'); }); setTimeout(() => { throw new Error('orig'); }, 1)");
+    assert.equal(b.status, 7);
+    assert.equal(b.stdout, 'exit 7\n');
+    assert.match(b.stderr, /\nError: in listener\n/);
+  });
+
+  it('process.abort() dies of SIGABRT whatever listens for it (no exit event)', async () => {
+    const r = await node('-e', "process.on('SIGABRT', () => console.log('listener')); process.on('exit', () => console.log('exit')); process.abort(); console.log('after')");
+    assert.equal(r.status, 134);
+    assert.equal(r.stdout, '');
+  });
+
   it('process.ppid is a number, from the kernel', async () => {
     const r = await node('-p', 'Number.isInteger(process.ppid) && process.ppid >= 0');
     assert.equal(r.stdout, 'true\n');

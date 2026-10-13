@@ -59,6 +59,7 @@ export function createTimers(handles, { onCallbackError } = {}) {
       return repeating ? nativeSetInterval(fn, delay, ...args) : nativeSetTimeout(fn, delay, ...args);
     }
     const state = {
+      kind: 'Timeout',
       refed: true,
       id: null,
       repeating,
@@ -84,6 +85,7 @@ export function createTimers(handles, { onCallbackError } = {}) {
   const makeImmediate = (fn, args) => {
     if (stopped) return nativeSetTimeout(fn, 0, ...args);
     const state = {
+      kind: 'Immediate',
       refed: true,
       id: null,
       repeating: false,
