@@ -1,8 +1,8 @@
 # `.jsh` in seven vs six vs Node: gap report
 
-Status: **measurement only** (phase 1). Nothing in slicc-jsh is changed yet; this report proposes the fixes.
+Status: **phase 2, re-recorded 2026-10-13** on slicc-jsh 0.16.1 and slicc-kernel 1.72.0. The phase 1 report below proposed the fixes. Most have landed: [Progress](#progress-phase-2) lists them, and the matrix's seven column is today's. [Where seven still differs from Node](#where-seven-still-differs-from-node) has what's left.
 
-**Bottom line.** The `.jsh` wrapper itself already agrees with six and Node: the async body, top-level `await`/`return`, the parameters, `require` resolution and `sliccy:cli/fmt/time/pool/http` are the same everywhere. The big gaps sit elsewhere:
+**Bottom line in phase 1.** The `.jsh` wrapper itself already agrees with six and Node: the async body, top-level `await`/`return`, the parameters, `require` resolution and `sliccy:cli/fmt/time/pool/http` are the same everywhere. The big gaps sit elsewhere:
 
 - **Deliberate breaks** whose script migration hasn't happened: v6's promise `fs` (45 scripts) and whole-buffer `stdin.read()` (7).
 - **A catchable `process.exit`.** Seven inherited it from six, and Node doesn't have it. 40 scripts carry a workaround, and the `--help` of about 10 scripts exits 1 on both.
@@ -14,7 +14,7 @@ Status: **measurement only** (phase 1). Nothing in slicc-jsh is changed yet; thi
 
 ## Progress (phase 2)
 
-The matrix below is the measurement of 2026-10-11. The fixes since then, re-recorded in [results/](../../test/compare/results):
+The fixes since the measurement of 2026-10-11. All are re-recorded in [results/](../../test/compare/results), and the matrix's seven column is as of 2026-10-13.
 
 | PR | release | fixes | rows now seven=node (or seven=six) |
 |---|---|---|---|
@@ -23,17 +23,35 @@ The matrix below is the measurement of 2026-10-11. The fixes since then, re-reco
 | #79 | | 9, 11: Buffer views share memory, `process.env` stores strings, `require('buffer')` | buffer, process-env |
 | #80 | | 10: `sliccy:skill` `root`/`refs`/`assets` | sliccy-skill (seven=six) |
 | #83 | 0.3.9 | F1 (cert): modules resolve through symlinks to their real path, `--preserve-symlinks(-main)` | (cert m7) |
-| #84 | | 7: `zlib` (browserify-zlib over pako, patched to Node 22; no Brotli/Zstd) | |
-| crypto | | 7: `crypto` (Node's JS layer over @noble/hashes and browserify-aes/-des) | crypto |
+| #84 | 0.4.0 | 7: `zlib` (browserify-zlib over pako, patched to Node 22; no Brotli/Zstd) | (all but Brotli) |
+| #86 | 0.5.0 | 7: `crypto` (Node's JS layer over @noble/hashes and browserify-aes/-des) | crypto |
+| #87, #89, #94 | 0.4.1–0.6.1 | `child_process` cwd errors and `spawn /bin/sh` ENOENT as Node's | |
+| #92 | 0.6.0 | 7: `process.stdin/stdout/stderr` are Node's streams, `tty`, signal listeners | process-stdout, process-stdout-istty, tty |
+| #93 | 0.7.0 | `events` is Node's own `lib/events.js` | events |
+| #95 | 0.8.0 | 7: `readline`, `readline/promises` (Node's own) | stdin-readline |
+| #97 | 0.9.0 | 7: `spawnSync`/`execSync`/`execFileSync` on `ctx.sync.run` | child-process-sync |
+| #99 | 0.9.1 | 13 smaller gaps (exit listeners, `kill`, `chdir`, `console`, `require(esm)`, `import()` in Function bodies, Buffer encodings) | process-signals, process-cwd-chdir, require-esm, import-in-function-ctor, console-methods |
+| #100 | 0.10.0 | `process.exit` ends the program inside the call (`ctx.sync.exit`, slicc-kernel ≥ 1.65) | |
+| #101 | 0.11.0 | Node 22's ESM resolver, errors and frames; `import('sliccy:x')` | require-sliccy-esm |
+| #102, #103 | 0.12.0 | `path`, `url`, `querystring`, `punycode`, `os` are Node's own; fds from `fs.openSync` as child stdio | path, url, os |
+| #104 | 0.12.1 | `process.kill(self)` with the default action dies of the signal | |
+| #106 | 0.13.0 | `util`, `console`, `async_hooks` are Node's own | util, stdout-isatty-color |
+| #107, #108, #109, #110 | 0.13.1–0.13.3 | exit 128+n as a code, child stdout destroy → EPIPE, detached process methods (yargs 17), sync child stdio order (slicc-kernel ≥ 1.70) | |
+| #113, #115 | 0.14.0–0.14.1 | `/dev` through `fs` (slicc-kernel ≥ 1.69), device fds to children | fs-fd |
+| #114, #116 | 0.14.2–0.14.3 | SIGPIPE, `chdir('')`, throwing ticks; cjs-module-lexer named exports, ESM errors, `node:x`, `v8` | |
+| #119 | 0.15.0 | Node's REPL; `vm` | misc-builtins (`vm`) |
+| #121 | 0.14.4 | Buffer alloc/fill memory, `ERR_STRING_TOO_LONG` | |
+| #123 | 0.16.0 | `process.kill(self)`/`abort()` inside the call (`ctx.sync.kill`, slicc-kernel ≥ 1.72) | |
+| #124 | 0.16.1 | `fs` takes `file:` URLs, `constants`, `console` to a dead pipe, SIGPIPE default, tick order | |
 
-Kernel follow-ups: slicc-kernel#401 (an exit that never unwinds) and #402 (`/dev` for JS programs' `fs`).
+Kernel follow-ups from phase 1: ai-ecoverse/slicc-kernel#401 (an exit that never unwinds: `ctx.sync.exit`, used by #100) and ai-ecoverse/slicc-kernel#402 (`/dev` for JS programs' `fs`, used by #113). Since then: ai-ecoverse/slicc-kernel#431 and ai-ecoverse/slicc-kernel#444 (`ctx.sync.kill`, used by #123).
 
 ## How this was measured
 
 | | version | how it ran |
 |---|---|---|
 | six | SLICC 6.247.17, `ai-ecoverse/slicc@e44ee9d2c` (origin/main, 2026-10-11) | the real v6 shell and realm, headless under slicc's own vitest setup (see below) |
-| seven | slicc-jsh `main@06e7bb5` (child_process from #58 and #62 included), slicc-kernel 1.59.1 | the kernel `jsh` on slicc-kernel's Node entry, with `@ai-ecoverse/wasm-bash@5.3.0-17` and `wasm-coreutils@9.12.0-5` installed |
+| seven | phase 1: slicc-jsh `main@06e7bb5` on slicc-kernel 1.59.1; re-recorded 2026-10-13: slicc-jsh 0.16.1 (`main@d5de405`) on slicc-kernel 1.72.0 | the kernel `jsh` on slicc-kernel's Node entry, with `@ai-ecoverse/wasm-bash@5.3.0-17` and `wasm-coreutils@9.12.0-5` installed |
 | jsh | same build | the host `jsh` (`dist/host/jsh.mjs`) on Node 22.22.0: the `.jsh` wrapper on real Node, the reference for `.jsh` semantics |
 | node | Node 22.22.0 | each case as a plain program (ESM, or CJS where the body needs it): the tie-breaker for the Node API |
 
@@ -97,8 +115,8 @@ The case name is given for every row below.
 | `import('./x.mjs')`, `import('pkg')`, `import('node:fs')` | yes | yes | yes | same (seven and six also list `value` as a named export of a CJS `module.exports = { value }`; Node lists only `default`) | 4 | import-relative, import-package, import-builtin |
 | `import('sliccy:exec')` | works | `Cannot find module 'sliccy:exec'` | `ERR_UNSUPPORTED_ESM_URL_SCHEME` | six-only; the two jsh engines fail differently | 0 | require-sliccy-esm |
 | `import('https://…')` (pdf, pptx2pdf use esm.sh) | `Cannot find module … (run: ipk install http:)` | `MODULE_NOT_FOUND` | `ERR_UNSUPPORTED_ESM_URL_SCHEME` | same (all reject; those 2 scripts are broken on six today too) | 2 | import-url |
-| `new Function('u', 'return import(u)')` (vpod) | unknown *(harness)* | `ERR_ACCESS_DENIED` for `node:path`; relative paths resolve against a `data:` URL | works | seven≠node | 1 | import-in-function-ctor |
-| syntax error report | message only | `SyntaxError: …`, no file:line | file:line, caret, message | seven≠node (cosmetic) | — | wrapper-syntax-error |
+| `new Function('u', 'return import(u)')` (vpod) | unknown *(harness)* | works: `import()` in a Function body goes through the runtime's loader, resolved against the calling script (#99, `function-import.mjs`) | works | six unknown, seven=node | 1 | import-in-function-ctor |
+| syntax error report | message only | `SyntaxError: …` with its message; no file:line or caret | file:line, caret, message | seven≠node (cosmetic) | — | wrapper-syntax-error |
 
 ### `process`
 
@@ -107,21 +125,21 @@ The case name is given for every row below.
 | `argv[1]`, `argv.slice(2)`, non-enumerable `parseFlags()` and its output | same | same | same (jsh) | same | 57 / 40 | process-argv, process-parse-flags |
 | `argv[0]` | `'node'` | `'jsh'` | `process.execPath` | seven≠node, documented in the design; harmless, since all 8 mentions skip it | 8 | process-argv |
 | `argv0`, `execArgv` | undefined | present | present | six≠node, seven=node | — | process-argv |
-| `process.env.X = 42` stays a number | yes | yes | coerced to `'42'` | seven≠node (six too) | 32 | process-env |
+| `process.env.X = 42` stays a number | yes | coerced to `'42'` (#79) | coerced to `'42'` | six≠node, seven=node | 32 | process-env |
 | `exec()` children see the script's env (caller's and `process.env` edits) | **no** (just-bash's shell env) | yes | yes | six≠node, seven=node | 42 | exec-env-inherit |
-| `process.chdir` | missing | works; a missing directory doesn't throw | throws `ENOENT` | seven≠node (minor) | 0 | process-cwd-chdir |
-| **`process.exit()` can be caught** (`NodeExitError`): `catch`/`finally` run, code after it runs, `--help` inside `await main().catch(e => cli.die(e.message))` exits 1 with `Process exited with code 0` | yes | yes | no: exits at once | **seven≠node** (six too) | 54 exit, 51 `cli.die`, 45 `cli.help`; 11 caught-main shape; 72 with `try/catch`; 40 carry a `NodeExitError` re-throw guard | process-exit-catchable, process-exit-in-catch-all, process-exit-in-async-catch, sliccy-cli, sliccy-cli-help-in-main-catch |
-| extra `jsh: Process exited with code 1` on stderr after `process.exit` in a `.catch` | no | **yes** | no | seven≠node | 11 | error-in-main-catch, process-exit-in-async-catch |
+| `process.chdir` | missing | works; Node's `ENOENT`/`ENOTDIR` (and `chdir('')` → `ENOENT`, #114) | throws `ENOENT` | six≠node, seven=node | 0 | process-cwd-chdir |
+| **`process.exit()` can be caught** (`NodeExitError`): `catch`/`finally` run, code after it runs, `--help` inside `await main().catch(e => cli.die(e.message))` exits 1 with `Process exited with code 0` | yes | no: exits at once (#75; on slicc-kernel ≥ 1.65 through `ctx.sync.exit`, #100, so no `catch`/`finally` runs after it) | no: exits at once | six≠node, seven=node (fixed) | 54 exit, 51 `cli.die`, 45 `cli.help`; 11 caught-main shape; 72 with `try/catch`; 40 carry a `NodeExitError` re-throw guard | process-exit-catchable, process-exit-in-catch-all, process-exit-in-async-catch, sliccy-cli, sliccy-cli-help-in-main-catch |
+| extra `jsh: Process exited with code 1` on stderr after `process.exit` in a `.catch` | no | no | no | same (fixed, #75) | 11 | error-in-main-catch, process-exit-in-async-catch |
 | `exitCode`, `exit()` with no argument, `exit` in a timer after the body | same | same | same | same | 54 | process-exit-code, process-exit-noarg, process-exit-in-timer |
 | `exit` from a timer while the body is still awaiting | hangs | exits | exits | six≠node, seven=node | — | process-stdout-write-cb |
 | 200 KB of stdout, then `exit(0)` | complete | complete | complete | same | 21 | process-exit-flush |
 | `on('exit')`, `on('beforeExit')` | no `process.on` | yes | yes | six≠node, seven=node | 0 | process-exit-event |
-| `process.kill(process.pid, 'SIGTERM')` with a handler | no `on`/`kill` | kills itself (143); handler ignored | handler runs | seven≠node | 0 | process-signals |
-| `pid`, `hrtime`, `nextTick`, `memoryUsage`, `umask`, … | mostly missing | present; missing `ppid`, `emitWarning`, `versions.v8`, `release`; `toString` is `[object Object]` | all | seven≠node (minor) | 1 | process-props |
+| `process.kill(process.pid, 'SIGTERM')` with a handler | no `on`/`kill` | handler runs on a later turn; with none, death by the signal (#99, #104; inside the call on slicc-kernel ≥ 1.72, #123) | handler runs | six≠node, seven=node | 0 | process-signals |
+| `pid`, `hrtime`, `nextTick`, `memoryUsage`, `umask`, … | mostly missing | present, `ppid`, `emitWarning`, `versions.v8`, `release` included; `toString` is still `[object Object]` | all | seven≠node (cosmetic) | 1 | process-props |
 | `stdout.write(s, cb)` calls `cb` | **never** (the script hangs) | yes | yes | six≠node, seven=node | 21 | process-stdout-write-cb |
-| `stdout/stderr/stdin.isTTY` on pipes | `true, true, false` (`= !NO_COLOR`) | `false, false, false` | `undefined` ×3 | seven≠node (cosmetic; falsy either way) | 2 | process-stdout-istty |
-| `stdout.write(42)` | — | accepted | TypeError | seven≠node (minor) | — | process-stdout |
-| `console.log(true, 42)` under `FORCE_COLOR=1` | plain | plain | coloured | seven≠node (minor) | — | stdout-isatty-color |
+| `stdout/stderr/stdin.isTTY` on pipes | `true, true, false` (`= !NO_COLOR`) | `undefined` ×3, as Node (Node's own stdio streams, #92) | `undefined` ×3 | six≠node, seven=node | 2 | process-stdout-istty |
+| `stdout.write(42)` | — | TypeError, as Node (#92) | TypeError | six≠node, seven=node | — | process-stdout |
+| `console.log(true, 42)` under `FORCE_COLOR=1` | plain | coloured, as Node (#106) | coloured | six≠node, seven=node | — | stdout-isatty-color |
 
 ### `process.stdin`
 
@@ -132,7 +150,7 @@ The case name is given for every row below.
 | `'data'`/`'end'` with `setEncoding`, `for await`, a Promise collector | same | same | same | same | 8 | stdin-events, stdin-async-iterator, stdin-text-helper |
 | `'data'` chunks without `setEncoding` | strings | Buffers | Buffers | six≠node, seven=node | 2 | stdin-events-buffer |
 | `fs.readFileSync(0, 'utf8')` | yes | yes | yes | same (the portable form) | 0 | stdin-fd0 |
-| `readline.createInterface({ input: process.stdin })` | yes | `'readline' is not supported yet` | yes | seven≠node | 0 | stdin-readline |
+| `readline.createInterface({ input: process.stdin })` | yes | works: Node's own `lib/readline` (#95) | yes | same | 0 | stdin-readline |
 
 ### Exit timing and errors
 
@@ -140,9 +158,9 @@ The case name is given for every row below.
 |---|---|---|---|---|---|---|
 | timers pending when the body returns (300 ms, 2.5 s) | run | run | run | same | 33 | exit-pending-timer, exit-long-timer |
 | floating `main().catch()` whose main awaits a timer | waits | waits | waits | same | 1 | wrapper-floating-main |
-| **in-flight `fetch` / `exec` when the body returns** | waits | **exits 0, output lost** | waits | **seven≠node** | 1 floating main (signal.jsh), plus any fire-and-forget I/O | exit-pending-fetch, exit-floating-main-fetch, exit-floating-main-exec |
+| **in-flight `fetch` / `exec` when the body returns** | waits | waits (#75) | waits | same (fixed) | 1 floating main (signal.jsh), plus any fire-and-forget I/O | exit-pending-fetch, exit-floating-main-fetch, exit-floating-main-exec |
 | cleared interval plus an `unref()`'d one | hangs | exits | exits | six≠node, seven=node | 2 | exit-interval-cleared |
-| body awaits a promise that never settles, loop empty | hangs | **hangs** | host jsh exits 0; plain ESM exits 13 with a warning | seven≠node | — | exit-never-settles |
+| body awaits a promise that never settles, loop empty | hangs | exits 0 like the host jsh; an ES module's unsettled top-level await exits 13 with Node's warning | host jsh exits 0; plain ESM exits 13 with a warning | six≠node, seven=node | — | exit-never-settles |
 | uncaught Error from the body | `err.stack`, status 1 | `err.stack`, status 1 | host jsh: `err.stack`; plain Node: source excerpt, then `inspect(err)` with its own properties and `cause`, then `Node.js v22.22.0` | same between the engines; the `.jsh` layer drops `code`/`cause` that Node prints | — | error-uncaught, error-uncaught-props, error-cause |
 | uncaught Error from a timer | **swallowed**; later timers still run; status 0 | Node's format, status 1 | status 1 | six≠node, seven=node | 33 | error-in-timer |
 | unhandled rejection; a rejection handled one macrotask later | unknown *(harness; v6's code prints the stack and exits 1)* | Node's format, status 1 | status 1 | seven=node; six unknown | — | error-unhandled-rejection, error-rejection-late-handled |
@@ -160,8 +178,8 @@ The case name is given for every row below.
 | missing package | no `code`; `(run: ipk install x)` | `MODULE_NOT_FOUND` | `MODULE_NOT_FOUND` | six-only: drop the hint (or port it as a hint line) | 4 | require-missing |
 | native packages (`sharp`, `better-sqlite3`, `puppeteer`, `usb`) | refused with a hint naming a SLICC alternative | `MODULE_NOT_FOUND` | `MODULE_NOT_FOUND` | six-only: drop | 0 | require-native |
 | `require('playwright')` with nothing installed | CDP shim | `MODULE_NOT_FOUND` | `MODULE_NOT_FOUND` | six-only: decide | 1 (intent-arm) | require-playwright |
-| `require(esm)` | yes; top-level-await message differs | yes; no `__esModule` on the namespace | yes | seven≠node (minor) | — | require-esm |
-| builtins served (of Node 22's 53 names) | 20 (no `http`, `https`, `net`, `string_decoder`, `querystring`, `timers*`, `stream/*`, `util/types`, `perf_hooks`, `async_hooks`, …) | 25; **missing: `crypto`, `zlib`, `readline`, `tty`, `vm`, `worker_threads`, `dns`, `http2`, `tls`, `dgram`, `cluster`, `perf_hooks`, `async_hooks`, `stream/web`, `stream/consumers`, `readline/promises`, `path/win32`, `v8`, `inspector`, …** | all | seven≠node | 2 crypto, 3 zlib, 2 child_process | require-builtins |
+| `require(esm)` | yes; top-level-await message differs | yes; Node's facade (`__esModule`, `'module.exports'`) (#99) | yes | six≠node, seven=node | — | require-esm |
+| builtins served (of Node 22's 53 names) | 20 (no `http`, `https`, `net`, `string_decoder`, `querystring`, `timers*`, `stream/*`, `util/types`, `perf_hooks`, `async_hooks`, …) | 36; **missing: `cluster`, `dgram`, `diagnostics_channel`, `dns(/promises)`, `domain`, `http2`, `inspector`, `perf_hooks`, `repl`, `stream/consumers`, `stream/web`, `sys`, `tls`, `trace_events`, `wasi`, `worker_threads`** (`crypto`, `zlib`, `readline`, `tty`, `vm`, `v8`, `async_hooks`, `constants`, `path/win32`, `readline/promises` are there now) | all | seven≠node (the rest are platform features: sockets, workers, the inspector) | 2 crypto, 3 zlib, 2 child_process | require-builtins |
 | `sliccy:agent/usb/serial/hid/computer` | served | `only available inside SLICC` | n/a | six-only, by design | 0 / 1 / 0 / 0 / 1 | require-sliccy-unknown |
 
 ### `fs`
@@ -172,16 +190,16 @@ The case name is given for every row below.
 | `await fs.exists(p)` | boolean | TypeError | TypeError | six-only: migrate to `existsSync` | 16 | fs-exists |
 | `readFileBinary`, `writeFileBinary`, `readDir`, `fetchToFile` | yes | missing | missing | six-only: migrate | 22 / 9 / 2 | fs-v6-extras |
 | `(await fs.stat(p)).isDirectory` as a property | boolean | — | method | six-only: migrate | 6 | fs-stat |
-| `fs.promises` / `fs/promises` | `fs.promises !== require('fs/promises')`; `readFile` without an encoding isn't a Buffer; no `open` | identical; missing `mkdtemp` and `FileHandle.readFile` | full | seven≠node (minor) | 1 | fs-promises |
+| `fs.promises` / `fs/promises` | `fs.promises !== require('fs/promises')`; `readFile` without an encoding isn't a Buffer; no `open` | identical and full (#78) | full | six≠node, seven=node | 1 | fs-promises |
 | callbacks (`readFile(p, 'utf8', cb)`, …) | work | work | work | same | 0 | fs-callbacks |
 | the sync calls the corpus uses (`writeFileSync`, `readFileSync`, `mkdirSync`, `existsSync`) | same | same | same | same | 10 | fs-sync |
-| other sync calls | `readdirSync` withFileTypes broken; `mkdirSync` of an existing dir silent | missing `copyFileSync`, `realpathSync`, `mkdtempSync`, `cp`, `rm` (async), `chmod*`, `truncate*`, `utimes*`, `watch*`, `Stats`, `ReadStream`, `WriteStream`; `readdirSync({ recursive })` not recursive; `statSync(…, { throwIfNoEntry: false })` throws; `mkdirSync({ recursive })` returns `undefined` | all | seven≠node | — | fs-sync, fs-surface, fs-stat |
-| **`rmdirSync` on a non-empty directory** | `ENOTEMPTY` | **deletes it, contents and all** | `ENOTEMPTY` | **seven≠node (data loss)** | 0 | fs-errors |
+| other sync calls | `readdirSync` withFileTypes broken; `mkdirSync` of an existing dir silent | all but `statfs`, `watch`, `watchFile`, `unwatchFile` (#78, #99, #113) | all | seven≠node (minor) | — | fs-sync, fs-surface, fs-stat |
+| **`rmdirSync` on a non-empty directory** | `ENOTEMPTY` | `ENOTEMPTY` (#78) | `ENOTEMPTY` | same (fixed; the case differs only in `errno`, the host's macOS -66 against Linux's -39) | 0 | fs-errors |
 | error objects | `code` only; `EISDIR`/`ENOTDIR` reported as `ENOENT` | Node's `code`/`errno`/`syscall`/`path`/message | full | six≠node, seven=node | 55 | fs-errors |
-| encodings: `readFileSync(p, 'latin1'/'base64')`, `writeFileSync(p, 'ff00', 'hex')` | encoding ignored | `latin1`/`base64` decoded as UTF-8; `hex` ignored | right | seven≠node | 0 direct (16 use `Buffer`) | fs-binary |
+| encodings: `readFileSync(p, 'latin1'/'base64')`, `writeFileSync(p, 'ff00', 'hex')` | encoding ignored | right (#78) | right | six≠node, seven=node | 0 direct (16 use `Buffer`) | fs-binary |
 | binary bytes through `readFileSync`/`writeFileSync` | right | right | right | same | 16 | fs-binary |
-| file descriptors: `openSync`/`readSync`/`closeSync`; `writeFileSync(1)`; `/dev/stdout`, `/dev/null` | no `openSync`; fd 1/2 and `/dev/std*` work | fds work; `writeFileSync(1)` → `EIO`; `/dev/stdout` and `/dev/null` → `ENOENT` | all | seven≠node | — | fs-fd |
-| `createReadStream` / `createWriteStream` / `pipe` | missing | **hangs** (nextTick, below) | works | seven≠node | 0 | fs-streams |
+| file descriptors: `openSync`/`readSync`/`closeSync`; `writeFileSync(1)`; `/dev/stdout`, `/dev/null` | no `openSync`; fd 1/2 and `/dev/std*` work | all, `/dev/stdout`, `/dev/null`, `/dev/fd/N` included (#78, #113 on slicc-kernel ≥ 1.69) | all | six≠node, seven=node | — | fs-fd |
+| `createReadStream` / `createWriteStream` / `pipe` | missing | works (#75; `fd`/`pending` as Node's, #116) | works | six≠node, seven=node | 0 | fs-streams |
 | coherence: promise write → `readFileSync`; `writeFileSync` → promise read; shell ↔ fs | **async writes invisible to sync reads** (also `writeFileBinary`, `fetchToFile`, `skill.config()` writes) | coherent | coherent | six≠node, seven=node | 10 | fs-coherence, fs-v6-extras, sliccy-skill |
 | `/workspace`, `/shared` exist | `/workspace` only (`/tmp` and `$HOME` missing in a fresh VFS) | no / no | no / no | environment | 14 / 17 / 13 `/tmp` | env-paths |
 
@@ -189,28 +207,28 @@ The case name is given for every row below.
 
 | behavior | six | seven | node | verdict | corpus | case |
 |---|---|---|---|---|---|---|
-| `child_process.exec/spawn/execFile` (async) | works | works when the body doesn't await it; **hangs when it does** (nextTick) | works | seven≠node | 2 | child-process-async, child-process-floating |
+| `child_process.exec/spawn/execFile` (async) | works | works (#75) | works | same | 2 | child-process-async, child-process-floating |
 | `execSync`, `execFileSync`, `spawnSync` | unknown *(harness: needs the SW sync bridge)* | works (on slicc-kernel ≥ 1.65.0's `ctx.sync.run`; `ERR_NOT_SUPPORTED` naming that version on older kernels) | works | seven=node | 2 | child-process-sync, process-env-to-child |
-| `crypto` | md5/sha1/sha256 only; no `createHmac`, `pbkdf2Sync`, `timingSafeEqual`, `getHashes` | `'crypto' is not supported yet` | full | seven≠node | 2 (plus 5 using the global `crypto`, which works everywhere) | crypto, globals-crypto |
-| `zlib` | sync and callback (pako); no brotli, no streams | `'zlib' is not supported yet` | full | seven≠node | 3 | zlib |
-| `stream`: `Readable.from`, `pipeline`, `stream/promises` | stubs | **hangs** | works | seven≠node | 1 | stream |
-| `events` | no `once()`, `prependListener` or `setMaxListeners`; emitting `'error'` doesn't throw | no `prependListener`, `setMaxListeners`, `captureRejections` | full | seven≠node (npm deps call `setMaxListeners` a lot) | 0 | events |
-| `util` | no `types`, `isDeepStrictEqual`, `TextDecoder` | no `parseArgs`, `styleText`, `callbackify` | full | seven≠node | 0 | util |
-| `os` | no `userInfo`, `totalmem`, `networkInterfaces`, `constants` | no `userInfo`, `networkInterfaces`, `constants`, `availableParallelism` | full | seven≠node | 2 | os |
-| `path` | `path.posix !== path`, no `win32` | no `win32`, `toNamespacedPath`, `matchesGlob` | full | seven≠node (minor) | 5 | path |
-| `url` | no `parse`, `format`, `resolve` | no `format`, `resolve` | full | seven≠node | 0 | url |
-| `Buffer` | right | **`subarray()` copies instead of sharing memory**; no `buffer.constants`, `buffer.Blob` | right | seven≠node | 9 `subarray`, 16 `Buffer` | buffer |
-| `http`/`https`/`net`: a server on 127.0.0.1 and a client | refused (`Use fetch()`) | **hang** | work | seven≠node | 0 | http-module, net |
-| `tty.isatty` | `false` ×3 | `'tty' is not supported yet` | `false` ×3 | seven≠node | 0 | tty |
+| `crypto` | md5/sha1/sha256 only; no `createHmac`, `pbkdf2Sync`, `timingSafeEqual`, `getHashes` | Node 22's JS layer over pure-JS primitives (#86) | full | six≠node, seven=node | 2 (plus 5 using the global `crypto`, which works everywhere) | crypto, globals-crypto |
+| `zlib` | sync and callback (pako); no brotli, no streams | browserify-zlib over pako, patched to Node 22 (#84); Brotli/Zstd throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` | full | seven≠node (Brotli only) | 3 | zlib |
+| `stream`: `Readable.from`, `pipeline`, `stream/promises` | stubs | works; `stream/web` missing | works | seven≠node (minor) | 1 | stream |
+| `events` | no `once()`, `prependListener` or `setMaxListeners`; emitting `'error'` doesn't throw | Node's own `lib/events.js` (#93) | full | six≠node, seven=node | 0 | events |
+| `util` | no `types`, `isDeepStrictEqual`, `TextDecoder` | Node's own `lib/util.js` (#106) | full | six≠node, seven=node | 0 | util |
+| `os` | no `userInfo`, `totalmem`, `networkInterfaces`, `constants` | Node's own `lib/os.js` (#102) | full | six≠node, seven=node | 2 | os |
+| `path` | `path.posix !== path`, no `win32` | Node's own `lib/path.js` (#102) | full | six≠node, seven=node | 5 | path |
+| `url` | no `parse`, `format`, `resolve` | Node's own `lib/url.js` (#102) | full | six≠node, seven=node | 0 | url |
+| `Buffer` | right | right (#79, #99, #121) | right | six≠node, seven=node | 9 `subarray`, 16 `Buffer` | buffer |
+| `http`/`https`/`net`: a server on 127.0.0.1 and a client | refused (`Use fetch()`) | work in the kernel (#75); the recorded `http.get` of the *host's* compare server is refused, because the kernel's sockets live on its own loopback | work | same for seven's own servers; environment for the host server | 0 | http-module, net |
+| `tty.isatty` | `false` ×3 | `false` ×3 (#92) | `false` ×3 | six≠node, seven=node | 0 | tty |
 | `assert`, `string_decoder`, `querystring`, `timers/promises`, `module.createRequire` | partial | work | work | same for seven | 0 | misc-builtins |
-| `perf_hooks`, `async_hooks`, `worker_threads`, `vm`, `dns` | refused | missing or `not supported yet` | work | seven≠node | 0 | misc-builtins |
+| `perf_hooks`, `async_hooks`, `worker_threads`, `vm`, `dns` | refused | `async_hooks` (#106) and `vm` (#119) work; `perf_hooks`, `worker_threads`, `dns` don't | work | seven≠node | 0 | misc-builtins |
 
 ### `console`
 
 | behavior | six | seven | node | verdict | corpus | case |
 |---|---|---|---|---|---|---|
 | `console.log(obj)`, `%s`/`%d`/`%o`, `Map`, `Error`, `Buffer`, nested depth | **`JSON.stringify`**: `{"a":1}`, no format specifiers, `Map` → `{}`, `Error` → `{}`, `undefined` in arrays → `null` | `util.inspect`, identical to Node | inspect | six≠node, seven=node | 64 use `console.log`, a handful log non-strings | console-format |
-| `console.table`, `dir`, `group`, `count`, `assert` | `table`/`dir` print JSON | same as Node; **`console.trace` missing** | full | seven≠node (minor) | 0 | console-methods |
+| `console.table`, `dir`, `group`, `count`, `assert` | `table`/`dir` print JSON | Node's own console (#106), `trace` included | full | six≠node, seven=node | 0 | console-methods |
 
 ### `sliccy:` modules
 
@@ -236,10 +254,34 @@ The case name is given for every row below.
 | `fetch`: JSON, text, 404, POST, FormData, bytes, headers | same | same | same | same | 46 | fetch |
 | `fetch`: redirect reporting, `redirect: 'manual'`, `AbortSignal`, error type | `redirected: false`, manual ignored, abort ignored, `Error` (not `TypeError`) | Node's | Node's | six≠node, seven=node | 5 AbortController | fetch |
 | `WebSocket` echo | works | works | works | same | 0 | websocket |
-| **`process.nextTick` while the body (or an ESM entry's top-level await) is pending** | no `nextTick` | **queued, but only run after the body settles** | runs | **seven≠node**: the cause of every stream, `child_process`, `http`/`net` and fs-stream hang above, and it hits `node` ESM with top-level await too (checked by hand: `node m.mjs` in the kernel prints a `nextTick` queued before an `await` last) | 0 direct; every npm package on streams | timers |
+| **`process.nextTick` while the body (or an ESM entry's top-level await) is pending** | no `nextTick` | runs (#75), in Node's order around promise jobs and timers (#124) | runs | same (fixed) | 0 direct; every npm package on streams | timers |
 | `setImmediate`, timer handles (`unref`/`ref`/`hasRef`), extra `setTimeout` args | same | same | same | same | 33 | timers, timers-immediate |
 
+## Where seven still differs from Node
+
+The 16 cases where seven's recording differs from the host `jsh` on Node (re-recorded 2026-10-13; `node test/compare/show.mjs <case>` shows each):
+
+| case | what differs | kind |
+|---|---|---|
+| process-argv | `argv[0]`/`argv0` are `jsh`, Node's are `process.execPath` | by design (the command is `jsh`) |
+| require-node-modules | the `slicc` export condition wins | by design |
+| require-builtins, misc-builtins | 17 builtins missing: sockets (`dgram`, `dns`, `tls`, `http2`, `cluster`), workers (`worker_threads`), the inspector (`inspector`, `trace_events`), `wasi`, `domain`, `repl`, `sys`, `perf_hooks`, `diagnostics_channel`, `stream/web`, `stream/consumers` | gap: the cheap ones (`sys`, `repl`, `diagnostics_channel`, `perf_hooks`, `stream/web`, `stream/consumers`, `domain`) are next |
+| stream | `stream/web` missing | gap (as above) |
+| fs-surface | `statfs`, `watch`, `watchFile`, `unwatchFile` missing | gap (`watch` needs kernel change events) |
+| zlib | Brotli/Zstd throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM` | gap (no pure-JS Brotli encoder is bundled) |
+| process-props | `String(process)` is `[object Object]`, Node's `[object process]` | gap (cosmetic) |
+| stdin-fd0 | `readFileSync('/dev/stdin')` after stdin was read gives `''`; the host's Node gives `EACCES` | environment, most likely: the host's macOS pipe (not checked on Linux) |
+| fs-errors | `errno` -39 against the host's -66 for `ENOTEMPTY` | environment: macOS numbers on the host, Linux's in jsh |
+| fetch | a refused `fetch`'s `err.cause.code` is `ECONNREFUSED`; the host's undici gives none | seven is more specific |
+| http-module | the `http.get` of the *host's* compare server is refused | environment: the kernel's sockets are on its own loopback |
+| globals | no `BroadcastChannel` | by design (the kernel withholds it from programs) |
+| wrapper-syntax-error, wrapper-static-import, wrapper-static-import-sliccy | a `.jsh` body's SyntaxError has no `file:line`, source line and caret above it | gap (cosmetic) |
+
 ## Proposed fixes, ordered by corpus impact
+
+These are the phase 1 proposals, as written then; the fix numbers in [Progress](#progress-phase-2) refer to this list. Since then, the slicc-jsh fixes have landed:
+- done: 1, 3, 4, 7 (except what [Where seven still differs from Node](#where-seven-still-differs-from-node) lists), 8 to 14;
+- not slicc-jsh work: 2 and 5 are script migrations in ai-ecoverse/skills, and 6 (`sliccy:browser`) and 15 (six-only features) are decisions.
 
 Default: follow Node. "Where" means one of:
 - the **runtime** (`src/runtime/`, shared with `node`);
