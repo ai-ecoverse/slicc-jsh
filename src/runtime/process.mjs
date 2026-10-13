@@ -375,7 +375,9 @@ class Process extends EventEmitter {
   _unwatchSignal(event) {
     if (!this._signals.has(event) || this.listenerCount(event) > 0) return;
     this._signals.delete(event);
-    Promise.resolve(this._ctx.signals?.reset?.(event)).catch(() => {});
+    // SIGPIPE goes back to ignored, as Node starts with it (see ignoreSigpipe).
+    const back = event === 'SIGPIPE' ? this._ctx.signals?.ignore : this._ctx.signals?.reset;
+    Promise.resolve(back?.call(this._ctx.signals, event)).catch(() => {});
   }
 
   get title() {
@@ -664,6 +666,12 @@ class Process extends EventEmitter {
 
   chdir(directory) {
     if (typeof directory !== 'string') throw ERR_INVALID_ARG_TYPE('directory', 'string', directory);
+    if (directory === '') {
+      // uv_chdir('') is ENOENT.
+      const err = new Error(`ENOENT: no such file or directory, chdir '${this._cwd}' -> ''`);
+      Object.assign(err, { errno: -2, code: 'ENOENT', syscall: 'chdir', path: this._cwd, dest: '' });
+      throw err;
+    }
     const from = this._cwd;
     const target = directory.startsWith('/') ? directory : `${from.replace(/\/$/, '')}/${directory}`;
     const fail = (code, errno, text) => {

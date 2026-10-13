@@ -36,7 +36,15 @@ export function createNextTick() {
     flushSync() {
       while (queue.length > 0) {
         const batch = queue.splice(0);
-        for (const job of batch) job();
+        for (let i = 0; i < batch.length; i++) {
+          try {
+            batch[i]();
+          } catch (err) {
+            // The rest of the batch still runs (after the error is handled).
+            queue.unshift(...batch.slice(i + 1));
+            throw err;
+          }
+        }
       }
     },
     get depth() {

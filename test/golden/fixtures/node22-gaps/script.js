@@ -23,6 +23,7 @@ show('chdir missing', () => process.chdir('no-such-dir'));
 show('chdir file', () => process.chdir(path.join(work, 'file')));
 show('chdir under file', () => process.chdir(path.join(work, 'file', 'x')));
 show('chdir number', () => process.chdir(1));
+show('chdir empty', () => process.chdir(''));
 process.chdir(work);
 console.log('chdir ok', process.cwd() === fs.realpathSync(work) || process.cwd() === work);
 process.chdir(cwd);

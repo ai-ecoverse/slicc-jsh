@@ -74,6 +74,13 @@ export function createStdio({ ctx, process, Buffer, handles, info = {} }) {
         try {
           (writers[this.fd] ?? ((b) => ctx.sync.write(this.fd, b)))(chunk);
         } catch (err) {
+          // Node's: Error: write EPIPE { errno: -32, code: 'EPIPE', syscall: 'write' }.
+          if (err?.code === 'EPIPE') {
+            const e = new Error('write EPIPE');
+            Object.assign(e, { errno: -32, code: 'EPIPE', syscall: 'write' });
+            callback(e);
+            return;
+          }
           callback(err);
           return;
         }

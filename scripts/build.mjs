@@ -395,12 +395,16 @@ const main = await esbuild.build({
 // Keep the source tree small; dist bundles already inlined the map.
 writeVendorEmbedded(false);
 
-writeFileSync(join(dist, 'meta-main.json'), JSON.stringify(main.metafile));
-writeFileSync(join(dist, 'meta-stream.json'), JSON.stringify(stream.metafile));
-writeFileSync(join(dist, 'meta-decoder.json'), JSON.stringify(decoder.metafile));
-writeFileSync(join(dist, 'meta-zlib.json'), JSON.stringify(zlib.metafile));
-writeFileSync(join(dist, 'meta-crypto.json'), JSON.stringify(crypto.metafile));
-writeFileSync(join(dist, 'meta-node-lib.json'), JSON.stringify(nodeLib.metafile));
+// Metafiles ship in dist/: no build machine's absolute paths in them.
+function writeMeta(name, metafile) {
+  writeFileSync(join(dist, name), JSON.stringify(metafile).split(`${root}/`).join(''));
+}
+writeMeta('meta-main.json', main.metafile);
+writeMeta('meta-stream.json', stream.metafile);
+writeMeta('meta-decoder.json', decoder.metafile);
+writeMeta('meta-zlib.json', zlib.metafile);
+writeMeta('meta-crypto.json', crypto.metafile);
+writeMeta('meta-node-lib.json', nodeLib.metafile);
 
 const pkgRoots = packagesFromMetafiles([main.metafile, stream.metafile, decoder.metafile, zlib.metafile, crypto.metafile, nodeLib.metafile]);
 const notice = renderNotice(pkgRoots);

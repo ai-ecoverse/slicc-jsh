@@ -1,0 +1,8 @@
+{
+  "description": "an error thrown by a nextTick callback is an uncaughtException; the other ticks of its batch and the timers still run",
+  "argv": [
+    "-e",
+    "process.on('uncaughtException', (e) => console.log('caught', e.message)); process.nextTick(() => { throw new Error('t1'); }); process.nextTick(() => console.log('t2 still runs')); setTimeout(() => console.log('timer'), 5)"
+  ],
+  "shim": true
+}

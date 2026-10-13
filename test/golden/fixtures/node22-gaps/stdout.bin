@@ -2,6 +2,7 @@ chdir missing THROWS Error ENOENT: no such file or directory, chdir 'CWD' -> 'no
 chdir file THROWS Error ENOTDIR: not a directory, chdir 'CWD' -> 'WORK/file' {"code":"ENOTDIR","errno":-20,"syscall":"chdir","path":"CWD","dest":"WORK/file"}
 chdir under file THROWS Error ENOTDIR: not a directory, chdir 'CWD' -> 'WORK/file/x' {"code":"ENOTDIR","errno":-20,"syscall":"chdir","path":"CWD","dest":"WORK/file/x"}
 chdir number THROWS TypeError The "directory" argument must be of type string. Received type number (1) {"code":"ERR_INVALID_ARG_TYPE"}
+chdir empty THROWS Error ENOENT: no such file or directory, chdir 'CWD' -> '' {"code":"ENOENT","errno":-2,"syscall":"chdir","path":"CWD","dest":""}
 chdir ok true
 kill other THROWS Error kill ESRCH {"code":"ESRCH","errno":-3,"syscall":"kill"}
 kill bad signal THROWS TypeError Unknown signal: SIGNOPE {"code":"ERR_UNKNOWN_SIGNAL"}
