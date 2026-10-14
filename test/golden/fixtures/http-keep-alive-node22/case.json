@@ -1,0 +1,5 @@
+{
+  "description": "keep-alive as Node 22's: globalAgent keeps sockets (keepAlive, lifo, timeout 5000) and reuses them (reusedSocket), a keepAlive: false agent and agent: false send Connection: close; the server answers keep-alive with Keep-Alive: timeout=N, closes for Connection: close, HTTP/1.0, a response that sets close, after keepAliveTimeout idle (the agent's free socket goes too) and on closeIdleConnections() / close(); pipelined requests in order; an Upgrade request goes to 'upgrade' on both sides, or is an ordinary request without a server listener; a maxSockets: 1 agent serves queued requests on one connection",
+  "argv": ["main.js"],
+  "shim": true
+}

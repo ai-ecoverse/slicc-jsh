@@ -194,7 +194,7 @@ function decodeChunked(body, Buffer, maxBytes = MAX_HTTP_BODY) {
     const need = i + 2 + size + 2;
     if (state.length < need) break;
     if (size === 0) {
-      return { ok: true, body: Buffer.concat(parts) };
+      return { ok: true, body: Buffer.concat(parts), used: body.length - state.length + need };
     }
     total += size;
     if (total > maxBytes) return { ok: false, tooLarge: true };
@@ -249,6 +249,14 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
   class ServerResponse extends Writable {
     #socket;
     #headers = Object.create(null);
+    // The names as set (Node writes them so), by their lower-case key.
+    #names = Object.create(null);
+    /** Set by the connection: whether this response may leave it open. */
+    shouldKeepAlive = false;
+    /** @internal Called once the response is on the wire and the connection stays. */
+    _onKeptAlive = null;
+    /** @internal The server's keepAliveTimeout, for the Keep-Alive header. */
+    _keepAliveTimeout = 0;
     #headersSent = false;
     #chunked = false;
     #chunks = [];
@@ -274,7 +282,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
 
     setHeader(name, value) {
       if (this.#headersSent) throw this.#headersSentError('set');
-      this.#headers[String(name).toLowerCase()] = Array.isArray(value) ? value.map(String) : String(value);
+      const key = String(name).toLowerCase();
+      this.#headers[key] = Array.isArray(value) ? value.map(String) : String(value);
+      this.#names[key] = String(name);
       return this;
     }
     getHeader(name) {
@@ -286,6 +296,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     removeHeader(name) {
       if (this.#headersSent) throw this.#headersSentError('remove');
       delete this.#headers[String(name).toLowerCase()];
+      delete this.#names[String(name).toLowerCase()];
     }
     hasHeader(name) {
       return Object.prototype.hasOwnProperty.call(this.#headers, String(name).toLowerCase());
@@ -318,24 +329,39 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       if (!this.#headersSent) this.#sendHead(true);
     }
 
-    #sendHead(streaming) {
+    #sendHead(streaming, autoLength = null) {
       const noBody = responseHasNoBody(this.req?.method, this.statusCode);
+      // HTTP/1.0 has no chunked framing: such a body ends with the connection.
+      const http10 = this.req?.httpVersion === '1.0';
+      let autoChunked = false;
       if (streaming) {
         this.#streamed = true;
-        if (!noBody && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) {
-          this.setHeader('Transfer-Encoding', 'chunked');
-        }
+        if (!noBody && !http10 && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) autoChunked = true;
       }
-      if (!this.hasHeader('connection')) this.setHeader('Connection', 'close');
-      if (this.sendDate && !this.hasHeader('date')) this.setHeader('Date', new Date().toUTCString());
-      if (String(this.getHeader('transfer-encoding') || '').toLowerCase() === 'chunked') this.#chunked = true;
+      if (http10) autoLength = null;
+      // Node's order: the headers as set, then Date, Connection, Keep-Alive
+      // and the framing it adds itself.
+      const auto = [];
+      if (this.sendDate && !this.hasHeader('date')) auto.push(['Date', new Date().toUTCString()]);
+      const framed =
+        noBody || autoChunked || autoLength != null || this.hasHeader('content-length') || /chunked/i.test(String(this.getHeader('transfer-encoding') ?? ''));
+      if (!framed || /close/i.test(String(this.getHeader('connection') ?? ''))) this.shouldKeepAlive = false;
+      if (!this.hasHeader('connection')) {
+        auto.push(['Connection', this.shouldKeepAlive ? 'keep-alive' : 'close']);
+        if (this.shouldKeepAlive && this._keepAliveTimeout) auto.push(['Keep-Alive', `timeout=${Math.floor(this._keepAliveTimeout / 1000)}`]);
+      }
+      if (autoLength != null) auto.push(['Content-Length', String(autoLength)]);
+      if (autoChunked) auto.push(['Transfer-Encoding', 'chunked']);
+      if (autoChunked || String(this.getHeader('transfer-encoding') || '').toLowerCase() === 'chunked') this.#chunked = true;
       // Node's server: the table's phrase, else 'unknown'.
       const reason = this.statusMessage ?? (STATUS_CODES[this.statusCode] || 'unknown');
       let head = `HTTP/1.1 ${this.statusCode} ${reason}\r\n`;
       for (const [k, v] of Object.entries(this.#headers)) {
-        if (Array.isArray(v)) for (const item of v) head += `${k}: ${item}\r\n`;
-        else head += `${k}: ${v}\r\n`;
+        const name = this.#names[k] ?? k;
+        if (Array.isArray(v)) for (const item of v) head += `${name}: ${item}\r\n`;
+        else head += `${name}: ${v}\r\n`;
       }
+      for (const [k, v] of auto) head += `${k}: ${v}\r\n`;
       head += '\r\n';
       this.#headersSent = true;
       this.headersSent = true;
@@ -375,11 +401,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       this.#socket.write(payload, () => {
         this.finished = true;
         this.emit('finish');
-        try {
-          this.#socket.unref?.();
-          this.#socket.destroy();
-        } catch {
-          /* ignore */
+        if (this.shouldKeepAlive && typeof this._onKeptAlive === 'function' && !this.#socket.destroyed) {
+          // Keep-alive: the connection takes its next request.
+          this._onKeptAlive();
+        } else {
+          try {
+            this.#socket.unref?.();
+            this.#socket.destroy();
+          } catch {
+            /* ignore */
+          }
         }
         callback();
       });
@@ -403,18 +434,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         // 204 always omits Content-Length. 304 must not auto-frame a body, but
         // preserves an explicitly supplied Content-Length (selected representation).
         const noAutoLength = this.statusCode === 204 || this.statusCode === 304;
-        if (
-          !noAutoLength &&
-          !this.hasHeader('content-length') &&
-          !this.hasHeader('transfer-encoding')
-        ) {
-          this.setHeader('Content-Length', String(wouldBeBody.length));
-        }
+        const autoLength =
+          !noAutoLength && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding') ? wouldBeBody.length : null;
         if (this.statusCode === 204) {
           this.removeHeader('content-length');
           this.removeHeader('Content-Length');
         }
-        const head = this.#sendHead(false);
+        const head = this.#sendHead(false, autoLength);
         let payload;
         if (this.#chunked && !noBody) {
           const parts = [head];
@@ -473,13 +499,61 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     }
   }
 
+  /**
+   * One connection of a server, as Node's: requests one after another
+   * (pipelined ones queued), the connection kept open after a response that
+   * may (HTTP/1.1, no `Connection: close`, a framed body), closed after
+   * `keepAliveTimeout` idle, or at once by closeIdleConnections(). A request
+   * whose headers don't arrive within `headersTimeout` gets 408. An
+   * `Upgrade` request goes to 'upgrade' listeners, with the socket.
+   */
   function handleConnection(socket, requestListener, server) {
     let buf = Buffer.alloc(0);
-    const onData = (chunk) => {
-      buf = Buffer.concat([
-        buf,
-        chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk),
-      ]);
+    let busy = false;
+    let served = 0;
+    let idleTimer = null;
+    let headersTimer = null;
+    const conn = { socket, idle: true };
+    server._connections.add(conn);
+    socket.once('close', () => {
+      server._connections.delete(conn);
+      clearTimeout(idleTimer);
+      clearTimeout(headersTimer);
+    });
+    const destroy = () => {
+      try {
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
+    };
+    const armIdle = () => {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+      const ms = server.keepAliveTimeout;
+      if (ms > 0) {
+        idleTimer = setTimeout(destroy, ms);
+        idleTimer.unref?.();
+      }
+    };
+    const armHeaders = () => {
+      if (headersTimer || !(server.headersTimeout > 0)) return;
+      headersTimer = setTimeout(() => {
+        headersTimer = null;
+        if (busy || socket.destroyed) return;
+        try {
+          socket.end('HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n', destroy);
+        } catch {
+          destroy();
+        }
+      }, server.headersTimeout);
+      headersTimer.unref?.();
+    };
+    const pump = () => {
+      if (busy || socket.destroyed || buf.length === 0) return;
+      clearTimeout(idleTimer);
+      idleTimer = null;
+      armHeaders();
       if (buf.length > MAX_HTTP_BODY + 64 * 1024) {
         // Cap head+body growth while still reading the request line/headers.
         rejectPayloadTooLarge(socket, onData);
@@ -487,13 +561,29 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       }
       const parsed = parseHead(buf, Buffer);
       if (!parsed || parsed.kind === 'error') {
-        if (parsed?.kind === 'error') socket.destroy();
+        if (parsed?.kind === 'error') destroy();
         return;
       }
       if (parsed.kind !== 'request') return;
       const headers = headerObj(parsed.rawHeaders);
       const te = String(headers['transfer-encoding'] || '').toLowerCase();
+      const connectionTokens = String(headers.connection || '').toLowerCase();
+      // Node: an Upgrade request goes to 'upgrade' listeners, with what
+      // followed the head; with none, it is an ordinary request.
+      if (headers.upgrade && /\bupgrade\b/.test(connectionTokens) && server.listenerCount('upgrade') > 0) {
+        clearTimeout(headersTimer);
+        headersTimer = null;
+        socket.off('data', onData);
+        server._connections.delete(conn);
+        const req = makeIncomingMessage(socket, Buffer.alloc(0));
+        setRequestLine(req, parsed, headers);
+        buf = Buffer.alloc(0);
+        server.emit('upgrade', req, socket, Buffer.from(parsed.bodyPrefix));
+        return;
+      }
       let body;
+      let used;
+      const headLength = buf.length - parsed.bodyPrefix.length;
       // RFC 9112: if Transfer-Encoding is present, it frames the body (ignore CL).
       if (te.includes('chunked')) {
         const decoded = decodeChunked(parsed.bodyPrefix, Buffer);
@@ -503,10 +593,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         }
         if (!decoded.ok) return;
         body = decoded.body;
+        used = headLength + decoded.used;
       } else {
         const cl = headers['content-length'] != null ? Number(headers['content-length']) : 0;
         if (!Number.isFinite(cl) || cl < 0) {
-          socket.destroy();
+          destroy();
           return;
         }
         if (cl > MAX_HTTP_BODY) {
@@ -515,28 +606,37 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         }
         if (parsed.bodyPrefix.length < cl) return;
         body = parsed.bodyPrefix.subarray(0, cl);
+        used = headLength + cl;
       }
-      socket.off('data', onData);
+      clearTimeout(headersTimer);
+      headersTimer = null;
+      // What follows this request (a pipelined one) waits its turn.
+      buf = Buffer.from(buf.subarray(used));
+      busy = true;
+      conn.idle = false;
+      served++;
       const req = makeIncomingMessage(socket, body);
-      req.method = parsed.method;
-      req.url = parsed.url;
-      req.httpVersion = parsed.httpVersion;
-      const [maj, min] = parsed.httpVersion.split('.');
-      req.httpVersionMajor = Number(maj);
-      req.httpVersionMinor = Number(min);
-      req.rawHeaders = parsed.rawHeaders;
-      req.headers = headers;
+      setRequestLine(req, parsed, headers);
       const res = new ServerResponse(req);
+      // Node's shouldKeepAlive: HTTP/1.1 unless the client says close, the
+      // server still open, and below maxRequestsPerSocket.
+      const max = server.maxRequestsPerSocket;
+      res.shouldKeepAlive =
+        parsed.httpVersion !== '1.0' &&
+        !/\bclose\b/.test(connectionTokens) &&
+        server.listening !== false &&
+        !server._closing &&
+        !(max > 0 && served >= max);
+      res._keepAliveTimeout = server.keepAliveTimeout;
       // The client gone before the response ended (an aborted SSE or
       // long-poll): Node's 'close' on both, so the handler can stop.
       const gone = () => {
         if (!res.finished && !res.destroyed) res.destroy();
         if (!req.destroyed) req.destroy();
       };
-      socket.once('close', gone);
       // Node (httpAllowHalfOpen false): the client's FIN aborts a response
       // still going, and the server ends its side.
-      socket.once('end', () => {
+      const onEnd = () => {
         if (res.finished) return;
         gone();
         try {
@@ -544,12 +644,47 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         } catch {
           /* ignore */
         }
-      });
+      };
+      socket.once('close', gone);
+      socket.once('end', onEnd);
+      res._onKeptAlive = () => {
+        socket.off('close', gone);
+        socket.off('end', onEnd);
+        busy = false;
+        conn.idle = true;
+        // The request's 'close' (Node emits it once the response is done).
+        if (!req.destroyed) req.destroy();
+        if (server._closing || socket.destroyed) {
+          destroy();
+          return;
+        }
+        armIdle();
+        queueMicrotask(pump);
+      };
       server.emit('request', req, res);
       if (typeof requestListener === 'function') requestListener(req, res);
     };
+    const onData = (chunk) => {
+      buf = Buffer.concat([buf, chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk)]);
+      pump();
+    };
+    // The client ends an idle connection: so does the server.
+    socket.on('end', () => {
+      if (!busy) destroy();
+    });
     socket.on('data', onData);
     socket.on('error', (err) => server.emit('clientError', err, socket));
+  }
+
+  function setRequestLine(req, parsed, headers) {
+    req.method = parsed.method;
+    req.url = parsed.url;
+    req.httpVersion = parsed.httpVersion;
+    const [maj, min] = parsed.httpVersion.split('.');
+    req.httpVersionMajor = Number(maj);
+    req.httpVersionMinor = Number(min);
+    req.rawHeaders = parsed.rawHeaders;
+    req.headers = headers;
   }
 
   class Server extends net.Server {
@@ -569,6 +704,52 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       });
     }
     #requestListener;
+    // Node 22's defaults.
+    keepAliveTimeout = 5000;
+    headersTimeout = 60000;
+    requestTimeout = 300000;
+    maxRequestsPerSocket = 0;
+    maxHeadersCount = null;
+    timeout = 0;
+    /** @internal This server's connections, and whether each is between requests. */
+    _connections = new Set();
+    _closing = false;
+
+    /** Node's: the connections waiting for their next request go now. */
+    closeIdleConnections() {
+      for (const conn of [...this._connections]) {
+        if (conn.idle) {
+          this._connections.delete(conn);
+          try {
+            conn.socket.destroy();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+    closeAllConnections() {
+      for (const conn of [...this._connections]) {
+        this._connections.delete(conn);
+        try {
+          conn.socket.destroy();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    /** Node 19+: close() also closes the idle connections; the busy ones close after their response. */
+    close(callback) {
+      this._closing = true;
+      const r = super.close(callback);
+      this.closeIdleConnections();
+      return r;
+    }
+    setTimeout(ms, callback) {
+      this.timeout = Number(ms) || 0;
+      if (typeof callback === 'function') this.on('timeout', callback);
+      return this;
+    }
   }
 
   function createServer(options, requestListener) {
@@ -586,22 +767,48 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       this.totalSocketCount = 0;
       this.protocol = options.protocol;
       this.scheduling = options.scheduling ?? 'lifo';
-      // Keep-alive pooling is not implemented yet (documented); surface matches Node.
+      this.keepAliveMsecs = options.keepAliveMsecs ?? 1000;
       this.sockets = Object.create(null);
       this.freeSockets = Object.create(null);
       this.requests = Object.create(null);
+      // Node's _http_agent.js: a socket whose response is done comes back
+      // here: to the next queued request, else to the free pool.
+      this.on('free', (socket, options) => this.#onFree(socket, options));
     }
-    /** Idle keep-alive sockets are not pooled yet — no-op close. */
+    #onFree(socket, options = {}) {
+      const name = this.getName(options);
+      const queue = this.requests[name];
+      if (!socket.destroyed && queue?.length) {
+        const req = queue.shift();
+        if (!queue.length) delete this.requests[name];
+        this.#handoffSocket(req, socket);
+        return;
+      }
+      const free = (this.freeSockets[name] ||= []);
+      if (socket.destroyed || !this.keepAlive || !(this.maxFreeSockets > 0) || free.length >= this.maxFreeSockets || !this.keepSocketAlive(socket)) {
+        if (!free.length) delete this.freeSockets[name];
+        socket.destroy();
+        return;
+      }
+      const list = this.sockets[name];
+      const i = list ? list.indexOf(socket) : -1;
+      if (i !== -1) list.splice(i, 1);
+      if (list && !list.length) delete this.sockets[name];
+      free.push(socket);
+    }
+    /** Node's: every socket, in use or free, goes. */
     destroy() {
-      for (const name of Object.keys(this.freeSockets)) {
-        for (const s of this.freeSockets[name]) {
-          try {
-            s.destroy?.();
-          } catch {
-            /* ignore */
+      for (const pool of [this.freeSockets, this.sockets]) {
+        for (const name of Object.keys(pool)) {
+          for (const s of [...pool[name]]) {
+            try {
+              s.destroy?.();
+            } catch {
+              /* ignore */
+            }
           }
+          delete pool[name];
         }
-        delete this.freeSockets[name];
       }
     }
     getName(options = {}) {
@@ -622,11 +829,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       }
       return net.createConnection(opts, callback);
     }
-    keepSocketAlive() {
-      return false;
+    /** Node's: a free socket doesn't keep the program alive, and times out after `timeout`. */
+    keepSocketAlive(socket) {
+      socket.setKeepAlive?.(true, this.keepAliveMsecs);
+      socket.unref?.();
+      const timeout = this.options.timeout;
+      if (timeout > 0 && socket.timeout !== timeout) socket.setTimeout?.(timeout);
+      return true;
     }
-    reuseSocket() {
-      /* keep-alive reuse not implemented */
+    reuseSocket(socket, req) {
+      req.reusedSocket = true;
+      socket.ref?.();
     }
     /**
      * Node `_http_agent.js` shape: addRequest → createSocket → createConnection.
@@ -692,6 +905,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         this.sockets[name].push(s);
         this.totalSocketCount++;
         s.once?.('close', () => this.removeSocket(s, options));
+        s.on?.('free', () => this.emit('free', s, options));
+        // A free socket that idles past the agent's timeout goes (Node's onTimeout).
+        s.on?.('timeout', () => {
+          if (this.freeSockets[name]?.includes(s)) s.destroy();
+        });
         cb(null, s);
       };
 
@@ -700,6 +918,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     }
     removeSocket(socket, options = {}) {
       const name = options._agentKey || this.getName(options);
+      // A free socket that closed (the server's keep-alive timeout) leaves the pool.
+      const free = this.freeSockets[name];
+      const f = free ? free.indexOf(socket) : -1;
+      if (f !== -1) {
+        free.splice(f, 1);
+        if (!free.length) delete this.freeSockets[name];
+        this.totalSocketCount = Math.max(0, this.totalSocketCount - 1);
+        return;
+      }
       const list = this.sockets[name];
       if (!list) return;
       const i = list.indexOf(socket);
@@ -731,7 +958,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     }
   }
 
-  const globalAgent = new Agent();
+  // Node 22's: keep-alive, LIFO, free sockets closed after 5 s.
+  const globalAgent = new Agent({ keepAlive: true, scheduling: 'lifo', timeout: 5000 });
 
   class ClientRequest extends Writable {
     #opts;
@@ -744,6 +972,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     /** When content-length is known up front, stream body bytes as written. */
     #streaming = false;
 
+    // The names as given (Node writes them so), by their lower-case key.
+    #names = Object.create(null);
+
     constructor(options, callback) {
       // Not destroyed when the request is written: the response comes after
       // (destroy() is req.destroy(), see _destroy).
@@ -752,13 +983,19 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       this.reusedSocket = false;
       for (const [k, v] of Object.entries(options.headers ?? {})) {
         this.#headers[String(k).toLowerCase()] = String(v);
+        this.#names[String(k).toLowerCase()] = String(k);
       }
+      // Node: keep-alive when the agent keeps sockets (the global agent does).
+      const agent = options.agent === false ? null : (options.agent ?? globalAgent);
+      this.agent = agent ?? undefined;
+      this.shouldKeepAlive = Boolean(agent?.keepAlive);
       if (callback) this.once('response', callback);
       queueMicrotask(() => this.#connect());
     }
 
     setHeader(name, value) {
       this.#headers[String(name).toLowerCase()] = String(value);
+      this.#names[String(name).toLowerCase()] = String(name);
       return this;
     }
     getHeader(name) {
@@ -766,6 +1003,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     }
     removeHeader(name) {
       delete this.#headers[String(name).toLowerCase()];
+      delete this.#names[String(name).toLowerCase()];
     }
     setTimeout() {
       return this;
@@ -812,6 +1050,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
 
     #attachSocket(socket) {
       this.#socket = socket;
+      socket._httpMessage = this;
       const method = (this.#opts.method ?? 'GET').toUpperCase();
       let headBuf = Buffer.alloc(0);
       let socketEnded = false;
@@ -878,7 +1117,31 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         finished = true;
         res.complete = true;
         res.push(null);
-        quietClose();
+        // Keep-alive: a framed response the server didn't end the connection
+        // with goes back to the agent ('free'), for the next request.
+        const agent = this.agent;
+        const reusable =
+          agent &&
+          this.shouldKeepAlive &&
+          framing.kind !== 'eof' &&
+          res.httpVersion !== '1.0' &&
+          !/\bclose\b/i.test(String(res.headers.connection ?? '')) &&
+          !socketEnded &&
+          !socket.destroyed &&
+          // An agent that didn't make the socket (its own createSocket) has no pool for it.
+          socket.listenerCount('free') > 0;
+        if (!reusable) {
+          quietClose();
+          return;
+        }
+        unlisten();
+        this.#socket = null;
+        socket._httpMessage = null;
+        queueMicrotask(() => {
+          if (socket.destroyed) return;
+          socket.emit('free');
+          handles?.notify?.();
+        });
       };
       // A body cut short (the peer gone, or req.destroy()): Node's 'aborted'.
       const abortBody = (err) => {
@@ -970,6 +1233,26 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
           return;
         }
         emitted = true;
+        // 101 Switching Protocols: Node's 'upgrade' with the response, the
+        // socket (the caller's from now on) and what came after the head;
+        // with no listener the connection closes.
+        if (parsed.statusCode === 101) {
+          unlisten();
+          this.#socket = null;
+          const up = makeIncomingMessage(socket, Buffer.alloc(0));
+          up.statusCode = parsed.statusCode;
+          up.statusMessage = parsed.statusMessage;
+          up.httpVersion = parsed.httpVersion;
+          up.rawHeaders = parsed.rawHeaders;
+          up.headers = headers;
+          if (this.listenerCount('upgrade') > 0) {
+            this.emit('upgrade', up, socket, Buffer.from(parsed.bodyPrefix ?? Buffer.alloc(0)));
+          } else {
+            socket.destroy();
+          }
+          this.destroy();
+          return;
+        }
         res = new Readable({
           read() {
             socket.resume?.();
@@ -1020,6 +1303,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       const onEnd = () => {
         if (socketEnded) return;
         socketEnded = true;
+        // The connection ended before a response (a kept-alive one the
+        // server closed meanwhile): Node's 'socket hang up'.
+        if (!res && !this.destroyed && this.#connected && !this.#fetchMode) {
+          emitted = true;
+          const err = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+          if (this.listenerCount('error')) this.emit('error', err);
+          this.destroy();
+          quietClose();
+          return;
+        }
         if (!res || finished) return;
         // Framed by the peer's FIN: done; any other framing: cut short.
         if (framing.kind === 'eof') finish();
@@ -1127,10 +1420,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       const port = Number(opts.port ?? 80);
       if (!this.#headers.host) {
         this.#headers.host = port === 80 || port === 443 ? host : `${host}:${port}`;
+        this.#names.host = 'Host';
       }
-      if (!this.#headers.connection) this.#headers.connection = 'close';
+      if (/\bclose\b/i.test(String(this.#headers.connection ?? ''))) this.shouldKeepAlive = false;
+      if (!this.#headers.connection) {
+        this.#headers.connection = this.shouldKeepAlive ? 'keep-alive' : 'close';
+        this.#names.connection = 'Connection';
+      }
       let head = `${method} ${path} HTTP/1.1\r\n`;
-      for (const [k, v] of Object.entries(this.#headers)) head += `${k}: ${v}\r\n`;
+      for (const [k, v] of Object.entries(this.#headers)) head += `${this.#names[k] ?? k}: ${v}\r\n`;
       head += '\r\n';
       return Buffer.from(head);
     }
