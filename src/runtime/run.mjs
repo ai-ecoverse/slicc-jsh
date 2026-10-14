@@ -1,4 +1,5 @@
 import { installProcessMembers } from './process-members.mjs';
+import { installCredentials } from './process-credentials.mjs';
 import { installJshHandoff } from '../jsh/kernel.mjs';
 import { drainLoop, trackPromise } from './async-handles.mjs';
 import nodeInspect from 'node-inspect-extracted';
@@ -279,6 +280,7 @@ export async function runNode(ctx, options = {}) {
       handles.notify();
     },
   });
+  installCredentials(process);
   installProcessMembers(process, {
     flushTicks: () => flushTicks(),
     handleUncaught: (err, origin) => handleUncaught(err, origin),
