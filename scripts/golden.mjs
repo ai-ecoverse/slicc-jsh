@@ -7,6 +7,8 @@
  * Always run host Node 22.22.0 (scripts/node22.mjs: $NODE22, else fetched once
  * with `npx -y node@22.22.0`) so host major cannot poison
  * goldens. Fixtures live under test/golden/fixtures/ and are not published.
+ * case.json `kernel` ("1.86.0"): the oldest slicc-kernel the shim run needs;
+ * with an older one installed only the host run is checked.
  *
  * Usage:
  *   node scripts/golden.mjs record [fixture…]
@@ -53,6 +55,19 @@ function fixtureTree(dir) {
 }
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+// The installed slicc-kernel, for case.json `kernel`: the oldest kernel the
+// shim side needs (a feature an older kernel lacks, where jsh falls back).
+// On an older one only the host side is checked.
+const kernelVersion = JSON.parse(
+  readFileSync(join(root, 'node_modules/@ai-ecoverse/slicc-kernel/package.json'), 'utf8')
+).version;
+const atLeast = (version, min) => {
+  const a = version.split(/[.-]/).map(Number);
+  const b = min.split(/[.-]/).map(Number);
+  for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  return true;
+};
 const fixturesDir = join(root, 'test/golden/fixtures');
 const mode = process.argv[2];
 const only = process.argv.slice(3);
@@ -203,7 +218,9 @@ async function main() {
     const host = runNode22(hostArgv, { cwd, stdin: meta.stdin, env: meta.env });
     compare(name, 'host', host, expected);
 
-    if (meta.shim) {
+    if (meta.shim && meta.kernel && !atLeast(kernelVersion, meta.kernel)) {
+      console.log(`${name}: shim skipped (slicc-kernel ${kernelVersion} < ${meta.kernel})`);
+    } else if (meta.shim) {
       const files = [
         ...fixtureTree(dir),
         // case.json `packages`: devDependencies to install in the kernel
