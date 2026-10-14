@@ -1,0 +1,7 @@
+{
+  "description": "an http.Agent with a finite maxSockets (1, 2; keepAlive on and off) on loopback hands each freed slot to the next queued request: sequential and parallel GETs all answered, each request's 'close' emitted, a POST body included (0.23.0 to 0.26.0 hung from the first queued request on); and the events' order: req 'finish', res 'end', res 'close', req 'close' (destroyed); a refused connect's 'error' then 'close'",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true
+}

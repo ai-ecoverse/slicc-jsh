@@ -768,10 +768,27 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       let socketEnded = false;
       let emitted = false;
 
-      socket.on('error', (err) => {
+      // Only our own listeners come off at the end: an Agent's 'close'
+      // listener (removeSocket, which hands the socket's slot to the next
+      // queued request) must still hear the socket close.
+      const own = [];
+      const listen = (event, fn) => {
+        socket.on(event, fn);
+        own.push([event, fn]);
+      };
+      const unlisten = (event) => {
+        for (let i = own.length - 1; i >= 0; i--) {
+          if (event && own[i][0] !== event) continue;
+          socket.removeListener(own[i][0], own[i][1]);
+          own.splice(i, 1);
+        }
+      };
+      listen('error', (err) => {
         if (emitted) return;
         if (this.listenerCount('error')) this.emit('error', err);
         else socket.destroy();
+        // Node: 'error', then the request's 'close'.
+        if (!this.destroyed) this.destroy();
       });
       const onReady = () => {
         this.#connected = true;
@@ -797,10 +814,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       let finished = false;
       let framing = null; // { kind: 'none' | 'length' | 'chunked' | 'eof', left, buf, state }
       const quietClose = () => {
-        socket.removeAllListeners('data');
-        socket.removeAllListeners('end');
-        socket.removeAllListeners('close');
-        socket.removeAllListeners('error');
+        unlisten();
         socket.on('error', () => {});
         try {
           socket.destroy();
@@ -883,7 +897,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         }
       };
 
-      socket.on('data', (chunk) => {
+      listen('data', (chunk) => {
         const bytes = chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk);
         if (res) {
           feed(bytes);
@@ -934,13 +948,18 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         res.setTimeout = () => res;
         res.req = this;
         this.res = res;
+        // Node: the request closes once its response has (res 'end', res
+        // 'close', then req 'close'), or was cut short.
+        res.once('close', () => {
+          if (!this.destroyed) this.destroy();
+        });
         if (responseHasNoBody(method, parsed.statusCode)) framing = { kind: 'none' };
         else if (te.includes('chunked')) framing = { kind: 'chunked', buf: Buffer.alloc(0), state: 'size', left: 0 };
         else if (cl != null) framing = { kind: 'length', left: cl };
         else framing = { kind: 'eof' };
         // A late socket error is the body's.
-        socket.removeAllListeners('error');
-        socket.on('error', (err) => abortBody(err));
+        unlisten('error');
+        listen('error', (err) => abortBody(err));
         this.emit('response', res);
         if (framing.kind === 'none' || (framing.kind === 'length' && framing.left === 0)) {
           finish();
@@ -956,9 +975,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         if (framing.kind === 'eof') finish();
         else abortBody();
       };
-      socket.on('end', onEnd);
+      listen('end', onEnd);
       // Fallback: some transports deliver close without a prior readable 'end'.
-      socket.on('close', onEnd);
+      listen('close', onEnd);
     }
 
     #abortBody = null;
