@@ -44,3 +44,22 @@ run('--title', ['show.js']);
 run('--input-type=bad', ['show.js']);
 run('--stack-trace-limit=abc', ['show.js']);
 run('--bogus', ['--bad-cli-option', 'show.js']);
+// A value that looks like an option isn't one (NODE_OPTIONS and the command line).
+run('--require --no-warnings', ['show.js']);
+run('', ['--require', '--no-warnings', 'show.js']);
+run('--title --x', ['show.js']);
+run('', ['--import', '--x', 'show.js']);
+run('', ['-e', '-1']);
+// A short option takes no `=`.
+run('-C=foo', ['show.js']);
+run('-r=./r1.js', ['show.js']);
+run('', ['-r=./r1.js', 'show.js']);
+// A boolean's last form wins, its negation included.
+run('--enable-source-maps --no-enable-source-maps', ['-p', 'process.sourceMapsEnabled']);
+run('--no-enable-source-maps', ['--enable-source-maps', '-p', 'process.sourceMapsEnabled']);
+run('', ['--no-enable-source-maps', '-p', 'process.sourceMapsEnabled']);
+run('--no-deprecation', ['--deprecation', 'show.js']);
+run('--no-warnings', ['--warnings', 'show.js']);
+run('--no-preserve-symlinks', ['show.js']);
+run('--no-require', ['show.js']);
+run('--no-no-deprecation', ['show.js']);

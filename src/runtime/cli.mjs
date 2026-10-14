@@ -85,16 +85,20 @@ export function parseNodeOptions(text, argv0 = 'node') {
     const word = words[i];
     // The first argument that isn't an option ends them; the rest is ignored.
     if (!word.startsWith('-') || word === '-') break;
-    const eq = word.indexOf('=');
+    // A short option takes no `=` (`-C=foo` is a name of its own).
+    const eq = word.startsWith('--') ? word.indexOf('=') : -1;
     const raw = eq === -1 ? word : word.slice(0, eq);
     // Node's names take `_` for `-` (after the leading dashes).
     const name = raw.replace(/^(-+)(.*)$/, (m, dashes, rest) => dashes + rest.replace(/_/g, '-'));
+    if (name.startsWith('--no-') && ENV_VALUED.has(`--${name.slice(5)}`)) {
+      return { error: `${argv0}: ${raw} is an invalid negation because it is not a boolean option`, status: 9 };
+    }
     if (word === '--' || !allowed.has(name)) return { error: `${argv0}: ${raw} is not allowed in NODE_OPTIONS`, status: 9 };
     const alias = ENV_ALIASES[name];
     const canonical = alias?.length === 1 ? alias[0] : name;
     const takesValue = ENV_VALUED.has(canonical);
     if (takesValue && eq === -1) {
-      if (i + 1 >= words.length) return { error: `${argv0}: ${raw} requires an argument`, status: 9 };
+      if (missingValue(words[i + 1])) return { error: `${argv0}: ${raw} requires an argument`, status: 9 };
       apply.push(word, words[++i]);
     } else if (takesValue && eq === word.length - 1) {
       return { error: `${argv0}: ${word} requires an argument`, status: 9 };
@@ -119,7 +123,7 @@ export function parseNodeOptions(text, argv0 = 'node') {
 function jshKnows(word) {
   const name = word.split('=')[0];
   return (
-    BOOLEAN_FLAGS.has(name) ||
+    booleanToggle(name) !== null ||
     VALUED_FLAGS.includes(name) ||
     ['-r', '--require', '--import', '--stack-trace-limit', '--max-old-space-size', '-i', '--interactive'].includes(name)
   );
@@ -157,11 +161,35 @@ export function parseNodeArgv(argv, { nodeOptions } = {}) {
 
 /** The options in effect: a boolean given a value (`--no-warnings=x`, which Node takes) as itself. */
 function effective(flags) {
-  return flags.map((f) => {
+  const out = [];
+  for (const f of flags) {
     const name = f.split('=')[0];
-    return f.includes('=') && BOOLEAN_FLAGS.has(name) ? name : f;
-  });
+    const toggle = booleanToggle(name);
+    if (!toggle || !f.startsWith('--')) {
+      out.push(f);
+      continue;
+    }
+    // A boolean's last form wins (`--x` … `--no-x`), as in Node.
+    for (let i = out.length - 1; i >= 0; i--) if (booleanToggle(out[i])?.key === toggle.key) out.splice(i, 1);
+    if (toggle.on) out.push(toggle.flag);
+  }
+  return out;
 }
+
+/**
+ * A boolean option jsh takes, in either form: `--x` and `--no-x` (for
+ * jsh's `--no-warnings`, `--warnings` is the other form). `flag` is jsh's
+ * name for it, `on` whether this form sets it.
+ */
+function booleanToggle(name) {
+  if (BOOLEAN_FLAGS.has(name)) return { key: name.replace(/^--no-/, '--'), flag: name, on: true };
+  const other = name.startsWith('--no-') ? `--${name.slice(5)}` : name.startsWith('--') ? `--no-${name.slice(2)}` : null;
+  if (other && BOOLEAN_FLAGS.has(other)) return { key: other.replace(/^--no-/, '--'), flag: other, on: false };
+  return null;
+}
+
+/** Node's: a value that looks like an option isn't one (`--require --no-warnings`). */
+const missingValue = (next) => next === undefined || next.startsWith('-');
 
 function parseCommandLine(argv) {
   const argv0 = argv[0] ?? 'node';
@@ -195,7 +223,7 @@ function parseCommandLine(argv) {
     }
     if (arg === '-e' || arg === '--eval') {
       i += 1;
-      if (i >= args.length) {
+      if (missingValue(args[i])) {
         return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
       }
       evalCode = args[i];
@@ -231,7 +259,7 @@ function parseCommandLine(argv) {
       continue;
     }
     if (arg === '-r' || arg === '--require') {
-      if (i + 1 >= args.length) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      if (missingValue(args[i + 1])) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
       preload.push(args[i + 1]);
       flags.push(arg, args[i + 1]);
       i += 2;
@@ -276,7 +304,7 @@ function parseCommandLine(argv) {
     }
     // --import X / --import=X: ES modules loaded before the entry (after -r).
     if (arg === '--import') {
-      if (i + 1 >= args.length) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      if (missingValue(args[i + 1])) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
       imports.push(args[i + 1]);
       flags.push(arg, args[i + 1]);
       i += 2;
@@ -302,7 +330,7 @@ function parseCommandLine(argv) {
       i += 1;
       continue;
     }
-    if (BOOLEAN_FLAGS.has(arg) || (arg.startsWith('--') && BOOLEAN_FLAGS.has(arg.split('=')[0]))) {
+    if (BOOLEAN_FLAGS.has(arg) || (arg.startsWith('--') && booleanToggle(arg.split('=')[0]))) {
       flags.push(arg);
       i += 1;
       continue;
@@ -310,7 +338,7 @@ function parseCommandLine(argv) {
     const valued = VALUED_FLAGS.find((f) => arg === f || arg.startsWith(`${f}=`));
     if (valued) {
       if (arg === valued) {
-        if (i + 1 >= args.length) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+        if (missingValue(args[i + 1])) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
         flags.push(arg, args[i + 1]);
         i += 2;
       } else {

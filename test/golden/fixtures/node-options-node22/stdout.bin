@@ -115,3 +115,41 @@ node: bad option: --experimental-wasm-memory64
 node: bad option: --experimental-wasm-exnref
 == NODE_OPTIONS="--bogus" --bad-cli-option show.js: status 9
 node: --bogus is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="--require --no-warnings" show.js: status 9
+node: --require requires an argument
+== NODE_OPTIONS="" --require --no-warnings show.js: status 9
+node: --require requires an argument
+== NODE_OPTIONS="--title --x" show.js: status 9
+node: --title requires an argument
+== NODE_OPTIONS="" --import --x show.js: status 9
+node: --import requires an argument
+== NODE_OPTIONS="" -e -1: status 9
+node: -e requires an argument
+== NODE_OPTIONS="-C=foo" show.js: status 9
+node: -C=foo is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="-r=./r1.js" show.js: status 9
+node: -r=./r1.js is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="" -r=./r1.js show.js: status 9
+node: bad option: -r=./r1.js
+== NODE_OPTIONS="--enable-source-maps --no-enable-source-maps" -p process.sourceMapsEnabled: status 0
+false
+== NODE_OPTIONS="--no-enable-source-maps" --enable-source-maps -p process.sourceMapsEnabled: status 0
+true
+== NODE_OPTIONS="" --no-enable-source-maps -p process.sourceMapsEnabled: status 0
+false
+== NODE_OPTIONS="--no-deprecation" --deprecation show.js: status 0
+execArgv ["--deprecation"] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-warnings" --warnings show.js: status 0
+execArgv ["--warnings"] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-preserve-symlinks" show.js: status 0
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-require" show.js: status 9
+node: --no-require is an invalid negation because it is not a boolean option
+== NODE_OPTIONS="--no-no-deprecation" show.js: status 9
+node: --no-no-deprecation is not allowed in NODE_OPTIONS
