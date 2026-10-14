@@ -272,6 +272,10 @@ export function createFetch(ctx, { handles, getHttp } = {}) {
       if (result.response) return handles ? trackBody(result.response, track) : result.response;
       input = result.handoff;
       init = undefined;
+    } else if (request) {
+      // The request that was checked is the one fetched (its body read once).
+      input = request;
+      init = undefined;
     }
     const response = await track(ctx.fetch(input, init));
     if (!handles || response == null || typeof response !== 'object') return response;
