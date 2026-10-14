@@ -179,7 +179,9 @@ function wrapRaw(frame) {
   const v8Ctor = typeof frame.isConstructor === 'function' ? frame.isConstructor() : false;
   let fn = userName || null;
   let locationOnly = false;
-  if (fn === 'eval' || fn === 'Object.eval' || fn === '<anonymous>') {
+  // V8's getFunctionName() of such a function is null: `fn` is a label only.
+  const anonymous = fn === 'eval' || fn === 'Object.eval' || fn === '<anonymous>';
+  if (anonymous) {
     if (v8TopLevel === true && !v8Ctor) {
       fn = null;
       locationOnly = true;
@@ -236,7 +238,7 @@ function wrapRaw(frame) {
     getTypeName: () => (ctor ? null : typeName),
     getFunction: () => frame.getFunction?.(),
     getFunctionName: () => {
-      if (fn === 'Object.<anonymous>') return null;
+      if (anonymous || fn === 'Object.<anonymous>') return null;
       if (isToplevel && !ctor) return null;
       if (fn?.startsWith('Object.') && !ctor) return fn.slice(7);
       const as = fn && /^[^.[]+\.([^ ]+) \[as /.exec(fn);
@@ -262,15 +264,17 @@ function wrapRaw(frame) {
       // V8: a frame with no script (a builtin's) is `<anonymous>`.
       const f = file || '<anonymous>';
       const pos = line != null ? `:${line}:${col ?? 0}` : '';
+      // V8: a frame resumed after an await is `async …`.
+      const prefix = frame.isAsync?.() ? 'async ' : '';
       // V8: an anonymous function called with no receiver (an arrow, a
       // callback) is its location alone.
-      if (!fn && (locationOnly || (v8TopLevel === true && !ctor))) return `${f}${pos}`;
+      if (!fn && (locationOnly || (v8TopLevel === true && !ctor))) return `${prefix}${f}${pos}`;
       const label = fn || 'Object.<anonymous>';
       if (f === '[eval]' || String(f).includes('[eval]')) {
-        if (label === 'Object.<anonymous>') return `${f}${pos}`;
+        if (label === 'Object.<anonymous>') return `${prefix}${f}${pos}`;
       }
       if (ctor && fn) return `new ${fn} (${f}${pos})`;
-      return `${label} (${f}${pos})`;
+      return `${prefix}${label} (${f}${pos})`;
     },
   };
 }

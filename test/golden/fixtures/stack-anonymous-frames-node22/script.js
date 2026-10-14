@@ -26,3 +26,45 @@ new Promise((resolve) => resolve()).then(() => {
   console.log(own(new Error('promise callback').stack));
 });
 setTimeout(() => console.log(own(new Error('timer callback').stack)), 0);
+// The CallSites a prepareStackTrace sees: V8's getters (a label like
+// `Array.<anonymous>` is the frame's string only; getFunctionName is null).
+const sites = (fn) => {
+  const prev = Error.prepareStackTrace;
+  Error.prepareStackTrace = (e, s) => s;
+  const s = fn();
+  Error.prepareStackTrace = prev;
+  return s;
+};
+const callSite = (label, s) =>
+  console.log(label, JSON.stringify([s.getFunctionName(), s.getMethodName(), s.getTypeName(), s.isToplevel(), s.isAsync(), String(s).replace(__dirname, 'DIR')]));
+callSite('CallSite of an arrow', [1].map(() => sites(() => new Error('x').stack)[2])[0]);
+callSite('CallSite of a reviver', JSON.parse('[1]', function (k, v) {
+  return k === '0' ? sites(() => new Error('j').stack)[2] : v;
+})[0]);
+const obj2 = { m: [0].map(() => function () { return sites(() => new Error('m').stack)[2]; })[0] };
+callSite('CallSite of obj.m', obj2.m());
+// Frames resumed after an await: `async …`, a location alone included.
+async function a() {
+  await null;
+  throw new Error('in a');
+}
+async function b() {
+  await a();
+}
+b().catch((e) => console.log(own(e.stack)));
+(async () => {
+  await null;
+  await [0].map(async () => {
+    await null;
+    throw new Error('anonymous async callback');
+  })[0];
+})().catch((e) => console.log(own(e.stack)));
+class K {
+  async m() {
+    await null;
+    throw new Error('async method');
+  }
+}
+(async () => {
+  await new K().m();
+})().catch((e) => console.log(own(e.stack)));
