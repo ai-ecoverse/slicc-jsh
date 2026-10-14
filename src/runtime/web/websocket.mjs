@@ -301,6 +301,14 @@ export function createWebSocket(ctx, { handles, trackPromise, getNet } = {}) {
     }
 
     close(code, reason) {
+      // undici's checks, before the state's: a code we may send, a reason that fits a control frame.
+      if (code !== undefined && !(code === 1000 || (Number.isInteger(code) && code >= 3000 && code <= 4999))) {
+        throw new DOMException('invalid code', 'InvalidAccessError');
+      }
+      if (reason !== undefined) {
+        const size = new TextEncoder().encode(String(reason)).length;
+        if (size > 123) throw new DOMException(`Reason must be less than 123 bytes; received ${size}`, 'SyntaxError');
+      }
       if (this.#readyState === CLOSING || this.#readyState === CLOSED) return;
       this.#closed = true;
       this.#readyState = CLOSING;

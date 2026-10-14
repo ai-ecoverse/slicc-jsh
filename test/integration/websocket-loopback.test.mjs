@@ -132,4 +132,81 @@ ws.onerror = (e) => console.log('error', e.error.cause.code, e.error.cause.messa
       kernel.terminate();
     }
   });
+
+  it('holds a server to RFC 6455, as undici does: masked, reserved-bit and long control frames, a bad handshake, the closing handshake', async () => {
+    const { kernel, run, close } = await withCdp(echo);
+    try {
+      await kernel.writeFile(
+        '/os/strict.js',
+        `const net = require('net');
+const { createHash } = require('crypto');
+const echoes = [];
+const server = net.createServer((sock) => {
+  let head = '';
+  sock.on('data', function first(chunk) {
+    head += chunk.toString('latin1');
+    if (!head.includes('\\r\\n\\r\\n')) return;
+    sock.off('data', first);
+    const path = head.split(' ')[1];
+    const key = /sec-websocket-key: (.*)\\r\\n/i.exec(head)[1];
+    const accept = createHash('sha1').update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+    const lines = ['HTTP/1.1 101 Switching Protocols', 'Upgrade: websocket'];
+    if (path !== '/noconn') lines.push('Connection: Upgrade');
+    if (path === '/ext') lines.push('Sec-WebSocket-Extensions: permessage-deflate');
+    lines.push('Sec-WebSocket-Accept: ' + accept);
+    sock.write(lines.join('\\r\\n') + '\\r\\n\\r\\n');
+    const text = Buffer.from('hi');
+    if (path === '/masked') sock.write(Buffer.concat([Buffer.from([0x81, 0x82, 1, 2, 3, 4]), Buffer.from([text[0] ^ 1, text[1] ^ 2])]));
+    if (path === '/rsv') sock.write(Buffer.concat([Buffer.from([0xc1, 2]), text]));
+    if (path === '/bigping') sock.write(Buffer.concat([Buffer.from([0x89, 126, 0, 126]), Buffer.alloc(126)]));
+    if (path === '/drop') setTimeout(() => sock.destroy(), 50);
+    if (path === '/close') {
+      sock.write(Buffer.concat([Buffer.from([0x88, 5, 0x0f, 0xa1]), Buffer.from('bye')]));
+      sock.on('data', (c) => { echoes.push((c[0] & 0x0f) + ':' + (((c[2] ^ c[6]) << 8) | (c[3] ^ c[7]))); sock.end(); });
+    }
+  });
+});
+const one = (path) => new Promise((resolve) => {
+  const ev = [];
+  const ws = new WebSocket('ws://127.0.0.1:' + server.address().port + path);
+  ws.onopen = () => ev.push('open');
+  ws.onmessage = (e) => ev.push('message ' + e.data);
+  ws.onerror = (e) => ev.push('error ' + e.error.cause.code);
+  ws.onclose = (e) => { ev.push('close ' + e.code + ' ' + JSON.stringify(e.reason) + ' ' + e.wasClean); resolve(path + ': ' + ev.join(', ')); };
+  setTimeout(() => resolve(path + ': ' + ev.join(', ')), 1500);
+});
+server.listen(0, '127.0.0.1', async () => {
+  for (const path of ['/masked', '/rsv', '/bigping', '/noconn', '/ext', '/drop', '/close']) console.log(await one(path));
+  console.log('echoed', echoes.join(','));
+  const ws = new WebSocket('ws://127.0.0.1:' + server.address().port + '/drop');
+  for (const [code, reason] of [[999], [1001], [3000, 'x'.repeat(124)], [4999, 'x'.repeat(123)]]) {
+    try { ws.close(code, reason); console.log('close', code, 'ok'); } catch (e) { console.log('close', code, e.name, e.message); }
+  }
+  server.close();
+});
+`
+      );
+      assert.deepEqual(await run(['node', 'strict.js']), {
+        status: 0,
+        stdout: [
+          '/masked: open, close 1006 "" false',
+          '/rsv: open, close 1006 "" false',
+          '/bigping: open, close 1006 "" false',
+          '/noconn: error EPROTO',
+          '/ext: error EPROTO',
+          '/drop: open, close 1006 "" false',
+          '/close: open, close 4001 "bye" true',
+          'echoed 8:4001',
+          'close 999 InvalidAccessError invalid code',
+          'close 1001 InvalidAccessError invalid code',
+          'close 3000 SyntaxError Reason must be less than 123 bytes; received 124',
+          'close 4999 ok',
+          '',
+        ].join('\n'),
+        stderr: '',
+      });
+    } finally {
+      close();
+    }
+  });
 });

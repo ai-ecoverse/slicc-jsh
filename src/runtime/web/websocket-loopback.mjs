@@ -115,6 +115,9 @@ export async function openLoopbackWebSocket(net, href, protocols, route) {
   };
   if (head.status !== 101) refuse(`the server answered the upgrade with ${head.status}`);
   if (header(head.rawHeaders, 'upgrade')?.toLowerCase() !== 'websocket') refuse('no Upgrade: websocket');
+  const connection = (header(head.rawHeaders, 'connection') ?? '').toLowerCase().split(',');
+  if (!connection.some((token) => token.trim() === 'upgrade')) refuse('no Connection: upgrade');
+  if (header(head.rawHeaders, 'sec-websocket-extensions')) refuse('the far end chose an extension the program did not offer');
   if (header(head.rawHeaders, 'sec-websocket-accept') !== (await acceptFor(key))) {
     refuse('wrong Sec-WebSocket-Accept');
   }
@@ -128,6 +131,7 @@ function connected(socket, href, protocol, rest) {
   let reading;
   let closing = false; // our close frame went out
   let ended = false;
+  let peerClose = null; // the server's close frame, once it came
   let closeTimer;
   let resolveClosed;
   const closed = new Promise((resolve) => {
@@ -145,8 +149,9 @@ function connected(socket, href, protocol, rest) {
     }
     resolveClosed({ code, reason, wasClean });
   };
-  const send = (opcode, payload) => {
-    if (!socket.destroyed) socket.write(frame(opcode, payload));
+  const send = (opcode, payload, written) => {
+    if (socket.destroyed) written?.();
+    else socket.write(frame(opcode, payload), written);
   };
   const close = (code, reason) => {
     if (closing || ended) return;
@@ -159,16 +164,20 @@ function connected(socket, href, protocol, rest) {
   let buffered = rest;
   let message = null; // { opcode, parts, size }
   const decoder = new TextDecoder('utf-8', { fatal: true });
+  // Failing the connection: our close frame, then a 1006 close, as undici reports it.
   const protocolError = (code, reason) => {
     close(code, reason);
-    finish(code, reason, false);
+    finish(1006, '', false);
   };
   const parse = () => {
     for (;;) {
-      if (buffered.length < 2) return;
+      if (peerClose || ended || buffered.length < 2) return;
       const fin = (buffered[0] & 0x80) !== 0;
       const opcode = buffered[0] & 0x0f;
       const masked = (buffered[1] & 0x80) !== 0;
+      // RFC 6455: no extension was negotiated (5.2), and a server never masks (5.1).
+      if (buffered[0] & 0x70) return protocolError(1002, 'reserved bits set');
+      if (masked) return protocolError(1002, 'a masked frame from the server');
       let length = buffered[1] & 0x7f;
       let at = 2;
       if (length === 126) {
@@ -182,11 +191,9 @@ function connected(socket, href, protocol, rest) {
         length = Number(big);
         at = 10;
       }
-      const maskAt = at;
-      if (masked) at += 4;
+      if (opcode >= 8 && (!fin || length > 125)) return protocolError(1002, 'a fragmented or long control frame');
       if (buffered.length < at + length) return;
-      let payload = buffered.slice(at, at + length);
-      if (masked) for (let i = 0; i < payload.length; i++) payload[i] ^= buffered[maskAt + (i & 3)];
+      const payload = buffered.slice(at, at + length);
       buffered = buffered.subarray(at + length);
       if (opcode >= 8) {
         if (opcode === OP.ping) send(OP.pong, payload);
@@ -198,11 +205,18 @@ function connected(socket, href, protocol, rest) {
           } catch {
             return protocolError(1007, 'invalid UTF-8 in the close reason');
           }
-          if (!closing) {
+          peerClose = { code, reason };
+          if (closing) finish(code, reason, true);
+          else {
+            // Echo it, and let the socket go only once the echo is out: end()
+            // flushes and half-closes, where destroy() would drop it (5.5.1).
             closing = true;
+            const done = () => finish(code, reason, true);
             send(OP.close, code === 1005 ? new Uint8Array(0) : payload.subarray(0, 2));
+            socket.end(done);
+            closeTimer = setTimeout(done, CLOSE_WAIT_MS);
+            closeTimer.unref?.();
           }
-          finish(code, reason, true);
           return;
         }
         continue;
@@ -234,16 +248,30 @@ function connected(socket, href, protocol, rest) {
         } catch {
           return protocolError(1007, 'invalid UTF-8');
         }
-        reading.enqueue(text);
+        deliver(text);
       } else {
-        reading.enqueue(whole);
+        deliver(whole);
       }
     }
   };
 
+  let cancelled = false;
+  // A message after the reader went away (cancelled, or the socket ended) is dropped.
+  const deliver = (message) => {
+    if (cancelled || ended) return;
+    try {
+      reading.enqueue(message);
+    } catch {
+      /* closed */
+    }
+  };
   readable = new ReadableStream({
     start(controller) {
       reading = controller;
+    },
+    cancel() {
+      cancelled = true;
+      close(1000, '');
     },
   });
   const writable = new WritableStream({
@@ -262,8 +290,10 @@ function connected(socket, href, protocol, rest) {
     buffered = joined;
     parse();
   });
-  socket.on('error', () => finish(1006, '', false));
-  socket.on('close', () => finish(1006, '', false));
+  // The socket going away: a clean close if the server's close frame came first, else 1006.
+  const gone = () => finish(peerClose?.code ?? 1006, peerClose?.reason ?? '', peerClose !== null);
+  socket.on('error', gone);
+  socket.on('close', gone);
   socket.resume();
   if (buffered.length) queueMicrotask(parse);
 
