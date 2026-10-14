@@ -88,6 +88,18 @@ const DEFAULT_HEADERS = [
   ['accept-encoding', 'gzip, deflate'],
 ];
 
+// The fetch spec's bad ports (undici's badPorts): an http(s) request to one
+// is a network error, 'bad port'.
+const BAD_PORTS = new Set([
+  '1', '7', '9', '11', '13', '15', '17', '19', '20', '21', '22', '23', '25', '37', '42', '43', '53', '69', '77', '79',
+  '87', '95', '101', '102', '103', '104', '109', '110', '111', '113', '115', '117', '119', '123', '135', '137',
+  '139', '143', '161', '179', '389', '427', '465', '512', '513', '514', '515', '526', '530', '531', '532',
+  '540', '548', '554', '556', '563', '587', '601', '636', '989', '990', '993', '995', '1719', '1720', '1723',
+  '2049', '3659', '4045', '4190', '5060', '5061', '6000', '6566', '6665', '6666', '6667', '6668', '6669', '6679',
+  '6697', '10080',
+]);
+const isBadPort = (url) => (url.protocol === 'http:' || url.protocol === 'https:') && BAD_PORTS.has(url.port);
+
 /** undici's TypeError('fetch failed') with the network error as its cause. */
 const fetchFailed = (cause) => Object.assign(new TypeError('fetch failed'), { cause });
 
@@ -166,6 +178,7 @@ async function loopbackFetch(getHttp, request, target, initHeaders) {
           if (/^content-(type|length|encoding|language|location)$/.test(headers[i][0])) headers.splice(i, 1);
         }
       }
+      if (isBadPort(url)) throw fetchFailed(new Error('bad port'));
       const next = kernelRoute(url);
       if (!next) {
         // Off the loopback: the platform's fetch takes it from here.
@@ -244,13 +257,15 @@ export function createFetch(ctx, { handles, getHttp } = {}) {
     // go to the host's loopback, or nowhere in a browser).
     let request;
     let target = null;
-    if (getHttp) {
-      try {
-        request = new Request(input, init);
-        target = kernelRoute(new URL(request.url));
-      } catch {
-        target = null;
-      }
+    try {
+      request = new Request(input, init);
+    } catch {
+      request = undefined;
+    }
+    if (request) {
+      const url = new URL(request.url);
+      if (isBadPort(url)) throw fetchFailed(new Error('bad port'));
+      if (getHttp) target = kernelRoute(url);
     }
     if (target) {
       const result = await track(loopbackFetch(getHttp, request, target, init?.headers));

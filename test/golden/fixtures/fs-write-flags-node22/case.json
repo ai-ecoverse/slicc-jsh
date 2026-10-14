@@ -1,0 +1,13 @@
+{
+  "description": "writeFile/appendFile (sync, callback, promises) with ax, ax+, wx, wx+, a+, a, w, r+ on an existing and a missing file: the x flags are exclusive (EEXIST), as Node's",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

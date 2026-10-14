@@ -1,0 +1,78 @@
+writeFileSync ax existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/writeFileSync-ax-existing'
+writeFileSync ax "old;" "new"
+writeFile ax existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/writeFile-ax-existing'
+writeFile ax "old;" "new"
+promises.writeFile ax existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/promises.writeFile-ax-existing'
+promises.writeFile ax "old;" "new"
+appendFileSync ax existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/appendFileSync-ax-existing'
+appendFileSync ax "old;" "new"
+appendFile ax existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/appendFile-ax-existing'
+appendFile ax "old;" "new"
+promises.appendFile ax existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/promises.appendFile-ax-existing'
+promises.appendFile ax "old;" "new"
+writeFileSync ax+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/writeFileSync-ax+-existing'
+writeFileSync ax+ "old;" "new"
+writeFile ax+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/writeFile-ax+-existing'
+writeFile ax+ "old;" "new"
+promises.writeFile ax+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/promises.writeFile-ax+-existing'
+promises.writeFile ax+ "old;" "new"
+appendFileSync ax+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/appendFileSync-ax+-existing'
+appendFileSync ax+ "old;" "new"
+appendFile ax+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/appendFile-ax+-existing'
+appendFile ax+ "old;" "new"
+promises.appendFile ax+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/promises.appendFile-ax+-existing'
+promises.appendFile ax+ "old;" "new"
+writeFileSync wx existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/writeFileSync-wx-existing'
+writeFileSync wx "old;" "new"
+writeFile wx existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/writeFile-wx-existing'
+writeFile wx "old;" "new"
+promises.writeFile wx existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/promises.writeFile-wx-existing'
+promises.writeFile wx "old;" "new"
+appendFileSync wx existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/appendFileSync-wx-existing'
+appendFileSync wx "old;" "new"
+appendFile wx existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/appendFile-wx-existing'
+appendFile wx "old;" "new"
+promises.appendFile wx existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/promises.appendFile-wx-existing'
+promises.appendFile wx "old;" "new"
+writeFileSync wx+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/writeFileSync-wx+-existing'
+writeFileSync wx+ "old;" "new"
+writeFile wx+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/writeFile-wx+-existing'
+writeFile wx+ "old;" "new"
+promises.writeFile wx+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/promises.writeFile-wx+-existing'
+promises.writeFile wx+ "old;" "new"
+appendFileSync wx+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/appendFileSync-wx+-existing'
+appendFileSync wx+ "old;" "new"
+appendFile wx+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/appendFile-wx+-existing'
+appendFile wx+ "old;" "new"
+promises.appendFile wx+ existing THROWS EEXIST open EEXIST: file already exists, open 'DIR/promises.appendFile-wx+-existing'
+promises.appendFile wx+ "old;" "new"
+writeFileSync a+ "old;new" "new"
+writeFile a+ "old;new" "new"
+promises.writeFile a+ "old;new" "new"
+appendFileSync a+ "old;new" "new"
+appendFile a+ "old;new" "new"
+promises.appendFile a+ "old;new" "new"
+writeFileSync a "old;new" "new"
+writeFile a "old;new" "new"
+promises.writeFile a "old;new" "new"
+appendFileSync a "old;new" "new"
+appendFile a "old;new" "new"
+promises.appendFile a "old;new" "new"
+writeFileSync w "new" "new"
+writeFile w "new" "new"
+promises.writeFile w "new" "new"
+appendFileSync w "new" "new"
+appendFile w "new" "new"
+promises.appendFile w "new" "new"
+writeFileSync r+ missing THROWS ENOENT open ENOENT: no such file or directory, open 'DIR/writeFileSync-r+-missing'
+writeFileSync r+ "new;" none
+writeFile r+ missing THROWS ENOENT open ENOENT: no such file or directory, open 'DIR/writeFile-r+-missing'
+writeFile r+ "new;" none
+promises.writeFile r+ missing THROWS ENOENT open ENOENT: no such file or directory, open 'DIR/promises.writeFile-r+-missing'
+promises.writeFile r+ "new;" none
+appendFileSync r+ missing THROWS ENOENT open ENOENT: no such file or directory, open 'DIR/appendFileSync-r+-missing'
+appendFileSync r+ "new;" none
+appendFile r+ missing THROWS ENOENT open ENOENT: no such file or directory, open 'DIR/appendFile-r+-missing'
+appendFile r+ "new;" none
+promises.appendFile r+ missing THROWS ENOENT open ENOENT: no such file or directory, open 'DIR/promises.appendFile-r+-missing'
+promises.appendFile r+ "new;" none
