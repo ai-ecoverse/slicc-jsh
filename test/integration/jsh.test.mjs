@@ -39,13 +39,33 @@ describe('kernel jsh', () => {
     }
   });
 
+  // As on Linux, running a script by path (binfmt or #!) needs its x bit
+  // (slicc-kernel 1.78.0+). A file kernel.writeFile writes is 0644, and
+  // neither the embedder nor a JS program can chmod yet
+  // (ai-ecoverse/slicc-kernel#495), so the runnable fixtures sit where the
+  // kernel's default mode is 0755: a package's bin/.
   it('runs a .jsh file through binfmt and through #!/usr/bin/jsh', async () => {
     const { kernel, run, close } = await withJsh();
     try {
-      await kernel.writeFile('/os/plain.jsh', "console.log('binfmt', process.argv.slice(2).join(','));\n");
-      await kernel.writeFile('/os/bang.jsh', "#!/usr/bin/jsh\nconsole.log('shebang', process.argv.slice(2).join(','));\n");
-      assert.deepEqual(await run(['/os/plain.jsh', 'a', 'b']), { status: 0, stdout: 'binfmt a,b\n', stderr: '' });
-      assert.deepEqual(await run(['/os/bang.jsh', 'c']), { status: 0, stdout: 'shebang c\n', stderr: '' });
+      const bin = '/node_modules/jsh-fixtures/bin';
+      await kernel.writeFile(`${bin}/plain.jsh`, "console.log('binfmt', process.argv.slice(2).join(','));\n");
+      await kernel.writeFile(`${bin}/bang.jsh`, "#!/usr/bin/jsh\nconsole.log('shebang', process.argv.slice(2).join(','));\n");
+      assert.deepEqual(await run([`${bin}/plain.jsh`, 'a', 'b']), { status: 0, stdout: 'binfmt a,b\n', stderr: '' });
+      assert.deepEqual(await run([`${bin}/bang.jsh`, 'c']), { status: 0, stdout: 'shebang c\n', stderr: '' });
+    } finally {
+      close();
+    }
+  });
+
+  it('a .jsh file without its x bit is not run by path (EACCES), but jsh <file> runs it', async () => {
+    const { kernel, run, close } = await withJsh();
+    try {
+      await kernel.writeFile('/os/noexec.jsh', "console.log('read by jsh');\n");
+      await kernel.writeFile('/os/noexec-bang.jsh', "#!/usr/bin/jsh\nconsole.log('read by jsh');\n");
+      for (const file of ['/os/noexec.jsh', '/os/noexec-bang.jsh']) {
+        await assert.rejects(run([file]), (err) => err.code === 'EACCES', file);
+      }
+      assert.deepEqual(await run(['jsh', 'noexec.jsh']), { status: 0, stdout: 'read by jsh\n', stderr: '' });
     } finally {
       close();
     }
