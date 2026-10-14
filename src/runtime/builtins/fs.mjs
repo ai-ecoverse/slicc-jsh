@@ -5,6 +5,49 @@
 import { trackPromise } from '../async-handles.mjs';
 import { createCp } from './fs-cp.mjs';
 import { UV_ERRORS } from '../node-bindings.mjs';
+import {
+  ERR_INVALID_ARG_TYPE,
+  ERR_INVALID_ARG_VALUE,
+  validateInt32,
+  validateInteger,
+  validateUint32,
+} from '../node-errors.mjs';
+
+// Node's argument checks (lib/internal/fs/utils.js), before any call.
+/** getValidatedFd: an int32 >= 0. */
+function validatedFd(fd) {
+  validateInt32(fd, 'fd', 0);
+  return fd;
+}
+/** parseFileMode: a uint32, or an octal string. */
+function parseFileMode(value, name, def) {
+  value ??= def;
+  if (typeof value === 'string') {
+    if (!/^[0-7]+$/.test(value)) throw ERR_INVALID_ARG_VALUE(name, value, 'must be a 32-bit unsigned integer or an octal string');
+    value = Number.parseInt(value, 8);
+  }
+  validateUint32(value, name);
+  return value;
+}
+/** toUnixTimestamp: a Date, a number of seconds, or a numeric string. */
+function toUnixTimestamp(time, name = 'time') {
+  // eslint-disable-next-line eqeqeq
+  if (typeof time === 'string' && +time == time) return +time;
+  if (Number.isFinite(time)) return time < 0 ? Date.now() / 1000 : time;
+  if (time instanceof Date || Object.prototype.toString.call(time) === '[object Date]') return time.getTime() / 1000;
+  throw ERR_INVALID_ARG_TYPE(name, ['Date', 'Time in seconds'], time);
+}
+/** getValidatedPath's type check: a string, a Buffer or a URL (a file: URL is a path by then). */
+function validatePathType(p) {
+  if (typeof p === 'string' || p instanceof Uint8Array || (p && typeof p === 'object' && typeof p.href === 'string')) return;
+  throw ERR_INVALID_ARG_TYPE('path', ['string', 'Buffer', 'URL'], p);
+}
+/** Node's argument errors: thrown at the call, never given to a callback. */
+const isArgError = (err) => /^ERR_(INVALID_ARG_TYPE|INVALID_ARG_VALUE|OUT_OF_RANGE|MISSING_ARGS)$/.test(err?.code ?? '');
+/** A uid / gid: -1 (keep) up to kMaxUserId. */
+function validateId(id, name) {
+  validateInteger(id, name, -1, 4294967295);
+}
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -965,6 +1008,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       return fd;
     },
     readSync(fd, buffer, offset, length, position) {
+      validatedFd(fd);
       const { bufOffset, length: len, position: filePosition } = parseReadSyncArgs(
         buffer,
         offset,
@@ -1002,6 +1046,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
     },
     writeSync(fd, data, offset, length, position) {
+      validatedFd(fd);
       if (fd === 1 || fd === 2) {
         const { bytes } = parseWriteSyncArgs(data, offset, length, position);
         ctx.sync.write(fd, bytes);
@@ -1026,6 +1071,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
     },
     fstatSync(fd, options) {
+      validatedFd(fd);
       const ent = fdTable.get(fd);
       if (!ent) throw nodeFsError('EBADF', 'fstat', undefined);
       try {
@@ -1035,6 +1081,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
     },
     ftruncateSync(fd, len = 0) {
+      validatedFd(fd);
+      validateInteger(len, 'len');
       const ent = fdTable.get(fd);
       if (!ent) throw nodeFsError('EBADF', 'ftruncate', undefined);
       try {
@@ -1052,6 +1100,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
     },
     closeSync(fd) {
+      validatedFd(fd);
       if (fd === 0 || fd === 1 || fd === 2) return;
       if (!fdTable.has(fd)) throw nodeFsError('EBADF', 'close', undefined);
       const ent = fdTable.get(fd);
@@ -1158,37 +1207,64 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     },
     // The kernel's JS fs has no mode bits, owners or times to set: these
     // check that the path exists, as Node's do, and change nothing.
-    chmodSync(p) {
+    chmodSync(p, mode) {
+      validatePathType(p);
+      parseFileMode(mode, 'mode');
       mustExist(p, 'chmod');
     },
-    lchmodSync(p) {
+    lchmodSync(p, mode) {
+      validatePathType(p);
+      parseFileMode(mode, 'mode');
       mustExist(p, 'lchmod');
     },
-    fchmodSync(fd) {
+    fchmodSync(fd, mode) {
+      validatedFd(fd);
+      parseFileMode(mode, 'mode');
       syncApi.fstatSync(fd);
     },
-    chownSync(p) {
+    chownSync(p, uid, gid) {
+      validatePathType(p);
+      validateId(uid, 'uid');
+      validateId(gid, 'gid');
       mustExist(p, 'chown');
     },
-    lchownSync(p) {
+    lchownSync(p, uid, gid) {
+      validatePathType(p);
+      validateId(uid, 'uid');
+      validateId(gid, 'gid');
       mustExist(p, 'lchown');
     },
-    fchownSync(fd) {
+    fchownSync(fd, uid, gid) {
+      validatedFd(fd);
+      validateId(uid, 'uid');
+      validateId(gid, 'gid');
       syncApi.fstatSync(fd);
     },
-    utimesSync(p) {
+    utimesSync(p, atime, mtime) {
+      validatePathType(p);
+      // Node's utimes / lutimes name both `time`.
+      toUnixTimestamp(atime);
+      toUnixTimestamp(mtime);
       mustExist(p, 'utime');
     },
-    lutimesSync(p) {
+    lutimesSync(p, atime, mtime) {
+      validatePathType(p);
+      toUnixTimestamp(atime);
+      toUnixTimestamp(mtime);
       mustExist(p, 'lutime');
     },
-    futimesSync(fd) {
+    futimesSync(fd, atime, mtime) {
+      validatedFd(fd);
+      toUnixTimestamp(atime, 'atime');
+      toUnixTimestamp(mtime, 'mtime');
       syncApi.fstatSync(fd);
     },
     fsyncSync(fd) {
+      validatedFd(fd);
       if (fd !== 0 && fd !== 1 && fd !== 2 && !fdTable.has(fd)) throw nodeFsError('EBADF', 'fsync', undefined);
     },
     fdatasyncSync(fd) {
+      validatedFd(fd);
       if (fd !== 0 && fd !== 1 && fd !== 2 && !fdTable.has(fd)) throw nodeFsError('EBADF', 'fdatasync', undefined);
     },
     opendirSync(p, options) {
@@ -1343,6 +1419,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         const result = fn(...syncArgs);
         queueMicrotask(() => cb(null, result));
       } catch (err) {
+        if (isArgError(err)) throw err;
         queueMicrotask(() => cb(err));
       }
     };
@@ -1884,6 +1961,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     open: callbackify(syncApi.openSync),
     close: callbackify(syncApi.closeSync),
     read(fd, buffer, offset, length, position, callback) {
+      validatedFd(fd);
       const parsed = parseReadCallbackArgs(buffer, offset, length, position, callback);
       const cb = requireCallback(parsed.callback);
       queueMicrotask(() => {
@@ -1902,6 +1980,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       });
     },
     write(fd, data, offset, length, position, callback) {
+      validatedFd(fd);
       const parsed = parseWriteCallbackArgs(data, offset, length, position, callback);
       const cb = requireCallback(parsed.callback);
       queueMicrotask(() => {

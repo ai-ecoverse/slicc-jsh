@@ -41,7 +41,11 @@ export function deprecate(fn, msg, code) {
     if (!process?.noDeprecation && !warned) {
       warned = true;
       if (typeof process?.emitWarning === 'function') {
-        if (code !== undefined) {
+        // Node's getDeprecationWarningEmitter: the code 'ExperimentalWarning'
+        // is the warning's type (util.getCallSite's), not a deprecation code.
+        if (code === 'ExperimentalWarning') {
+          process.emitWarning(msg, code, deprecated);
+        } else if (code !== undefined) {
           if (!codesWarned.has(code)) {
             process.emitWarning(msg, 'DeprecationWarning', code, deprecated);
             codesWarned.add(code);

@@ -1,0 +1,13 @@
+{
+  "description": "Node's argument checks before the call: fd (int32 >= 0) of the f* calls, then mode / len / uid / gid / times, a path's type; callback forms throw them at the call. util.setTraceSigInt takes any value; util.getCallSite warns with type ExperimentalWarning",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
