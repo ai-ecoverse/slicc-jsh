@@ -3,6 +3,7 @@
  * spawnSync / execSync / execFileSync on ctx.sync.run (slicc-kernel 1.65.0+).
  * fork stays ERR_NOT_SUPPORTED.
  */
+import { kernelVersion } from '../kernel-version.mjs';
 import { trackPromise } from '../async-handles.mjs';
 import {
   ERR_INVALID_ARG_TYPE,
@@ -1091,9 +1092,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
    * Whether ctx.sync.run takes program fd numbers and stderr: 'stdout'
    * (slicc-kernel 1.70.0+, ai-ecoverse/slicc-kernel#432). Unknown until the
    * first call that needs it: an older kernel refuses those with EINVAL
-   * before it starts anything, and the call is then made the old way.
+   * before it starts anything, and the call is then made the old way. A
+   * kernel that says its version (1.88.0+, ctx.kernel) has them.
    */
-  let syncRunTakesFds;
+  let syncRunTakesFds = kernelVersion(ctx) !== null ? true : undefined;
 
   /**
    * How each stdio slot goes to ctx.sync.run. `how` is the kernel's choice,
