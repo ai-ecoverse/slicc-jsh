@@ -317,7 +317,7 @@ class Process extends EventEmitter {
    * prints `(node:PID) [CODE] Name: message`.
    */
   _setupWarnings() {
-    const has = (flag) => this.execArgv.includes(flag);
+    const has = (flag) => (this._options ?? this.execArgv).includes(flag);
     if (has('--no-deprecation')) this.noDeprecation = true;
     if (has('--throw-deprecation')) this.throwDeprecation = true;
     if (has('--trace-deprecation')) this.traceDeprecation = true;
@@ -865,7 +865,7 @@ const OWN_INTERNALS = ['_getActiveHandles', '_getActiveRequests', '_rawDebug'];
 const JSH_INTERNALS = [
   '_assignedExitCode', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
   '_dispatchSignal', '_evalCode', '_exitError', '_forcedExitCode', '_handles', '_nodeLib', '_onExit',
-  '_onHardExit', '_reportSignal', '_reportSignalWrite', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
+  '_onHardExit', '_options', '_reportSignal', '_reportSignalWrite', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
   '_stdio', '_stdoutWrite', '_umask', '_uncaughtCapture', '_writeStderr', '_writeStdout',
 ];
 

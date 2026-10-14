@@ -288,7 +288,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
       (vm ??= createVm({
         cwd: () => process.cwd(),
         importFrom: (specifier, referrer, options) => process._importFrom(specifier, referrer, options),
-        execArgv: () => process.execArgv ?? [],
+        execArgv: () => process._options ?? process.execArgv ?? [],
         emitWarning: (message, type) => process.emitWarning(message, type),
       })),
     module: () => ModuleExport,
@@ -331,7 +331,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     },
     load(id) {
       const bare = id.startsWith('node:') ? id.slice(5) : id;
-      if (bare.startsWith('internal/') && process.execArgv.includes('--expose-internals')) {
+      if (bare.startsWith('internal/') && (process._options ?? process.execArgv).includes('--expose-internals')) {
         const mod = process._nodeLib().internal(bare);
         if (mod !== undefined) return mod;
       }

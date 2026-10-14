@@ -1,0 +1,155 @@
+== NODE_OPTIONS="--no-deprecation" show.js: status 0
+execArgv [] noDeprecation true title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-warnings" show.js: status 0
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+== NODE_OPTIONS="--no-warnings   --title=from-env" show.js: status 0
+execArgv [] noDeprecation undefined title from-env stackTraceLimit 10
+== NODE_OPTIONS="--title=env" --title=cli show.js: status 0
+execArgv ["--title=cli"] noDeprecation undefined title cli stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--stack-trace-limit=3" show.js: status 0
+execArgv [] noDeprecation undefined title node stackTraceLimit 3
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--stack-trace-limit=3" --stack-trace-limit=4 show.js: status 0
+execArgv ["--stack-trace-limit=4"] noDeprecation undefined title node stackTraceLimit 4
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="-r ./r1.js" -r ./r2.js show.js: status 0
+preload r1
+preload r2
+execArgv ["-r","./r2.js"] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--require=./r1.js --import ./i1.mjs" show.js: status 0
+preload r1
+import i1
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--require \"./r q.js\"" show.js: status 0
+preload with a space
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="-r \"./r\\\"q.js\"" show.js: status 0
+preload with a quote
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="\"--no-deprecation\"" show.js: status 0
+execArgv [] noDeprecation true title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-dep\"recation\"" show.js: status 0
+execArgv [] noDeprecation true title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no_deprecation" show.js: status 0
+execArgv [] noDeprecation true title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-warnings=x" show.js: status 0
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+== NODE_OPTIONS="foo --no-deprecation" show.js: status 0
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-deprecation foo" show.js: status 0
+execArgv [] noDeprecation true title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="'--no-deprecation'" show.js: status 0
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="   " show.js: status 0
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--input-type=module" -e console.log(typeof require): status 0
+undefined
+== NODE_OPTIONS="--max-http-header-size=100 --dns-result-order=ipv4first" show.js: status 0
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--eval 1" show.js: status 9
+node: --eval is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="-e 1" show.js: status 9
+node: -e is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="--bogus" show.js: status 9
+node: --bogus is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="--bogus" --version: status 9
+node: --bogus is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="--" show.js: status 9
+node: -- is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="--expose-internals" show.js: status 9
+node: --expose-internals is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="\"--no-deprecation" show.js: status 9
+node: invalid value for NODE_OPTIONS (unterminated string)
+
+== NODE_OPTIONS="\"a\\" show.js: status 9
+node: invalid value for NODE_OPTIONS (invalid escape)
+
+== NODE_OPTIONS="--require" show.js: status 9
+node: --require requires an argument
+== NODE_OPTIONS="--require=" show.js: status 9
+node: --require= requires an argument
+== NODE_OPTIONS="-r" show.js: status 9
+node: -r requires an argument
+== NODE_OPTIONS="--title" show.js: status 9
+node: --title requires an argument
+== NODE_OPTIONS="--input-type=bad" show.js: status 9
+node: --input-type must be "module","commonjs", "module-typescript" or "commonjs-typescript"
+== NODE_OPTIONS="--stack-trace-limit=abc" show.js: status 9
+Error: illegal value for flag --stack-trace-limit=abc of type int
+Try --help for options
+node: bad option: --stack-trace-limit=abc
+node: bad option: --harmony-import-attributes
+node: bad option: --no-harmony-import-assertions
+node: bad option: --experimental-wasm-imported-strings
+node: bad option: --experimental-wasm-memory64
+node: bad option: --experimental-wasm-exnref
+== NODE_OPTIONS="--bogus" --bad-cli-option show.js: status 9
+node: --bogus is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="--require --no-warnings" show.js: status 9
+node: --require requires an argument
+== NODE_OPTIONS="" --require --no-warnings show.js: status 9
+node: --require requires an argument
+== NODE_OPTIONS="--title --x" show.js: status 9
+node: --title requires an argument
+== NODE_OPTIONS="" --import --x show.js: status 9
+node: --import requires an argument
+== NODE_OPTIONS="" -e -1: status 9
+node: -e requires an argument
+== NODE_OPTIONS="-C=foo" show.js: status 9
+node: -C=foo is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="-r=./r1.js" show.js: status 9
+node: -r=./r1.js is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="" -r=./r1.js show.js: status 9
+node: bad option: -r=./r1.js
+== NODE_OPTIONS="--enable-source-maps --no-enable-source-maps" -p process.sourceMapsEnabled: status 0
+false
+== NODE_OPTIONS="--no-enable-source-maps" --enable-source-maps -p process.sourceMapsEnabled: status 0
+true
+== NODE_OPTIONS="" --no-enable-source-maps -p process.sourceMapsEnabled: status 0
+false
+== NODE_OPTIONS="--no-deprecation" --deprecation show.js: status 0
+execArgv ["--deprecation"] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-warnings" --warnings show.js: status 0
+execArgv ["--warnings"] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-preserve-symlinks" show.js: status 0
+execArgv [] noDeprecation undefined title node stackTraceLimit 10
+(node:PID) Warning: a warning
+(Use `node --trace-warnings ...` to show where the warning was created)
+== NODE_OPTIONS="--no-require" show.js: status 9
+node: --no-require is an invalid negation because it is not a boolean option
+== NODE_OPTIONS="--no-no-deprecation" show.js: status 9
+node: --no-no-deprecation is not allowed in NODE_OPTIONS
