@@ -84,7 +84,8 @@ await step('eval', () => browser.eval(tab, 'window.marker'));
 await step('eval function', () => browser.eval(tab, () => ({ title: document.title, path: location.pathname })));
 await step('eval throws', () => browser.eval(tab, 'missing.thing'));
 await step('evalAsync', () => browser.evalAsync(tab, 'new Promise((r) => setTimeout(() => r(document.title), 10))'));
-await step('findTab domain', () => browser.findTab({ domain: 'localhost' }).then((t) => t && t.url.startsWith(site)));
+// Both sites are on localhost (other ports), so the first localhost tab may be either's.
+await step('findTab domain', () => browser.findTab({ domain: 'localhost' }).then((t) => t && new URL(t.url).hostname));
 await step('findTab urlMatch', async () => (await browser.findTab({ urlMatch: new RegExp(site.split(':').pop() + '/app$') })).targetId === tab.targetId);
 await step('findTab none', () => browser.findTab({ domain: 'example.invalid' }));
 await step('cookie', () => browser.cookie(tab, 'jsh_sid'));
@@ -171,7 +172,7 @@ eval 42
 eval function {"title":"jsh browser site /app","path":"/app"}
 eval throws THROW ReferenceError: missing is not defined
 evalAsync jsh browser site /app
-findTab domain true
+findTab domain localhost
 findTab urlMatch true
 findTab none null
 cookie jsh-session-42
