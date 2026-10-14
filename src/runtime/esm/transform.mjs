@@ -69,7 +69,7 @@ function walk(node, visitor, parent = null) {
  *   hoistImports: string[],
  * }}
  */
-export function transformEsm(source, filename) {
+export function transformEsm(source, filename, sourceUrl = filename) {
   // A hashbang line goes, its newline stays (lines keep their numbers).
   const body = source.startsWith('#!') ? (source.includes('\n') ? source.slice(source.indexOf('\n')) : '') : source;
   let ast;
@@ -337,7 +337,7 @@ export function transformEsm(source, filename) {
   const code = applyReplacements(body, replacements);
 
   const preamble = [...exportSetup, ...hoistImports].join('\n');
-  const out = `${preamble ? preamble + '\n' : ''}${code}\n//# sourceURL=${filename}\n`;
+  const out = `${preamble ? preamble + '\n' : ''}${code}\n//# sourceURL=${sourceUrl}\n`;
   return {
     code: out,
     // Lines `code` puts before the module's own first line.

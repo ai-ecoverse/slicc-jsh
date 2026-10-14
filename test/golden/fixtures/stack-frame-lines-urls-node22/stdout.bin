@@ -1,0 +1,42 @@
+    at Module.f (file://DIR/m.mjs?v=1:2:10)
+    at Module.f (file://DIR/m.mjs#h:2:10)
+    at Module.f (file://DIR/m.mjs:2:10)
+== q-main.mjs: status 1
+file://DIR/t.mjs?x=2:2
+  throw new Error('boom');
+        ^
+
+Error: boom
+    at g (file://DIR/t.mjs?x=2:2:9)
+    at file://DIR/q-main.mjs:2:1
+
+Node.js v22.22.0
+== hashbang.js: status 1
+DIR/hashbang.js:4
+  throw new Error('after a hashbang');
+  ^
+
+Error: after a hashbang
+    at f (DIR/hashbang.js:4:9)
+    at Object.<anonymous> (DIR/hashbang.js:6:1)
+
+Node.js v22.22.0
+== hashbang-assert.js: status 1
+node:internal/assert/utils:77
+    throw err;
+    ^
+
+AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+  assert.ok(1 === 2)
+
+    at Object.<anonymous> (DIR/hashbang-assert.js:3:8) {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.22.0

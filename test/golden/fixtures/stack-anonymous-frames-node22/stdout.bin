@@ -1,0 +1,41 @@
+Error: arrow in map
+    at DIR/script.js:8:24
+    at Array.map (<anonymous>)
+    at named (DIR/script.js:8:14)
+    at Object.<anonymous> (DIR/script.js:10:17)
+Error: function expression in map
+    at anon (DIR/script.js:12:10)
+    at Array.map (<anonymous>)
+    at Object.<anonymous> (DIR/script.js:14:21)
+Error: anonymous function in map
+    at DIR/script.js:16:10
+    at Array.map (<anonymous>)
+    at Object.<anonymous> (DIR/script.js:15:21)
+Error: reviver on its holder
+    at Array.<anonymous> (DIR/script.js:19:22)
+    at JSON.parse (<anonymous>)
+    at Object.<anonymous> (DIR/script.js:18:22)
+Error: top level
+    at Object.<anonymous> (DIR/script.js:21:17)
+Error: method of an object
+    at Object.m (DIR/script.js:22:53)
+    at Object.<anonymous> (DIR/script.js:23:21)
+Error: called arrow
+    at DIR/script.js:24:24
+    at Object.<anonymous> (DIR/script.js:24:56)
+CallSite of an arrow [null,null,null,true,false,"DIR/script.js:40:48"]
+CallSite of a reviver [null,null,"Array",false,false,"Array.<anonymous> (DIR/script.js:42:22)"]
+CallSite of obj.m [null,"m","Object",false,false,"Object.m (DIR/script.js:44:54)"]
+Error: promise callback
+    at DIR/script.js:26:19
+Error: in a
+    at a (DIR/script.js:49:9)
+    at async b (DIR/script.js:52:3)
+Error: async method
+    at K.m (DIR/script.js:65:11)
+    at async DIR/script.js:69:3
+Error: anonymous async callback
+    at DIR/script.js:59:11
+    at async DIR/script.js:57:3
+Error: timer callback
+    at Timeout._onTimeout (DIR/script.js:28:34)

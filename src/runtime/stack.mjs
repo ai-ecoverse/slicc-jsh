@@ -52,9 +52,13 @@ function isKernelFrame(frame) {
  */
 const esmFrames = new Map();
 const esmColumns = new Map();
-export function registerEsmFrames(filename, extraLines, columnShifts) {
+// A module's URL when it isn't its path's (a query or fragment).
+const esmUrls = new Map();
+export function registerEsmFrames(filename, extraLines, columnShifts, url) {
   if (typeof filename !== 'string' || !filename.startsWith('/')) return;
   esmFrames.set(filename, extraLines);
+  if (typeof url === 'string' && url !== fileUrl(filename)) esmUrls.set(filename, url);
+  else esmUrls.delete(filename);
   if (columnShifts && Object.keys(columnShifts).length) esmColumns.set(filename, columnShifts);
   else esmColumns.delete(filename);
 }
@@ -171,9 +175,29 @@ function wrapRaw(frame) {
   const typeName = frame.getTypeName?.();
   const userName = frame.getFunctionName?.();
 
+  // V8 names an anonymous function in Function-constructor code `eval`.
+  // As V8 prints a real anonymous one: called with no receiver (an arrow, a
+  // callback), its location alone; on a receiver, `Type.<anonymous>` (a
+  // module's top level runs on `exports`: Object.<anonymous>).
+  const v8TopLevel = typeof frame.isToplevel === 'function' ? frame.isToplevel() : null;
+  const v8Ctor = typeof frame.isConstructor === 'function' ? frame.isConstructor() : false;
   let fn = userName || null;
-  if (fn === 'eval' || fn === 'Object.eval' || fn === '<anonymous>') {
-    fn = 'Object.<anonymous>';
+  let locationOnly = false;
+  // V8's getFunctionName() of such a function is null: `fn` is a label only.
+  const anonymous = fn === 'eval' || fn === 'Object.eval' || fn === '<anonymous>';
+  if (anonymous) {
+    if (v8TopLevel === true && !v8Ctor) {
+      fn = null;
+      locationOnly = true;
+    } else if (typeName === 'Object' && method && !v8Ctor) {
+      // V8's AppendMethodCall with no function name: Type.method (other
+      // types' method calls are named below), or Type.<anonymous>.
+      fn = `Object.${method}`;
+    } else if (typeName && typeName !== 'Object' && !method && !v8Ctor) {
+      fn = `${typeName}.<anonymous>`;
+    } else {
+      fn = 'Object.<anonymous>';
+    }
   }
   const isAnon = fn === 'Object.<anonymous>';
 
@@ -185,7 +209,7 @@ function wrapRaw(frame) {
     } else {
       fn = `${typeName}.${method}`;
     }
-  } else if (!fn) {
+  } else if (!fn && !locationOnly) {
     fn = parsed?.name || null;
     if (fn === 'eval' || fn === 'Object.eval' || fn === '<anonymous>') {
       fn = 'Object.<anonymous>';
@@ -218,7 +242,7 @@ function wrapRaw(frame) {
     getTypeName: () => (ctor ? null : typeName),
     getFunction: () => frame.getFunction?.(),
     getFunctionName: () => {
-      if (fn === 'Object.<anonymous>') return null;
+      if (anonymous || fn === 'Object.<anonymous>') return null;
       if (isToplevel && !ctor) return null;
       if (fn?.startsWith('Object.') && !ctor) return fn.slice(7);
       const as = fn && /^[^.[]+\.([^ ]+) \[as /.exec(fn);
@@ -241,20 +265,26 @@ function wrapRaw(frame) {
     isPromiseAll: () => frame.isPromiseAll?.() ?? false,
     getPromiseIndex: () => frame.getPromiseIndex?.(),
     toString() {
-      const f = file || 'unknown';
+      // V8: a frame with no script (a builtin's) is `<anonymous>`.
+      const f = file || '<anonymous>';
       const pos = line != null ? `:${line}:${col ?? 0}` : '';
+      // V8: a frame resumed after an await is `async …`.
+      const prefix = frame.isAsync?.() ? 'async ' : '';
+      // V8: an anonymous function called with no receiver (an arrow, a
+      // callback) is its location alone.
+      if (!fn && (locationOnly || (v8TopLevel === true && !ctor))) return `${prefix}${f}${pos}`;
       const label = fn || 'Object.<anonymous>';
       if (f === '[eval]' || String(f).includes('[eval]')) {
-        if (label === 'Object.<anonymous>') return `${f}${pos}`;
+        if (label === 'Object.<anonymous>') return `${prefix}${f}${pos}`;
       }
       if (ctor && fn) return `new ${fn} (${f}${pos})`;
-      return `${label} (${f}${pos})`;
+      return `${prefix}${label} (${f}${pos})`;
     },
   };
 }
 /** A frame in an ES module: Node's shape (file: URL, no receiver, top level unnamed). */
 function wrapEsmCallSite(frame, path, line) {
-  const url = fileUrl(path);
+  const url = esmUrls.get(path) ?? fileUrl(path);
   const col = esmColumn(path, line, frame.getColumnNumber?.() ?? 0);
   const ctor = typeof frame.isConstructor === 'function' ? frame.isConstructor() : false;
   let fn = frame.getFunctionName?.() || null;

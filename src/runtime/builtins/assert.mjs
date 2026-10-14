@@ -70,7 +70,8 @@ function findClosingParen(text, openIdx) {
 }
 
 function extractAssertCallFromSource(source, line, column) {
-  const lines = source.replace(/^#![^\n]*\n/, '').split('\n');
+  // A frame's lines are the file's own, its hashbang included.
+  const lines = source.split('\n');
   if (line < 1 || line > lines.length) return null;
   const startLineIdx = line - 1;
   let text = '';

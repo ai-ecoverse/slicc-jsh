@@ -1,0 +1,37 @@
+{
+  "description": "frames name a module by its URL with query / fragment (file:///x.mjs?v=1), uncaught reports included, and count a CommonJS file's hashbang line (stack, uncaught report, assert's source)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/hashbang-assert.js",
+      "from": "hashbang-assert.js"
+    },
+    {
+      "path": "/os/hashbang.js",
+      "from": "hashbang.js"
+    },
+    {
+      "path": "/os/m.mjs",
+      "from": "m.mjs"
+    },
+    {
+      "path": "/os/package.json",
+      "from": "package.json"
+    },
+    {
+      "path": "/os/q-main.mjs",
+      "from": "q-main.mjs"
+    },
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    },
+    {
+      "path": "/os/t.mjs",
+      "from": "t.mjs"
+    }
+  ]
+}

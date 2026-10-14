@@ -205,9 +205,11 @@ export function createCjs({
   }
 
   function stripHashbang(source) {
+    // Its line stays (empty), so frames name the file's own lines, as V8's
+    // hashbang comment does (and a source map's lines match).
     if (source.startsWith('#!')) {
       const nl = source.indexOf('\n');
-      return nl === -1 ? '' : source.slice(nl + 1);
+      return nl === -1 ? '' : source.slice(nl);
     }
     return source;
   }
