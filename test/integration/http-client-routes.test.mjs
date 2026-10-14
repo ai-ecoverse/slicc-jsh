@@ -179,6 +179,19 @@ describe('http.request without a route: ctx.fetch hands it to the embedder’s t
       traits: { manualRedirects: true, encodedBodies: false, crossOrigin: 'any' },
       async fetch(req) {
         seen.push({ url: req.url, method: req.method, headers: req.headers, body: req.body && new TextDecoder().decode(req.body) });
+        if (req.url.endsWith('/slow')) {
+          return {
+            status: 200,
+            statusText: 'OK',
+            headers: [['content-type', 'text/plain']],
+            body: (async function* () {
+              yield enc.encode('first ');
+              await new Promise((r) => setTimeout(r, 300));
+              yield enc.encode('later');
+            })(),
+            cancel() {},
+          };
+        }
         return {
           status: 201,
           statusText: '',
@@ -213,6 +226,48 @@ describe('http.request without a route: ctx.fetch hands it to the embedder’s t
     assert.equal(seen[0].method, 'POST');
     assert.equal(seen[0].body, 'body!');
     assert.deepEqual(seen[0].headers.filter(([k]) => k === 'x-a' || k === 'connection'), [['x-a', '1']]);
+  });
+
+  it('a streamed https body that pauses keeps the program alive to its end', async () => {
+    await kernel.writeFile(
+      '/os/slow.js',
+      program([
+        "const https = require('https');",
+        "await new Promise((resolve) => https.get('https://far.example/slow', (res) => { let b = ''; res.on('data', (d) => (b += d)); res.on('end', () => { console.log('https', JSON.stringify(b)); resolve(); }); }));",
+        "await new Promise((resolve) => require('http').get('http://far.example/slow', (res) => { let b = ''; res.on('data', (d) => (b += d)); res.on('end', () => { console.log('http', JSON.stringify(b)); resolve(); }); }));",
+      ])
+    );
+    const r = await kernel.run(['node', 'slow.js'], { cwd: '/os' });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(r.stdout, 'https "first later"\nhttp "first later"\n');
+  });
+
+  it('what fetch can’t send is refused, not changed: a GET body, TRACE; a proxy-like agent gets the connect error, a plain Agent the fallback', async () => {
+    const before = seen.length;
+    await kernel.writeFile(
+      '/os/refused.js',
+      program([
+        ...GET,
+        "console.log((await get('http://far.example/g', {}, 'a body')).error);",
+        "console.log((await get('http://far.example/t', { method: 'TRACE' })).error);",
+        "const proxied = new http.Agent(); proxied.createConnection = (o, cb) => require('net').createConnection(o, cb);",
+        "console.log((await get('http://far.example/p', { agent: proxied })).error);",
+        "console.log((await get('http://far.example/k', { agent: new http.Agent({ keepAlive: true }) })).status);",
+      ])
+    );
+    const r = await kernel.run(['node', 'refused.js'], { cwd: '/os' });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(
+      r.stdout,
+      [
+        "ERR_NOT_SUPPORTED undefined slicc-jsh: a GET request with a body can't go through fetch (no route to far.example in the kernel)",
+        "ERR_NOT_SUPPORTED undefined slicc-jsh: a TRACE request can't go through fetch (no route to far.example in the kernel)",
+        'ENOTFOUND getaddrinfo getaddrinfo ENOTFOUND far.example',
+        '201',
+        '',
+      ].join('\n')
+    );
+    assert.deepEqual(seen.slice(before).map((x) => x.url), ['http://far.example/k']);
   });
 });
 

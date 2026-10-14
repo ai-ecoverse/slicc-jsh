@@ -192,7 +192,8 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 - **Buffered upload.** The request body is sent whole, after `end()`.
 - **Streamed download.** The response body streams as it arrives. `set-cookie` is an array, and a missing reason phrase is Node's.
 - **Redirects.** Requests use `redirect: 'manual'`, so a 3xx shows as `statusCode` and `Location`, as in Node. A browser transport can't do that (an opaque redirect), so there jsh follows redirects instead (see below).
-- **Agents.** A request with its own agent (a proxy agent, say), a `socketPath`, or a kernel without `ctx.fetch` gets the connect error instead.
+- **Refused, not changed.** What fetch can't send fails with `ERR_NOT_SUPPORTED` before anything goes out: the methods it forbids (`CONNECT`, `TRACE`, `TRACK`), and a `GET` or `HEAD` with a body.
+- **Agents.** A request with its own agent (a subclass of `http.Agent`, or one with its own `createConnection`, `addRequest` or `createSocket`, as a proxy's has), a `socketPath`, or a kernel without `ctx.fetch` gets the connect error instead. A plain `new http.Agent(…)` takes the fallback.
 - If `fetch` has no network either, the error is the connect's (`getaddrinfo ENOTFOUND`, `connect ENETUNREACH`).
 
 **`https` client.** `https.request` and `https.get` take the fetch fallback above every time.

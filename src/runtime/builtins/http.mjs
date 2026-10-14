@@ -985,8 +985,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       const opts = this.#opts;
       const host = opts.hostname ?? opts.host ?? '127.0.0.1';
       if (isLoopbackHost(host) || opts.socketPath || typeof ctx?.fetch !== 'function') return false;
+      // jsh's own agents only: a subclass, or an Agent with its own
+      // createConnection / addRequest / createSocket (a proxy's), routes the
+      // request somewhere fetch wouldn't.
       const agent = opts.agent;
-      if (agent !== undefined && agent !== false && agent !== globalAgent && agent?.constructor !== Agent) return false;
+      const ownAgent =
+        agent === undefined ||
+        agent === false ||
+        agent === globalAgent ||
+        (Object.getPrototypeOf(agent ?? {}) === Agent.prototype &&
+          !['createConnection', 'addRequest', 'createSocket'].some((k) => Object.prototype.hasOwnProperty.call(agent, k)));
+      if (!ownAgent) return false;
       this.#fetchMode = true;
       this.#noRouteError = err;
       try {

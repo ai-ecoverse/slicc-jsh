@@ -12,6 +12,7 @@
  * has ended; a browser transport can't do redirect: 'manual', so redirects
  * are followed there.
  */
+import { trackPromise } from '../async-handles.mjs';
 import { UV_ERRORS } from '../node-bindings.mjs';
 
 const ERRNO = Object.fromEntries(UV_ERRORS.map(([n, name]) => [name, n]));
@@ -29,6 +30,15 @@ const FETCH_OWNED = new Set([
   'trailer',
   'proxy-connection',
 ]);
+
+/** Methods the Fetch standard forbids (a Request with one throws). */
+const FETCH_FORBIDDEN_METHODS = new Set(['CONNECT', 'TRACE', 'TRACK']);
+
+function unsupported(what, host) {
+  const e = new Error(`slicc-jsh: ${what} can't go through fetch (no route to ${host} in the kernel)`);
+  e.code = 'ERR_NOT_SUPPORTED';
+  return e;
+}
 
 const isIp = (host) => /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || String(host).includes(':');
 
@@ -132,7 +142,9 @@ export function createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODE
             msg.push(null);
             return;
           }
-          const { value, done: end } = await reader.read();
+          // A pending read keeps the program alive, as Node's open socket does.
+          const pending = reader.read();
+          const { value, done: end } = await (handles ? trackPromise(handles, pending) : pending);
           if (end) {
             done = true;
             msg.complete = true;
@@ -196,10 +208,15 @@ export function createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODE
    * an abort rejects with the signal's reason.
    */
   async function send({ protocol, host, port, path, method, headers, body, signal, req }) {
+    const m0 = String(method || 'GET').toUpperCase();
+    // What fetch can't send, refused before anything goes out rather than
+    // sent as another request: the methods it forbids, and a GET / HEAD body.
+    if (FETCH_FORBIDDEN_METHODS.has(m0)) throw unsupported(`a ${m0} request`, host);
+    if ((m0 === 'GET' || m0 === 'HEAD') && body?.length) throw unsupported(`a ${m0} request with a body`, host);
     const defaultPort = protocol === 'https:' ? 443 : 80;
     const h = String(host).includes(':') && !String(host).startsWith('[') ? `[${host}]` : host;
     const url = `${protocol}//${h}${Number(port) === defaultPort ? '' : `:${port}`}${path || '/'}`;
-    const m = String(method || 'GET').toUpperCase();
+    const m = m0;
     let res;
     try {
       res = await fetchManual(url, {
@@ -211,7 +228,9 @@ export function createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODE
     } catch (err) {
       if (signal?.aborted) throw err;
       const code = err?.cause?.code ?? err?.code;
-      throw connectError(typeof code === 'string' ? code : 'ECONNREFUSED', host, port, err, { noNetwork: true });
+      // A failure with no errno (a header fetch refuses, …) is fetch's own.
+      if (typeof code !== 'string') throw err;
+      throw connectError(code, host, port, err, { noNetwork: true });
     }
     return incomingFrom(res, m, req);
   }
