@@ -276,8 +276,9 @@ srv.listen(0, '127.0.0.1', () => {
   });
 
   it('host WebSocket echo under nodeTransport (open, echo, close)', async () => {
-    // thr_vhnh9gvngc hostws.mjs: ctx.websocket via nodeTransport reaches HOST 127.0.0.1.
-    // A kernel-loopback TCP probe must never gate this path.
+    // thr_vhnh9gvngc hostws.mjs: ctx.websocket via nodeTransport reaches the
+    // HOST. In the kernel, 127.0.0.1 is the kernel's own loopback (as for
+    // fetch); the real machine's is host.slicc.internal.
     const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
     wss.on('connection', (s) => {
       s.on('message', (m) => s.send(`echo:${m}`));
@@ -289,7 +290,7 @@ srv.listen(0, '127.0.0.1', () => {
     try {
       await kernel.writeFile(
         '/os/hostws.js',
-        `const w = new WebSocket('ws://127.0.0.1:${port}/');
+        `const w = new WebSocket('ws://host.slicc.internal:${port}/');
 w.onopen = () => w.send('hi');
 w.onmessage = (m) => { console.log('got', m.data); w.close(); };
 w.onerror = () => console.log('error');

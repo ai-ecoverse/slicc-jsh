@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +21,28 @@ const conditionPackage = {
   'node_modules/@ai-ecoverse/sliccy-where/host.js': "module.exports = 'host';\n",
   'where.jsh': "console.log(require('sliccy:where'));\n",
 };
+
+/**
+ * pnpm's global layout, as `pnpm add -g` leaves it: an older pnpm ≤ 10
+ * global/5, and pnpm ≥ 11 groups (one per add) with their 64-hex links. As
+ * for the kernel's commands, the first group in sorted order wins;
+ * `sliccy-older` is only in the pnpm ≤ 10 one.
+ */
+function pnpmHome(dir) {
+  const pkg = (base, name, value) => {
+    const at = join(dir, base, 'node_modules', name);
+    mkdirSync(at, { recursive: true });
+    writeFileSync(join(at, 'package.json'), JSON.stringify({ name, main: 'index.js' }));
+    writeFileSync(join(at, 'index.js'), `module.exports = ${JSON.stringify(value)};\n`);
+  };
+  pkg('global/v11/1-18de50e4fd642380-0', '@ai-ecoverse/sliccy-hello', 'first group');
+  pkg('global/v11/1-18de50e530a6b280-0', '@ai-ecoverse/sliccy-hello', 'second group');
+  pkg('global/v11/1-18de50e530a6b280-0', 'sliccy-plain', 'unscoped');
+  pkg('global/5', 'sliccy-older', 'pnpm 10');
+  symlinkSync(join(dir, 'global/v11/1-18de50e4fd642380-0'), join(dir, 'global/v11', 'a'.repeat(64)));
+  writeFileSync(join(dir, 'global.jsh'), "console.log(['hello', 'plain', 'older'].map((n) => require('sliccy:' + n)).join('|'));\n");
+}
+const GLOBAL_OUT = 'first group|unscoped|pnpm 10\n';
 
 describe('kernel jsh', () => {
   it('prints its version and usage', async () => {
@@ -80,6 +102,28 @@ describe('kernel jsh', () => {
       close();
     }
   });
+
+  it("finds a sliccy-* package in pnpm's global installs (PNPM_HOME), each pnpm add -g its own group", async () => {
+    const { kernel, run, close } = await withJsh();
+    const dir = mkdtempSync(join(tmpdir(), 'jsh-pnpm-home-'));
+    try {
+      pnpmHome(dir);
+      // kernel.writeFile has no symlinks; the link is left out here.
+      const walk = async (at, to) => {
+        for (const entry of (await import('node:fs')).readdirSync(at, { withFileTypes: true })) {
+          if (entry.isSymbolicLink()) continue;
+          if (entry.isDirectory()) await walk(join(at, entry.name), `${to}/${entry.name}`);
+          else await kernel.writeFile(`${to}/${entry.name}`, readFileSync(join(at, entry.name)));
+        }
+      };
+      await walk(dir, '/srv/pnpm');
+      const r = await run(['jsh', '/srv/pnpm/global.jsh'], { env: { PNPM_HOME: '/srv/pnpm' } });
+      assert.deepEqual(r, { status: 0, stdout: GLOBAL_OUT, stderr: '' });
+    } finally {
+      close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('host jsh', () => {
@@ -96,6 +140,23 @@ describe('host jsh', () => {
       const r = runHost(['where.jsh'], dir);
       assert.equal(r.stderr, '');
       assert.equal(r.stdout, 'host\n');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("finds a sliccy-* package in pnpm's global installs (PNPM_HOME)", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jsh-pnpm-home-'));
+    try {
+      pnpmHome(dir);
+      const r = spawnSync(process.execPath, [hostJsh, 'global.jsh'], {
+        cwd: dir,
+        encoding: 'utf8',
+        timeout: 30_000,
+        env: { ...process.env, PNPM_HOME: dir },
+      });
+      assert.equal(r.stderr, '');
+      assert.equal(r.stdout, GLOBAL_OUT);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

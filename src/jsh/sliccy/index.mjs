@@ -5,7 +5,8 @@
  *    `pool`, `skill`, `time`);
  * 2. `@ai-ecoverse/sliccy-<name>`, then `sliccy-<name>`, found with Node's
  *    algorithm from the script's directory, then from slicc-jsh's own
- *    location (so a global install next to a global `jsh` is found);
+ *    location (so a global install next to a global `jsh` is found), then
+ *    from each of pnpm's global installs (`pnpm add -g`; see globalRoots);
  * 3. an error: names that exist only inside SLICC say so, others list what
  *    is known and the package to install.
  */
@@ -73,7 +74,15 @@ export function createSliccyResolver({ engine, process, require }) {
     time: () => time,
   };
   const cache = new Map();
-  const lookups = [require, engine.selfRequire].filter(Boolean);
+  let globals;
+  const lookups = {
+    *[Symbol.iterator]() {
+      if (require) yield require;
+      if (engine.selfRequire) yield engine.selfRequire;
+      globals ??= globalRequires(engine, process, require);
+      yield* globals;
+    },
+  };
 
   return function requireSliccy(id) {
     const name = id.slice('sliccy:'.length);
@@ -98,6 +107,65 @@ export function createSliccyResolver({ engine, process, require }) {
     cache.set(name, value);
     return value;
   };
+}
+
+const PNPM_GLOBAL_LINK = /^[0-9a-f]{64}$/;
+
+/**
+ * pnpm's global installs, in the kernel's order for their commands
+ * (slicc-kernel's pnpmGlobalRoots: sorted, the first one wins). pnpm ≥ 11 puts each `pnpm add -g`
+ * in a project of its own, `<PNPM_HOME>/global/v11/<id>/` (the 64-hex names
+ * there are links to those), so a package added on its own is not next to
+ * slicc-jsh; pnpm ≤ 10 had one `<PNPM_HOME>/global/<n>/`. PNPM_HOME, else
+ * pnpm's default homes: the kernel's /usr/local/share/pnpm, Linux's
+ * ~/.local/share/pnpm and macOS's ~/Library/pnpm.
+ */
+export function globalRoots(fs, env) {
+  const homes = new Set(
+    [
+      env.PNPM_HOME,
+      '/usr/local/share/pnpm',
+      env.HOME && `${env.HOME}/.local/share/pnpm`,
+      env.HOME && `${env.HOME}/Library/pnpm`,
+    ].filter(Boolean)
+  );
+  const isDir = (path) => {
+    try {
+      return fs.lstatSync(path).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+  const list = (path) => {
+    try {
+      return fs.readdirSync(path).sort();
+    } catch {
+      return [];
+    }
+  };
+  const roots = [];
+  for (const home of homes) {
+    for (const layout of list(`${home}/global`)) {
+      const base = `${home}/global/${layout}`;
+      if (isDir(`${base}/node_modules`)) roots.push(base);
+      for (const id of list(base)) {
+        if (id === 'node_modules' || PNPM_GLOBAL_LINK.test(id)) continue;
+        if (isDir(`${base}/${id}`) && isDir(`${base}/${id}/node_modules`)) roots.push(`${base}/${id}`);
+      }
+    }
+  }
+  return roots;
+}
+
+function globalRequires(engine, process, require) {
+  if (!engine.createRequire || !require) return [];
+  let fs;
+  try {
+    fs = require('fs');
+  } catch {
+    return [];
+  }
+  return globalRoots(fs, process.env).map((root) => engine.createRequire(`${root}/package.json`));
 }
 
 function findPackage(name, lookups) {

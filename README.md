@@ -12,7 +12,7 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 
 **M2 shipped:** `globalThis.fetch` / `WebSocket` from kernel ≥ 1.53.0 `OPEN_SLOTS` (`ctx.fetch` / `ctx.websocket`). `net` / `http` on `ctx.net` (loopback TCP); `https.createServer` waits on TLS, `https.request`/`get` use `ctx.fetch` with `redirect: 'manual'` (Node entry) and fall back to `'follow'` on browser transports that reject manual redirects (`ENOTSUP`). jsh `Buffer.allocUnsafe` / `allocUnsafeSlow` zero-fill and `poolSize` is `0`.
 
-**WebSocket refused connects** need `slicc-kernel` ≥ **1.59.1** on the Node entry (`nodeTransport` / `fetchTransport`). When `ctx.websocket` rejects, jsh emits an `error` Event (no `close`; `readyState` stays `CONNECTING`), matching Node 22 undici. The rejection's `err.cause.code` is passed through on `error.error.cause` (`ECONNREFUSED`, `EAI_NONAME`, `EHOSTUNREACH` / `ENETUNREACH`, `ETIMEDOUT`, `EPROTO`); Node undici's own `ErrorEvent.error` has no `.code` / `.cause`, so jsh does not invent one on the event. `ws://host.slicc.internal:port` reaches the host loopback. Do not probe with `ctx.net.connect` before open: that dials the **kernel** loopback, while `nodeTransport` WebSockets reach the **host**'s `127.0.0.1`.
+**WebSocket refused connects** need `slicc-kernel` ≥ **1.59.1** on the Node entry (`nodeTransport` / `fetchTransport`). When `ctx.websocket` rejects, jsh emits an `error` Event (no `close`; `readyState` stays `CONNECTING`), matching Node 22 undici. The rejection's `err.cause.code` is passed through on `error.error.cause` (`ECONNREFUSED`, `EAI_NONAME`, `EHOSTUNREACH` / `ENETUNREACH`, `ETIMEDOUT`, `EPROTO`); Node undici's own `ErrorEvent.error` has no `.code` / `.cause`, so jsh does not invent one on the event. **Loopback WebSockets:** in the kernel, as with `fetch`, a `ws:` URL on a loopback name (`127.0.0.0/8`, `::1`, `0.0.0.0`, `localhost`, `*.localhost`, `<port>.kernel.localhost`) is a server of this kernel. jsh does the handshake and the framing over the kernel's sockets, because `ctx.websocket` only reaches the transport ([slicc-kernel#510](https://github.com/ai-ecoverse/slicc-kernel/issues/510)). That's how `new WebSocket(process.env.SLICC_CDP_URL)` reaches the kernel's CDP facade on 127.0.0.1:9222. `ws://host.slicc.internal:port` reaches the real machine's loopback, through `ctx.websocket`.
 
 **M3 shipped:** ESM — `.mjs` / `"type":"module"`, static `import`/`export`, dynamic `import()`, `import.meta.url` / `import.meta.resolve`, and CJS↔ESM interop (`import` of CJS, `require` of ESM, `package.json` `"exports"` `import`/`require` conditions). The transform uses **acorn** (bundled) so multi-line imports/exports, strings/comments, and `$` identifiers parse correctly; imports are hoisted and export getters are registered before evaluation for cycles. Node-style detect-module for `-e` / ambiguous `.js` (dynamic `import()` alone stays CJS).
 
@@ -167,7 +167,7 @@ npx @ai-ecoverse/slicc-jsh script.jsh
 
 ### `.jsh` scripts
 
-A `.jsh` file is the body of an async function with `process`, `console`, `require`, `module`, `exports`, `fetch`, `__dirname` and `__filename` in scope, the same in the kernel and on the host. `require('fs')` is Node's `fs`. Built-in `sliccy:` modules are `cli`, `color`, `exec`, `fmt`, `http`, `pool`, `skill` and `time`. Any other `sliccy:<name>` resolves to an `@ai-ecoverse/sliccy-<name>` or `sliccy-<name>` package; `sliccy:browser` over CDP comes from slicc-cdp ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)). The parity tables are in the [design note](docs/design/run-outside-slicc.md#parity-tables).
+A `.jsh` file is the body of an async function with `process`, `console`, `require`, `module`, `exports`, `fetch`, `__dirname` and `__filename` in scope, the same in the kernel and on the host. `require('fs')` is Node's `fs`. Built-in `sliccy:` modules are `cli`, `color`, `exec`, `fmt`, `http`, `pool`, `skill` and `time`. Any other `sliccy:<name>` resolves to an `@ai-ecoverse/sliccy-<name>` or `sliccy-<name>` package. jsh looks next to the script, then next to slicc-jsh, then in pnpm's global installs (`pnpm add -g`, one group per add since pnpm 11, under `$PNPM_HOME`, or pnpm's default home: `/usr/local/share/pnpm` in the kernel). `sliccy:browser` over CDP comes from slicc-cdp ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)): `pnpm add -g @ai-ecoverse/sliccy-browser`, and in the kernel it drives the browser behind `SLICC_CDP_URL`. The parity tables are in the [design note](docs/design/run-outside-slicc.md#parity-tables).
 
 ## Develop
 
@@ -178,6 +178,7 @@ npm run lint
 npm run test:golden          # host Node 22 baselines (npx node@22)
 npm run test:jsh             # .jsh parity: host jsh baseline vs kernel jsh
 npm run test:integration     # slicc-kernel Node entry, memory root
+npm run test:browser         # the kernel in Chromium: sliccy:browser and its corpus (#73)
 sh test/install/run.sh       # install.sh in throwaway HOMEs, against the registry
 ```
 

@@ -6,6 +6,7 @@
  * `json()`, …) and reads of `response.body` are tracked handles.
  */
 import { trackPromise } from '../async-handles.mjs';
+import { kernelRoute } from './loopback.mjs';
 
 const BODY_METHODS = ['arrayBuffer', 'blob', 'bytes', 'formData', 'json', 'text'];
 
@@ -50,32 +51,6 @@ function trackBody(response, track) {
   });
   return response;
 }
-
-/**
- * A loopback URL's address on the kernel's own loopback, as the kernel
- * classifies names: 127.0.0.0/8, ::1, 0.0.0.0, localhost and *.localhost (a
- * trailing dot or not) at the URL's port; `<port>.kernel.localhost` (the
- * page's way to name a kernel port) at that port. `host.slicc.internal` (and
- * its address 10.0.2.2), the real machine's loopback, through the kernel's
- * proxy, which forwards it there (the platform's fetch doesn't). Else null:
- * the platform's fetch.
- */
-function kernelRoute(url) {
-  if (url.protocol !== 'http:') return null;
-  const host = url.hostname.toLowerCase().replace(/\.$/, '');
-  const port = Number(url.port || 80);
-  const kernelPort = /^(\d+)\.kernel\.localhost$/.exec(host);
-  if (kernelPort) return { host: '127.0.0.1', port: Number(kernelPort[1]) };
-  if (host === 'localhost' || host.endsWith('.localhost')) return { host: '127.0.0.1', port };
-  if (/^127(\.\d{1,3}){3}$/.test(host)) return { host, port };
-  if (host === '0.0.0.0') return { host: '127.0.0.1', port };
-  if (host === '[::1]' || host === '::1') return { host: '::1', port };
-  if (host === 'host.slicc.internal' || host === '10.0.2.2') return KERNEL_PROXY;
-  return null;
-}
-
-// The kernel's HTTP proxy (it takes absolute-form requests).
-const KERNEL_PROXY = Object.freeze({ host: '127.0.0.1', port: 3128, proxy: true });
 
 const NULL_BODY = new Set([101, 103, 204, 205, 304]);
 const REDIRECT = new Set([301, 302, 303, 307, 308]);
