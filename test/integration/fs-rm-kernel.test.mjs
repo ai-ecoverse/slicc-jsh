@@ -75,6 +75,30 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
     assert.equal(r.stdout, `rmSync ${e}\nrmSync force ${e}\npromises.rm ${e}\nrm callback ${e}\nleft true\n`);
   });
 
+  it('a lookup refused under an untraversable directory: lstat, or with force and recursive unlink, as Node gives it', needs, async () => {
+    await jsh.kernel.writeFile(
+      '/tmp/locked.js',
+      program([
+        "const fs = require('fs');",
+        ERR,
+        "fs.mkdirSync('locked'); fs.writeFileSync('locked/x', ''); fs.chmodSync('locked', 0);",
+        "for (const o of [{ recursive: true, force: true }, { recursive: true }, { force: true }]) { try { fs.rmSync('locked/x', o); console.log('ok'); } catch (e) { console.log(err(e)); } }",
+        "fs.chmodSync('locked', 0o755); fs.rmSync('locked', { recursive: true });",
+      ])
+    );
+    const r = await jsh.run(['node', '/tmp/locked.js'], { user: 'cone', cwd: '/tmp' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(
+      r.stdout,
+      [
+        "EACCES -13 unlink locked/x EACCES: permission denied, unlink 'locked/x'",
+        "EACCES -13 lstat locked/x EACCES: permission denied, lstat 'locked/x'",
+        "EACCES -13 lstat locked/x EACCES: permission denied, lstat 'locked/x'",
+        '',
+      ].join('\n')
+    );
+  });
+
   it('a 500-file tree with a symlink out of it goes; the link target stays', async () => {
     await jsh.kernel.writeFile(
       '/tmp/big.js',
