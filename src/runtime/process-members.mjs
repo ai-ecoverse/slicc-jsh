@@ -211,6 +211,35 @@ function createReport(process) {
     reportOnUncaughtException: false,
     excludeEnv: false,
   };
+  // The command line's (and NODE_OPTIONS') --report-* options.
+  const options = process._options ?? process.execArgv;
+  const valueOf = (names) => {
+    let value;
+    for (let i = 0; i < options.length; i++) {
+      const o = options[i];
+      for (const name of names) {
+        if (o === name) value = options[i + 1];
+        else if (o.startsWith(`${name}=`)) value = o.slice(name.length + 1);
+      }
+    }
+    return value;
+  };
+  const has = (name) => options.includes(name);
+  settings.directory = valueOf(['--report-dir', '--report-directory']) ?? settings.directory;
+  settings.filename = valueOf(['--report-filename']) ?? settings.filename;
+  settings.signal = valueOf(['--report-signal']) ?? settings.signal;
+  settings.compact = has('--report-compact');
+  settings.excludeNetwork = has('--report-exclude-network');
+  settings.excludeEnv = has('--report-exclude-env');
+  settings.reportOnFatalError = has('--report-on-fatalerror');
+  // Node's --report-signal implies --report-on-signal where it stands: a
+  // later --no-report-on-signal turns it off, an earlier one doesn't.
+  settings.reportOnSignal = false;
+  for (const o of options) {
+    if (o === '--report-on-signal' || o === '--report-signal' || o.startsWith('--report-signal=')) settings.reportOnSignal = true;
+    else if (o === '--no-report-on-signal') settings.reportOnSignal = false;
+  }
+  settings.reportOnUncaughtException = has('--report-uncaught-exception');
   let sequence = 0;
   const os = () => process._builtin('os');
   const synthetic = () => {
@@ -417,6 +446,8 @@ function createReport(process) {
       },
     });
   }
+  // --report-on-signal: its signal watched from the start.
+  if (settings.reportOnSignal) signalHook();
   return report;
 }
 

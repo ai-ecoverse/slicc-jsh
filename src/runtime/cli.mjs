@@ -20,6 +20,13 @@ const BOOLEAN_FLAGS = new Set([
   '--trace-uncaught',
   // Source maps for stacks and error reports (source-maps.mjs).
   '--enable-source-maps',
+  // process.report's settings (process-members.mjs).
+  '--report-compact',
+  '--report-exclude-env',
+  '--report-exclude-network',
+  '--report-on-fatalerror',
+  '--report-on-signal',
+  '--report-uncaught-exception',
 ]);
 
 /** V8's report for a flag it couldn't take, then Node's "bad option" for it and for the flags Node 22.22 passes V8 after it. */
@@ -33,7 +40,16 @@ function v8FlagError(argv0, lines, arg) {
   ];
   return [...lines, 'Try --help for options', ...[arg, ...after].map((f) => `${argv0}: bad option: ${f}`)].join('\n');
 }
-const VALUED_FLAGS = ['--disable-warning', '--redirect-warnings', '--input-type', '--title'];
+const VALUED_FLAGS = [
+  '--disable-warning',
+  '--redirect-warnings',
+  '--input-type',
+  '--title',
+  '--report-dir',
+  '--report-directory',
+  '--report-filename',
+  '--report-signal',
+];
 const INPUT_TYPES = ['module', 'commonjs', 'module-typescript', 'commonjs-typescript'];
 
 /** --input-type's value from execArgv (`--input-type=x` or `--input-type x`), or undefined. */
@@ -169,9 +185,10 @@ function effective(flags) {
       out.push(f);
       continue;
     }
-    // A boolean's last form wins (`--x` … `--no-x`), as in Node.
+    // A boolean's last form wins (`--x` … `--no-x`), as in Node; it stays,
+    // in order (an implication such as --report-signal's counts before it).
     for (let i = out.length - 1; i >= 0; i--) if (booleanToggle(out[i])?.key === toggle.key) out.splice(i, 1);
-    if (toggle.on) out.push(toggle.flag);
+    out.push(toggle.on ? toggle.flag : name);
   }
   return out;
 }

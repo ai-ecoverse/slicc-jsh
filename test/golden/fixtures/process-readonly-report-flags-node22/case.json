@@ -1,0 +1,13 @@
+{
+  "description": "process's read-only members (argv0, pid, version, versions, arch, platform, release, config, features) throw on assignment in strict code, argv[0] is execPath, and the --report-* options set process.report, as Node's",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

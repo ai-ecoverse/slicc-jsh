@@ -158,7 +158,9 @@ function resolveNodeExecPath(ctx) {
   return '/usr/bin/node';
 }
 
-class Process extends EventEmitter {
+// Named `process` (V8's messages name an instance #<process>, as Node's),
+// through a property key: a binding of that name would be renamed by the bundler.
+const Process = { process: class extends EventEmitter {
   constructor({ ctx, argv, nextTick, onExit, handles, Buffer, stdio, ppid }) {
     super();
     this._signals = new Set();
@@ -850,7 +852,7 @@ class Process extends EventEmitter {
     this._assignedExitCode = code;
     this._onExit?.(code);
   }
-}
+} }.process;
 Object.defineProperty(Process, 'name', { value: 'process' });
 
 // Node's process methods are own properties that work from any receiver
@@ -882,6 +884,21 @@ function nodeShape(process) {
     else Object.defineProperty(process, name, { value: undefined, writable: true, enumerable: false, configurable: true });
   }
   const proto = Process.prototype;
+  // Node's read-only members (an assignment throws in strict code).
+  for (const [name, configurable] of [
+    ['argv0', false],
+    ['pid', true],
+    ['version', true],
+    ['versions', true],
+    ['arch', true],
+    ['platform', true],
+    ['release', true],
+    ['config', true],
+    ['features', false],
+  ]) {
+    const desc = Object.getOwnPropertyDescriptor(process, name);
+    if (desc && 'value' in desc) Object.defineProperty(process, name, { value: desc.value, writable: false, enumerable: true, configurable });
+  }
   const { get, set } = Object.getOwnPropertyDescriptor(proto, 'exitCode');
   Object.defineProperty(process, 'exitCode', { get, set, enumerable: true, configurable: false });
   let exiting = process._exiting === true;
