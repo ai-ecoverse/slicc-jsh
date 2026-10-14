@@ -3,7 +3,8 @@
  * Prefer util.inspect(err) for the props block (symbols, cause, AggregateError).
  */
 
-import { KERNEL_HINT } from './stack.mjs';
+import { KERNEL_HINT, generatedLocation } from './stack.mjs';
+import { sourceMapErrorSource } from './source-maps.mjs';
 
 function sanitizeStack(stack) {
   if (!stack) return stack;
@@ -82,6 +83,27 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false) {
   }
   col = Math.min(Math.max(1, col), Math.max(1, text.length + 1));
   return { file: loc.url ?? loc.file, lineNo: n, text, caret: `${' '.repeat(col - 1)}^` };
+}
+
+/** With source maps, the original `file:line`, line and caret of `err`'s throw. */
+function mappedErrorSource(ctx, err, evalCode, fromPromise) {
+  const gen = generatedLocation(err);
+  if (!gen) return undefined;
+  const esm = gen.file.startsWith('file://');
+  let file = gen.file;
+  if (esm) {
+    try {
+      file = decodeURIComponent(gen.file.slice('file://'.length).replace(/[?#].*$/, ''));
+    } catch {
+      return undefined;
+    }
+  }
+  // The column V8's message has there: as for an unmapped report.
+  const snip = snippetFor(ctx, { file, url: esm ? gen.file : undefined, line: gen.line, column: gen.column, esm }, evalCode, fromPromise);
+  if (!snip) return undefined;
+  const source = sourceMapErrorSource(gen.file, gen.line, snip.caret.length - 1);
+  // No original source to show: the code as run, as Node falls back to.
+  return source ? `${source}\n` : `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
 }
 
 function assertionHeader(err) {
@@ -261,6 +283,9 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPro
   const loc = frameLocation(rawStack);
   const snip = snippetFor(ctx, loc, evalCode, fromPromise);
   if (snip) head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
+  // Source maps: the position in the code as run, mapped (Node's GetErrorSource).
+  const mapped = mappedErrorSource(ctx, err, evalCode, fromPromise);
+  if (mapped) head = mapped;
 
   // Node 22 uncaught: compact nested props; AggregateError [errors] is multiline.
   const isAgg = err.name === 'AggregateError' || err instanceof AggregateError;

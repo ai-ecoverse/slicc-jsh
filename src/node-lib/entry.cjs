@@ -20,6 +20,13 @@ module.exports = {
   get warning() {
     return require('internal/process/warning');
   },
+  /** Source maps: lib/internal/source_map (module.SourceMap, findSourceMap, stacks). */
+  get sourceMapCache() {
+    return require('internal/source_map/source_map_cache');
+  },
+  get sourceMap() {
+    return require('internal/source_map/source_map');
+  },
   /** process.finalization: lib/internal/process/finalization.js. */
   get finalization() {
     return require('internal/process/finalization');

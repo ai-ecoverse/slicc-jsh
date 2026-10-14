@@ -1,0 +1,73 @@
+{
+  "description": "source maps: --enable-source-maps stacks and uncaught reports (inline map with sourcesContent, a .map file read from disk, an ES module), process.setSourceMapsEnabled, module.findSourceMap / SourceMap / getSourceMapsSupport",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/esm-query.mjs",
+      "from": "esm-query.mjs"
+    },
+    {
+      "path": "/os/out/esm.mjs",
+      "from": "out/esm.mjs"
+    },
+    {
+      "path": "/os/out/esm.mjs.map",
+      "from": "out/esm.mjs.map"
+    },
+    {
+      "path": "/os/out/file.js",
+      "from": "out/file.js"
+    },
+    {
+      "path": "/os/out/file.js.map",
+      "from": "out/file.js.map"
+    },
+    {
+      "path": "/os/out/hashbang.js",
+      "from": "out/hashbang.js"
+    },
+    {
+      "path": "/os/out/hashbang.js.map",
+      "from": "out/hashbang.js.map"
+    },
+    {
+      "path": "/os/out/inline.js",
+      "from": "out/inline.js"
+    },
+    {
+      "path": "/os/out/nosrc.js",
+      "from": "out/nosrc.js"
+    },
+    {
+      "path": "/os/out/nosrc.js.map",
+      "from": "out/nosrc.js.map"
+    },
+    {
+      "path": "/os/out/tiny.mjs",
+      "from": "out/tiny.mjs"
+    },
+    {
+      "path": "/os/package.json",
+      "from": "package.json"
+    },
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    },
+    {
+      "path": "/os/src/main.ts",
+      "from": "src/main.ts"
+    },
+    {
+      "path": "/os/src/orig.ts",
+      "from": "src/orig.ts"
+    },
+    {
+      "path": "/os/src/tiny.ts",
+      "from": "src/tiny.ts"
+    }
+  ]
+}

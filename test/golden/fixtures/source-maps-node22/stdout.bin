@@ -1,0 +1,187 @@
+== inline map, sourcesContent: status 1
+[ '(1, 2)' ]
+Error: negative x: -1
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:5:3)
+DIR/src/orig.ts:8
+    throw new Error(`negative x: ${p.x}`);
+    ^
+
+Error: negative x: -2
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:9:1)
+
+Node.js v22.22.0
+== map file, sources from disk: status 1
+[ '(1, 2)' ]
+Error: negative x: -1
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:5:3)
+DIR/src/orig.ts:8
+    throw new Error(`negative x: ${p.x}`);
+    ^
+
+Error: negative x: -2
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:9:1)
+
+Node.js v22.22.0
+== ES module: status 1
+[ '(1, 2)' ]
+Error: negative x: -1
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at <anonymous> (DIR/src/main.ts:5:3)
+DIR/src/orig.ts:8
+    throw new Error(`negative x: ${p.x}`);
+          ^
+
+Error: negative x: -2
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at <anonymous> (DIR/src/main.ts:9:1)
+
+Node.js v22.22.0
+== original sources missing: status 1
+[ '(1, 2)' ]
+Error: negative x: -1
+    at describe (DIR/missing/orig.ts:8:11)
+    at <anonymous> (DIR/missing/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/missing/orig.ts:14:17)
+    at Object.<anonymous> (DIR/missing/main.ts:5:3)
+DIR/out/nosrc.js:4
+    throw new Error(`negative x: ${p.x}`);
+    ^
+
+Error: negative x: -2
+    at describe (DIR/missing/orig.ts:8:11)
+    at <anonymous> (DIR/missing/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/missing/orig.ts:14:17)
+    at Object.<anonymous> (DIR/missing/main.ts:9:1)
+
+Node.js v22.22.0
+== a CommonJS bundle with a hashbang: status 1
+[ '(1, 2)' ]
+Error: negative x: -1
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:5:3)
+DIR/src/orig.ts:8
+    throw new Error(`negative x: ${p.x}`);
+    ^
+
+Error: negative x: -2
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:9:1)
+
+Node.js v22.22.0
+== an ES module imported with a query: status 0
+    at where (DIR/src/tiny.ts:1:36)
+true undefined
+== no source maps: status 1
+[ '(1, 2)' ]
+Error: negative x: -1
+    at describe (DIR/out/file.js:4:11)
+    at DIR/out/file.js:9:28
+    at Array.map (<anonymous>)
+    at run (DIR/out/file.js:9:17)
+    at Object.<anonymous> (DIR/out/file.js:15:3)
+DIR/out/file.js:4
+    throw new Error(`negative x: ${p.x}`);
+    ^
+
+Error: negative x: -2
+    at describe (DIR/out/file.js:4:11)
+    at DIR/out/file.js:9:28
+    at Array.map (<anonymous>)
+    at run (DIR/out/file.js:9:17)
+    at Object.<anonymous> (DIR/out/file.js:19:1)
+
+Node.js v22.22.0
+== process.setSourceMapsEnabled(true) before the require: status 1
+false
+true {"enabled":true,"nodeModules":true,"generatedCode":true}
+[ '(1, 2)' ]
+Error: negative x: -1
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:5:3)
+DIR/src/orig.ts:8
+    throw new Error(`negative x: ${p.x}`);
+    ^
+
+Error: negative x: -2
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:9:1)
+
+Node.js v22.22.0
+== module API: status 0
+{"enabled":true,"nodeModules":true,"generatedCode":true} function undefined
+[ '(1, 2)' ]
+Error: negative x: -1
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
+    at Array.map (<anonymous>)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:5:3)
+true ["file://DIR/src/orig.ts","file://DIR/src/main.ts"] "" 21
+{
+  generatedLine: 3,
+  generatedColumn: 10,
+  originalSource: 'file://DIR/src/orig.ts',
+  originalLine: 7,
+  originalColumn: 10,
+  name: undefined
+}
+{
+  name: undefined,
+  fileName: 'file://DIR/src/orig.ts',
+  lineNumber: 8,
+  columnNumber: 11
+}
+{
+  generatedLine: 18,
+  generatedColumn: 21,
+  originalSource: 'file://DIR/src/main.ts',
+  originalLine: 8,
+  originalColumn: 21,
+  name: undefined
+}
+true undefined undefined
+{
+  generatedLine: 0,
+  generatedColumn: 0,
+  originalSource: 'a.js',
+  originalLine: 0,
+  originalColumn: 0,
+  name: 'x'
+} [ 'x' ]
+ERR_INVALID_ARG_TYPE

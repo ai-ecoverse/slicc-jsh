@@ -15,6 +15,8 @@ const BOOLEAN_FLAGS = new Set([
   '--expose-internals',
   // Node prints a thrown non-Error's site with it; accepted (the report is the usual one).
   '--trace-uncaught',
+  // Source maps for stacks and error reports (source-maps.mjs).
+  '--enable-source-maps',
 ]);
 
 /** V8's report for a flag it couldn't take, then Node's "bad option" for it and for the flags Node 22.22 passes V8 after it. */

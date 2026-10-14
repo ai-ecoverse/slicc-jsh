@@ -2,6 +2,7 @@
  * ESM loader over ctx.sync.fs — static import/export, dynamic import(),
  * import.meta, and CJS interop.
  */
+import * as sourceMaps from '../source-maps.mjs';
 import { encodeFilePath } from '../builtins/url.mjs';
 import { createPath } from '../path.mjs';
 import { preserveSymlinks } from '../cjs/loader.mjs';
@@ -446,6 +447,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const exportsObj = Object.create(null);
     const entry = { evaluating: true, exportsObj };
     cache.set(filename, entry);
+    // Its source map, when support is on (Node's translators), under its URL.
+    sourceMaps.cacheModuleSourceMap(publicUrlOf(filename), source, entry);
 
     const __meta = makeImportMeta(filename);
     const __importSync = (spec, attributes) => resolveAndLoadSync(spec, filename, attributes);
@@ -497,6 +500,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     );
     const exportsObj = Object.create(null);
     const entry = { evaluating: true, exportsObj };
+    sourceMaps.cacheModuleSourceMap(publicUrlOf(filename), source, entry);
     let settle;
     entry.done = new Promise((resolve, reject) => {
       settle = { resolve, reject };

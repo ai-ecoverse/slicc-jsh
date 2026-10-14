@@ -1,3 +1,4 @@
+import * as sourceMaps from '../source-maps.mjs';
 import { rewriteDynamicImports } from '../esm/transform.mjs';
 import { syntaxReport } from '../syntax-report.mjs';
 import { createPath } from '../path.mjs';
@@ -128,6 +129,21 @@ export function createCjs({
     if (typeof id !== 'string') return false;
     const bare = id.startsWith('node:') ? id.slice(5) : id;
     return isBuiltinName(bare);
+  };
+  // Source maps (lib/internal/source_map, see source-maps.mjs).
+  Module.findSourceMap = function findSourceMap(path) {
+    return sourceMaps.findSourceMap(path);
+  };
+  Object.defineProperty(Module, 'SourceMap', {
+    get: () => sourceMaps.SourceMapClass(),
+    enumerable: true,
+    configurable: true,
+  });
+  Module.getSourceMapsSupport = function getSourceMapsSupport() {
+    return sourceMaps.getSourceMapsSupport();
+  };
+  Module.setSourceMapsSupport = function setSourceMapsSupport(enabled, options) {
+    sourceMaps.setSourceMapsSupport(enabled, options);
   };
   Module.createRequire = (filename) => {
     let parent;
@@ -275,6 +291,8 @@ export function createCjs({
     // Exact Node CJS wrapper arity — five parameters, plus a collision-free
     // dynamic-import binding when needed. process/Buffer/console/timers/fetch
     // come from globalThis.
+    // Its source map, when support is on (Node's wrapSafe / _compile).
+    sourceMaps.cacheModuleSourceMap(filename, source, mod);
     let wrapper;
     try {
       if (hasImport) {
