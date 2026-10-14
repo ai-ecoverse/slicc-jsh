@@ -252,6 +252,22 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
 
   const syncFs = ctx.sync.fs;
   const asyncFs = ctx.fs;
+  // slicc-kernel 1.86.0: ctx.fs.chmod / ctx.sync.fs.chmod (#495), and, in the
+  // same release, mkdir(p, { recursive: false }) as Node's mkdir without
+  // `recursive` (#514: EEXIST / ENOENT, atomic among one kernel's
+  // processes). An older kernel's mkdir ignores the option and makes the
+  // parents, so chmod's presence stands for both. Older kernels: chmod
+  // changes nothing and mkdir checks before it creates, as before.
+  const kernelChmod = typeof syncFs.chmod === 'function';
+  const exclusiveMkdir = kernelChmod;
+  /** Node's chmod(2): the permission bits only, as Linux masks the rest. */
+  const chmodPath = (target, mode, syscall, pathArg) => {
+    try {
+      syncFs.chmod(target, mode & 0o7777);
+    } catch (err) {
+      throw nodeFsError(err?.code || 'EIO', syscall, pathArg, err);
+    }
+  };
   const wrapBuffer = (bytes) => (Buffer ? Buffer.from(bytes) : bytes);
   const optEncoding = (options) =>
     typeof options === 'string' ? options : options?.encoding ?? null;
@@ -540,6 +556,16 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     const target = abs(p);
     const recursive = options === true || options?.recursive === true;
     if (!recursive) {
+      if (exclusiveMkdir) {
+        // The kernel answers EEXIST / ENOENT / ENOTDIR itself, so of two
+        // processes making one name exactly one succeeds.
+        try {
+          syncFs.mkdir(target, { recursive: false });
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
+        }
+        return;
+      }
       if (syncFs.exists(target)) throw nodeFsError('EEXIST', 'mkdir', pathArg);
       try {
         syncFs.mkdir(target);
@@ -1206,11 +1232,14 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       out.set(cur.subarray(0, Math.min(cur.length, out.length)), 0);
       syncFs.writeFile(target, out);
     },
-    // The kernel's JS fs has no mode bits, owners or times to set: these
+    // chmod goes to the kernel where it has one (1.86.0+; it follows a
+    // symlink, and only the owner or root may: EPERM). Otherwise, and for
+    // lchmod, chown and utimes, which the kernel's JS fs doesn't have: these
     // check that the path exists, as Node's do, and change nothing.
     chmodSync(p, mode) {
       validatePathType(p);
-      parseFileMode(mode, 'mode');
+      mode = parseFileMode(mode, 'mode');
+      if (kernelChmod) return chmodPath(abs(p), mode, 'chmod', p);
       mustExist(p, 'chmod');
     },
     lchmodSync(p, mode) {
@@ -1220,8 +1249,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     },
     fchmodSync(fd, mode) {
       validatedFd(fd);
-      parseFileMode(mode, 'mode');
-      syncApi.fstatSync(fd);
+      mode = parseFileMode(mode, 'mode');
+      const ent = fdTable.get(fd);
+      // By the descriptor's path: jsh's descriptors are paths (Node's fchmod
+      // errors name no path).
+      if (!ent) throw nodeFsError('EBADF', 'fchmod', undefined);
+      if (kernelChmod) chmodPath(ent.path, mode, 'fchmod');
     },
     chownSync(p, uid, gid) {
       validatePathType(p);
@@ -1519,8 +1552,19 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     realpath(p, options) {
       return track((async () => realpathNative(p, options))());
     },
-    chmod(p, ...args) {
-      return track((async () => syncApi.chmodSync(p, ...args))());
+    chmod(p, mode) {
+      return track(
+        (async () => {
+          if (typeof asyncFs.chmod !== 'function') return syncApi.chmodSync(p, mode);
+          validatePathType(p);
+          mode = parseFileMode(mode, 'mode');
+          try {
+            await asyncFs.chmod(abs(p), mode & 0o7777);
+          } catch (err) {
+            throw nodeFsError(err?.code || 'EIO', 'chmod', p, err);
+          }
+        })()
+      );
     },
     lchmod(p, ...args) {
       return track((async () => syncApi.lchmodSync(p, ...args))());
@@ -1592,7 +1636,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   function createFileHandle(fd) {
     let closed = false;
     const ensureOpen = (syscall) => {
-      if (closed || !fdTable.has(fd)) throw nodeFsError('EBADF', syscall, undefined);
+      if (closed || !fdTable.has(fd)) {
+        // Node's fsCall on a closed FileHandle.
+        const err = new Error('file closed');
+        err.code = 'EBADF';
+        err.syscall = syscall;
+        throw err;
+      }
     };
     const entPath = () => fdTable.get(fd)?.path;
 
@@ -1641,7 +1691,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       },
       async chmod(mode) {
         ensureOpen('fchmod');
-        parseFileMode(mode, 'mode');
+        syncApi.fchmodSync(fd, mode);
       },
       async chown(uid, gid) {
         ensureOpen('fchown');
