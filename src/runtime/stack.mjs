@@ -52,9 +52,13 @@ function isKernelFrame(frame) {
  */
 const esmFrames = new Map();
 const esmColumns = new Map();
-export function registerEsmFrames(filename, extraLines, columnShifts) {
+// A module's URL when it isn't its path's (a query or fragment).
+const esmUrls = new Map();
+export function registerEsmFrames(filename, extraLines, columnShifts, url) {
   if (typeof filename !== 'string' || !filename.startsWith('/')) return;
   esmFrames.set(filename, extraLines);
+  if (typeof url === 'string' && url !== fileUrl(filename)) esmUrls.set(filename, url);
+  else esmUrls.delete(filename);
   if (columnShifts && Object.keys(columnShifts).length) esmColumns.set(filename, columnShifts);
   else esmColumns.delete(filename);
 }
@@ -280,7 +284,7 @@ function wrapRaw(frame) {
 }
 /** A frame in an ES module: Node's shape (file: URL, no receiver, top level unnamed). */
 function wrapEsmCallSite(frame, path, line) {
-  const url = fileUrl(path);
+  const url = esmUrls.get(path) ?? fileUrl(path);
   const col = esmColumn(path, line, frame.getColumnNumber?.() ?? 0);
   const ctor = typeof frame.isConstructor === 'function' ? frame.isConstructor() : false;
   let fn = frame.getFunctionName?.() || null;

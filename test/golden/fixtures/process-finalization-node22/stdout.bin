@@ -8,4 +8,4 @@ warning ExperimentalWarning process.finalization.unregister is an experimental f
 beforeExit callback kept beforeExit
 beforeExit listener
 exit callback kept exit
-exit listener
+exit listener kept

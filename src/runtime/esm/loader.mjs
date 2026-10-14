@@ -171,6 +171,9 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
   const pathOf = (id) => idParts.get(id)?.path ?? id;
   const suffixOf = (id) => idParts.get(id)?.suffix ?? '';
+  /** A module's frames are named by its path and URL suffix (`file:///x.mjs?v=1`, as Node's). */
+  const frameKeyOf = (id) => `${pathOf(id)}${suffixOf(id)}`;
+  const publicUrlOf = (id) => pathToFileURL(pathOf(id)) + suffixOf(id);
 
   /**
    * Node's import attributes (validateAttributes): a JSON module needs
@@ -431,7 +434,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     if (cached?.namespace) return cached.namespace;
     if (cached?.evaluating) return cached.exportsObj;
 
-    const { code, hasTopLevelAwait, preambleLines, columnShifts } = transformEsm(source, pathOf(filename));
+    const { code, hasTopLevelAwait, preambleLines, columnShifts } = transformEsm(source, pathOf(filename), frameKeyOf(filename));
     if (hasTopLevelAwait) {
       const err = requireAsyncModule();
       deepAsync.add(err);
@@ -456,7 +459,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     };
 
     // Its frames: the file's own lines, as a file: URL (see stack.mjs).
-    registerEsmFrames(pathOf(filename), 1 + preambleLines, columnShifts);
+    registerEsmFrames(frameKeyOf(filename), 1 + preambleLines, columnShifts, publicUrlOf(filename));
     try {
       const fn = new Function(
         '__meta',
@@ -487,7 +490,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
     const { bodyCode, staticSpecs, staticAttributes, exportSetup, hoistImports, columnShifts } = transformEsm(
       source,
-      pathOf(filename)
+      pathOf(filename),
+      frameKeyOf(filename)
     );
     const exportsObj = Object.create(null);
     const entry = { evaluating: true, exportsObj };
@@ -532,8 +536,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
       const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
       const prefix = [...exportSetup, 'await __preload();', ...hoistImports].join('\n');
-      const parts = [prefix, bodyCode, `//# sourceURL=${pathOf(filename)}`];
-      registerEsmFrames(pathOf(filename), 1 + (prefix.match(/\n/g) || []).length + 1, columnShifts);
+      const parts = [prefix, bodyCode, `//# sourceURL=${frameKeyOf(filename)}`];
+      registerEsmFrames(frameKeyOf(filename), 1 + (prefix.match(/\n/g) || []).length + 1, columnShifts, publicUrlOf(filename));
       const fn = new AsyncFunction(
         '__meta',
         '__importSync',

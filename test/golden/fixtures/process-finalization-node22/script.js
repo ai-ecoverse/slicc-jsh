@@ -17,5 +17,6 @@ for (const bad of [null, 1, 'x']) {
   }
 }
 process.on('beforeExit', () => console.log('beforeExit listener'));
-process.on('exit', () => console.log('exit listener'));
+// The listener keeps `kept` alive to the end (a collected object's callback never runs).
+process.on('exit', () => console.log('exit listener', kept.name));
 console.log('main done');
