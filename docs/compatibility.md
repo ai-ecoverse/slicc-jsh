@@ -127,6 +127,10 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 
 **`/dev`.** On slicc-kernel 1.69 and later, devices (`/dev/null`, `/dev/zero`, `/dev/urandom`, `/dev/stdout`, `/dev/fd/N`, …) open as kernel descriptors and are read and written as streams, never whole. A link to a device is followed first. `/dev/stdin` and `/dev/fd/0` are `process.stdin`.
 
+**Modes, owners and times.** The kernel's JS file system has no mode bits, owners or times to set. `chmod`, `chown` and `utimes`, with their `l` and `f` forms, check their arguments and that the path exists, as Node's do, and change nothing.
+
+**`mkdir`** without `recursive` checks that the path doesn't exist and then creates it. These are two steps, not one exclusive call, so two programs racing for the same name can both succeed.
+
 **Not available:** `watch`, `watchFile`, `unwatchFile`, `glob`, `globSync`, `promises.glob`, `promises.watch`, `openAsBlob`, `readv`, `writev`, `fs.Dir` as an export (`opendir` works), and `promises.constants`.
 
 ## `child_process`
