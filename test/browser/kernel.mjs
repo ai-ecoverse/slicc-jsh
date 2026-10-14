@@ -93,9 +93,14 @@ export async function booted(chrome, t, { cdp = true, webSocket = false } = {}) 
  */
 export const SLICCY_BROWSER = process.env.SLICCY_BROWSER ?? '@ai-ecoverse/sliccy-browser@0.1.1';
 
-/** npm pack this repo (and copy a local SLICCY_BROWSER) into `dir`; the jsh tarball's name. */
+/**
+ * npm pack this repo (and copy a local SLICCY_BROWSER) into `dir`; the jsh
+ * tarball's name. JSH_TARBALL=/path/to.tgz (a released one, say) is used
+ * instead of packing.
+ */
 export function packJsh(dir) {
-  execFileSync('npm', ['pack', '--ignore-scripts', '--pack-destination', dir], { cwd: root, stdio: 'pipe' });
+  if (process.env.JSH_TARBALL) copyFileSync(process.env.JSH_TARBALL, join(dir, basename(process.env.JSH_TARBALL)));
+  else execFileSync('npm', ['pack', '--ignore-scripts', '--pack-destination', dir], { cwd: root, stdio: 'pipe' });
   if (SLICCY_BROWSER.startsWith('/')) copyFileSync(SLICCY_BROWSER, join(dir, basename(SLICCY_BROWSER)));
   return readdirSync(dir).find((n) => n.startsWith('ai-ecoverse-slicc-jsh-'));
 }
