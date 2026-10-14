@@ -1,0 +1,30 @@
+spawn pid at return: number exitCode null killed false
+exit 3: spawn pid=number | exit 3 null | close 3 null
+child saw its pid: true
+stdin: spawn pid=number | exit 0 null | close 0 null
+stdin echoed: "piped at once\n"
+kill at once: true killed true
+killed: spawn pid=number | exit null SIGTERM | close null SIGTERM
+SIGKILL at once: true
+SIGKILL: spawn pid=number | exit null SIGKILL | close null SIGKILL
+detached pid at return: number
+detached: spawn pid=number | exit 0 null | close 0 null
+argv0 pid at return: number ["zork","-c","printf \"%s\\n\" \"$0\""]
+argv0: spawn pid=number | exit 0 null | close 0 null
+argv0 seen: "zork\n"
+fd stdio pid at return: number stdout null
+fd stdio: spawn pid=number | exit 0 null | close 0 null
+fd got: "to the fd\n"
+execFile pid at return: number
+execFile: null "ef\n"
+exec pid at return: number
+exec: 2 "ex\n"
+ENOENT pid at return: undefined spawnargs ["no-such-command-zz","a","b"]
+ENOENT: error ["ENOENT",-2,"spawn no-such-command-zz","no-such-command-zz",["a","b"],"spawn no-such-command-zz ENOENT"] pid=undefined | close -2 null
+ENOENT after: pid undefined exitCode -2 kill false
+ENOENT path pid at return: undefined
+ENOENT path: error ["ENOENT",-2,"spawn /no/such/dir/cmd","/no/such/dir/cmd",[],"spawn /no/such/dir/cmd ENOENT"] pid=undefined | close -2 null
+EACCES pid at return: undefined
+EACCES: error ["EACCES",-13,"spawn <work>/plain.sh",["x"],"spawn <work>/plain.sh EACCES"] | close -13 null pid undefined
+execFile ENOENT pid at return: undefined
+execFile ENOENT: ENOENT -2 spawn no-such-command-zz no-such-command-zz ["q"] no-such-command-zz q

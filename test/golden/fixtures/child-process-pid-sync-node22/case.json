@@ -1,0 +1,7 @@
+{
+  "description": "child_process.spawn sets child.pid before it returns (slicc-kernel 1.87.0's ctx.sync.spawn; older kernels set it a tick later, so this case needs 1.87.0+): the event order (spawn, exit, close), kill() right after spawn(), the child's own pid, exec/execFile, detached and argv0; a missing command's 'error' (ENOENT, pid undefined) and a file without x (EACCES) come on a later tick, never thrown",
+  "kernel": "1.87.0",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-bash"]
+}
