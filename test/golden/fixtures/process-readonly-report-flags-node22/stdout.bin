@@ -1,0 +1,21 @@
+argv0 writable=false configurable=false TypeError: Cannot assign to read only property 'argv0' of object '#<process>'
+pid writable=false configurable=true TypeError: Cannot assign to read only property 'pid' of object '#<process>'
+version writable=false configurable=true TypeError: Cannot assign to read only property 'version' of object '#<process>'
+versions writable=false configurable=true TypeError: Cannot assign to read only property 'versions' of object '#<process>'
+arch writable=false configurable=true TypeError: Cannot assign to read only property 'arch' of object '#<process>'
+platform writable=false configurable=true TypeError: Cannot assign to read only property 'platform' of object '#<process>'
+release writable=false configurable=true TypeError: Cannot assign to read only property 'release' of object '#<process>'
+config writable=false configurable=true TypeError: Cannot assign to read only property 'config' of object '#<process>'
+features writable=false configurable=false TypeError: Cannot assign to read only property 'features' of object '#<process>'
+ppid writable=true configurable=true assigned
+execPath writable=true configurable=true assigned
+title writable=true configurable=true assigned
+argv[0] is execPath true argv0 node
+== : status 0
+{"directory":"","filename":"","compact":false,"excludeNetwork":false,"signal":"SIGUSR2","reportOnFatalError":false,"reportOnSignal":false,"reportOnUncaughtException":false,"excludeEnv":false}
+== --report-on-signal --report-signal=SIGUSR1 --report-compact --report-dir=/tmp/x --report-filename=r.json --report-uncaught-exception --report-on-fatalerror --report-exclude-network --report-exclude-env: status 0
+{"directory":"/tmp/x","filename":"r.json","compact":true,"excludeNetwork":true,"signal":"SIGUSR1","reportOnFatalError":true,"reportOnSignal":true,"reportOnUncaughtException":true,"excludeEnv":true}
+== --report-directory=/tmp/y --report-signal SIGUSR1: status 0
+{"directory":"/tmp/y","filename":"","compact":false,"excludeNetwork":false,"signal":"SIGUSR1","reportOnFatalError":false,"reportOnSignal":true,"reportOnUncaughtException":false,"excludeEnv":false}
+== --report-dir: status 9
+node: --report-dir requires an argument

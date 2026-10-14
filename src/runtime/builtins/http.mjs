@@ -317,11 +317,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         return;
       }
       const framed = this.#chunked ? Buffer.concat([Buffer.from(`${buf.length.toString(16)}\r\n`), buf, Buffer.from('\r\n')]) : buf;
-      this.#socket.write(framed, (err) => callback(err));
+      // A client gone (EPIPE) isn't the response's error, as Node's: the
+      // socket's goes to the server ('clientError'), the response closes.
+      this.#socket.write(framed, () => callback());
     }
 
     #closeAfter(payload, callback) {
-      this.#socket.write(payload, (err) => {
+      this.#socket.write(payload, () => {
         this.finished = true;
         this.emit('finish');
         try {
@@ -330,7 +332,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
         } catch {
           /* ignore */
         }
-        callback(err);
+        callback();
       });
     }
 

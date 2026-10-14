@@ -292,9 +292,14 @@ export async function runNode(ctx, options = {}) {
   nextTickRef = nextTick;
   processRef = process;
   process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
+  // Node's argv[0] is always its executable's path; argv0 keeps the name it
+  // was run as (a spawn's argv0 included). (A .jsh script's argv[0] stays jsh.)
+  if (!options.main && process.argv.length > 0) process.argv[0] = process.execPath;
   // The options in effect: NODE_OPTIONS' and the command line's (only these
   // are execArgv). What the runtime reads for its behaviour.
   process._options = Object.freeze([...(parsed.options ?? process.execArgv)]);
+  // --report-on-signal / --report-uncaught-exception: process.report from the start.
+  if (process._options.some((o) => /^--report-(on-signal|uncaught-exception|signal)(=|$)/.test(o))) void process.report;
   {
     let title;
     for (let i = 0; i < process._options.length; i++) {
