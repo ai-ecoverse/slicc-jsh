@@ -20,3 +20,4 @@ package-lock.json.bak
 # Comparison harness: fake packages under cases are committed.
 !test/compare/cases/**/node_modules/
 !test/compare/cases/**/node_modules/**
+artifacts/

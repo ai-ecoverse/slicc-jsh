@@ -139,3 +139,33 @@ jobs:
         run: shellcheck -s sh install.sh test/install/run.sh
       - name: install.sh (Node 22, no Node, pty, uninstall)
         run: sh test/install/run.sh
+
+  browser:
+    # The kernel in a Chromium tab (slicc-shared-web's harness), slicc-jsh and
+    # @ai-ecoverse/sliccy-browser installed in it with pnpm add -g, and
+    # sliccy:browser driving the harness browser through the kernel's CDP
+    # facade (SLICC_CDP_URL); then the skills corpus that uses it. Each run
+    # is compared with the host jsh on the same browser (#73). One Chromium
+    # at a time, under 3 GB.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.21.0'
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Chromium
+        run: npx playwright-core install --with-deps --no-shell chromium
+      - name: Browser suite
+        timeout-minutes: 10
+        run: npm run test:browser
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: browser-artifacts
+          path: artifacts/
+          if-no-files-found: ignore
