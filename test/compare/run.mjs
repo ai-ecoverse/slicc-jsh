@@ -323,7 +323,9 @@ let jshFiles;
 async function runSeven(c, http) {
   kernelExtra ??= kernelPackages();
   jshFiles ??= packageFiles();
-  const kernel = await createNodeKernel({ network: { transport: nodeTransport() } });
+  // COMPARE_HTTP is a server on the host's loopback: nodeTransport refuses
+  // that unless asked (slicc-kernel 1.84.0+).
+  const kernel = await createNodeKernel({ network: { transport: nodeTransport({ hostLoopback: true }) } });
   try {
     for (const [rel, data] of jshFiles) {
       await kernel.writeFile(`/node_modules/@ai-ecoverse/slicc-jsh/${rel}`, data);
