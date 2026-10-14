@@ -1,0 +1,5 @@
+const where = () => new Error("tiny").stack.split("\n")[1];
+export {
+  where
+};
+//# sourceMappingURL=data:application/json;base64,ewogICJ2ZXJzaW9uIjogMywKICAic291cmNlcyI6IFsiLi4vc3JjL3RpbnkudHMiXSwKICAic291cmNlc0NvbnRlbnQiOiBbImV4cG9ydCBjb25zdCB3aGVyZSA9ICgpOiBzdHJpbmcgPT4gbmV3IEVycm9yKCd0aW55Jykuc3RhY2shLnNwbGl0KCdcXG4nKVsxXTtcbiJdLAogICJtYXBwaW5ncyI6ICJBQUFPLE1BQU0sUUFBUSxNQUFjLElBQUksTUFBTSxNQUFNLEVBQUUsTUFBTyxNQUFNLElBQUksRUFBRSxDQUFDOyIsCiAgIm5hbWVzIjogW10KfQo=

@@ -6,32 +6,48 @@
   "shim": true,
   "files": [
     {
-      "path": "/os/dist/esm.mjs",
-      "from": "dist/esm.mjs"
+      "path": "/os/esm-query.mjs",
+      "from": "esm-query.mjs"
     },
     {
-      "path": "/os/dist/esm.mjs.map",
-      "from": "dist/esm.mjs.map"
+      "path": "/os/out/esm.mjs",
+      "from": "out/esm.mjs"
     },
     {
-      "path": "/os/dist/file.js",
-      "from": "dist/file.js"
+      "path": "/os/out/esm.mjs.map",
+      "from": "out/esm.mjs.map"
     },
     {
-      "path": "/os/dist/file.js.map",
-      "from": "dist/file.js.map"
+      "path": "/os/out/file.js",
+      "from": "out/file.js"
     },
     {
-      "path": "/os/dist/inline.js",
-      "from": "dist/inline.js"
+      "path": "/os/out/file.js.map",
+      "from": "out/file.js.map"
     },
     {
-      "path": "/os/dist/nosrc.js",
-      "from": "dist/nosrc.js"
+      "path": "/os/out/hashbang.js",
+      "from": "out/hashbang.js"
     },
     {
-      "path": "/os/dist/nosrc.js.map",
-      "from": "dist/nosrc.js.map"
+      "path": "/os/out/hashbang.js.map",
+      "from": "out/hashbang.js.map"
+    },
+    {
+      "path": "/os/out/inline.js",
+      "from": "out/inline.js"
+    },
+    {
+      "path": "/os/out/nosrc.js",
+      "from": "out/nosrc.js"
+    },
+    {
+      "path": "/os/out/nosrc.js.map",
+      "from": "out/nosrc.js.map"
+    },
+    {
+      "path": "/os/out/tiny.mjs",
+      "from": "out/tiny.mjs"
     },
     {
       "path": "/os/package.json",
@@ -48,6 +64,10 @@
     {
       "path": "/os/src/orig.ts",
       "from": "src/orig.ts"
+    },
+    {
+      "path": "/os/src/tiny.ts",
+      "from": "src/tiny.ts"
     }
   ]
 }

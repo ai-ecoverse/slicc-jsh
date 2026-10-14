@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/orig.ts", "../src/main.ts"],
+  "sourcesContent": ["interface Point {\n  x: number;\n  y: number;\n}\n\nfunction describe(p: Point): string {\n  if (p.x < 0) {\n    throw new Error(`negative x: ${p.x}`);\n  }\n  return `(${p.x}, ${p.y})`;\n}\n\nexport function run(points: Point[]): string[] {\n  return points.map((p) => describe(p));\n}\n", "import { run } from './orig';\n\nconsole.log(run([{ x: 1, y: 2 }]));\ntry {\n  run([{ x: -1, y: 0 }]);\n} catch (e) {\n  console.log((e as Error).stack);\n}\nrun([{ x: -2, y: 0 }]);\n"],
+  "mappings": ";AAKA,SAAS,SAAS,GAAkB;AAClC,MAAI,EAAE,IAAI,GAAG;AACX,UAAM,IAAI,MAAM,eAAe,EAAE,CAAC,EAAE;AAAA,EACtC;AACA,SAAO,IAAI,EAAE,CAAC,KAAK,EAAE,CAAC;AACxB;AAEO,SAAS,IAAI,QAA2B;AAC7C,SAAO,OAAO,IAAI,CAAC,MAAM,SAAS,CAAC,CAAC;AACtC;;;ACZA,QAAQ,IAAI,IAAI,CAAC,EAAE,GAAG,GAAG,GAAG,EAAE,CAAC,CAAC,CAAC;AACjC,IAAI;AACF,MAAI,CAAC,EAAE,GAAG,IAAI,GAAG,EAAE,CAAC,CAAC;AACvB,SAAS,GAAG;AACV,UAAQ,IAAK,EAAY,KAAK;AAChC;AACA,IAAI,CAAC,EAAE,GAAG,IAAI,GAAG,EAAE,CAAC,CAAC;",
+  "names": []
+}

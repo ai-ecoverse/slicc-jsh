@@ -20,28 +20,30 @@ const show = (label, args, options = {}) => {
   process.stdout.write(clean(r.stdout));
   process.stdout.write(clean(r.stderr));
 };
-show('inline map, sourcesContent', ['--enable-source-maps', 'dist/inline.js']);
-show('map file, sources from disk', ['--enable-source-maps', 'dist/file.js']);
-show('ES module', ['--enable-source-maps', 'dist/esm.mjs']);
-show('original sources missing', ['--enable-source-maps', 'dist/nosrc.js']);
-show('no source maps', ['dist/file.js']);
+show('inline map, sourcesContent', ['--enable-source-maps', 'out/inline.js']);
+show('map file, sources from disk', ['--enable-source-maps', 'out/file.js']);
+show('ES module', ['--enable-source-maps', 'out/esm.mjs']);
+show('original sources missing', ['--enable-source-maps', 'out/nosrc.js']);
+show('a CommonJS bundle with a hashbang', ['--enable-source-maps', 'out/hashbang.js']);
+show('an ES module imported with a query', ['--enable-source-maps', 'esm-query.mjs']);
+show('no source maps', ['out/file.js']);
 show('process.setSourceMapsEnabled(true) before the require', [
   '-e',
-  "console.log(process.sourceMapsEnabled); process.setSourceMapsEnabled(true); console.log(process.sourceMapsEnabled, JSON.stringify(require('module').getSourceMapsSupport())); require('./dist/inline.js')",
+  "console.log(process.sourceMapsEnabled); process.setSourceMapsEnabled(true); console.log(process.sourceMapsEnabled, JSON.stringify(require('module').getSourceMapsSupport())); require('./out/inline.js')",
 ]);
 show('module API', [
   '--enable-source-maps',
   '-e',
   [
     "const m = require('module');",
-    "console.log(JSON.stringify(m.getSourceMapsSupport()), typeof m.SourceMap, m.findSourceMap(require.resolve('./dist/file.js')));",
-    "try { require('./dist/file.js') } catch {}",
-    "const sm = m.findSourceMap(require.resolve('./dist/file.js'));",
+    "console.log(JSON.stringify(m.getSourceMapsSupport()), typeof m.SourceMap, m.findSourceMap(require.resolve('./out/file.js')));",
+    "try { require('./out/file.js') } catch {}",
+    "const sm = m.findSourceMap(require.resolve('./out/file.js'));",
     "console.log(sm instanceof m.SourceMap, JSON.stringify(sm.payload.sources), JSON.stringify(sm.payload.sourceRoot), sm.lineLengths.length);",
     'console.log(sm.findEntry(3, 10));',
     'console.log(sm.findOrigin(4, 11));',
     'console.log(sm.findEntry(1000, 0));',
-    "console.log(m.findSourceMap(require('url').pathToFileURL(require.resolve('./dist/file.js')).href) === sm, m.findSourceMap('node:fs'), m.findSourceMap(1));",
+    "console.log(m.findSourceMap(require('url').pathToFileURL(require.resolve('./out/file.js')).href) === sm, m.findSourceMap('node:fs'), m.findSourceMap(1));",
     "const own = new m.SourceMap({ version: 3, sources: ['a.js'], names: ['x'], mappings: 'AAAAA' });",
     'console.log(own.findEntry(0, 0), own.payload.names);',
     "try { new m.SourceMap(1) } catch (e) { console.log(e.code) }",

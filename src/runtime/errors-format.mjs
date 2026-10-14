@@ -93,7 +93,7 @@ function mappedErrorSource(ctx, err, evalCode, fromPromise) {
   let file = gen.file;
   if (esm) {
     try {
-      file = decodeURIComponent(gen.file.slice('file://'.length));
+      file = decodeURIComponent(gen.file.slice('file://'.length).replace(/[?#].*$/, ''));
     } catch {
       return undefined;
     }

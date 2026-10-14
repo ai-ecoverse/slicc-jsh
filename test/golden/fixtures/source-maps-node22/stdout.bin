@@ -66,7 +66,7 @@ Error: negative x: -1
     at Array.map (<anonymous>)
     at run (DIR/missing/orig.ts:14:17)
     at Object.<anonymous> (DIR/missing/main.ts:5:3)
-DIR/dist/nosrc.js:4
+DIR/out/nosrc.js:4
     throw new Error(`negative x: ${p.x}`);
     ^
 
@@ -78,24 +78,47 @@ Error: negative x: -2
     at Object.<anonymous> (DIR/missing/main.ts:9:1)
 
 Node.js v22.22.0
-== no source maps: status 1
+== a CommonJS bundle with a hashbang: status 1
 [ '(1, 2)' ]
 Error: negative x: -1
-    at describe (DIR/dist/file.js:4:11)
-    at DIR/dist/file.js:9:28
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
     at Array.map (<anonymous>)
-    at run (DIR/dist/file.js:9:17)
-    at Object.<anonymous> (DIR/dist/file.js:15:3)
-DIR/dist/file.js:4
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:5:3)
+DIR/src/orig.ts:8
     throw new Error(`negative x: ${p.x}`);
     ^
 
 Error: negative x: -2
-    at describe (DIR/dist/file.js:4:11)
-    at DIR/dist/file.js:9:28
+    at describe (DIR/src/orig.ts:8:11)
+    at <anonymous> (DIR/src/orig.ts:14:28)
     at Array.map (<anonymous>)
-    at run (DIR/dist/file.js:9:17)
-    at Object.<anonymous> (DIR/dist/file.js:19:1)
+    at run (DIR/src/orig.ts:14:17)
+    at Object.<anonymous> (DIR/src/main.ts:9:1)
+
+Node.js v22.22.0
+== an ES module imported with a query: status 0
+    at where (DIR/src/tiny.ts:1:36)
+true undefined
+== no source maps: status 1
+[ '(1, 2)' ]
+Error: negative x: -1
+    at describe (DIR/out/file.js:4:11)
+    at DIR/out/file.js:9:28
+    at Array.map (<anonymous>)
+    at run (DIR/out/file.js:9:17)
+    at Object.<anonymous> (DIR/out/file.js:15:3)
+DIR/out/file.js:4
+    throw new Error(`negative x: ${p.x}`);
+    ^
+
+Error: negative x: -2
+    at describe (DIR/out/file.js:4:11)
+    at DIR/out/file.js:9:28
+    at Array.map (<anonymous>)
+    at run (DIR/out/file.js:9:17)
+    at Object.<anonymous> (DIR/out/file.js:19:1)
 
 Node.js v22.22.0
 == process.setSourceMapsEnabled(true) before the require: status 1
