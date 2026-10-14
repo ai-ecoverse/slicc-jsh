@@ -37,7 +37,7 @@ const proc = () => programProcess ?? globalThis.process;
 const DEFAULT_ON = new Set(['--experimental-repl-await']);
 
 function getOptionValue(name) {
-  const argv = proc()?.execArgv ?? [];
+  const argv = proc()?._options ?? proc()?.execArgv ?? [];
   if (DEFAULT_ON.has(name)) return !argv.includes(`--no-${name.slice(2)}`);
   const values = [];
   for (let i = 0; i < argv.length; i++) {

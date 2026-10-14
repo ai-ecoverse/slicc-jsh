@@ -111,7 +111,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     preserveSymlinks: preserveSymlinks(process),
     esm: true,
     // node --expose-internals: import 'internal/…', as require() has it.
-    exposeInternals: () => process.execArgv.includes('--expose-internals'),
+    exposeInternals: () => (process._options ?? process.execArgv).includes('--expose-internals'),
   });
 
   /**

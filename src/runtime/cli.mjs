@@ -2,6 +2,9 @@
  * Parse `node` argv the way Node 22 does for -e / -p / -v / -h / script.js.
  * `argv` is ctx.argv: [argv0, ...args].
  */
+import { NODE_ENV_FLAGS } from './node-env-flags.mjs';
+import { ENV_ALIASES, ENV_VALUED } from './node-env-options.mjs';
+
 // Options that only set behaviour; kept in execArgv as Node does.
 const BOOLEAN_FLAGS = new Set([
   '--preserve-symlinks',
@@ -30,7 +33,7 @@ function v8FlagError(argv0, lines, arg) {
   ];
   return [...lines, 'Try --help for options', ...[arg, ...after].map((f) => `${argv0}: bad option: ${f}`)].join('\n');
 }
-const VALUED_FLAGS = ['--disable-warning', '--redirect-warnings', '--input-type'];
+const VALUED_FLAGS = ['--disable-warning', '--redirect-warnings', '--input-type', '--title'];
 const INPUT_TYPES = ['module', 'commonjs', 'module-typescript', 'commonjs-typescript'];
 
 /** --input-type's value from execArgv (`--input-type=x` or `--input-type x`), or undefined. */
@@ -43,7 +46,124 @@ export function inputTypeOf(execArgv = []) {
   return type;
 }
 
-export function parseNodeArgv(argv) {
+/**
+ * NODE_OPTIONS as Node 22.22.0 reads it (ParseNodeOptionsEnvVar, then the
+ * option parser in its environment mode): words split on spaces, `"…"`
+ * groups (a backslash escapes the next character inside), parsing stops at
+ * the first word that isn't an option, and every option must be one Node
+ * allows there. Answers the words jsh applies (in CLI form, before the
+ * command line's), or Node's error.
+ */
+export function parseNodeOptions(text, argv0 = 'node') {
+  const words = [];
+  let inString = false;
+  let fresh = true;
+  for (let i = 0; i < text.length; i++) {
+    let c = text[i];
+    if (c === '\\' && inString) {
+      if (i + 1 === text.length) return { error: `${argv0}: invalid value for NODE_OPTIONS (invalid escape)\n`, status: 9 };
+      c = text[++i];
+    } else if (c === ' ' && !inString) {
+      fresh = true;
+      continue;
+    } else if (c === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (fresh) {
+      words.push(c);
+      fresh = false;
+    } else {
+      words[words.length - 1] += c;
+    }
+  }
+  if (inString) return { error: `${argv0}: invalid value for NODE_OPTIONS (unterminated string)\n`, status: 9 };
+
+  const allowed = new Set(NODE_ENV_FLAGS);
+  const apply = [];
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    // The first argument that isn't an option ends them; the rest is ignored.
+    if (!word.startsWith('-') || word === '-') break;
+    const eq = word.indexOf('=');
+    const raw = eq === -1 ? word : word.slice(0, eq);
+    // Node's names take `_` for `-` (after the leading dashes).
+    const name = raw.replace(/^(-+)(.*)$/, (m, dashes, rest) => dashes + rest.replace(/_/g, '-'));
+    if (word === '--' || !allowed.has(name)) return { error: `${argv0}: ${raw} is not allowed in NODE_OPTIONS`, status: 9 };
+    const alias = ENV_ALIASES[name];
+    const canonical = alias?.length === 1 ? alias[0] : name;
+    const takesValue = ENV_VALUED.has(canonical);
+    if (takesValue && eq === -1) {
+      if (i + 1 >= words.length) return { error: `${argv0}: ${raw} requires an argument`, status: 9 };
+      apply.push(word, words[++i]);
+    } else if (takesValue && eq === word.length - 1) {
+      return { error: `${argv0}: ${word} requires an argument`, status: 9 };
+    } else {
+      apply.push(eq === -1 ? name : `${name}${word.slice(eq)}`);
+    }
+  }
+  // What jsh knows of them goes through its own parser; the rest Node would
+  // apply, and jsh has no use for (accepted, as there).
+  const known = [];
+  for (let i = 0; i < apply.length; i++) {
+    const word = apply[i];
+    const name = word.split('=')[0];
+    const valued = !word.includes('=') && ENV_VALUED.has(ENV_ALIASES[name]?.length === 1 ? ENV_ALIASES[name][0] : name);
+    if (jshKnows(word)) known.push(word, ...(valued ? [apply[i + 1]] : []));
+    if (valued) i++;
+  }
+  return { args: known };
+}
+
+/** An option jsh's command line takes (see parseNodeArgv). */
+function jshKnows(word) {
+  const name = word.split('=')[0];
+  return (
+    BOOLEAN_FLAGS.has(name) ||
+    VALUED_FLAGS.includes(name) ||
+    ['-r', '--require', '--import', '--stack-trace-limit', '--max-old-space-size', '-i', '--interactive'].includes(name)
+  );
+}
+
+/**
+ * The command line with NODE_OPTIONS (`nodeOptions`) before it, as Node
+ * applies them: their options come first (the command line's win where one
+ * value counts; `-r` / `--import` lists take NODE_OPTIONS' first), and they
+ * aren't in execArgv: `options` is what's in effect.
+ */
+export function parseNodeArgv(argv, { nodeOptions } = {}) {
+  const argv0 = argv[0] ?? 'node';
+  if (typeof nodeOptions === 'string' && nodeOptions !== '') {
+    const env = parseNodeOptions(nodeOptions, argv0);
+    if (env.error) return env;
+    if (env.args.length > 0) {
+      const fromEnv = parseCommandLine([argv0, ...env.args]);
+      if (fromEnv.error) return fromEnv;
+      const cli = parseCommandLine(argv);
+      if (cli.error || cli.mode === 'version' || cli.mode === 'help') return cli;
+      return {
+        ...cli,
+        options: effective([...fromEnv.execArgv, ...cli.execArgv]),
+        preload: [...fromEnv.preload, ...cli.preload],
+        imports: [...fromEnv.imports, ...cli.imports],
+        v8Warnings: [...fromEnv.v8Warnings, ...cli.v8Warnings],
+        interactive: cli.interactive || fromEnv.interactive,
+      };
+    }
+  }
+  const parsed = parseCommandLine(argv);
+  return parsed.execArgv ? { ...parsed, options: effective(parsed.execArgv) } : parsed;
+}
+
+/** The options in effect: a boolean given a value (`--no-warnings=x`, which Node takes) as itself. */
+function effective(flags) {
+  return flags.map((f) => {
+    const name = f.split('=')[0];
+    return f.includes('=') && BOOLEAN_FLAGS.has(name) ? name : f;
+  });
+}
+
+function parseCommandLine(argv) {
   const argv0 = argv[0] ?? 'node';
   const args = argv.slice(1);
   let evalCode;
@@ -182,7 +302,7 @@ export function parseNodeArgv(argv) {
       i += 1;
       continue;
     }
-    if (BOOLEAN_FLAGS.has(arg)) {
+    if (BOOLEAN_FLAGS.has(arg) || (arg.startsWith('--') && BOOLEAN_FLAGS.has(arg.split('=')[0]))) {
       flags.push(arg);
       i += 1;
       continue;

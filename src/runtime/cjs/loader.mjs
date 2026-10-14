@@ -24,7 +24,7 @@ function nodeModulePaths(dir) {
 /** Node: `--preserve-symlinks` or NODE_PRESERVE_SYMLINKS=1 keeps link paths. */
 export function preserveSymlinks(process) {
   return (
-    (process?.execArgv ?? []).includes('--preserve-symlinks') ||
+    (process?._options ?? process?.execArgv ?? []).includes('--preserve-symlinks') ||
     process?.env?.NODE_PRESERVE_SYMLINKS === '1'
   );
 }
@@ -61,7 +61,7 @@ export function createCjs({
     path,
     readPackageJson,
     preserveSymlinks: preserveSymlinks(process),
-    exposeInternals: () => process.execArgv.includes('--expose-internals'),
+    exposeInternals: () => (process._options ?? process.execArgv).includes('--expose-internals'),
   });
   const builtins = createBuiltins({ ctx, process, Buffer, console, path, handles, timers });
   // Node lib files the runtime runs (src/node-lib) require fs, path, console.

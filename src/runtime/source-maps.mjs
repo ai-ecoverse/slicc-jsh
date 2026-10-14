@@ -32,7 +32,7 @@ const kSourceMappingURL = /\/[*/]#\s+sourceMappingURL=(?<sourceMappingURL>[^\s]+
 /** Wires the process: support from `--enable-source-maps` (Node's pre-execution). */
 export function initSourceMaps(process) {
   processRef = process;
-  if (process.execArgv.includes('--enable-source-maps')) {
+  if ((process._options ?? process.execArgv).includes('--enable-source-maps')) {
     enabled = true;
     pending = { __proto__: null, nodeModules: true, generatedCode: true };
   }

@@ -227,7 +227,8 @@ export async function runNode(ctx, options = {}) {
     return true;
   };
 
-  const parsed = parseNodeArgv([...ctx.argv]);
+  // NODE_OPTIONS first, as Node reads it.
+  const parsed = parseNodeArgv([...ctx.argv], { nodeOptions: ctx.env?.NODE_OPTIONS });
   if (parsed.error) {
     await ctx.write(2, `${parsed.error}\n`);
     return parsed.status ?? 9;
@@ -291,6 +292,18 @@ export async function runNode(ctx, options = {}) {
   nextTickRef = nextTick;
   processRef = process;
   process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
+  // The options in effect: NODE_OPTIONS' and the command line's (only these
+  // are execArgv). What the runtime reads for its behaviour.
+  process._options = Object.freeze([...(parsed.options ?? process.execArgv)]);
+  {
+    let title;
+    for (let i = 0; i < process._options.length; i++) {
+      const o = process._options[i];
+      if (o === '--title') title = process._options[++i];
+      else if (o.startsWith('--title=')) title = o.slice(8);
+    }
+    if (title !== undefined) process.title = title;
+  }
   initSourceMaps(process);
   process._setupWarnings();
   // Node ignores SIGPIPE from the start: a write to a pipe with no reader
@@ -556,7 +569,7 @@ export async function runNode(ctx, options = {}) {
    * its 'exit' ends the program. A status to return when it can't start.
    */
   const startRepl = () => {
-    if (inputTypeOf(process.execArgv)) {
+    if (inputTypeOf(process._options)) {
       console.error('Cannot specify --input-type for REPL');
       return 9;
     }
@@ -628,7 +641,7 @@ export async function runNode(ctx, options = {}) {
     removeJshHandoff = installJshHandoff(ctx, rt);
     let skipEntry = false;
     // V8's --stack-trace-limit=N.
-    const limit = process.execArgv.findLast?.((a) => a.startsWith('--stack-trace-limit='));
+    const limit = process._options.findLast?.((a) => a.startsWith('--stack-trace-limit='));
     if (limit) Error.stackTraceLimit = Number(limit.slice(20));
     // node -r / --require: loaded first, in order, as Node's preload modules.
     if (typeof options.main !== 'function') {
@@ -740,7 +753,7 @@ export async function runNode(ctx, options = {}) {
       process._evalCode = source;
       // `node -` keeps its `-`; piped input with no argument is [stdin].
       if (!parsed.stdinScript) process.argv[1] = '[stdin]';
-      const inputType = inputTypeOf(process.execArgv);
+      const inputType = inputTypeOf(process._options);
       const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(source);
       try {
         if (asEsm) {
@@ -770,7 +783,7 @@ export async function runNode(ctx, options = {}) {
       lastEvalCode = parsed.code;
       // --input-type, else Node's detect-module: CJS unless ESM-only syntax
       // (not mere import()).
-      const inputType = inputTypeOf(process.execArgv);
+      const inputType = inputTypeOf(process._options);
       const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(parsed.code);
       try {
         if (asEsm && parsed.print) {
@@ -857,7 +870,7 @@ export async function runNode(ctx, options = {}) {
       // Node runs the entry from its real path (so its own requires, and a
       // require of itself, resolve as for any module); process.argv[1] keeps
       // the path as given. --preserve-symlinks-main keeps the link.
-      const mainPath = realMainPath(ctx, filePath, process.execArgv);
+      const mainPath = realMainPath(ctx, filePath, process._options);
       try {
         // isEsmFilename covers .mjs, "type":"module", and detect-module for
         // ambiguous .js (not explicit "type":"commonjs").

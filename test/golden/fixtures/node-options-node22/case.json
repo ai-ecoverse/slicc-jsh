@@ -1,0 +1,41 @@
+{
+  "description": "NODE_OPTIONS: Node's word splitting (spaces, quotes, escapes), its options first and out of execArgv, CLI precedence, -r/--import lists, the allowed list and Node's errors (not allowed, requires an argument, unterminated string, invalid escape)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/i1.mjs",
+      "from": "i1.mjs"
+    },
+    {
+      "path": "/os/package.json",
+      "from": "package.json"
+    },
+    {
+      "path": "/os/r q.js",
+      "from": "r q.js"
+    },
+    {
+      "path": "/os/r\"q.js",
+      "from": "r\"q.js"
+    },
+    {
+      "path": "/os/r1.js",
+      "from": "r1.js"
+    },
+    {
+      "path": "/os/r2.js",
+      "from": "r2.js"
+    },
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    },
+    {
+      "path": "/os/show.js",
+      "from": "show.js"
+    }
+  ]
+}
