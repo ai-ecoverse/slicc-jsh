@@ -232,8 +232,13 @@ function createReport(process) {
   settings.excludeNetwork = has('--report-exclude-network');
   settings.excludeEnv = has('--report-exclude-env');
   settings.reportOnFatalError = has('--report-on-fatalerror');
-  // (Node's --report-signal implies --report-on-signal.)
-  settings.reportOnSignal = has('--report-on-signal') || valueOf(['--report-signal']) !== undefined;
+  // Node's --report-signal implies --report-on-signal where it stands: a
+  // later --no-report-on-signal turns it off, an earlier one doesn't.
+  settings.reportOnSignal = false;
+  for (const o of options) {
+    if (o === '--report-on-signal' || o === '--report-signal' || o.startsWith('--report-signal=')) settings.reportOnSignal = true;
+    else if (o === '--no-report-on-signal') settings.reportOnSignal = false;
+  }
   settings.reportOnUncaughtException = has('--report-uncaught-exception');
   let sequence = 0;
   const os = () => process._builtin('os');

@@ -24,9 +24,10 @@ for (const name of ['argv0', 'pid', 'version', 'versions', 'arch', 'platform', '
   }
 }
 console.log('argv[0] is execPath', process.argv[0] === process.execPath, 'argv0', process.argv0);
-const run = (args) => {
-  const r = spawnSync(process.execPath, args, { encoding: 'utf8', argv0: 'node' });
-  console.log(`== ${args.slice(0, -2).join(' ')}: status ${r.status}`);
+const run = (args, nodeOptions) => {
+  const env = nodeOptions === undefined ? process.env : { ...process.env, NODE_OPTIONS: nodeOptions };
+  const r = spawnSync(process.execPath, args, { encoding: 'utf8', argv0: 'node', env });
+  console.log(`== ${nodeOptions === undefined ? '' : `NODE_OPTIONS=${nodeOptions} `}${args.slice(0, -2).join(' ')}: status ${r.status}`);
   process.stdout.write(r.stdout + r.stderr);
 };
 const settings =
@@ -35,3 +36,10 @@ run(['-p', settings]);
 run(['--report-on-signal', '--report-signal=SIGUSR1', '--report-compact', '--report-dir=/tmp/x', '--report-filename=r.json', '--report-uncaught-exception', '--report-on-fatalerror', '--report-exclude-network', '--report-exclude-env', '-p', settings]);
 run(['--report-directory=/tmp/y', '--report-signal', 'SIGUSR1', '-p', settings]);
 run(['--report-dir', '-p', settings]);
+// --report-signal implies --report-on-signal where it stands.
+const onSignal = 'process.report.reportOnSignal';
+run(['--report-signal=SIGUSR1', '--no-report-on-signal', '-p', onSignal]);
+run(['--no-report-on-signal', '--report-signal=SIGUSR1', '-p', onSignal]);
+run(['--no-report-on-signal', '-p', onSignal], '--report-signal=SIGUSR1');
+run(['--report-signal=SIGUSR1', '-p', onSignal], '--no-report-on-signal');
+run(['--no-report-compact', '-p', 'process.report.compact'], '--report-compact');

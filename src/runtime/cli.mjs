@@ -185,9 +185,10 @@ function effective(flags) {
       out.push(f);
       continue;
     }
-    // A boolean's last form wins (`--x` … `--no-x`), as in Node.
+    // A boolean's last form wins (`--x` … `--no-x`), as in Node; it stays,
+    // in order (an implication such as --report-signal's counts before it).
     for (let i = out.length - 1; i >= 0; i--) if (booleanToggle(out[i])?.key === toggle.key) out.splice(i, 1);
-    if (toggle.on) out.push(toggle.flag);
+    out.push(toggle.on ? toggle.flag : name);
   }
   return out;
 }

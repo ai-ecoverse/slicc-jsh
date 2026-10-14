@@ -19,3 +19,13 @@ argv[0] is execPath true argv0 node
 {"directory":"/tmp/y","filename":"","compact":false,"excludeNetwork":false,"signal":"SIGUSR1","reportOnFatalError":false,"reportOnSignal":true,"reportOnUncaughtException":false,"excludeEnv":false}
 == --report-dir: status 9
 node: --report-dir requires an argument
+== --report-signal=SIGUSR1 --no-report-on-signal: status 0
+false
+== --no-report-on-signal --report-signal=SIGUSR1: status 0
+true
+== NODE_OPTIONS=--report-signal=SIGUSR1 --no-report-on-signal: status 0
+false
+== NODE_OPTIONS=--no-report-on-signal --report-signal=SIGUSR1: status 0
+true
+== NODE_OPTIONS=--report-compact --no-report-compact: status 0
+false
