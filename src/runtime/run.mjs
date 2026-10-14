@@ -1,3 +1,4 @@
+import { initSourceMaps } from './source-maps.mjs';
 import { installProcessMembers } from './process-members.mjs';
 import { installCredentials } from './process-credentials.mjs';
 import { installJshHandoff } from '../jsh/kernel.mjs';
@@ -290,6 +291,7 @@ export async function runNode(ctx, options = {}) {
   nextTickRef = nextTick;
   processRef = process;
   process.execArgv = parsed.execArgv ? [...parsed.execArgv] : [];
+  initSourceMaps(process);
   process._setupWarnings();
   // Node ignores SIGPIPE from the start: a write to a pipe with no reader
   // fails with EPIPE instead of ending the program.

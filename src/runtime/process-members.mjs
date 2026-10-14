@@ -7,6 +7,7 @@
  * `moduleLoadList`, `openStdin`, `reallyExit`, `report`,
  * `setSourceMapsEnabled` / `sourceMapsEnabled`.
  */
+import { getSourceMapsSupport, setSourceMapsSupport } from './source-maps.mjs';
 import { SIGNALS } from './signals.mjs';
 import { NODE_ENV_FLAGS } from './node-env-flags.mjs';
 import {
@@ -600,14 +601,13 @@ export function installProcessMembers(process, { flushTicks, handleUncaught, pre
       return (report ??= createReport(process));
     },
   });
-  let sourceMaps = process.execArgv.includes('--enable-source-maps');
+  // Node's bootstrap/node.js: both on lib/internal/source_map's support.
   method(process, 'setSourceMapsEnabled', function setSourceMapsEnabled(val) {
-    validateBoolean(val, 'enabled');
-    sourceMaps = val;
+    setSourceMapsSupport(val, { __proto__: null, nodeModules: val, generatedCode: val });
   });
   define(process, 'sourceMapsEnabled', {
     get() {
-      return sourceMaps;
+      return getSourceMapsSupport().enabled;
     },
   });
 }

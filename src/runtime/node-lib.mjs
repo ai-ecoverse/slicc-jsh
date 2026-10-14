@@ -21,7 +21,7 @@ import { createUtil } from './builtins/util.mjs';
 import { createUrlInternals, urlBindings } from './builtins/url-internal.mjs';
 import * as acorn from 'acorn';
 import { ES_GLOBALS, decorateErrorStack, makeContextifyScriptWith, setGlobalOverlay } from './builtins/vm.mjs';
-import { ErrorPrepareStackTrace, overrideStackTrace } from './stack.mjs';
+import { ErrorPrepareStackTrace, overrideStackTrace, setInternalPrepareStackTrace } from './stack.mjs';
 
 for (const [name, value] of Object.entries(urlBindings)) setBinding(name, value);
 
@@ -305,6 +305,11 @@ export function loadNodeLib({ ctx, process } = {}) {
         kEnhanceStackBeforeInspector,
         ErrorPrepareStackTrace,
         overrideStackTrace,
+        // lib/internal/source_map: the formatter of every stack while source
+        // maps are on (jsh's own otherwise: `defaultPrepareStackTrace`).
+        defaultPrepareStackTrace: null,
+        setInternalPrepareStackTrace,
+        kIsNodeError: Symbol('kIsNodeError'),
       },
       'internal/validators': {
         validateAbortSignal: errors.validateAbortSignal,
@@ -350,6 +355,7 @@ export function loadNodeLib({ ctx, process } = {}) {
           });
         },
         isWindows: false,
+        isUnderNodeModules: (filename) => /[\\/]node_modules[\\/]/.test(String(filename)),
         // Node's: one ExperimentalWarning per feature.
         emitExperimentalWarning(feature) {
           experimentalWarned ??= new Set();
@@ -400,7 +406,6 @@ export function loadNodeLib({ ctx, process } = {}) {
         stripVTControlCharacters,
       },
       'internal/abort_controller': abortController,
-      'internal/source_map/source_map_cache': { findSourceMap: () => undefined },
       'internal/v8/startup_snapshot': { namespace: { addSerializeCallback() {}, isBuildingSnapshot: () => false } },
       'internal/encoding': { TextEncoder: globalThis.TextEncoder, TextDecoder: globalThis.TextDecoder },
       'internal/util/trace_sigint': {
@@ -477,7 +482,19 @@ export function loadNodeLib({ ctx, process } = {}) {
             proc()._importFrom(specifier, decodeURIComponent(new URL(parentURL).pathname), { with: attributes }),
         }),
       },
-      'internal/modules/helpers': lazy(() => ({ makeRequireFunction, addBuiltinLibsToObject })),
+      'internal/modules/helpers': lazy(() => ({
+        makeRequireFunction,
+        addBuiltinLibsToObject,
+        // Node's: a path as a file: URL, a URL as it is, else undefined.
+        normalizeReferrerURL(referrerName) {
+          if (referrerName == null) return undefined;
+          if (builtin('path').isAbsolute(referrerName)) {
+            return createUrlInternals({ nodePath: builtin('path'), Buffer: builtin('buffer').Buffer }).pathToFileURL(referrerName).href;
+          }
+          if (referrerName.startsWith('file://') || URL.canParse(referrerName)) return referrerName;
+          return undefined;
+        },
+      })),
       'internal/process/permission': { isEnabled: () => false, has: () => true },
       'internal/util/inspector': {
         // No inspector: what Node does without one.

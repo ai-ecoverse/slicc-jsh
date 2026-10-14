@@ -255,6 +255,8 @@ function wrapRaw(frame) {
     getFileName: () => file,
     getLineNumber: () => line,
     getColumnNumber: () => col,
+    getEnclosingLineNumber: () => adjustLine(frame.getEnclosingLineNumber?.()),
+    getEnclosingColumnNumber: () => frame.getEnclosingColumnNumber?.(),
     getEvalOrigin: () => frame.getEvalOrigin?.(),
     getScriptId: () => frame.getScriptId?.(),
     isToplevel: () => !!isToplevel,
@@ -309,6 +311,14 @@ function wrapEsmCallSite(frame, path, line) {
     getFileName: () => url,
     getLineNumber: () => line,
     getColumnNumber: () => col,
+    getEnclosingLineNumber: () => {
+      const enclosing = adjustLine(frame.getEnclosingLineNumber?.()) - (esmFrames.get(path) ?? 0);
+      return enclosing;
+    },
+    getEnclosingColumnNumber: () => {
+      const enclosing = adjustLine(frame.getEnclosingLineNumber?.()) - (esmFrames.get(path) ?? 0);
+      return esmColumn(path, enclosing, frame.getEnclosingColumnNumber?.() ?? 0);
+    },
     getEvalOrigin: () => undefined,
     getScriptId: () => frame.getScriptId?.(),
     isToplevel: () => !!top,
@@ -416,9 +426,41 @@ function takeOverride(err, frames) {
   return { value: override(err, frames.filter((f) => !isKernelFrame(f)).map(wrapCallSite)) };
 }
 
+/**
+ * internal/errors' setInternalPrepareStackTrace: the formatter Node uses for
+ * every stack while source maps are on (lib/internal/source_map's
+ * prepareStackTraceWithSourceMaps); null for jsh's own.
+ */
+let internalPrepare = null;
+export function setInternalPrepareStackTrace(fn) {
+  internalPrepare = typeof fn === 'function' ? fn : null;
+}
+
+/**
+ * Where an error formatted through source maps was thrown, in the code as
+ * run (its first frame): what the uncaught-error report maps, as Node's
+ * GetErrorSource maps the V8 message's position.
+ */
+const generatedAt = new WeakMap();
+export function generatedLocation(err) {
+  return err && typeof err === 'object' ? generatedAt.get(err) : undefined;
+}
+
 function defaultPrepare(err, frames) {
   if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
   const kept = frames.filter((f) => !isKernelFrame(f));
+  if (internalPrepare) {
+    try {
+      const sites = kept.map(wrapCallSite);
+      const top = sites[0];
+      if (top && err && typeof err === 'object' && typeof top.getFileName() === 'string') {
+        generatedAt.set(err, { file: top.getFileName(), line: top.getLineNumber(), column: top.getColumnNumber() });
+      }
+      return internalPrepare(err, sites);
+    } catch {
+      /* jsh's own, as when nothing maps */
+    }
+  }
   return [stackHeader(err), ...kept.map((f) => formatFrame(wrapCallSite(f)))].join('\n');
 }
 

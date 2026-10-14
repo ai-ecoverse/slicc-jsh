@@ -6,6 +6,9 @@
 import nodeInspect from 'node-inspect-extracted';
 import { SIGNALS } from './signals.mjs';
 
+/** Set by lib/internal/source_map (see internalBinding('errors')). */
+export const sourceMapHooks = { errorSource: undefined, cacheGenerated: undefined };
+
 const proc = () => globalThis.process;
 const env = () => proc()?.env ?? {};
 
@@ -172,6 +175,15 @@ const bindings = {
   // diagnostics_channel's: a subscriber that throws is an uncaught exception
   // (the runtime's, set by run.mjs), and the publish goes on.
   errors: {
+    // lib/internal/source_map: V8's own source-map flag (unused here), and
+    // the hooks jsh's error reports and eval call (source-maps.mjs).
+    setSourceMapsEnabled() {},
+    setGetSourceMapErrorSource(fn) {
+      sourceMapHooks.errorSource = fn;
+    },
+    setMaybeCacheGeneratedSourceMap(fn) {
+      sourceMapHooks.cacheGenerated = fn;
+    },
     triggerUncaughtException(err) {
       const trigger = globalThis.process?._triggerUncaught;
       if (typeof trigger === 'function') trigger(err);
@@ -187,6 +199,7 @@ const bindings = {
     stopSigintWatchdog: () => false,
   },
   util: {
+    privateSymbols: { source_map_data_private_symbol: Symbol('source_map_data_private_symbol') },
     // punycode's deprecation check (DEP0040): a caller under node_modules.
     isInsideNodeModules() {
       const holder = {};

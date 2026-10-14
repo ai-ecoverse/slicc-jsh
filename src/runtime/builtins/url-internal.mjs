@@ -213,6 +213,14 @@ export function createUrlInternals({ nodePath, Buffer }) {
 
   return {
     URL: globalThis.URL,
+    // Node's URLParse: a URL, or null when it doesn't parse.
+    URLParse: (input, base) => {
+      try {
+        return new globalThis.URL(input, base);
+      } catch {
+        return null;
+      }
+    },
     URLSearchParams: globalThis.URLSearchParams,
     isURL,
     domainToASCII,
