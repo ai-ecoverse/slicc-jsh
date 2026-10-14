@@ -1,0 +1,13 @@
+{
+  "description": "V8's names for anonymous frames: an arrow or callback with no receiver is its location alone, Type.<anonymous> on a receiver, builtins (<anonymous>), a module's top level Object.<anonymous>",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

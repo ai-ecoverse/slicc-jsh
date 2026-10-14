@@ -171,9 +171,27 @@ function wrapRaw(frame) {
   const typeName = frame.getTypeName?.();
   const userName = frame.getFunctionName?.();
 
+  // V8 names an anonymous function in Function-constructor code `eval`.
+  // As V8 prints a real anonymous one: called with no receiver (an arrow, a
+  // callback), its location alone; on a receiver, `Type.<anonymous>` (a
+  // module's top level runs on `exports`: Object.<anonymous>).
+  const v8TopLevel = typeof frame.isToplevel === 'function' ? frame.isToplevel() : null;
+  const v8Ctor = typeof frame.isConstructor === 'function' ? frame.isConstructor() : false;
   let fn = userName || null;
+  let locationOnly = false;
   if (fn === 'eval' || fn === 'Object.eval' || fn === '<anonymous>') {
-    fn = 'Object.<anonymous>';
+    if (v8TopLevel === true && !v8Ctor) {
+      fn = null;
+      locationOnly = true;
+    } else if (typeName === 'Object' && method && !v8Ctor) {
+      // V8's AppendMethodCall with no function name: Type.method (other
+      // types' method calls are named below), or Type.<anonymous>.
+      fn = `Object.${method}`;
+    } else if (typeName && typeName !== 'Object' && !method && !v8Ctor) {
+      fn = `${typeName}.<anonymous>`;
+    } else {
+      fn = 'Object.<anonymous>';
+    }
   }
   const isAnon = fn === 'Object.<anonymous>';
 
@@ -185,7 +203,7 @@ function wrapRaw(frame) {
     } else {
       fn = `${typeName}.${method}`;
     }
-  } else if (!fn) {
+  } else if (!fn && !locationOnly) {
     fn = parsed?.name || null;
     if (fn === 'eval' || fn === 'Object.eval' || fn === '<anonymous>') {
       fn = 'Object.<anonymous>';
@@ -241,8 +259,12 @@ function wrapRaw(frame) {
     isPromiseAll: () => frame.isPromiseAll?.() ?? false,
     getPromiseIndex: () => frame.getPromiseIndex?.(),
     toString() {
-      const f = file || 'unknown';
+      // V8: a frame with no script (a builtin's) is `<anonymous>`.
+      const f = file || '<anonymous>';
       const pos = line != null ? `:${line}:${col ?? 0}` : '';
+      // V8: an anonymous function called with no receiver (an arrow, a
+      // callback) is its location alone.
+      if (!fn && (locationOnly || (v8TopLevel === true && !ctor))) return `${f}${pos}`;
       const label = fn || 'Object.<anonymous>';
       if (f === '[eval]' || String(f).includes('[eval]')) {
         if (label === 'Object.<anonymous>') return `${f}${pos}`;
