@@ -40,11 +40,14 @@ export function installCredentials(process) {
   const uidOf = (name) => readTable(ctx, '/etc/passwd').find((f) => f[0] === name)?.[2];
   const gidOf = (name) => readTable(ctx, '/etc/group').find((f) => f[0] === name)?.[2];
   const nameOfUid = (uid) => readTable(ctx, '/etc/passwd').find((f) => Number(f[2]) === uid)?.[0];
-  /** A uid / gid: the number, or the name's (undefined when unknown). */
+  /**
+   * A uid / gid: the number, or the name's (undefined when unknown). The
+   * all-ones id is (uid_t)-1, reserved: never a credential (Node's
+   * uid_not_found / gid_not_found).
+   */
   const resolve = (id, lookup) => {
-    if (typeof id === 'number') return id >>> 0;
-    const n = lookup(id);
-    return n === undefined ? undefined : Number(n);
+    const n = typeof id === 'number' ? id >>> 0 : lookup(id) === undefined ? undefined : Number(lookup(id));
+    return n === 0xffffffff ? undefined : n;
   };
   const apply = (change, syscall) => {
     try {
