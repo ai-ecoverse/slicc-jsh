@@ -8,10 +8,13 @@ import { UV_ERRORS } from '../node-bindings.mjs';
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
+  validateBoolean,
   validateInt32,
   validateInteger,
+  validateObject,
   validateUint32,
 } from '../node-errors.mjs';
+import { kernelVersion } from '../kernel-version.mjs';
 
 // Node's argument checks (lib/internal/fs/utils.js), before any call.
 /** getValidatedFd: an int32 >= 0. */
@@ -632,6 +635,99 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     if (!ok) throw nodeFsError('ENOENT', syscall, p);
   }
 
+  /** Node's validateRmdirOptions with rm's defaults (lib/internal/fs/utils.js). */
+  function validateRmOptions(options) {
+    const defaults = { recursive: false, force: false, retryDelay: 100, maxRetries: 0 };
+    if (options === undefined) return defaults;
+    validateObject(options, 'options');
+    const opts = { ...defaults, ...options };
+    validateBoolean(opts.recursive, 'options.recursive');
+    validateInt32(opts.retryDelay, 'options.retryDelay', 0);
+    validateUint32(opts.maxRetries, 'options.maxRetries');
+    validateBoolean(opts.force, 'options.force');
+    return opts;
+  }
+
+  // slicc-kernel 1.88.0+ (ctx.kernel, #518; so 1.84.1+, whose recursive rm
+  // has Node's result): a tree goes to the kernel in one call. When that
+  // fails partway (EACCES / EPERM, a mount point's EBUSY, …), the walk
+  // below runs on what is left, so the error names the entry and the
+  // syscall, as Node's does.
+  const kernelRm = kernelVersion(ctx) !== null;
+
+  /**
+   * Node's rimrafSync (lib/internal/fs/rimraf.js): a missing entry is
+   * skipped; a file is unlinked; a directory's children go first, then the
+   * directory. `shown` is the path as the error should name it (the caller's
+   * path joined with '/' and each name, as Node's Buffer concat does).
+   */
+  function rimrafSync(shown, target, recursive) {
+    let st;
+    try {
+      st = syncFs.lstat(target);
+    } catch (err) {
+      if (err?.code === 'ENOENT') return;
+      st = null;
+    }
+    if (!st?.isDirectory) {
+      try {
+        syncFs.unlink(target);
+      } catch (err) {
+        if (err?.code === 'ENOENT') return;
+        throw nodeFsError(err?.code || 'EIO', 'unlink', shown, err);
+      }
+      return;
+    }
+    if (!recursive) throw rmIsDirectoryError(shown);
+    if (kernelRm) {
+      try {
+        syncFs.rm(target);
+        return;
+      } catch {
+        /* the walk names the entry that fails */
+      }
+    }
+    rmTreeSync(shown, target);
+  }
+
+  function rmTreeSync(shown, target) {
+    let names;
+    try {
+      names = syncFs.readdir(target);
+    } catch (err) {
+      if (err?.code === 'ENOENT') return;
+      throw nodeFsError(err?.code || 'EIO', 'scandir', shown, err);
+    }
+    const sep = String(shown).endsWith('/') ? '' : '/';
+    for (const name of names) {
+      const child = `${shown}${sep}${name}`;
+      const childTarget = path.join(target, name);
+      let st;
+      try {
+        st = syncFs.lstat(childTarget);
+      } catch (err) {
+        if (err?.code === 'ENOENT') continue;
+        throw nodeFsError(err?.code || 'EIO', 'lstat', child, err);
+      }
+      if (st.isDirectory) rmTreeSync(child, childTarget);
+      else {
+        try {
+          syncFs.unlink(childTarget);
+        } catch (err) {
+          if (err?.code === 'ENOENT') continue;
+          throw nodeFsError(err?.code || 'EIO', 'unlink', child, err);
+        }
+      }
+    }
+    // Empty now: the kernel's rm takes it as rmdir would.
+    try {
+      syncFs.rm(target);
+    } catch (err) {
+      if (err?.code === 'ENOENT') return;
+      throw nodeFsError(err?.code || 'EIO', 'rmdir', shown, err);
+    }
+  }
+
   // How many symlinks a path may pass through before the kernel refuses it
   // (Linux's MAXSYMLINKS): Node's recursive readdir follows linked
   // directories until the OS answers ELOOP.
@@ -894,12 +990,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       try {
         st = syncFs.lstat(target);
       } catch (err) {
-        throw nodeFsError(err?.code || 'ENOENT', 'rmdir', pathArg, err);
+        // Node's recursive rmdir checks with lstat (validateRmOptionsSync).
+        throw nodeFsError(err?.code || 'ENOENT', options?.recursive ? 'lstat' : 'rmdir', pathArg, err);
       }
       // Even with `recursive`, rmdir removes directories only (Node).
       if (!st.isDirectory) throw nodeFsError('ENOTDIR', 'rmdir', pathArg);
       if (options?.recursive) {
-        syncApi.rmSync(p, { recursive: true, force: options.force });
+        syncApi.rmSync(p, { ...options, recursive: true, force: false });
         return;
       }
       let entries;
@@ -915,30 +1012,24 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         throw nodeFsError(err?.code || 'EIO', 'rmdir', pathArg, err);
       }
     },
-    rmSync(p, options = {}) {
+    rmSync(p, options) {
       const pathArg = p;
       const target = abs(p);
-      let st;
-      try {
-        st = syncFs.lstat(target);
-      } catch (err) {
-        if (options?.force && (err?.code === 'ENOENT' || err?.code === 'ENOTDIR')) return;
-        throw nodeFsError(err?.code || 'ENOENT', 'lstat', pathArg, err);
-      }
-      if (st.isDirectory && !options?.recursive) throw rmIsDirectoryError(pathArg);
-      try {
-        if (st.isDirectory) {
-          for (const name of syncFs.readdir(target)) {
-            syncApi.rmSync(path.join(target, name), { recursive: true, force: options.force });
-          }
-          syncFs.rm(target);
-        } else {
-          syncFs.unlink(target);
+      const opts = validateRmOptions(options);
+      // Node's validateRmOptionsSync: lstat first, unless force and recursive
+      // (then the removal itself reports what it meets). force forgives a
+      // missing path only.
+      if (!opts.force || !opts.recursive) {
+        let st;
+        try {
+          st = syncFs.lstat(target);
+        } catch (err) {
+          const code = err?.code || 'ENOENT';
+          if (!opts.force || (code !== 'ENOENT' && code !== 'ENOTDIR')) throw nodeFsError(code, 'lstat', pathArg, err);
         }
-      } catch (err) {
-        if (err?.syscall) throw err;
-        throw nodeFsError(err?.code || 'EIO', 'rm', pathArg, err);
+        if (st?.isDirectory && !opts.recursive) throw rmIsDirectoryError(pathArg);
       }
+      rimrafSync(pathArg, target, opts.recursive);
     },
     unlinkSync(p) {
       const pathArg = p;
@@ -2070,11 +2161,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     rm(p, options, callback) {
       const cb = typeof options === 'function' ? options : callback;
       const opts = typeof options === 'function' ? undefined : options;
-      if (typeof cb === 'function') return callbackify(syncApi.rmSync)(p, opts ?? {}, cb);
+      if (typeof cb === 'function') return opts === undefined ? callbackify(syncApi.rmSync)(p, cb) : callbackify(syncApi.rmSync)(p, opts, cb);
       let err = null;
       try {
-        syncApi.rmSync(p, opts ?? {});
+        syncApi.rmSync(p, opts);
       } catch (e) {
+        // Node validates the options before it starts: those throw here.
+        if (isArgError(e)) throw e;
         err = e;
       }
       void err;

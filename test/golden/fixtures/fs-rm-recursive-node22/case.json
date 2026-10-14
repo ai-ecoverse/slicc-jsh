@@ -1,0 +1,5 @@
+{
+  "description": "fs.rm / rmSync / promises.rm / rmdirSync with recursive (one kernel call on slicc-kernel 1.88.0+, jsh's walk before): trees with files, nested and empty directories, symlinks inside (removed, never followed) and a symlink as the target; force with ENOENT and ENOTDIR; ERR_FS_EISDIR without recursive; Node's code / errno / syscall / path",
+  "argv": ["script.js"],
+  "shim": true
+}
