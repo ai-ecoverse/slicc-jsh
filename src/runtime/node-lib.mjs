@@ -409,9 +409,9 @@ export function loadNodeLib({ ctx, process } = {}) {
       'internal/v8/startup_snapshot': { namespace: { addSerializeCallback() {}, isBuildingSnapshot: () => false } },
       'internal/encoding': { TextEncoder: globalThis.TextEncoder, TextDecoder: globalThis.TextDecoder },
       'internal/util/trace_sigint': {
-        setTraceSigInt(enable) {
-          errors.validateBoolean(enable, 'enable');
-        },
+        // Node's: any value (truthy starts the SIGINT watchdog, which a
+        // script here can't be interrupted by anyway: nothing to do).
+        setTraceSigInt() {},
       },
       'internal/crypto/util': { kKeyObject: Symbol('kKeyObject') },
       'internal/crypto/keys': lazy(() => ({
