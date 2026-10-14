@@ -4,5 +4,14 @@
     "**/node_modules/**",
     "**/bower_components/**",
     "test/fixtures/**"
+  ],
+  "packageRules": [
+    {
+      "description": "The goldens are recorded on host Node 22.22.0 (scripts/node22.mjs checks it): keep ci.yml's baseline setup-node pinned. The toolchain's Node (the other setup-node) still updates.",
+      "matchFileNames": [".github/workflows/ci.yml"],
+      "matchDepNames": ["node"],
+      "matchCurrentVersion": "22.22.0",
+      "enabled": false
+    }
   ]
 }
