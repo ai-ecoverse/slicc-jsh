@@ -1,0 +1,13 @@
+{
+  "description": "process.setuid/setgid/seteuid/setegid/setgroups/initgroups: Node's argument checks, ERR_UNKNOWN_CREDENTIAL for unknown names, no-op changes to the ids held, getgroups with the egid (slicc-kernel 1.81.0 ctx.sync.cred/setcred)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

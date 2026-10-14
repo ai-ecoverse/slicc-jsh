@@ -82,6 +82,54 @@ describe('process members (kernel)', () => {
     assert.equal(j.stdout, 'Exception Exception [eval]:12 true\n');
   });
 
+  it('process.setuid & co. change the kernel credentials by Linux rules (ctx.sync.setcred, slicc-kernel 1.81.0)', async () => {
+    const r = await jsh.run(
+      [
+        'node',
+        '-e',
+        [
+          "const fs = require('fs');",
+          'const ids = () => [process.getuid(), process.geteuid(), process.getgid(), process.getegid(), process.getgroups()].map(String).join(" ");',
+          "const t = (label, fn) => { try { fn(); console.log(label, 'ok', ids()); } catch (e) { console.log(label, e.code, e.syscall ?? '', e.message); } };",
+          "t('start', () => {});",
+          "t('setgroups', () => process.setgroups([0, 'users']));",
+          "t('setegid users', () => process.setegid('users'));",
+          "t('seteuid nobody', () => process.seteuid('nobody'));",
+          "t('setgroups as nobody', () => process.setgroups([0]));",
+          "t('seteuid back to 0', () => process.seteuid(0));",
+          "t('initgroups', () => process.initgroups('nobody', 'nogroup'));",
+          "t('setgid nogroup', () => process.setgid('nogroup'));",
+          "t('setuid nobody', () => process.setuid(65534));",
+          "t('setuid 0 as nobody', () => process.setuid(0));",
+          "fs.writeFileSync('/tmp/cred-owned', 'x');",
+          "console.log('new file uid', fs.statSync('/tmp/cred-owned').uid);",
+        ].join('\n'),
+      ],
+      { cwd: '/os' }
+    );
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(
+      r.stdout,
+      [
+        'start ok 0 0 0 0 0',
+        'setgroups ok 0 0 0 0 0,100',
+        'setegid users ok 0 0 0 100 0,100',
+        'seteuid nobody ok 0 65534 0 100 0,100',
+        // Not root any more (euid 65534): the group list is root's to set.
+        'setgroups as nobody EPERM setgroups EPERM, Operation not permitted',
+        // The saved uid is still 0, so the effective one may go back.
+        'seteuid back to 0 ok 0 0 0 100 0,100',
+        'initgroups ok 0 0 0 100 65534,100',
+        // As root, setgid sets the real, effective and saved gid.
+        'setgid nogroup ok 0 0 65534 65534 65534',
+        'setuid nobody ok 65534 65534 65534 65534 65534',
+        'setuid 0 as nobody EPERM setuid EPERM, Operation not permitted',
+        'new file uid 65534',
+        '',
+      ].join('\n')
+    );
+  });
+
   it('process.dlopen fails as Linux dlopen(3) does', async () => {
     const r = await jsh.run(
       [

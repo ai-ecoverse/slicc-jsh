@@ -1,0 +1,29 @@
+setuid -1 THROWS RangeError ERR_OUT_OF_RANGE "The value of \"id\" is out of range. It must be >= 0 && <= 4294967295. Received -1"
+setuid 1.5 THROWS RangeError ERR_OUT_OF_RANGE "The value of \"id\" is out of range. It must be an integer. Received 1.5"
+setuid {} THROWS TypeError ERR_INVALID_ARG_TYPE "The \"id\" argument must be one of type number or string. Received an instance of Object"
+setuid unknown name THROWS Error ERR_UNKNOWN_CREDENTIAL "User identifier does not exist: no-such-credential"
+setgid -1 THROWS RangeError ERR_OUT_OF_RANGE "The value of \"id\" is out of range. It must be >= 0 && <= 4294967295. Received -1"
+setgid 1.5 THROWS RangeError ERR_OUT_OF_RANGE "The value of \"id\" is out of range. It must be an integer. Received 1.5"
+setgid {} THROWS TypeError ERR_INVALID_ARG_TYPE "The \"id\" argument must be one of type number or string. Received an instance of Object"
+setgid unknown name THROWS Error ERR_UNKNOWN_CREDENTIAL "Group identifier does not exist: no-such-credential"
+seteuid -1 THROWS RangeError ERR_OUT_OF_RANGE "The value of \"id\" is out of range. It must be >= 0 && <= 4294967295. Received -1"
+seteuid 1.5 THROWS RangeError ERR_OUT_OF_RANGE "The value of \"id\" is out of range. It must be an integer. Received 1.5"
+seteuid {} THROWS TypeError ERR_INVALID_ARG_TYPE "The \"id\" argument must be one of type number or string. Received an instance of Object"
+seteuid unknown name THROWS Error ERR_UNKNOWN_CREDENTIAL "User identifier does not exist: no-such-credential"
+setegid -1 THROWS RangeError ERR_OUT_OF_RANGE "The value of \"id\" is out of range. It must be >= 0 && <= 4294967295. Received -1"
+setegid 1.5 THROWS RangeError ERR_OUT_OF_RANGE "The value of \"id\" is out of range. It must be an integer. Received 1.5"
+setegid {} THROWS TypeError ERR_INVALID_ARG_TYPE "The \"id\" argument must be one of type number or string. Received an instance of Object"
+setegid unknown name THROWS Error ERR_UNKNOWN_CREDENTIAL "Group identifier does not exist: no-such-credential"
+setuid own uid undefined
+seteuid own euid undefined
+setgid own gid undefined
+setegid own egid undefined
+setgroups 1 THROWS TypeError ERR_INVALID_ARG_TYPE "The \"groups\" argument must be an instance of Array. Received type number (1)"
+setgroups [-1] THROWS RangeError ERR_OUT_OF_RANGE "The value of \"groups[0]\" is out of range. It must be >= 0 && <= 4294967295. Received -1"
+setgroups [null] THROWS TypeError ERR_INVALID_ARG_TYPE "The \"groups[0]\" argument must be one of type number or string. Received null"
+setgroups unknown THROWS Error ERR_UNKNOWN_CREDENTIAL "Group identifier does not exist: no-such-credential"
+initgroups bad user THROWS TypeError ERR_INVALID_ARG_TYPE "The \"user\" argument must be one of type number or string. Received an instance of Object"
+initgroups bad group THROWS TypeError ERR_INVALID_ARG_TYPE "The \"extraGroup\" argument must be one of type number or string. Received an instance of Object"
+initgroups unknown uid THROWS Error ERR_UNKNOWN_CREDENTIAL "User identifier does not exist: 4000000000"
+initgroups unknown group THROWS Error ERR_UNKNOWN_CREDENTIAL "Group identifier does not exist: no-such-credential"
+getgroups has egid true

@@ -570,10 +570,15 @@ class Process extends EventEmitter {
     return this._cwd;
   }
 
-  /** Real kernel credentials (from /proc or /etc/passwd for USER). */
+  /** The kernel's credentials (ctx.sync.cred, else /proc or /etc/passwd for USER). */
   _creds() {
     if (this._credCache) return this._credCache;
-    this._credCache = readProcessCreds(this._ctx);
+    // slicc-kernel's ctx.sync.cred() where it has it, else /proc.
+    const cred = typeof this._ctx.sync?.cred === 'function' ? this._ctx.sync.cred() : undefined;
+    this._credCache =
+      cred && typeof cred === 'object'
+        ? { uid: cred.ruid, euid: cred.euid, gid: cred.rgid, egid: cred.egid, groups: [...(cred.groups ?? [])] }
+        : readProcessCreds(this._ctx);
     return this._credCache;
   }
 
@@ -594,7 +599,10 @@ class Process extends EventEmitter {
   }
 
   getgroups() {
-    return this._creds().groups.slice();
+    // Node's GetGroups: the supplementary groups, the effective gid added
+    // when it isn't among them.
+    const { groups, egid } = this._creds();
+    return groups.includes(egid) ? groups.slice() : [...groups, egid];
   }
 
   /**
