@@ -217,9 +217,12 @@ server.listen(0, '127.0.0.1', async () => {
   it('frames that come after the reader cancelled are dropped, not thrown into the program', async () => {
     const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
     await new Promise((resolve) => wss.on('listening', resolve));
-    const closes = [];
+    let peerClosed;
+    const serverSaw = new Promise((resolve) => {
+      peerClosed = resolve;
+    });
     wss.on('connection', (peer) => {
-      peer.on('close', (code) => closes.push(code));
+      peer.on('close', (code) => peerClosed(code));
       peer.send('first');
       // A burst the program never reads: it cancelled after the first.
       peer.once('message', () => {
@@ -238,9 +241,8 @@ server.listen(0, '127.0.0.1', async () => {
       await writer.write('go');
       await reader.cancel();
       assert.deepEqual(await socket.closed, { code: 1000, reason: '', wasClean: true });
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      assert.equal(await serverSaw, 1000);
       assert.deepEqual(uncaught, []);
-      assert.deepEqual(closes, [1000]);
     } finally {
       process.off('uncaughtException', onUncaught);
       await new Promise((resolve) => wss.close(resolve));
