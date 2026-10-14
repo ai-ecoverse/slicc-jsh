@@ -39,13 +39,11 @@
     "commands": {
       "node": {
         "abi": "js",
-        "module": "dist/node.mjs",
-        "argv0": "node"
+        "module": "dist/node.mjs"
       },
       "jsh": {
         "abi": "js",
-        "module": "dist/jsh.mjs",
-        "argv0": "jsh"
+        "module": "dist/jsh.mjs"
       }
     },
     "binfmt": {
