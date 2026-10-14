@@ -372,6 +372,8 @@ class Process extends EventEmitter {
     const deliver = () => {
       const dispatch = this._dispatchSignal ?? ((fn) => queueMicrotask(fn));
       dispatch(() => {
+        // process.report.reportOnSignal: the report first, as Node's handler.
+        if (this._reportSignal === event) this._reportSignalWrite?.();
         if (this.listenerCount(event) > 0) this.emit(event, event, SIGNALS[event]);
       });
     };
@@ -379,8 +381,17 @@ class Process extends EventEmitter {
     (this._signalReady ??= new Map()).set(event, ready);
   }
 
+  /** process.report's signal (null: none): watched while it is set. */
+  _setReportSignal(name, write) {
+    const old = this._reportSignal;
+    this._reportSignal = name ?? undefined;
+    this._reportSignalWrite = write;
+    if (old && old !== name) this._unwatchSignal(old);
+    if (name) this._watchSignal(name);
+  }
+
   _unwatchSignal(event) {
-    if (!this._signals.has(event) || this.listenerCount(event) > 0) return;
+    if (!this._signals.has(event) || this.listenerCount(event) > 0 || this._reportSignal === event) return;
     this._signals.delete(event);
     // The last listener gone, the signal's default action is back, as in
     // Node: SIGPIPE too (a write to a dead pipe then ends the program, 141),
@@ -846,7 +857,7 @@ const OWN_INTERNALS = ['_getActiveHandles', '_getActiveRequests', '_rawDebug'];
 const JSH_INTERNALS = [
   '_assignedExitCode', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
   '_dispatchSignal', '_evalCode', '_exitError', '_forcedExitCode', '_handles', '_nodeLib', '_onExit',
-  '_onHardExit', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
+  '_onHardExit', '_reportSignal', '_reportSignalWrite', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
   '_stdio', '_stdoutWrite', '_umask', '_uncaughtCapture', '_writeStderr', '_writeStdout',
 ];
 

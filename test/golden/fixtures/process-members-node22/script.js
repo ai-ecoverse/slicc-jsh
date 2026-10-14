@@ -89,7 +89,8 @@ show('report settings', () => Object.fromEntries(['directory', 'filename', 'comp
 show('report keys', () => Object.keys(process.report));
 const r = process.report.getReport();
 show('getReport keys', () => Object.keys(r));
-show('getReport header keys', () => Object.keys(r.header));
+// Linux builds add glibcVersionRuntime / glibcVersionCompiler (macOS's don't).
+show('getReport header keys', () => Object.keys(r.header).filter((k) => !k.startsWith('glibc')));
 show('getReport header', () => [r.header.reportVersion, r.header.event, r.header.trigger, r.header.filename, r.header.processId === process.pid, r.header.threadId, r.header.nodejsVersion, r.header.wordSize, r.header.cwd === process.cwd()]);
 show('getReport synthetic message', () => r.javascriptStack.message);
 show('getReport error', () => {

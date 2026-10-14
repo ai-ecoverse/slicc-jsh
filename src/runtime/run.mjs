@@ -149,7 +149,22 @@ export async function runNode(ctx, options = {}) {
       evalCode: lastEvalCode,
       esmEntry: uncaughtFromEsm,
     });
-    writeStderr(body);
+    // process.report.reportOnUncaughtException: Node writes the report
+    // between the error and its `Node.js v…` line.
+    const trailer = `\nNode.js v${NODE_SHIM_VERSION}\n`;
+    const report = processRef?._reportUncaught;
+    if (typeof report !== 'function' || !body.endsWith(trailer)) {
+      writeStderr(body);
+      return;
+    }
+    const printed = body.slice(0, -trailer.length);
+    writeStderr(printed);
+    try {
+      report(err, printed);
+    } catch {
+      /* the report is best effort, as Node's */
+    }
+    writeStderr(trailer);
   };
   /**
    * The program ends on an uncaught error (Node's triggerUncaughtException):

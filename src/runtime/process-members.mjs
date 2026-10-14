@@ -217,7 +217,11 @@ function createReport(process) {
     Error.captureStackTrace?.(err, createReport);
     return err;
   };
-  const build = (err, event, trigger, filename) => {
+  /**
+   * `jsStack`: an uncaught exception's report as printed (Node's message is
+   * its first line, the rest its stack); a signal's report has none.
+   */
+  const build = (err, event, trigger, filename, jsStack) => {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const stack = String(err?.stack ?? '')
@@ -245,6 +249,9 @@ function createReport(process) {
         cwd: process.cwd(),
         commandLine: [...(process.argv0 ? [process.argv0] : []), ...process.execArgv, ...process.argv.slice(1)],
         nodejsVersion: process.version,
+        // Node's Linux builds (glibc 2.28); jsh follows Linux.
+        glibcVersionRuntime: '2.28',
+        glibcVersionCompiler: '2.28',
         wordSize: 64,
         arch: process.arch,
         platform: process.platform,
@@ -271,11 +278,10 @@ function createReport(process) {
             }),
         host: o.hostname(),
       },
-      javascriptStack: {
-        message: `${name}: ${err?.message ?? ''}`,
-        stack,
-        errorProperties,
-      },
+      javascriptStack:
+        jsStack !== undefined
+          ? { message: jsStack[0] ?? '', ...(jsStack.length > 1 ? { stack: jsStack.slice(1) } : {}), errorProperties }
+          : { message: `${name}: ${err?.message ?? ''}`, stack, errorProperties },
       javascriptHeap: {
         totalMemory: mem.heapTotal,
         executableMemory: 0,
@@ -326,6 +332,44 @@ function createReport(process) {
       sharedObjects: [],
     };
   };
+  /** Writes a report file as Node's TriggerNodeReport does; its name. */
+  const write = (file, err, event, trigger, jsStack) => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    sequence++;
+    const name =
+      file ??
+      (settings.filename ||
+        `report.${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}.${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.${process.pid}.0.${String(sequence).padStart(3, '0')}.json`);
+    const path = process._builtin('path');
+    const target = settings.directory && !path.isAbsolute(name) ? path.join(settings.directory, name) : name;
+    const json = build(err, event, trigger, name, jsStack);
+    process._rawDebug(`\nWriting Node.js report to file: ${name}`);
+    try {
+      process._builtin('fs').writeFileSync(target, `${JSON.stringify(json, null, settings.compact ? 0 : 2)}\n`);
+      process._rawDebug('Node.js report completed');
+    } catch (e) {
+      process._rawDebug(`Failed to open Node.js report file: ${name} directory: ${settings.directory || '.'} (errno: ${Math.abs(e?.errno ?? 2)})`);
+    }
+    return name;
+  };
+  // The runtime's hooks: an uncaught exception's report (its printed text),
+  // and the report signal (process.mjs delivers it, as Node's handler does).
+  Object.defineProperty(process, '_reportUncaught', {
+    value: (err, printed) => {
+      if (!settings.reportOnUncaughtException) return;
+      const lines = String(printed).replace(/\n+$/, '').split('\n').map((l) => l.trim());
+      write(undefined, err, 'Exception', 'Exception', lines);
+    },
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
+  const signalHook = () => {
+    process._setReportSignal(settings.reportOnSignal ? settings.signal : null, () =>
+      write(undefined, undefined, settings.signal, 'Signal', [''])
+    );
+  };
   const report = {
     writeReport(file, err) {
       if (typeof file === 'object' && file !== null) {
@@ -336,20 +380,7 @@ function createReport(process) {
       }
       if (err === undefined) err = synthetic();
       else validateObject(err, 'err');
-      const now = new Date();
-      const pad = (n) => String(n).padStart(2, '0');
-      sequence++;
-      const name =
-        file ??
-        (settings.filename ||
-          `report.${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}.${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.${process.pid}.0.${String(sequence).padStart(3, '0')}.json`);
-      const path = process._builtin('path');
-      const target = settings.directory && !path.isAbsolute(name) ? path.join(settings.directory, name) : name;
-      const json = build(err, 'JavaScript API', 'API', name);
-      process._rawDebug(`\nWriting Node.js report to file: ${name}`);
-      process._builtin('fs').writeFileSync(target, `${JSON.stringify(json, null, settings.compact ? 0 : 2)}\n`);
-      process._rawDebug('Node.js report completed');
-      return name;
+      return write(file, err, 'JavaScript API', 'API');
     },
     getReport(err) {
       if (err === undefined) err = synthetic();
@@ -381,6 +412,7 @@ function createReport(process) {
       set(value) {
         check(value, key);
         settings[key] = value;
+        if (key === 'reportOnSignal' || key === 'signal') signalHook();
       },
     });
   }
