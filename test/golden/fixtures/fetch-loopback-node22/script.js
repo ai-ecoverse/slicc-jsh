@@ -74,6 +74,10 @@ srv.listen(0, '127.0.0.1', async () => {
       far.close(resolve);
     });
   });
+  // The fetch spec's bad ports: a network error before any connection.
+  await show('bad port 1', fetch('http://127.0.0.1:1/'));
+  await show('bad port 6000 (no lookup)', fetch('http://example.invalid:6000/'));
+  await show('redirect to a bad port', fetch(`${base}/to?${encodeURIComponent('http://127.0.0.1:25/')}`));
   srv.close();
   const other = http.createServer().listen(0, '127.0.0.1', () => {
     const free = other.address().port;

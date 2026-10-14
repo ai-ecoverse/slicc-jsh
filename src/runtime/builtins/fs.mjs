@@ -717,8 +717,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         syncApi.writeSync(p, bytes);
         return;
       }
+      // An append flag appends, its `x` (O_EXCL) included.
       if (flag.includes('a')) {
-        syncApi.appendFileSync(p, bytes);
+        syncApi.appendFileSync(p, bytes, { flag });
         return;
       }
       const pathArg = p;
