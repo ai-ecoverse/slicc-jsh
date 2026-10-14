@@ -6,7 +6,10 @@
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
+import { WebSocketServer } from 'ws';
+import { openLoopbackWebSocket } from '../../src/runtime/web/websocket-loopback.mjs';
 import { packageFiles } from './helpers.mjs';
 
 async function withCdp(answer) {
@@ -207,6 +210,42 @@ server.listen(0, '127.0.0.1', async () => {
       });
     } finally {
       close();
+    }
+  });
+
+  // The client on host Node's net (the module needs only net.connect, WebCrypto and streams).
+  it('frames that come after the reader cancelled are dropped, not thrown into the program', async () => {
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 });
+    await new Promise((resolve) => wss.on('listening', resolve));
+    let peerClosed;
+    const serverSaw = new Promise((resolve) => {
+      peerClosed = resolve;
+    });
+    wss.on('connection', (peer) => {
+      peer.on('close', (code) => peerClosed(code));
+      peer.send('first');
+      // A burst the program never reads: it cancelled after the first.
+      peer.once('message', () => {
+        for (let i = 0; i < 20; i++) peer.send(`late ${i}`);
+      });
+    });
+    const uncaught = [];
+    const onUncaught = (err) => uncaught.push(err);
+    process.on('uncaughtException', onUncaught);
+    try {
+      const { port } = wss.address();
+      const socket = await openLoopbackWebSocket(net, `ws://127.0.0.1:${port}/`, undefined, { host: '127.0.0.1', port });
+      const reader = socket.readable.getReader();
+      assert.deepEqual(await reader.read(), { value: 'first', done: false });
+      const writer = socket.writable.getWriter();
+      await writer.write('go');
+      await reader.cancel();
+      assert.deepEqual(await socket.closed, { code: 1000, reason: '', wasClean: true });
+      assert.equal(await serverSaw, 1000);
+      assert.deepEqual(uncaught, []);
+    } finally {
+      process.off('uncaughtException', onUncaught);
+      await new Promise((resolve) => wss.close(resolve));
     }
   });
 });

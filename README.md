@@ -178,7 +178,7 @@ npm run lint
 npm run test:golden          # host Node 22 baselines (npx node@22)
 npm run test:jsh             # .jsh parity: host jsh baseline vs kernel jsh
 npm run test:integration     # slicc-kernel Node entry, memory root
-npm run test:browser         # the kernel in Chromium: sliccy:browser and its corpus (#73)
+npm run test:browser         # the kernel in Chromium: sliccy:browser and its corpus (#73); JSH_TARBALL / SLICCY_BROWSER pin a release
 sh test/install/run.sh       # install.sh in throwaway HOMEs, against the registry
 ```
 
