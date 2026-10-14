@@ -52,6 +52,27 @@ show('write callback', () => fs.write('x', 'y', cb));
 show('futimes callback', () => fs.futimes(99, 'x', 0, cb));
 show('fchmod callback', () => fs.fchmod(99, 'x', cb));
 fs.fstat(99, (err) => console.log('fstat(99) callback', err.code));
+// The promise forms take every argument (and reject on a bad one).
+(async () => {
+  const f = `${require('os').tmpdir()}/fs-fd-arg-checks.txt`;
+  fs.writeFileSync(f, 'x');
+  for (const [label, run] of [
+    ['promises.chmod', () => fs.promises.chmod(f, 0o644)],
+    ['promises.chmod bad', () => fs.promises.chmod(f, 'x')],
+    ['promises.chown', () => fs.promises.chown(f, -1, -1)],
+    ['promises.utimes', () => fs.promises.utimes(f, 1, 2)],
+    ['promises.lutimes bad', () => fs.promises.lutimes(f, 1, 'x')],
+    ['FileHandle.chmod bad', async () => { const h = await fs.promises.open(f); try { await h.chmod('x'); } finally { await h.close(); } }],
+    ['FileHandle.utimes', async () => { const h = await fs.promises.open(f); try { return await h.utimes(1, 2); } finally { await h.close(); } }],
+  ]) {
+    try {
+      console.log(label, await run());
+    } catch (e) {
+      console.log(label, 'REJECTS', e.code, e.message);
+    }
+  }
+  fs.unlinkSync(f);
+})();
 show('util.setTraceSigInt(x)', () => util.setTraceSigInt('x'));
 show('util.setTraceSigInt(false)', () => util.setTraceSigInt(false));
 show('util.getCallSite', () => typeof util.getCallSite()[0].scriptName);

@@ -1518,23 +1518,23 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     realpath(p, options) {
       return track((async () => realpathNative(p, options))());
     },
-    chmod(p) {
-      return track((async () => syncApi.chmodSync(p))());
+    chmod(p, ...args) {
+      return track((async () => syncApi.chmodSync(p, ...args))());
     },
-    lchmod(p) {
-      return track((async () => syncApi.lchmodSync(p))());
+    lchmod(p, ...args) {
+      return track((async () => syncApi.lchmodSync(p, ...args))());
     },
-    chown(p) {
-      return track((async () => syncApi.chownSync(p))());
+    chown(p, ...args) {
+      return track((async () => syncApi.chownSync(p, ...args))());
     },
-    lchown(p) {
-      return track((async () => syncApi.lchownSync(p))());
+    lchown(p, ...args) {
+      return track((async () => syncApi.lchownSync(p, ...args))());
     },
-    utimes(p) {
-      return track((async () => syncApi.utimesSync(p))());
+    utimes(p, ...args) {
+      return track((async () => syncApi.utimesSync(p, ...args))());
     },
-    lutimes(p) {
-      return track((async () => syncApi.lutimesSync(p))());
+    lutimes(p, ...args) {
+      return track((async () => syncApi.lutimesSync(p, ...args))());
     },
     opendir(p, options) {
       return track((async () => syncApi.opendirSync(p, options))());
@@ -1638,14 +1638,19 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       async datasync() {
         ensureOpen('fdatasync');
       },
-      async chmod() {
+      async chmod(mode) {
         ensureOpen('fchmod');
+        parseFileMode(mode, 'mode');
       },
-      async chown() {
+      async chown(uid, gid) {
         ensureOpen('fchown');
+        validateId(uid, 'uid');
+        validateId(gid, 'gid');
       },
-      async utimes() {
+      async utimes(atime, mtime) {
         ensureOpen('futimes');
+        toUnixTimestamp(atime, 'atime');
+        toUnixTimestamp(mtime, 'mtime');
       },
       async close() {
         ensureOpen('close');
