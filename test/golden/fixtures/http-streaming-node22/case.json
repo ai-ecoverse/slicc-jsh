@@ -1,0 +1,13 @@
+{
+  "description": "streamed responses: a server's write() before end() sends the head and chunks as they come; http.get and fetch get the head at once and the body as it arrives; an SSE stream read event by event and aborted (the server sees 'close'); a POST answered with a stream; a body cut short",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

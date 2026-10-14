@@ -158,7 +158,8 @@ async function loopbackFetch(getHttp, request, target, initHeaders) {
     const status = res.statusCode;
     const location = res.headers.location;
     if (REDIRECT.has(status) && location !== undefined && request.redirect !== 'manual') {
-      res.resume();
+      // The redirect's own body is never read: its connection goes now.
+      res.destroy();
       if (request.redirect === 'error') throw fetchFailed(new TypeError('unexpected redirect'));
       if (hops >= 20) throw fetchFailed(new TypeError('redirect count exceeded'));
       const from = url;
@@ -220,10 +221,13 @@ function toResponse(res, { method, signal }, url, redirected) {
           done();
           controller.close();
         });
-        res.on('error', (err) => {
+        // The body cut short: undici's TypeError('terminated'), caused by
+        // its SocketError ('other side closed').
+        res.on('error', () => {
           if (settled) return;
           done();
-          controller.error(fetchFailed(err));
+          const cause = Object.assign(new Error('other side closed'), { name: 'SocketError', code: 'UND_ERR_SOCKET' });
+          controller.error(Object.assign(new TypeError('terminated'), { cause }));
         });
       },
       cancel() {

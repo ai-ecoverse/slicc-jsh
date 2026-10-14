@@ -1,0 +1,76 @@
+import { after, before, describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { withJsh } from './helpers.mjs';
+
+// A loopback fetch streams (the kernel's sockets, jsh's http client): it
+// resolves at the response's head and reads the body as it comes, so a
+// never-ending SSE stream (mcpcat's MCP over SSE) can be read and aborted.
+// The golden http-streaming-node22 pins the output against Node.
+describe('loopback fetch streams (kernel)', () => {
+  let jsh;
+  before(async () => {
+    jsh = await withJsh();
+  });
+  after(() => jsh?.close());
+
+  it("lets a followed redirect's own never-ending body go (the server sees it close)", async () => {
+    // Node's undici keeps reading such a body, so the program never ends;
+    // jsh closes it once it follows the redirect.
+    const source = [
+      "const http = require('http');",
+      'const srv = http.createServer((req, res) => {',
+      "  if (req.url === '/final') return res.end('final');",
+      "  res.writeHead(302, { location: '/final' });",
+      "  const tick = setInterval(() => res.write('.'), 10);",
+      "  res.on('close', () => { clearInterval(tick); console.log('server: redirect body closed'); });",
+      '});',
+      "srv.listen(0, '127.0.0.1', async () => {",
+      '  const r = await fetch(`http://127.0.0.1:${srv.address().port}/redirect`);',
+      "  console.log('followed', new URL(r.url).pathname, await r.text());",
+      '  setTimeout(() => srv.close(), 100);',
+      '});',
+    ].join('\n');
+    await jsh.kernel.writeFile('/os/redirect.js', source);
+    const r = await jsh.run(['node', 'redirect.js'], { cwd: '/os' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /followed \/final final\n/);
+    assert.match(r.stdout, /server: redirect body closed\n/);
+  });
+
+  it('reads 3 events of a never-ending SSE stream, aborts, and the server sees the client go', async () => {
+    const source = [
+      "const http = require('http');",
+      'const srv = http.createServer((req, res) => {',
+      "  res.writeHead(200, { 'content-type': 'text/event-stream' });",
+      '  res.flushHeaders();',
+      '  let n = 0;',
+      '  const tick = setInterval(() => res.write(`data: ${++n}\\n\\n`), 10);',
+      "  res.on('close', () => { clearInterval(tick); console.log('server: closed'); srv.close(); });",
+      '});',
+      "srv.listen(0, '127.0.0.1', async () => {",
+      '  const ac = new AbortController();',
+      // Guard: a fetch that waited for the end of the body would never resolve.
+      "  const guard = setTimeout(() => { console.log('fetch never resolved'); process.exit(3); }, 5000);",
+      '  const r = await fetch(`http://127.0.0.1:${srv.address().port}/`, { signal: ac.signal });',
+      '  clearTimeout(guard);',
+      '  const reader = r.body.getReader();',
+      '  const dec = new TextDecoder();',
+      "  let buf = '';",
+      '  const events = [];',
+      '  while (events.length < 3) {',
+      '    const { value, done } = await reader.read();',
+      '    if (done) break;',
+      '    buf += dec.decode(value, { stream: true });',
+      "    let i; while ((i = buf.indexOf('\\n\\n')) >= 0 && events.length < 3) { events.push(buf.slice(0, i)); buf = buf.slice(i + 2); }",
+      '  }',
+      "  console.log('events', events.join(','));",
+      '  ac.abort();',
+      "  await reader.read().catch((e) => console.log('after abort', e.name));",
+      '});',
+    ].join('\n');
+    await jsh.kernel.writeFile('/os/sse.js', source);
+    const r = await jsh.run(['node', 'sse.js'], { cwd: '/os' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'events data: 1,data: 2,data: 3\nafter abort AbortError\nserver: closed\n');
+  });
+});
