@@ -1,0 +1,13 @@
+{
+  "description": "process.finalization: register / registerBeforeExit callbacks at exit, unregister, argument checks (Node's own finalization.js)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

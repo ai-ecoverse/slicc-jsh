@@ -20,6 +20,10 @@ module.exports = {
   get warning() {
     return require('internal/process/warning');
   },
+  /** process.finalization: lib/internal/process/finalization.js. */
+  get finalization() {
+    return require('internal/process/finalization');
+  },
   get readline() {
     return require('readline');
   },

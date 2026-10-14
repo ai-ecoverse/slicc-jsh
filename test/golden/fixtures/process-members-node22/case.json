@@ -1,0 +1,13 @@
+{
+  "description": "process members jsh adds for Node's shape: _debugProcess, _kill, _tickCallback, _fatalException, allowedNodeEnvironmentFlags, assert, binding, dlopen, execve's checks, finalization, mainModule, openStdin, report, setSourceMapsEnabled, reallyExit",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

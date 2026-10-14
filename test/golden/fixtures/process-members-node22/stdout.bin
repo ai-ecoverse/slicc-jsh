@@ -1,0 +1,158 @@
+_debugEnd undefined
+_debugProcess no such pid THROWS Error ESRCH "ESRCH, No such process" 3 kill
+_startProfilerIdleNotifier undefined
+_kill self 0 0
+_kill no such pid -3
+_linkedBinding THROWS Error ERR_INVALID_MODULE "No such binding was linked: x" undefined undefined
+_preload_modules []
+_tickCallback [ 'tick', 'after' ]
+_fatalException without listener false
+_fatalException with listener [ true, [ 'y', 'uncaughtException' ] ]
+flags [ 271, true, 'NodeEnvironmentFlagsSet', '[object Set]', true ]
+flags has [
+  true, true, true,
+  true, true, false,
+  true, true, false
+]
+flags no-ops [ true, false, false, true, undefined, 271 ]
+flags iterate [ 268, true, true, 2 ]
+flags forEach count 271
+flags set 5
+assert ok undefined
+assert fails THROWS Error ERR_ASSERTION "msg" undefined undefined
+assert default message THROWS Error ERR_ASSERTION "assertion error" undefined undefined
+binding nope THROWS Error undefined "No such module: nope" undefined undefined
+binding constants [ 'os', 'fs', 'crypto', 'zlib', 'trace', 'internal' ]
+binding constants os.signals.SIGTERM 15
+binding constants trace [Object: null prototype] {
+  TRACE_EVENT_PHASE_BEGIN: 66,
+  TRACE_EVENT_PHASE_END: 69,
+  TRACE_EVENT_PHASE_COMPLETE: 88,
+  TRACE_EVENT_PHASE_INSTANT: 73,
+  TRACE_EVENT_PHASE_ASYNC_BEGIN: 83,
+  TRACE_EVENT_PHASE_ASYNC_STEP_INTO: 84,
+  TRACE_EVENT_PHASE_ASYNC_STEP_PAST: 112,
+  TRACE_EVENT_PHASE_ASYNC_END: 70,
+  TRACE_EVENT_PHASE_NESTABLE_ASYNC_BEGIN: 98,
+  TRACE_EVENT_PHASE_NESTABLE_ASYNC_END: 101,
+  TRACE_EVENT_PHASE_NESTABLE_ASYNC_INSTANT: 110,
+  TRACE_EVENT_PHASE_FLOW_BEGIN: 115,
+  TRACE_EVENT_PHASE_FLOW_STEP: 116,
+  TRACE_EVENT_PHASE_FLOW_END: 102,
+  TRACE_EVENT_PHASE_METADATA: 77,
+  TRACE_EVENT_PHASE_COUNTER: 67,
+  TRACE_EVENT_PHASE_SAMPLE: 80,
+  TRACE_EVENT_PHASE_CREATE_OBJECT: 78,
+  TRACE_EVENT_PHASE_SNAPSHOT_OBJECT: 79,
+  TRACE_EVENT_PHASE_DELETE_OBJECT: 68,
+  TRACE_EVENT_PHASE_MEMORY_DUMP: 118,
+  TRACE_EVENT_PHASE_MARK: 82,
+  TRACE_EVENT_PHASE_CLOCK_SYNC: 99,
+  TRACE_EVENT_PHASE_ENTER_CONTEXT: 40,
+  TRACE_EVENT_PHASE_LEAVE_CONTEXT: 41,
+  TRACE_EVENT_PHASE_LINK_IDS: 61
+}
+binding constants internal [Object: null prototype] { EXTENSIONLESS_FORMAT_JAVASCRIPT: 0, EXTENSIONLESS_FORMAT_WASM: 1 }
+binding util [
+  'isArrayBuffer',    'isAsyncFunction',
+  'isDataView',       'isDate',
+  'isExternal',       'isMap',
+  'isMapIterator',    'isNativeError',
+  'isPromise',        'isRegExp',
+  'isSet',            'isSetIterator',
+  'isAnyArrayBuffer', 'isArrayBufferView',
+  'isTypedArray',     'isUint8Array'
+]
+binding util isDate true
+binding uv errname 'ENOENT'
+binding uv UV_ENOENT -2
+binding config keys [
+  'isDebugBuild',
+  'openSSLIsBoringSSL',
+  'hasOpenSSL',
+  'fipsMode',
+  'hasIntl',
+  'hasTracing',
+  'hasNodeOptions',
+  'hasInspector',
+  'noBrowserGlobals',
+  'bits',
+  'getDefaultLocale'
+]
+debugPort 9229
+dlopen() THROWS TypeError ERR_MISSING_ARGS "process.dlopen needs at least 2 arguments" undefined undefined
+dlopen({}) THROWS TypeError undefined "Cannot convert undefined or null to object" undefined undefined
+dlopen(null) THROWS TypeError undefined "Cannot convert undefined or null to object" undefined undefined
+dlopen missing [ 'Error', 'ERR_DLOPEN_FAILED', true ]
+execve bad path THROWS TypeError ERR_INVALID_ARG_TYPE "The \"execPath\" argument must be of type string. Received type number (1)" undefined undefined
+execve bad args THROWS TypeError ERR_INVALID_ARG_TYPE "The \"args\" argument must be an instance of Array. Received type string ('x')" undefined undefined
+execve null byte THROWS TypeError ERR_INVALID_ARG_VALUE "The argument 'args[0]' must be a string without null bytes. Received 'a\\x00'" undefined undefined
+execve bad env THROWS TypeError ERR_INVALID_ARG_VALUE "The argument 'env' must be an object with string keys and values without null bytes. Received { A: 1 }" undefined undefined
+finalization keys [ 'register', 'registerBeforeExit', 'unregister' ]
+mainModule [ true, '.' ]
+moduleLoadList true
+openStdin true
+report same true
+report settings {
+  directory: '',
+  filename: '',
+  compact: false,
+  excludeNetwork: false,
+  signal: 'SIGUSR2',
+  reportOnFatalError: false,
+  reportOnSignal: false,
+  reportOnUncaughtException: false,
+  excludeEnv: false
+}
+report keys [
+  'writeReport',
+  'getReport',
+  'directory',
+  'filename',
+  'compact',
+  'excludeNetwork',
+  'signal',
+  'reportOnFatalError',
+  'reportOnSignal',
+  'reportOnUncaughtException',
+  'excludeEnv'
+]
+getReport keys [
+  'header',
+  'javascriptStack',
+  'javascriptHeap',
+  'nativeStack',
+  'resourceUsage',
+  'uvthreadResourceUsage',
+  'libuv',
+  'workers',
+  'environmentVariables',
+  'userLimits',
+  'sharedObjects'
+]
+getReport header keys [
+  'reportVersion',     'event',
+  'trigger',           'filename',
+  'dumpEventTime',     'dumpEventTimeStamp',
+  'processId',         'threadId',
+  'cwd',               'commandLine',
+  'nodejsVersion',     'wordSize',
+  'arch',              'platform',
+  'componentVersions', 'release',
+  'osName',            'osRelease',
+  'osVersion',         'osMachine',
+  'cpus',              'networkInterfaces',
+  'host'
+]
+getReport header [ 5, 'JavaScript API', 'GetReport', null, true, 0, 'v22.22.0', 64, true ]
+getReport synthetic message 'Error [ERR_SYNTHETIC]: JavaScript Callstack'
+getReport error [ 'Error: boom', { extra: '1' }, true ]
+getReport bad THROWS TypeError ERR_INVALID_ARG_TYPE "The \"err\" argument must be of type object. Received type number (1)" undefined undefined
+writeReport bad THROWS TypeError ERR_INVALID_ARG_TYPE "The \"file\" argument must be of type string. Received type number (1)" undefined undefined
+report.signal bad THROWS TypeError ERR_UNKNOWN_SIGNAL "Unknown signal: X" undefined undefined
+report.compact bad THROWS TypeError ERR_INVALID_ARG_TYPE "The \"compact\" argument must be of type boolean. Received type number (1)" undefined undefined
+report.directory bad THROWS TypeError ERR_INVALID_ARG_TYPE "The \"directory\" argument must be of type string. Received type number (1)" undefined undefined
+sourceMapsEnabled false
+setSourceMapsEnabled bad THROWS TypeError ERR_INVALID_ARG_TYPE "The \"enabled\" argument must be of type boolean. Received type string ('x')" undefined undefined
+setSourceMapsEnabled [ undefined, true ]
+reallyExit(3)

@@ -1,3 +1,4 @@
+import { installProcessMembers } from './process-members.mjs';
 import { installJshHandoff } from '../jsh/kernel.mjs';
 import { drainLoop, trackPromise } from './async-handles.mjs';
 import nodeInspect from 'node-inspect-extracted';
@@ -262,6 +263,11 @@ export async function runNode(ctx, options = {}) {
       nextTick.stop();
       handles.notify();
     },
+  });
+  installProcessMembers(process, {
+    flushTicks: () => flushTicks(),
+    handleUncaught: (err, origin) => handleUncaught(err, origin),
+    preload: parsed.preload ?? [],
   });
   finishExitRef = finishExit;
   nextTickRef = nextTick;

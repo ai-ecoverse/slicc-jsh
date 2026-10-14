@@ -1,0 +1,11 @@
+register null ERR_INVALID_ARG_TYPE
+register 1 ERR_INVALID_ARG_TYPE
+register x ERR_INVALID_ARG_TYPE
+main done
+warning ExperimentalWarning process.finalization.register is an experimental feature and might change at any time
+warning ExperimentalWarning process.finalization.registerBeforeExit is an experimental feature and might change at any time
+warning ExperimentalWarning process.finalization.unregister is an experimental feature and might change at any time
+beforeExit callback kept beforeExit
+beforeExit listener
+exit callback kept exit
+exit listener

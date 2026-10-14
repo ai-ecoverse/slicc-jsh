@@ -215,6 +215,8 @@ class Process extends EventEmitter {
     this.nextTick = function nextTick(callback, ...args) {
       return tickQueue.nextTick(callback, ...args);
     };
+    // Its own name whatever the bundler calls it.
+    Object.defineProperty(this.nextTick, 'name', { value: 'nextTick' });
     this._umask = 0o022;
     this._cpuPrev = { user: 0, system: 0 };
     // Node exposes process.config (build-time variables). Minimal M1 shape.
@@ -770,6 +772,57 @@ class Process extends EventEmitter {
     }
     this._exitError = hardExitError(this._ctx, code);
     throw this._exitError;
+  }
+
+  /**
+   * process.reallyExit (the binding under process.exit): the program ends
+   * now with `code`, no 'exit' event.
+   */
+  _reallyExit(code) {
+    if (this._exitError) throw this._exitError;
+    code = Number(code) | 0;
+    this._exiting = true;
+    this._recordExit(code);
+    this._silenced = true;
+    try {
+      this._onHardExit?.(code);
+    } catch {
+      /* ignore */
+    }
+    this._exitError = hardExitError(this._ctx, code);
+    throw this._exitError;
+  }
+
+  /**
+   * process.execve's call (the arguments checked): this program becomes
+   * `execPath`. The kernel has no exec for a JS program, so the command runs
+   * to its end on this process's stdio (ctx.sync.run) and the program ends
+   * as it did, with no 'exit' event: its status, or the signal it died of.
+   * One that can't start is Node's fatal error (SIGABRT).
+   */
+  _execve(execPath, args, env) {
+    const run = this._ctx.sync?.run;
+    if (typeof run !== 'function') {
+      throw nodeError(Error, 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM', 'The feature process.execve is unavailable on the current platform, which is being used to run Node.js');
+    }
+    const r = run.call(this._ctx.sync, {
+      argv: [execPath, ...args.slice(1)],
+      ...(args.length > 0 ? { argv0: args[0] } : {}),
+      env,
+      cwd: this.cwd(),
+      stdin: 'inherit',
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+    if (r?.error) {
+      const code = r.error.code ?? 'ENOENT';
+      this._writeStderr(
+        `node:internal/process/per_thread:330\n    _execve(execPath, args, envArray);\n    ^\n\nprocess.execve failed with error code ${code}\n`
+      );
+      return this._ctx.sync.kill(this.pid, 'SIGABRT');
+    }
+    if (r?.signal) return this._ctx.sync.kill(this.pid, r.signal);
+    return this._reallyExit(r?.status ?? 0);
   }
 
   _recordExit(code) {
