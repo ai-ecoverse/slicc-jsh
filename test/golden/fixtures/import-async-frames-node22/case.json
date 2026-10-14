@@ -1,0 +1,33 @@
+{
+  "description": "a throw in a module loaded by await import() names the importer's awaiting frames (at async load (\u2026), at async file:///importer.mjs:\u2026), from ES modules and CommonJS",
+  "argv": [
+    "script.mjs"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/bad-tla-before.mjs",
+      "from": "bad-tla-before.mjs"
+    },
+    {
+      "path": "/os/bad.mjs",
+      "from": "bad.mjs"
+    },
+    {
+      "path": "/os/cjs.js",
+      "from": "cjs.js"
+    },
+    {
+      "path": "/os/fn.mjs",
+      "from": "fn.mjs"
+    },
+    {
+      "path": "/os/package.json",
+      "from": "package.json"
+    },
+    {
+      "path": "/os/script.mjs",
+      "from": "script.mjs"
+    }
+  ]
+}
