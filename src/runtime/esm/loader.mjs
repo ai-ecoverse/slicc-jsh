@@ -174,6 +174,8 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   /** A module's frames are named by its path and URL suffix (`file:///x.mjs?v=1`, as Node's). */
   const frameKeyOf = (id) => `${pathOf(id)}${suffixOf(id)}`;
   const publicUrlOf = (id) => pathToFileURL(pathOf(id)) + suffixOf(id);
+  // A frame's URL, when the suffix makes it other than its path's.
+  const frameUrlOf = (id) => (suffixOf(id) ? publicUrlOf(id) : undefined);
 
   /**
    * Node's import attributes (validateAttributes): a JSON module needs
@@ -459,7 +461,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     };
 
     // Its frames: the file's own lines, as a file: URL (see stack.mjs).
-    registerEsmFrames(frameKeyOf(filename), 1 + preambleLines, columnShifts, publicUrlOf(filename));
+    registerEsmFrames(frameKeyOf(filename), 1 + preambleLines, columnShifts, frameUrlOf(filename));
     try {
       const fn = new Function(
         '__meta',
@@ -537,7 +539,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
       const prefix = [...exportSetup, 'await __preload();', ...hoistImports].join('\n');
       const parts = [prefix, bodyCode, `//# sourceURL=${frameKeyOf(filename)}`];
-      registerEsmFrames(frameKeyOf(filename), 1 + (prefix.match(/\n/g) || []).length + 1, columnShifts, publicUrlOf(filename));
+      registerEsmFrames(frameKeyOf(filename), 1 + (prefix.match(/\n/g) || []).length + 1, columnShifts, frameUrlOf(filename));
       const fn = new AsyncFunction(
         '__meta',
         '__importSync',
