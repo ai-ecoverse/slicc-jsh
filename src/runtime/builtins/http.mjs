@@ -217,7 +217,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       this.socket = req.socket;
     }
 
+    // Node's ERR_HTTP_HEADERS_SENT once the head is on the wire.
+    #headersSentError(what) {
+      const err = new Error(`Cannot ${what} headers after they are sent to the client`);
+      err.code = 'ERR_HTTP_HEADERS_SENT';
+      return err;
+    }
+
     setHeader(name, value) {
+      if (this.#headersSent) throw this.#headersSentError('set');
       this.#headers[String(name).toLowerCase()] = Array.isArray(value) ? value.map(String) : String(value);
       return this;
     }
@@ -228,12 +236,14 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
       return { ...this.#headers };
     }
     removeHeader(name) {
+      if (this.#headersSent) throw this.#headersSentError('remove');
       delete this.#headers[String(name).toLowerCase()];
     }
     hasHeader(name) {
       return Object.prototype.hasOwnProperty.call(this.#headers, String(name).toLowerCase());
     }
     writeHead(statusCode, statusMessage, headers) {
+      if (this.#headersSent) throw this.#headersSentError('write');
       this.statusCode = statusCode;
       if (typeof statusMessage === 'string') this.statusMessage = statusMessage;
       else if (statusMessage && typeof statusMessage === 'object') headers = statusMessage;

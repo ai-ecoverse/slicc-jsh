@@ -146,7 +146,8 @@ async function loopbackFetch(getHttp, request, target, initHeaders) {
     const status = res.statusCode;
     const location = res.headers.location;
     if (REDIRECT.has(status) && location !== undefined && request.redirect !== 'manual') {
-      res.resume();
+      // The redirect's own body is never read: its connection goes now.
+      res.destroy();
       if (request.redirect === 'error') throw fetchFailed(new TypeError('unexpected redirect'));
       if (hops >= 20) throw fetchFailed(new TypeError('redirect count exceeded'));
       const from = url;

@@ -13,6 +13,30 @@ describe('loopback fetch streams (kernel)', () => {
   });
   after(() => jsh?.close());
 
+  it("lets a followed redirect's own never-ending body go (the server sees it close)", async () => {
+    // Node's undici keeps reading such a body, so the program never ends;
+    // jsh closes it once it follows the redirect.
+    const source = [
+      "const http = require('http');",
+      'const srv = http.createServer((req, res) => {',
+      "  if (req.url === '/final') return res.end('final');",
+      "  res.writeHead(302, { location: '/final' });",
+      "  const tick = setInterval(() => res.write('.'), 10);",
+      "  res.on('close', () => { clearInterval(tick); console.log('server: redirect body closed'); });",
+      '});',
+      "srv.listen(0, '127.0.0.1', async () => {",
+      '  const r = await fetch(`http://127.0.0.1:${srv.address().port}/redirect`);',
+      "  console.log('followed', new URL(r.url).pathname, await r.text());",
+      '  setTimeout(() => srv.close(), 100);',
+      '});',
+    ].join('\n');
+    await jsh.kernel.writeFile('/os/redirect.js', source);
+    const r = await jsh.run(['node', 'redirect.js'], { cwd: '/os' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /followed \/final final\n/);
+    assert.match(r.stdout, /server: redirect body closed\n/);
+  });
+
   it('reads 3 events of a never-ending SSE stream, aborts, and the server sees the client go', async () => {
     const source = [
       "const http = require('http');",

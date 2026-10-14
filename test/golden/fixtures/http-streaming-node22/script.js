@@ -39,6 +39,23 @@ const srv = http.createServer((req, res) => {
       next();
       return;
     }
+    if (req.url === '/headers-after-write') {
+      res.write('x');
+      for (const [label, fn] of [
+        ['setHeader', () => res.setHeader('x-late', '1')],
+        ['removeHeader', () => res.removeHeader('content-type')],
+        ['writeHead', () => res.writeHead(201)],
+        ['flushHeaders', () => res.flushHeaders()],
+      ]) {
+        try {
+          console.log('server:', label, fn() === res ? 'res' : fn());
+        } catch (e) {
+          console.log('server:', label, e.code, e.message);
+        }
+      }
+      res.end();
+      return;
+    }
     if (req.url === '/cut') {
       res.writeHead(200, { 'content-length': '100' });
       res.write('only part');
@@ -91,6 +108,7 @@ srv.listen(0, '127.0.0.1', async () => {
   for await (const chunk of post.body.pipeThrough(new TextDecoderStream())) {
     for (const line of chunk.split('\n').filter(Boolean)) console.log('post: line', line);
   }
+  await (await fetch(`${base}/headers-after-write`)).text();
   const cut = await fetch(`${base}/cut`);
   try {
     await cut.text();

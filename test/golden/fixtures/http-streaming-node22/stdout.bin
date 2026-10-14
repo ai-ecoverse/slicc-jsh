@@ -11,6 +11,10 @@ post: headers 200 application/x-ndjson
 post: line {"i":0,"got":"hello"}
 post: line {"i":1,"got":"hello"}
 post: line {"i":2,"got":"hello"}
+server: setHeader ERR_HTTP_HEADERS_SENT Cannot set headers after they are sent to the client
+server: removeHeader ERR_HTTP_HEADERS_SENT Cannot remove headers after they are sent to the client
+server: writeHead ERR_HTTP_HEADERS_SENT Cannot write headers after they are sent to the client
+server: flushHeaders undefined
 cut: fetch body TypeError terminated UND_ERR_SOCKET
 cut: http.get aborted
 cut: http.get error ECONNRESET aborted
