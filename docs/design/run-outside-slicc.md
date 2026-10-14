@@ -129,7 +129,7 @@ Each engine passes in what differs:
 The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 
 1. Built in: `cli`, `color`, `exec`, `fmt`, `http`, `pool`, `skill`, `time`.
-2. `@ai-ecoverse/sliccy-<name>`, then `sliccy-<name>`, resolved with Node's algorithm, first from the script's directory and then from slicc-jsh's own location. The second step makes a global install next to a global `jsh` work.
+2. `@ai-ecoverse/sliccy-<name>`, then `sliccy-<name>`, resolved with Node's algorithm, first from the script's directory, then from slicc-jsh's own location, then from each of pnpm's global installs (`pnpm add -g`: `$PNPM_HOME`, else `/usr/local/share/pnpm`, `~/.local/share/pnpm` or `~/Library/pnpm`). The second step makes a global install next to a global `jsh` work.
 3. Otherwise an error:
    - `agent`, `usb`, `serial`, `hid` and `computer` say `sliccy:<name> is only available inside SLICC`;
    - other names give v6's message plus `Install @ai-ecoverse/sliccy-<name> to provide it.`
