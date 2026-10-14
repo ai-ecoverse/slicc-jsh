@@ -934,6 +934,10 @@ function nodeShape(process) {
     const desc = Object.getOwnPropertyDescriptor(process, name);
     if (desc && 'value' in desc) Object.defineProperty(process, name, { value: desc.value, writable: false, enumerable: true, configurable });
   }
+  // Each version is read-only too, as Node's.
+  for (const key of Object.keys(process.versions ?? {})) {
+    Object.defineProperty(process.versions, key, { value: process.versions[key], writable: false, enumerable: true, configurable: true });
+  }
   const { get, set } = Object.getOwnPropertyDescriptor(proto, 'exitCode');
   Object.defineProperty(process, 'exitCode', { get, set, enumerable: true, configurable: false });
   let exiting = process._exiting === true;

@@ -32,7 +32,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - `--import X` loads the ES module `X` after the `-r` modules and before the entry, top-level `await` included.
 - `--input-type=module|commonjs` for `-e` and piped input. `--input-type=module-typescript` and `commonjs-typescript` fail: there's no TypeScript.
 - `--stack-trace-limit=N` sets `Error.stackTraceLimit`.
-- `--max-old-space-size=N` and `--trace-uncaught` are accepted. The kernel sets a program's memory, and the uncaught report is the usual one.
+- `--max-old-space-size=N`, `--trace-uncaught` and `--trace-sigint` are accepted. The kernel sets a program's memory, the uncaught report is the usual one, and no stack is printed on SIGINT.
 - A bad value for a V8 flag gets V8's report, followed by Node's `bad option` lines.
 - Options after `-e`/`-p` are still node's, up to the first argument.
 - `NODE_OPTIONS` is read as Node 22 reads it: words with spaces, quotes and escapes; only the options Node allows there; its options before the command line's and out of `execArgv`; Node's errors.
@@ -134,9 +134,11 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 - Arguments are parsed as Node 22 parses them: octal strings such as `'755'`, `ERR_INVALID_ARG_VALUE`/`TYPE`, `ERR_OUT_OF_RANGE`.
 - A script a program writes and `chmod`s `0o755` runs by path: spawn, `#!`, binfmt, the shell.
 
-On older kernels `chmod` and `fchmod` check their arguments and that the path exists, and change nothing.
+On older kernels `chmod` and `fchmod` check their arguments and that the path exists, change nothing, and say so once, with a warning (`JSH_NO_CHMOD`).
 
-**Owners and times.** `lchmod`, `chown`, `lchown`, `fchown`, `utimes`, `lutimes` and `futimes` check their arguments and that the path (or fd) exists, as Node's do, and change nothing, on every kernel: the kernel's JS file system has no call for them.
+**Owners and times.** `chown`, `lchown`, `fchown`, `utimes`, `lutimes` and `futimes` check their arguments and that the path (or fd) exists, as Node's do, and change nothing, on every kernel: the kernel's JS file system has no call for them. There is no `fs.lchmod` or `lchmodSync`, as in Node on Linux, and `promises.lchmod` rejects with `ERR_METHOD_NOT_IMPLEMENTED`.
+
+**Arguments first.** As in Node, fs checks its arguments before it touches the file system: open's flags, the data of `writeFile`/`appendFile`, and every `mode`. A path with a NUL byte is `ERR_INVALID_ARG_VALUE` (`existsSync` says `false`).
 
 **New files' modes.** On slicc-kernel 1.86.0 and later, a file or directory fs creates gets the mode it asked for, less `process.umask()`, as in Node:
 - `writeFile`, `appendFile`, `open`, `FileHandle`s and `createWriteStream`: `mode`, default `0o666`;
@@ -229,7 +231,7 @@ An existing file keeps its mode. `copyFile` gives the copy the source's mode, wh
 
 ## `fetch` and `WebSocket`
 
-`globalThis.fetch` and `globalThis.WebSocket` run on the kernel's `ctx.fetch` and `ctx.websocket`. A request in flight keeps the program alive, and so does reading its body.
+`globalThis.fetch` and `globalThis.WebSocket` run on the kernel's `ctx.fetch` and `ctx.websocket`. A request in flight keeps the program alive, and so does reading its body. `new WebSocket` checks its URL and protocols as Node 22's does: `http:` and `https:` become `ws:` and `wss:`, another scheme, a fragment, a duplicate or a non-token protocol is a `SyntaxError` `DOMException`, and `.url` is the parsed URL.
 
 **Loopback.** As with Node on a machine, a loopback URL reaches a server of *this* kernel. The loopback names are `127.0.0.0/8`, `::1`, `0.0.0.0`, `localhost`, `*.localhost` and `<port>.kernel.localhost`. jsh does the HTTP, and for `ws:` the WebSocket handshake and framing, over the kernel's sockets, because `ctx.fetch` and `ctx.websocket` only reach the transport ([slicc-kernel#510](https://github.com/ai-ecoverse/slicc-kernel/issues/510)). That's how `new WebSocket(process.env.SLICC_CDP_URL)` reaches the kernel's CDP facade on 127.0.0.1:9222. The loopback WebSocket holds the server to RFC 6455 as undici does.
 - A loopback redirect to another origin drops `authorization`, `proxy-authorization`, `cookie` and `host`.

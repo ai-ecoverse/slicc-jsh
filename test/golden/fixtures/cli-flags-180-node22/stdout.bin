@@ -1,0 +1,7 @@
+--trace-sigint: 0 "--trace-sigint -e console.log(process.execArgv.join(\" \"))" ""
+NODE_OPTIONS=--eval=1: 9 "" "node: --eval= is not allowed in NODE_OPTIONS"
+NODE_OPTIONS=--eval: 9 "" "node: --eval is not allowed in NODE_OPTIONS"
+NODE_OPTIONS=--print=1: 9 "" "node: --print= is not allowed in NODE_OPTIONS"
+versions.node after a sloppy assignment: true
+descriptor: {"value":"string","writable":false,"enumerable":true,"configurable":true}
+a module assigning versions.node: 0 "TypeError Cannot assign to read only property 'node' of object '#<Object>'" ""

@@ -1,0 +1,5 @@
+{
+  "description": "#180's flags and process members: --trace-sigint is accepted (kept in execArgv); NODE_OPTIONS names an option given with a value with its '=' (--eval= is not allowed); process.versions' entries are read-only (ignored in sloppy code, a TypeError in a module)",
+  "argv": ["main.js"],
+  "shim": true
+}

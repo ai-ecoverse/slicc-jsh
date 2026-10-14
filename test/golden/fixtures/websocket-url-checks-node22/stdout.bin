@@ -1,0 +1,14 @@
+"ftp://x/" SyntaxError DOMException 12 Expected a ws: or wss: protocol, got ftp:
+"ws://x/#frag" SyntaxError DOMException 12 Got fragment
+"ws://x/#" SyntaxError DOMException 12 Got fragment
+"not a url" SyntaxError DOMException 12 TypeError: Invalid URL
+"http://127.0.0.1:1/" url ws://127.0.0.1:1/
+"https://127.0.0.1:1/p?q" url wss://127.0.0.1:1/p?q
+"ws://127.0.0.1:1" url ws://127.0.0.1:1/
+"ws://127.0.0.1:1/u" url ws://127.0.0.1:1/u
+["a","a"] SyntaxError Invalid Sec-WebSocket-Protocol value
+["a b"] SyntaxError Invalid Sec-WebSocket-Protocol value
+[""] SyntaxError Invalid Sec-WebSocket-Protocol value
+"x y" SyntaxError Invalid Sec-WebSocket-Protocol value
+["chat","superchat"] ok
+"v1.proto" ok

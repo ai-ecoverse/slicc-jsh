@@ -1,0 +1,5 @@
+{
+  "description": "fs checks its arguments before the file system, as Node (#158's rest, #180): open's flags, writeFile / appendFile's data, open's and mkdir's mode; a path with a NUL byte (string, Buffer, either path of rename) is ERR_INVALID_ARG_VALUE, existsSync false; recursive mkdir of an existing file is EEXIST, through one ENOTDIR",
+  "argv": ["script.js"],
+  "shim": true
+}

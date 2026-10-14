@@ -1,0 +1,15 @@
+mkdir file recursive THROW Error EEXIST EEXIST: file already exists, mkdir 'f'
+mkdir file/x recursive THROW Error ENOTDIR ENOTDIR: not a directory, mkdir 'f/x'
+nul THROW TypeError ERR_INVALID_ARG_VALUE The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'a\x00b'
+nul buf THROW TypeError ERR_INVALID_ARG_VALUE The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>
+nul mkdir THROW TypeError ERR_INVALID_ARG_VALUE The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'a\x00b'
+nul rename THROW TypeError ERR_INVALID_ARG_VALUE The argument 'newPath' must be a string, Uint8Array, or URL without null bytes. Received 'a\x00b'
+nul exists false
+open zz THROW TypeError ERR_INVALID_ARG_VALUE The argument 'flags' is invalid. Received 'zz'
+wfs 5 THROW TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (5)
+afs {} THROW TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object
+mkdir zz THROW TypeError ERR_INVALID_ARG_VALUE The property 'options.mode' must be a 32-bit unsigned integer or an octal string. Received 'zz'
+open r zz THROW TypeError ERR_INVALID_ARG_VALUE The argument 'mode' must be a 32-bit unsigned integer or an octal string. Received 'zz'
+open flags 0 "ok"
+open flags rs+ "ok"
+p.writeFile ERR_INVALID_ARG_TYPE

@@ -55,6 +55,16 @@ describe('modules and globals jsh leaves out (kernel)', () => {
     assert.equal(r.stdout, 'wasi true ERR_NOT_SUPPORTED\nnode:wasi true ERR_NOT_SUPPORTED\ninspector true ERR_NOT_SUPPORTED\ntrace_events true ERR_NOT_SUPPORTED\n');
   });
 
+  it('fs has no lchmod, as Node on Linux; promises.lchmod is ERR_METHOD_NOT_IMPLEMENTED', async () => {
+    const r = await jsh.run([
+      'node',
+      '-e',
+      "const fs = require('fs'); console.log(typeof fs.lchmod, typeof fs.lchmodSync); fs.promises.lchmod('/', 0o755).catch((e) => console.log(e.code, e.message));",
+    ]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'undefined undefined\nERR_METHOD_NOT_IMPLEMENTED The lchmod() method is not implemented\n');
+  });
+
   it('BroadcastChannel is undefined and locked by the kernel', async () => {
     const r = await jsh.run([
       'node',

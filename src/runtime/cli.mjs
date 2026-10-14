@@ -18,6 +18,8 @@ const BOOLEAN_FLAGS = new Set([
   '--expose-internals',
   // Node prints a thrown non-Error's site with it; accepted (the report is the usual one).
   '--trace-uncaught',
+  // Node prints the stack on SIGINT with it; accepted (no stack is printed).
+  '--trace-sigint',
   // Source maps for stacks and error reports (source-maps.mjs).
   '--enable-source-maps',
   // process.report's settings (process-members.mjs).
@@ -109,7 +111,8 @@ export function parseNodeOptions(text, argv0 = 'node') {
     if (name.startsWith('--no-') && ENV_VALUED.has(`--${name.slice(5)}`)) {
       return { error: `${argv0}: ${raw} is an invalid negation because it is not a boolean option`, status: 9 };
     }
-    if (word === '--' || !allowed.has(name)) return { error: `${argv0}: ${raw} is not allowed in NODE_OPTIONS`, status: 9 };
+    // Node names an option given with a value with its `=` (`--eval= is not allowed`).
+    if (word === '--' || !allowed.has(name)) return { error: `${argv0}: ${eq === -1 ? raw : `${raw}=`} is not allowed in NODE_OPTIONS`, status: 9 };
     const alias = ENV_ALIASES[name];
     const canonical = alias?.length === 1 ? alias[0] : name;
     const takesValue = ENV_VALUED.has(canonical);
