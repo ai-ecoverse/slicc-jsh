@@ -129,7 +129,9 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 
 **Modes, owners and times.** The kernel's JS file system has no mode bits, owners or times to set. `chmod`, `chown` and `utimes`, with their `l` and `f` forms, check their arguments and that the path exists, as Node's do, and change nothing.
 
-**`mkdir`** without `recursive` checks that the path doesn't exist and then creates it. These are two steps, not one exclusive call, so two programs racing for the same name can both succeed.
+**`mkdir`** without `recursive` checks that the path doesn't exist and then creates it. These are two steps, not one exclusive call, so two programs racing for the same name can both succeed. A missing parent is created rather than giving `ENOENT`. `recursive: true` works as in Node.
+
+**New files' modes.** `mkdir`, `writeFile` and `open` ignore their `mode` argument: new files are 0666 and directories 0777, less the kernel's umask.
 
 **Not available:** `watch`, `watchFile`, `unwatchFile`, `glob`, `globSync`, `promises.glob`, `promises.watch`, `openAsBlob`, `readv`, `writev`, `fs.Dir` as an export (`opendir` works), and `promises.constants`.
 
