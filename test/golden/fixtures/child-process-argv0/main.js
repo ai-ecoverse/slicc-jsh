@@ -3,6 +3,11 @@ const show = (label, r) => console.log(label, JSON.stringify(String(r.stdout ?? 
 show('spawnSync /bin/sh', cp.spawnSync('/bin/sh', ['-c', 'printf "%s" "$0"']));
 show('spawnSync sh', cp.spawnSync('sh', ['-c', 'printf "%s" "$0"']));
 show('spawnSync argv0', cp.spawnSync('/bin/sh', ['-c', 'printf "%s" "$0"'], { argv0: 'zork' }));
+// A node child: process.argv0 is what it was run as (the given argv0, else
+// the file as given); process.execPath is unchanged.
+const nodeArgv0 = 'console.log(JSON.stringify([process.argv0, process.execPath === process.argv[0] || require("path").isAbsolute(process.execPath)]))';
+show('node child argv0', cp.spawnSync(process.execPath, ['-e', nodeArgv0], { argv0: 'custom-node' }));
+show('node child by name', cp.spawnSync('node', ['-e', nodeArgv0]));
 console.log('execSync $0', JSON.stringify(cp.execSync('printf "%s" "$0"', { encoding: 'utf8' })));
 console.log('execFileSync argv0', JSON.stringify(cp.execFileSync('sh', ['-c', 'printf "%s" "$0"'], { argv0: 'zork', encoding: 'utf8' })));
 const c = cp.spawn('/bin/sh', ['-c', 'printf "%s" "$0"'], { argv0: 'async-zork' });

@@ -1,6 +1,8 @@
 spawnSync /bin/sh "/bin/sh" 0
 spawnSync sh "sh" 0
 spawnSync argv0 "zork" 0
+node child argv0 "[\"custom-node\",true]" 0
+node child by name "[\"node\",true]" 0
 execSync $0 "/bin/sh"
 execFileSync argv0 "zork"
 spawnargs ["async-zork","-c","printf \"%s\" \"$0\""] /bin/sh
