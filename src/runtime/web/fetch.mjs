@@ -207,10 +207,13 @@ function toResponse(res, { method, signal }, url, redirected) {
           done();
           controller.close();
         });
-        res.on('error', (err) => {
+        // The body cut short: undici's TypeError('terminated'), caused by
+        // its SocketError ('other side closed').
+        res.on('error', () => {
           if (settled) return;
           done();
-          controller.error(fetchFailed(err));
+          const cause = Object.assign(new Error('other side closed'), { name: 'SocketError', code: 'UND_ERR_SOCKET' });
+          controller.error(Object.assign(new TypeError('terminated'), { cause }));
         });
       },
       cancel() {
