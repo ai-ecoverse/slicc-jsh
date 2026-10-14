@@ -6,6 +6,11 @@ const cases = [
   ['exit 137', 'node', ['-e', 'process.exit(137)']],
   ['self SIGKILL', 'node', ['-e', "process.kill(process.pid, 'SIGKILL')"]],
   ['self SIGTERM', 'node', ['-e', "process.kill(process.pid, 'SIGTERM')"]],
+  // A shell that signals itself (slicc-kernel 1.73.2 with wasm-bash 5.3.0-18,
+  // ai-ecoverse/slicc-kernel#422). (A shell whose last command is killed is
+  // left out: bash execs that command, dash waits and exits 137.)
+  ['sh kill -9 $$', 'sh', ['-c', 'kill -9 $$']],
+  ['sh kill -TERM $$', 'sh', ['-c', 'kill -TERM $$']],
 ];
 
 for (const [label, file, args] of cases) {

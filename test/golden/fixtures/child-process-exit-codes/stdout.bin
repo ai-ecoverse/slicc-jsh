@@ -3,10 +3,14 @@ sync exit 130 130 null
 sync exit 137 137 null
 sync self SIGKILL null SIGKILL
 sync self SIGTERM null SIGTERM
+sync sh kill -9 $$ null SIGKILL
+sync sh kill -TERM $$ null SIGTERM
 async exit exit 143 143 null 143 null
 async exit exit 130 130 null 130 null
 async exit exit 137 137 null 137 null
 async exit self SIGKILL null SIGKILL null SIGKILL
 async exit self SIGTERM null SIGTERM null SIGTERM
+async exit sh kill -9 $$ null SIGKILL null SIGKILL
+async exit sh kill -TERM $$ null SIGTERM null SIGTERM
 exec exit 143 143 null false
 kill() null SIGTERM true
