@@ -329,7 +329,7 @@ export async function runNode(ctx, options = {}) {
   const console = process._nodeLib().consoleFor(process);
   const fetch = createFetch(ctx, { handles, getHttp: () => process._builtin('http') });
   const restorePlatform = trackPlatformAsync(handles);
-  const WebSocket = createWebSocket(ctx, { handles, trackPromise });
+  const WebSocket = createWebSocket(ctx, { handles, trackPromise, getNet: () => process._builtin('net') });
 
   const timers = createTimers(handles, {
     afterCallback: () => flushTicks(),

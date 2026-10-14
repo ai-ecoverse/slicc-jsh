@@ -4,6 +4,8 @@
  */
 
 import { NodeExitError } from '../exit.mjs';
+import { kernelRoute } from './loopback.mjs';
+import { openLoopbackWebSocket } from './websocket-loopback.mjs';
 
 const CONNECTING = 0;
 const OPEN = 1;
@@ -68,7 +70,25 @@ function errorEvent(error) {
   });
 }
 
-export function createWebSocket(ctx, { handles, trackPromise } = {}) {
+/**
+ * A `ws:` URL for a server of this kernel (its loopback names; see
+ * kernelRoute), else null: `ctx.websocket`, the platform's network, takes it
+ * (`host.slicc.internal` too, which the kernel forwards to the real machine).
+ */
+function loopbackRoute(href) {
+  let url;
+  try {
+    url = new URL(href);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'ws:') return null;
+  url.protocol = 'http:';
+  const route = kernelRoute(url);
+  return route && !route.proxy ? route : null;
+}
+
+export function createWebSocket(ctx, { handles, trackPromise, getNet } = {}) {
   class WebSocket extends EventTarget {
     static CONNECTING = CONNECTING;
     static OPEN = OPEN;
@@ -183,14 +203,15 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
     #open(url, protocols) {
       // Track the open promise so drainLoop stays alive until error fires
       // (without a handle the process can exit before the catch runs — m2g/ws2.js).
-      // Straight to ctx.websocket — never probe via ctx.net.connect: that dials the
-      // kernel loopback, while nodeTransport WebSockets reach the host's 127.0.0.1.
+      // A loopback URL is a server of this kernel (as fetch has it): RFC 6455
+      // over the kernel's sockets. Anything else, ctx.websocket: the
+      // platform's network, through the kernel's transport.
+      const route = getNet ? loopbackRoute(url) : null;
       const open = (async () => {
         try {
-          const socket = await ctx.websocket(
-            url,
-            protocols != null ? { protocols } : undefined
-          );
+          const socket = route
+            ? await openLoopbackWebSocket(getNet(), url, protocols, route)
+            : await ctx.websocket(url, protocols != null ? { protocols } : undefined);
           if (this.#closed) {
             socket.close();
             return;
@@ -204,7 +225,7 @@ export function createWebSocket(ctx, { handles, trackPromise } = {}) {
           const read = this.#readLoop(socket);
           if (trackPromise && handles) trackPromise(handles, read);
           const closed = socket.closed.then(
-            (close) => this.#finishClose(close?.code ?? 1000, close?.reason ?? '', true),
+            (close) => this.#finishClose(close?.code ?? 1000, close?.reason ?? '', close?.wasClean ?? true),
             (err) => {
               // Peer closed before open / transport failure after dial: error only,
               // matching Node undici (no close event; readyState stays CONNECTING).
