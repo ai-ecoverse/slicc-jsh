@@ -165,7 +165,11 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 
 ## `net`, `http` and `https`
 
-**Where they reach.** `net` and `http` are TCP on the kernel's sockets (`ctx.net`). That is the kernel's own loopback, IPv4 only. A plain-`http` request to another host fails; use `fetch` or `https` for the network. A server is reachable from other programs in the kernel and, as `<port>.kernel.localhost`, from the page.
+**Where they reach.** `net` and `http` are TCP on the kernel's sockets (`ctx.net`).
+- Loopback (`127.0.0.0/8`, `localhost`, `*.localhost`, `0.0.0.0`) is always the kernel's own, IPv4 only. A server is reachable from other programs in the kernel and, as `<port>.kernel.localhost`, from the page.
+- Another host is real TCP when the embedder gives the kernel an uplink that routes it (an exit node, or a route table). The name is resolved through the uplink, and the request goes out byte for byte.
+- Without a route (no uplink, or an address outside its routes), the connect fails. `net` reports Node's error: `getaddrinfo ENOTFOUND <name>` for a name nothing resolves, else `connect <CODE> <host>:<port>`. `http.request` then sends the request through `fetch` instead (see the fetch fallback below).
+- `https` always goes through `fetch`.
 
 **`net`.** Servers and sockets, `allowHalfOpen`, `end()` as a half-close. Unix domain sockets (`path`) and `new net.Socket({ fd })` throw `ERR_NOT_SUPPORTED`.
 
@@ -182,8 +186,17 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 - `http.Agent` follows Node's `_http_agent.js` request path (`addRequest` → `createSocket` → `createConnection`), so **agent-base** subclasses work for plain `http`. `getName`, `destroy`, `keepSocketAlive`, `reuseSocket`, `removeSocket`, and `sockets`/`freeSockets`/`requests` are present.
 - Keep-alive pooling is not implemented. `keepAlive` is accepted; `req.reusedSocket` is always `false`.
 
-**`https` client.** `https.request` and `https.get` run on the kernel's `fetch` (`ctx.fetch`).
-- Request and response bodies are buffered whole. `ClientRequest` is an `EventEmitter`, not a stream.
+**The fetch fallback** (plain `http` without a route, and every `https` request). The request is sent once it has ended, through jsh's `fetch`: the embedder's transport, and `host.slicc.internal` through the kernel's proxy. What a fetch can't carry, it doesn't:
+- **No raw socket.** `res.socket` and `req.socket` are `null`. There is no `'socket'` or `'connect'` event, no Agent pooling or keep-alive, no `upgrade` or `CONNECT`, no 1xx responses or `Expect: 100-continue`, and no trailers.
+- **Normalized headers.** Response header names arrive lowercased in `rawHeaders`, and repeated headers other than `set-cookie` are joined. The headers fetch owns (`Host`, `Connection`, `Content-Length`, `Transfer-Encoding`, `Keep-Alive`, `Expect`, `Upgrade`, `TE`, `Trailer`) are fetch's to set, so a custom `Host` doesn't reach the server.
+- **Buffered upload.** The request body is sent whole, after `end()`.
+- **Streamed download.** The response body streams as it arrives. `set-cookie` is an array, and a missing reason phrase is Node's.
+- **Redirects.** Requests use `redirect: 'manual'`, so a 3xx shows as `statusCode` and `Location`, as in Node. A browser transport can't do that (an opaque redirect), so there jsh follows redirects instead (see below).
+- **Agents.** A request with its own agent (a proxy agent, say), a `socketPath`, or a kernel without `ctx.fetch` gets the connect error instead.
+- If `fetch` has no network either, the error is the connect's (`getaddrinfo ENOTFOUND`, `connect ENETUNREACH`).
+
+**`https` client.** `https.request` and `https.get` take the fetch fallback above every time.
+- `ClientRequest` is an `EventEmitter`, not a stream.
 - `cert`, `key`, `pfx` and `ca` throw `ERR_NOT_SUPPORTED`: no client certificates or custom CAs.
 - `rejectUnauthorized: false` is accepted but ignored. TLS verification stays on.
 - Redirects: requests use `redirect: 'manual'`, so a redirect shows as `statusCode` and `Location`, as in Node. On the browser entry the transport may refuse that with `ENOTSUP`; jsh then falls back to `'follow'`, so plain requests work but a redirect is followed instead of surfaced. The Node entry's transport supports manual redirects. Embedders with `traits.redirectHops` ([slicc-kernel#315](https://github.com/ai-ecoverse/slicc-kernel/issues/315)) can surface redirects in the browser.

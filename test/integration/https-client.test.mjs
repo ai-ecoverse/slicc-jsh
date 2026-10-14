@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import * as nodeStream from 'node:stream';
 import { Readable } from 'node:stream';
 import { createHttps } from '../../src/runtime/builtins/https.mjs';
 
@@ -25,7 +26,7 @@ describe('https client (ctx.fetch)', () => {
         return new Response('ok', { status: 200, statusText: 'OK' });
       },
     };
-    const https = createHttps({ ctx, Buffer, http: makeHttpStub() });
+    const https = createHttps({ ctx, Buffer, http: makeHttpStub(), getStream: () => nodeStream });
     await new Promise((resolve, reject) => {
       const req = https.get('https://example.test/', (res) => {
         res.on('data', () => {});
@@ -44,7 +45,7 @@ describe('https client (ctx.fetch)', () => {
         return new Response('', { status: 200 });
       },
     };
-    const https = createHttps({ ctx, Buffer, http: makeHttpStub() });
+    const https = createHttps({ ctx, Buffer, http: makeHttpStub(), getStream: () => nodeStream });
     await new Promise((resolve, reject) => {
       const req = https.request('https://example.test/x', { method: 'POST' }, (res) => {
         res.on('data', () => {});
@@ -74,7 +75,7 @@ describe('https client (ctx.fetch)', () => {
         });
       },
     };
-    const https = createHttps({ ctx, Buffer, http: makeHttpStub() });
+    const https = createHttps({ ctx, Buffer, http: makeHttpStub(), getStream: () => nodeStream });
     const status = await new Promise((resolve, reject) => {
       const req = https.get('https://example.test/', (res) => {
         resolve(res.statusCode);
@@ -99,7 +100,7 @@ describe('https client (ctx.fetch)', () => {
         return new Response('ok', { status: 200 });
       },
     };
-    const https = createHttps({ ctx, Buffer, http: makeHttpStub() });
+    const https = createHttps({ ctx, Buffer, http: makeHttpStub(), getStream: () => nodeStream });
     const get = () =>
       new Promise((resolve, reject) => {
         const req = https.get('https://example.test/', (res) => {
@@ -126,7 +127,7 @@ describe('https client (ctx.fetch)', () => {
           });
         }),
     };
-    const https = createHttps({ ctx, Buffer, http: makeHttpStub() });
+    const https = createHttps({ ctx, Buffer, http: makeHttpStub(), getStream: () => nodeStream });
     await new Promise((resolve) => {
       const req = https.get('https://example.test/slow');
       req.on('error', () => {});
@@ -140,7 +141,7 @@ describe('https client (ctx.fetch)', () => {
     const ctx = {
       fetch: () => new Promise(() => {}),
     };
-    const https = createHttps({ ctx, Buffer, http: makeHttpStub() });
+    const https = createHttps({ ctx, Buffer, http: makeHttpStub(), getStream: () => nodeStream });
     await new Promise((resolve, reject) => {
       const req = https.get('https://example.test/hang');
       req.on('error', () => {});

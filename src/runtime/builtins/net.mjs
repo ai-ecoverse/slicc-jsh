@@ -3,6 +3,7 @@
  */
 import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
+import { connectError } from './http-fetch.mjs';
 
 function errnoError(err, syscall) {
   const code = err?.code ?? err?.cause?.code ?? 'EIO';
@@ -211,7 +212,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           })
           .catch((err) => {
             this.connecting = false;
-            this.destroy(errnoError(err, 'connect'));
+            // Node's shapes: getaddrinfo ENOTFOUND <name> for a name the
+            // kernel can't resolve, connect <CODE> <host>:<port> otherwise.
+            this.destroy(connectError(err?.code ?? err?.cause?.code ?? 'EIO', host, port, err));
           })
       );
       void p;

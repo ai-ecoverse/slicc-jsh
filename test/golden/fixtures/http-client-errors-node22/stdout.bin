@@ -1,0 +1,7 @@
+net refused: {"name":"Error","code":"ECONNREFUSED","syscall":"connect","message":"connect ECONNREFUSED 127.0.0.1:1","address":"127.0.0.1","port":1}
+net unknown name: {"name":"Error","code":"ENOTFOUND","syscall":"getaddrinfo","message":"getaddrinfo ENOTFOUND no-such-host.invalid","errno":-3008,"hostname":"no-such-host.invalid"}
+net unknown name (options): {"name":"Error","code":"ENOTFOUND","syscall":"getaddrinfo","message":"getaddrinfo ENOTFOUND no-such-host.invalid","errno":-3008,"hostname":"no-such-host.invalid"}
+http refused: {"name":"Error","code":"ECONNREFUSED","syscall":"connect","message":"connect ECONNREFUSED 127.0.0.1:1","address":"127.0.0.1","port":1}
+http unknown name: {"name":"Error","code":"ENOTFOUND","syscall":"getaddrinfo","message":"getaddrinfo ENOTFOUND no-such-host.invalid","errno":-3008,"hostname":"no-such-host.invalid"}
+http unknown name, port: {"name":"Error","code":"ENOTFOUND","syscall":"getaddrinfo","message":"getaddrinfo ENOTFOUND no-such-host.invalid","errno":-3008,"hostname":"no-such-host.invalid"}
+https unknown name: {"name":"Error","code":"ENOTFOUND","syscall":"getaddrinfo","message":"getaddrinfo ENOTFOUND no-such-host.invalid","errno":-3008,"hostname":"no-such-host.invalid"}

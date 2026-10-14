@@ -1,7 +1,9 @@
 /**
  * node:http over net (ctx.net loopback) + IncomingMessage / ServerResponse.
  */
+import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
+import { createFetchClient, isLoopbackHost } from './http-fetch.mjs';
 
 const STATUS_CODES = {
   100: 'Continue',
@@ -166,11 +168,13 @@ function responseHasNoBody(method, statusCode) {
   return false;
 }
 
-export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
+export function createHttp({ ctx, process, Buffer, handles, getStream, net, getFetch }) {
   void ctx;
   void process;
   const stream = getStream();
   const { Readable, Writable } = stream;
+  let fetchClient;
+  const getFetchClient = () => (fetchClient ??= createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODES, getFetch }));
 
   function makeIncomingMessage(socket, body) {
     const res = new Readable({
@@ -770,6 +774,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
 
       socket.on('error', (err) => {
         if (emitted) return;
+        if (this.#viaFetchOnNoRoute(err)) return;
         if (this.listenerCount('error')) this.emit('error', err);
         else socket.destroy();
       });
@@ -962,9 +967,76 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
     }
 
     #abortBody = null;
+    #fetchMode = false;
+    #fetchSent = false;
+    #fetchAbort = null;
+
+    /**
+     * The kernel has no route to the host (no uplink, or an address outside
+     * its route table: ENOENT / ENETUNREACH from the connect, before a byte
+     * went out): send the request through ctx.fetch instead, as https does.
+     * Loopback stays the kernel's own; a request with its own agent (a
+     * proxy's), a socketPath or no ctx.fetch gets the error.
+     */
+    #viaFetchOnNoRoute(err) {
+      const code = err?.cause?.code ?? err?.code;
+      if (this.#fetchMode || this.#headersSent || this.#connected) return false;
+      if (code !== 'ENOENT' && code !== 'ENETUNREACH' && code !== 'ENOTFOUND') return false;
+      const opts = this.#opts;
+      const host = opts.hostname ?? opts.host ?? '127.0.0.1';
+      if (isLoopbackHost(host) || opts.socketPath || typeof ctx?.fetch !== 'function') return false;
+      const agent = opts.agent;
+      if (agent !== undefined && agent !== false && agent !== globalAgent && agent?.constructor !== Agent) return false;
+      this.#fetchMode = true;
+      this.#noRouteError = err;
+      try {
+        this.#socket?.destroy?.();
+      } catch {
+        /* ignore */
+      }
+      this.#socket = null;
+      if (this.#ended) this.#sendViaFetch();
+      return true;
+    }
+
+    #noRouteError = null;
+
+    #sendViaFetch() {
+      if (this.#fetchSent) return;
+      this.#fetchSent = true;
+      const opts = this.#opts;
+      const host = opts.hostname ?? opts.host;
+      const port = Number(opts.port ?? 80);
+      const method = (opts.method ?? 'GET').toUpperCase();
+      const body = Buffer.concat(this.#chunks);
+      this.#chunks = [];
+      this.#headersSent = true;
+      this.#fetchAbort = new AbortController();
+      const pending = getFetchClient()
+        .send({ protocol: 'http:', host, port, path: opts.path ?? '/', method, headers: this.#headers, body, signal: this.#fetchAbort.signal, req: this })
+        .then(
+          (res) => {
+            if (this.destroyed) {
+              res.destroy();
+              return;
+            }
+            this.res = res;
+            this.emit('response', res);
+          },
+          (err) => {
+            if (this.destroyed) return;
+            // No network for fetch either: the connect's own error, as Node gives it.
+            const code = err?.cause?.cause?.code ?? err?.cause?.code;
+            const e = code === 'ENETUNREACH' && this.#noRouteError ? this.#noRouteError : err;
+            if (this.listenerCount('error')) this.emit('error', e);
+          }
+        );
+      if (handles) void trackPromise(handles, pending);
+    }
 
     _destroy(err, callback) {
       // req.destroy(): the connection goes, and a body still coming is cut short.
+      this.#fetchAbort?.abort();
       this.#abortBody?.();
       try {
         this.#socket?.destroy?.();
@@ -1032,6 +1104,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net }) {
 
     _final(callback) {
       this.#ended = true;
+      if (this.#fetchMode) {
+        this.#sendViaFetch();
+        callback();
+        return;
+      }
       if (!this.#headersSent) {
         // No Content-Length: buffer until end, then send with computed CL.
         if (this.#connected) this.#flushHeadersAndBufferedBody();

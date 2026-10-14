@@ -1,0 +1,5 @@
+{
+  "description": "connection errors as Node gives them: getaddrinfo ENOTFOUND <name> (errno -3008, hostname) for a name nothing resolves, connect ECONNREFUSED <host>:<port> (address, port), from net.connect, http.get (whose fetch fallback has no route in the shim's kernel either) and https.get",
+  "argv": ["script.js"],
+  "shim": true
+}
