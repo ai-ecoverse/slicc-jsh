@@ -506,6 +506,8 @@ export function createCjs({
     cache[filename] = mod;
     // Node leaves require.main unset for piped [stdin] scripts (typeof → 'undefined').
     mainModule = setMain ? mod : undefined;
+    // Node's process.mainModule: the main module of a file entry.
+    if (setMain && !filename.startsWith('[')) process.mainModule = mod;
     if (filename.startsWith('[')) {
       compile(mod, source, filename);
     } else {

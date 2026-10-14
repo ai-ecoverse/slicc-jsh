@@ -1,17 +1,40 @@
-keys: _events _eventsCount _exiting _getActiveHandles _getActiveRequests _maxListeners _rawDebug abort arch argv argv0 availableMemory chdir config constrainedMemory cpuUsage cwd domain emitWarning env execArgv execPath exit exitCode features getActiveResourcesInfo getBuiltinModule getegid geteuid getgid getgroups getuid hasUncaughtExceptionCaptureCallback hrtime kill loadEnvFile memoryUsage nextTick pid platform ppid ref release resourceUsage setUncaughtExceptionCaptureCallback stderr stdin stdout threadCpuUsage title umask unref uptime version versions
+keys: _debugEnd _debugProcess _events _eventsCount _exiting _fatalException _getActiveHandles _getActiveRequests _kill _linkedBinding _maxListeners _preload_modules _rawDebug _startProfilerIdleNotifier _stopProfilerIdleNotifier _tickCallback abort allowedNodeEnvironmentFlags arch argv argv0 assert availableMemory binding chdir config constrainedMemory cpuUsage cwd debugPort dlopen domain emitWarning env execArgv execPath execve exit exitCode features finalization getActiveResourcesInfo getBuiltinModule getegid geteuid getgid getgroups getuid hasUncaughtExceptionCaptureCallback hrtime kill loadEnvFile mainModule memoryUsage moduleLoadList nextTick openStdin pid platform ppid reallyExit ref release report resourceUsage setSourceMapsEnabled setUncaughtExceptionCaptureCallback sourceMapsEnabled stderr stdin stdout threadCpuUsage title umask unref uptime version versions
 for-in beyond keys: addListener emit eventNames getMaxListeners listenerCount listeners off on once prependListener prependOnceListener rawListeners removeAllListeners removeListener setMaxListeners
-internal (_) keys: _events _eventsCount _exiting _getActiveHandles _getActiveRequests _maxListeners _rawDebug
+internal (_) keys: _debugEnd _debugProcess _events _eventsCount _exiting _fatalException _getActiveHandles _getActiveRequests _kill _linkedBinding _maxListeners _preload_modules _rawDebug _startProfilerIdleNotifier _stopProfilerIdleNotifier _tickCallback
 stdin accessor set=undefined enumerable=true configurable=true
 stdout accessor set=undefined enumerable=true configurable=true
 stderr accessor set=undefined enumerable=true configurable=true
 exitCode accessor set=function enumerable=true configurable=false
 title value writable=true enumerable=true configurable=true
 _exiting accessor set=function enumerable=true configurable=true
-_getActiveHandles value writable=true enumerable=true configurable=true
-_getActiveRequests value writable=true enumerable=true configurable=true
-_rawDebug value writable=true enumerable=true configurable=true
-cwd value writable=true enumerable=true configurable=true
-nextTick value writable=true enumerable=true configurable=true
+_getActiveHandles value writable=true enumerable=true configurable=true "_getActiveHandles"/0
+_getActiveRequests value writable=true enumerable=true configurable=true "_getActiveRequests"/0
+_rawDebug value writable=true enumerable=true configurable=true "_rawDebug"/0
+cwd value writable=true enumerable=true configurable=true "wrappedCwd"/0
+nextTick value writable=true enumerable=true configurable=true "nextTick"/1
+_debugEnd value writable=true enumerable=true configurable=true "_debugEnd"/0
+_debugProcess value writable=true enumerable=true configurable=true "_debugProcess"/0
+_fatalException value writable=true enumerable=true configurable=true ""/2
+_kill value writable=true enumerable=true configurable=true "_kill"/0
+_linkedBinding value writable=true enumerable=true configurable=true "_linkedBinding"/1
+_preload_modules value writable=false enumerable=true configurable=true
+_startProfilerIdleNotifier value writable=true enumerable=true configurable=true ""/0
+_stopProfilerIdleNotifier value writable=true enumerable=true configurable=true ""/0
+_tickCallback value writable=true enumerable=true configurable=true "runNextTicks"/0
+allowedNodeEnvironmentFlags accessor set=function enumerable=true configurable=true
+assert value writable=true enumerable=true configurable=true "deprecated"/2
+binding value writable=true enumerable=true configurable=true "binding"/1
+debugPort value writable=true enumerable=true configurable=true
+dlopen value writable=true enumerable=true configurable=true "dlopen"/0
+execve value writable=true enumerable=true configurable=true "execve"/1
+finalization accessor set=function enumerable=true configurable=true
+mainModule value writable=true enumerable=true configurable=true
+moduleLoadList value writable=false enumerable=true configurable=true
+openStdin value writable=true enumerable=true configurable=true ""/0
+reallyExit value writable=true enumerable=true configurable=true "reallyExit"/0
+report accessor set=undefined enumerable=true configurable=true
+setSourceMapsEnabled value writable=true enumerable=true configurable=true "setSourceMapsEnabled"/1
+sourceMapsEnabled accessor set=undefined enumerable=true configurable=true
 title renamed true
 exitCode 0 true
-typeof internals: {"_events":"object","_eventsCount":"number","_exiting":"boolean","_getActiveHandles":"function","_getActiveRequests":"function","_maxListeners":"undefined","_rawDebug":"function"}
+typeof internals: {"_debugEnd":"function","_debugProcess":"function","_events":"object","_eventsCount":"number","_exiting":"boolean","_fatalException":"function","_getActiveHandles":"function","_getActiveRequests":"function","_kill":"function","_linkedBinding":"function","_maxListeners":"undefined","_preload_modules":"object","_rawDebug":"function","_startProfilerIdleNotifier":"function","_stopProfilerIdleNotifier":"function","_tickCallback":"function"}

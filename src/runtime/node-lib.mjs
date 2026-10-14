@@ -59,6 +59,7 @@ const kEvents = Symbol('kEvents');
 const kIsEventTarget = Symbol.for('nodejs.event_target');
 
 let urlInternals;
+let experimentalWarned;
 
 let maxStack;
 /** internal/errors isStackOverflowError. */
@@ -349,6 +350,13 @@ export function loadNodeLib({ ctx, process } = {}) {
           });
         },
         isWindows: false,
+        // Node's: one ExperimentalWarning per feature.
+        emitExperimentalWarning(feature) {
+          experimentalWarned ??= new Set();
+          if (experimentalWarned.has(feature)) return;
+          experimentalWarned.add(feature);
+          proc().emitWarning(`${feature} is an experimental feature and might change at any time`, 'ExperimentalWarning');
+        },
         isError: (e) => Object.prototype.toString.call(e) === '[object Error]' || e instanceof Error,
         isMacOS: false,
         getLazy(initializer) {

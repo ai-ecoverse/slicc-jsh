@@ -2,11 +2,8 @@
 // and the descriptors of what Node has as own accessors / values. NOT_YET is
 // what jsh doesn't have yet (each later change takes its names out).
 const NOT_YET = new Set([
-  '_debugEnd', '_debugProcess', '_fatalException', '_kill', '_linkedBinding', '_preload_modules',
-  '_startProfilerIdleNotifier', '_stopProfilerIdleNotifier', '_tickCallback', 'allowedNodeEnvironmentFlags',
-  'assert', 'binding', 'debugPort', 'dlopen', 'execve', 'finalization', 'initgroups', 'mainModule',
-  'moduleLoadList', 'openStdin', 'reallyExit', 'report', 'setSourceMapsEnabled', 'setegid', 'seteuid',
-  'setgid', 'setgroups', 'setuid', 'sourceMapsEnabled',
+  // Until the kernel gives JS programs ctx.sync.cred / setcred.
+  'initgroups', 'setegid', 'seteuid', 'setgid', 'setgroups', 'setuid',
 ]);
 const keys = Object.keys(process).filter((k) => !NOT_YET.has(k)).sort();
 console.log('keys:', keys.join(' '));
@@ -18,9 +15,14 @@ console.log('internal (_) keys:', keys.filter((k) => k.startsWith('_')).join(' '
 const shape = (name) => {
   const d = Object.getOwnPropertyDescriptor(process, name);
   if (!d) return 'none';
-  return `${'value' in d ? `value writable=${d.writable}` : `accessor set=${typeof d.set}`} enumerable=${d.enumerable} configurable=${d.configurable}`;
+  const fn = typeof d.value === 'function' ? ` ${JSON.stringify(d.value.name)}/${d.value.length}` : '';
+  return `${'value' in d ? `value writable=${d.writable}` : `accessor set=${typeof d.set}`} enumerable=${d.enumerable} configurable=${d.configurable}${fn}`;
 };
-for (const name of ['stdin', 'stdout', 'stderr', 'exitCode', 'title', '_exiting', '_getActiveHandles', '_getActiveRequests', '_rawDebug', 'cwd', 'nextTick']) {
+for (const name of ['stdin', 'stdout', 'stderr', 'exitCode', 'title', '_exiting', '_getActiveHandles', '_getActiveRequests', '_rawDebug', 'cwd', 'nextTick',
+  '_debugEnd', '_debugProcess', '_fatalException', '_kill', '_linkedBinding', '_preload_modules',
+  '_startProfilerIdleNotifier', '_stopProfilerIdleNotifier', '_tickCallback', 'allowedNodeEnvironmentFlags', 'assert',
+  'binding', 'debugPort', 'dlopen', 'execve', 'finalization', 'mainModule', 'moduleLoadList', 'openStdin', 'reallyExit',
+  'report', 'setSourceMapsEnabled', 'sourceMapsEnabled']) {
   console.log(name, shape(name));
 }
 // A later assignment of a jsh internal stays out of the keys.
