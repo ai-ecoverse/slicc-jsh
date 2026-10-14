@@ -109,7 +109,7 @@ node script.mjs
 | `color` | on when stdout is a terminal; `FORCE_COLOR` and `NO_COLOR` change that |
 | `exec` | `exec(cmd)` through the shell, `exec.spawn(argv)` without one; results are `{ stdout, stderr, exitCode }` |
 | `http` | v6's `http.client`, over `fetch` |
-| `skill` | the skill folder's `dir`, `root`, `refs`, `assets`, `config()` and `token(id)` |
+| `skill` | `dir` is the script's directory, and `config()` reads and writes `.config` there; `root` is the skill folder (the parent of a `scripts/` directory), with `refs` and `assets` in it; `token(id)` runs `oauth-token <id>` |
 
 Any other `sliccy:<name>` is the package `@ai-ecoverse/sliccy-<name>`, else `sliccy-<name>`. jsh looks for it in this order:
 
