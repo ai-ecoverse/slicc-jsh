@@ -1,0 +1,22 @@
+Error: module top
+    at file://DIR/bad.mjs:2:7
+    at async load (file://DIR/script.mjs:9:5)
+    at async outer (file://DIR/script.mjs:15:3)
+    at async file://DIR/script.mjs:17:1
+Error: before its top-level await
+    at file://DIR/bad-tla-before.mjs:1:46
+    at async load (file://DIR/script.mjs:9:5)
+    at async file://DIR/script.mjs:20:1
+Error: module top
+    at file://DIR/bad.mjs?top:2:7
+    at async file://DIR/script.mjs:22:3
+Error: called export
+    at f (file://DIR/fn.mjs:2:9)
+    at callExport (file://DIR/script.mjs:28:3)
+    at async file://DIR/script.mjs:30:1
+Error: module top
+    at file://DIR/bad.mjs?cjs:2:7
+    at async fromCjs (DIR/cjs.js:5:5)
+    at async file://DIR/script.mjs:31:1
+Error: module top
+    at file://DIR/bad.mjs?then:2:7

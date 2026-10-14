@@ -458,9 +458,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       const pending = evaluatingDone(spec, filename);
       if (pending) return pending;
       // Dynamic import must support TLA modules (async evaluation).
-      const p = Promise.resolve().then(() => importModule(String(spec), filename, attributesOf(options), true));
-      if (trackPromise && handles) return trackPromise(handles, p);
-      return p;
+      return dynamicImport(spec, filename, options);
     };
 
     // Its frames: the file's own lines, as a file: URL (see stack.mjs).
@@ -517,9 +515,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
         // A module still evaluating: its own promise, which doesn't keep the program alive.
         const pending = evaluatingDone(spec, filename);
         if (pending) return pending;
-        const p = Promise.resolve().then(() => importModule(String(spec), filename, attributesOf(options), true));
-        if (trackPromise && handles) return trackPromise(handles, p);
-        return p;
+        return dynamicImport(spec, filename, options);
       };
       // After export bindings exist in this scope (and function decls are hoisted),
       // preload static deps so TLA graphs and cycles link under import().
@@ -670,7 +666,36 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       return ns;
     }
     // Always async-evaluate on the import() path so static deps with TLA link.
-    return evaluateEsmAsync(filename, source);
+    // (Awaited, as every link of import()'s chain: V8 then names the
+    // importer's awaiting frame, `at async file:///importer.mjs:…`.)
+    return await evaluateEsmAsync(filename, source);
+  }
+
+  /**
+   * A promise awaited while it keeps the program alive (a handle until it
+   * settles). Awaited, with no reaction of its own: V8 follows an await
+   * chain only through a promise's one reaction, so a throw in an imported
+   * module names the importer's awaiting frame (`at async file:///…`).
+   */
+  async function awaitTracked(promise) {
+    if (!(trackPromise && handles)) return await promise;
+    const handle = { kind: 'promise' };
+    handles.add(handle);
+    try {
+      return await promise;
+    } finally {
+      handles.delete(handle);
+    }
+  }
+
+  /** import() from `filename`: a turn later, as Node's, and awaited all the way (see awaitTracked). */
+  function dynamicImport(spec, filename, options) {
+    return awaitTracked(
+      (async () => {
+        await null;
+        return await importModule(String(spec), filename, attributesOf(options), true);
+      })()
+    );
   }
 
   async function importModule(specifier, parentFilename = `${process.cwd()}/`, attributes, dynamic = false) {
@@ -697,8 +722,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     // Re-read: loadFileAsync may have already set {evaluating, exportsObj} before
     // suspending; a stale pre-call snapshot would wipe those fields.
     cache.set(filename, { ...(cache.get(filename) || {}), promise });
-    if (trackPromise && handles) trackPromise(handles, promise);
-    const ns = await promise;
+    const ns = await awaitTracked(promise);
     cache.set(filename, { namespace: ns });
     return ns;
   }
@@ -758,7 +782,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
   /** import(specifier, options) from outside a module (CommonJS, .jsh, new Function). */
   function importDynamic(specifier, parentFilename, options) {
-    return Promise.resolve().then(() => importModule(String(specifier), parentFilename, attributesOf(options), true));
+    return dynamicImport(specifier, parentFilename, options);
   }
 
   /**

@@ -540,12 +540,13 @@ export async function runNode(ctx, options = {}) {
   cjs.setImportModuleHook((specifier, parent, options) => esm.importDynamic(specifier, parent, options));
   // import() inside new Function / AsyncFunction bodies (see function-import.mjs).
   const restoreFunctionImport = installFunctionImport({
-    importFrom: (specifier, referrer, options) => trackPromise(handles, esm.importDynamic(specifier, referrer, options)),
+    // (importDynamic keeps the program alive while it is pending.)
+    importFrom: (specifier, referrer, options) => esm.importDynamic(specifier, referrer, options),
     cwd: () => process.cwd(),
   });
   // The program's loader for vm scripts (USE_MAIN_CONTEXT_DEFAULT_LOADER) and the REPL.
   Object.defineProperty(process, '_importFrom', {
-    value: (specifier, referrer, options) => trackPromise(handles, esm.importDynamic(specifier, referrer, options)),
+    value: (specifier, referrer, options) => esm.importDynamic(specifier, referrer, options),
     configurable: true,
     writable: true,
   });
