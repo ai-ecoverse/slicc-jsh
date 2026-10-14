@@ -41,7 +41,8 @@ describe('event loop and exit (kernel)', () => {
   let url;
 
   before(async () => {
-    jsh = await withJsh();
+    // COMPARE_HTTP is a server on the host's loopback: nodeTransport's opt-in.
+    jsh = await withJsh({ hostLoopback: true });
     server = createServer((req, res) => {
       setTimeout(() => res.end(`slow ${req.url}`), 200);
     });

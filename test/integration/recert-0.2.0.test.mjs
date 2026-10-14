@@ -284,7 +284,8 @@ srv.listen(0, '127.0.0.1', () => {
     });
     await new Promise((r) => wss.on('listening', r));
     const port = wss.address().port;
-    const { kernel, run, close } = await withJsh({ nodeTransport: true });
+    // A server on the host's own loopback: nodeTransport's opt-in (1.84.0+).
+    const { kernel, run, close } = await withJsh({ nodeTransport: true, hostLoopback: true });
     try {
       await kernel.writeFile(
         '/os/hostws.js',
@@ -310,7 +311,8 @@ setTimeout(() => { console.log('timeout'); process.exit(3); }, 5000);
   it('WebSocket refused → error Event, no close (nodeTransport, kernel ≥ 1.59.1)', async () => {
     // slicc-kernel#366: nodeTransport rejects at once with err.cause.code.
     // vhnh fx m2g/ws.js, ws2.js, ws3.js, wsrefused.js — SAME with Node 22.
-    const { kernel, run, close } = await withJsh({ nodeTransport: true });
+    // A server on the host's own loopback: nodeTransport's opt-in (1.84.0+).
+    const { kernel, run, close } = await withJsh({ nodeTransport: true, hostLoopback: true });
     try {
       await kernel.writeFile(
         '/os/ws.js',
