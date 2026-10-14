@@ -274,10 +274,16 @@ function decodeOutput(buf, encoding) {
   return buf.toString(enc);
 }
 
+/**
+ * The spawn failures Node reports as an 'error' event and a 'close' with
+ * the negative errno (no 'exit'): libuv's run-time errors.
+ */
+const RUNTIME_SPAWN_ERRNO = { ENOENT: -2, EACCES: -13, EAGAIN: -11, EMFILE: -24, ENFILE: -23 };
+
 function spawnError(command, args, code, message) {
   const err = new Error(message ?? `spawn ${command} ${code}`);
   err.code = code;
-  err.errno = code === 'ENOENT' ? -2 : code === 'ENOTDIR' ? -20 : undefined;
+  err.errno = RUNTIME_SPAWN_ERRNO[code] ?? (code === 'ENOTDIR' ? -20 : undefined);
   err.syscall = `spawn ${command}`;
   err.path = command;
   err.spawnargs = args;
@@ -605,7 +611,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     return { code, signal: null };
   }
 
-  function startSpawn(child, file, args, options, stdio, files) {
+  function startSpawn(child, file, args, options, stdio, files, sync = false) {
     // spawn / exec / execFile / (future sync) all go through here.
     const cwd = resolveSpawnCwd(path, options.cwd);
     const env = options.env ? { ...options.env } : { ...process.env };
@@ -640,7 +646,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     // Node); spawn() held it open, and it is let go once the child has it.
     const direct = files.map((f) => (f?.release ? f.kernelFd : null));
     const served = files.map((f, i) => (direct[i] != null ? null : f));
-    const spawnPromise = ctx.spawn({
+    const request = {
       argv,
       cwd,
       env,
@@ -654,71 +660,96 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       // slicc-kernel 1.76.0+ (ai-ecoverse/slicc-kernel#470); older kernels
       // ignore it and the child sees what the kernel resolved.
       argv0,
-    });
-    trackPromise(handles, spawnPromise);
-    spawnPromise.then(releaseAll, releaseAll);
+    };
 
-    spawnPromise.then(
-      (kernelChild) => {
-        child._bindKernel(kernelChild);
-        connectStdio(child, kernelChild, served);
-        const spawnErr = safeEmit(child, 'spawn');
-        if (spawnErr) return;
-        const waitP = kernelChild.wait();
-        trackPromise(handles, waitP);
-        waitP.then(
-          (status) => {
-            const { code, signal } = decodeWait(status);
-            finish(child, code, signal);
-          },
-          (err) => {
-            if (isExitError(err)) return;
-            safeEmit(child, 'error', err);
-            finish(child, 1, null);
-          }
-        );
-      },
-      (err) => {
-        const code = err?.code === 'ENOENT' ? 'ENOENT' : err?.code ?? 'ERR_SPAWN_FAILED';
-        const error =
-          code === 'ENOENT'
-            ? spawnError(file, args, 'ENOENT', `spawn ${file} ENOENT`)
-            : spawnError(file, args, code, err?.message ?? String(err));
-        // Soft-close deferred pipes (avoid stream 'error' races). Node: no
-        // 'spawn' / 'exit' on ENOENT — 'error' then 'close' with -2.
-        try {
-          child.stdout?.push?.(null);
-        } catch {
-          /* ignore */
+    const run = (kernelChild) => {
+      connectStdio(child, kernelChild, served);
+      const spawnErr = safeEmit(child, 'spawn');
+      if (spawnErr) return;
+      const waitP = kernelChild.wait();
+      trackPromise(handles, waitP);
+      waitP.then(
+        (status) => {
+          const { code, signal } = decodeWait(status);
+          finish(child, code, signal);
+        },
+        (err) => {
+          if (isExitError(err)) return;
+          safeEmit(child, 'error', err);
+          finish(child, 1, null);
         }
-        try {
-          child.stderr?.push?.(null);
-        } catch {
-          /* ignore */
+      );
+    };
+
+    const failed = (err) => {
+      const code = err?.code ?? 'ERR_SPAWN_FAILED';
+      const errno = RUNTIME_SPAWN_ERRNO[code];
+      const error =
+        errno !== undefined
+          ? spawnError(file, args, code, `spawn ${file} ${code}`)
+          : spawnError(file, args, code, err?.message ?? String(err));
+      // Soft-close deferred pipes (avoid stream 'error' races). Node: no
+      // 'spawn' / 'exit' on ENOENT or EACCES — 'error' then 'close' with -errno.
+      try {
+        child.stdout?.push?.(null);
+      } catch {
+        /* ignore */
+      }
+      try {
+        child.stderr?.push?.(null);
+      } catch {
+        /* ignore */
+      }
+      process.nextTick(() => {
+        const emitErr = safeEmit(child, 'error', error);
+        if (emitErr) {
+          child._release();
+          handles.notify?.();
+          return;
         }
-        process.nextTick(() => {
-          const emitErr = safeEmit(child, 'error', error);
-          if (emitErr) {
+        if (errno !== undefined) {
+          child.exitCode = errno;
+          child._markClosing();
+          // After error handlers (which may call execFile → async spawn) so
+          // their 'error' logs before this 'close' (Node order on ENOENT).
+          setTimeout(() => {
+            safeEmit(child, 'close', errno, null);
             child._release();
             handles.notify?.();
-            return;
-          }
-          if (code === 'ENOENT') {
-            child.exitCode = -2;
-            child._markClosing();
-            // After error handlers (which may call execFile → async spawn) so
-            // their 'error' logs before this 'close' (Node order on ENOENT).
-            setTimeout(() => {
-              safeEmit(child, 'close', -2, null);
-              child._release();
-              handles.notify?.();
-            }, 20);
-          } else {
-            finish(child, 1, null);
-          }
-        });
+          }, 20);
+        } else {
+          finish(child, 1, null);
+        }
+      });
+    };
+
+    // slicc-kernel 1.87.0 (ai-ecoverse/slicc-kernel#492): ctx.sync.spawn
+    // starts the child now, so child.pid is set when spawn() returns and a
+    // kill() right after reaches it, as in Node. 'spawn' and 'error' still
+    // come on a later tick: a spawn error throws here, and Node reports it
+    // as an event, never from spawn().
+    if (sync) {
+      let kernelChild;
+      try {
+        kernelChild = ctx.sync.spawn(request);
+      } catch (err) {
+        releaseAll();
+        failed(err);
+        return;
       }
-    );
+      releaseAll();
+      child._bindKernel(kernelChild);
+      process.nextTick(() => run(kernelChild));
+      return;
+    }
+
+    const spawnPromise = ctx.spawn(request);
+    trackPromise(handles, spawnPromise);
+    spawnPromise.then(releaseAll, releaseAll);
+    spawnPromise.then((kernelChild) => {
+      child._bindKernel(kernelChild);
+      run(kernelChild);
+    }, failed);
   }
 
   function spawn(command, args, options) {
@@ -804,7 +835,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       if (file?.hold) file.release = file.hold();
       return file;
     });
-    process.nextTick(() => startSpawn(child, file, argv, opts, stdio, files));
+    // Older kernels: the child starts a tick later, and child.pid with it.
+    if (typeof ctx.sync?.spawn === 'function') startSpawn(child, file, argv, opts, stdio, files, true);
+    else process.nextTick(() => startSpawn(child, file, argv, opts, stdio, files));
     return child;
   }
 
@@ -898,13 +931,17 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       });
     }
 
-    child.on('error', (err) => done(err));
+    const cmd =
+      opts._execCmd != null
+        ? String(opts._execCmd)
+        : `${file} ${norm.args.join(' ')}`.trim();
+    child.on('error', (err) => {
+      // Node's errorhandler: the error gets the command line too.
+      if (err && typeof err === 'object' && !('cmd' in err)) err.cmd = cmd;
+      done(err);
+    });
     child.on('close', (code, signal) => {
       if (exited) return;
-      const cmd =
-        opts._execCmd != null
-          ? String(opts._execCmd)
-          : `${file} ${norm.args.join(' ')}`.trim();
       if (timedOut) {
         const err = new Error(`Command failed: ${cmd}`);
         err.code = null;
