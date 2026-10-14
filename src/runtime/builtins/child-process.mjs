@@ -346,6 +346,50 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
   }
 
 
+  /**
+   * Node's spawn finds a bare name as execvp does: the first entry of the
+   * child's PATH holding an executable regular
+   * file, empty entries meaning the cwd. The kernel's commands are files in
+   * /usr/bin and /bin, so PATH order decides a clash, as bash in the kernel
+   * does. Returns the path to run, or the name when nothing on PATH is
+   * executable: then the kernel resolves it (its commands, else ENOENT), or,
+   * when only files without x were found, the first of those, which the
+   * kernel refuses with EACCES, as execvp reports it. A name with a '/' is
+   * never searched.
+   */
+  function resolveOnPath(file, env, cwd) {
+    if (!file || file.includes('/')) return file;
+    // libuv's: the child's environment's PATH, else _PATH_DEFPATH.
+    const pathVar = env && typeof env.PATH === 'string' ? env.PATH : '/usr/bin:/bin';
+    if (pathVar === '') return file;
+    const fs = ctx.sync?.fs;
+    if (!fs?.stat) return file;
+    const uid = typeof process.geteuid === 'function' ? process.geteuid() : 0;
+    const gid = typeof process.getegid === 'function' ? process.getegid() : 0;
+    const groups = typeof process.getgroups === 'function' ? process.getgroups() : [];
+    const executable = (st) => {
+      const mode = st.mode ?? 0;
+      if (uid === 0) return (mode & 0o111) !== 0;
+      if (st.uid === uid) return (mode & 0o100) !== 0;
+      if (st.gid === gid || groups.includes(st.gid)) return (mode & 0o010) !== 0;
+      return (mode & 0o001) !== 0;
+    };
+    let denied = null;
+    for (const dir of pathVar.split(':')) {
+      const full = path.resolve(cwd, dir === '' ? '.' : dir, file);
+      let st;
+      try {
+        st = fs.stat(full);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory || (typeof st.mode === 'number' && (st.mode & 0o170000) !== 0o100000 && (st.mode & 0o170000) !== 0)) continue;
+      if (executable(st)) return full;
+      denied ??= full;
+    }
+    return denied ?? file;
+  }
+
   /** Kernel stdio for a slot: a jsh fd becomes a pipe that jsh serves. */
   function kernelStdio(mode, file) {
     if (file) return 'pipe';
@@ -616,7 +660,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     // spawn / exec / execFile / (future sync) all go through here.
     const cwd = resolveSpawnCwd(path, options.cwd);
     const env = options.env ? { ...options.env } : { ...process.env };
-    const argv = [file, ...args];
+    // The file is found on the child's PATH; errors and spawnfile keep the name.
+    const argv = [resolveOnPath(file, env, cwd), ...args];
     // Node's argv0: what the child sees as argv[0] (the file by default).
     const argv0 = typeof options.argv0 === 'string' ? options.argv0 : file;
     child.spawnfile = file;
@@ -1187,7 +1232,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         }
         const req = {
           // Node's native layer stringifies each argument (null → 'null').
-          argv: [file, ...args.slice(1).map((a) => `${a}`)],
+          argv: [resolveOnPath(file, options.env, resolveSpawnCwd(path, options.cwd)), ...args.slice(1).map((a) => `${a}`)],
           // What the child sees as argv[0]: options.argv0, else the file, as
           // Node (slicc-kernel 1.76.0+; ignored before).
           argv0: args[0],

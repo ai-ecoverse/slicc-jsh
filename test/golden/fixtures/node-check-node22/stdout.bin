@@ -1,0 +1,86 @@
+== -c ok.js: status 0
+== --check ok.js a b: status 0
+== -c bad.js: status 1
+<dir>/bad.js:2
+let x = ;
+        ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== -c esm.js (detected): status 1
+(node:PID) Warning: Failed to load the ES module: <dir>/esm.js. Make sure to set "type": "module" in the nearest package.json file or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+<dir>/esm.js:1
+import fs from "fs";
+^^^^^^
+
+SyntaxError: Cannot use import statement outside a module
+
+Node.js v22.22.0
+
+== -c badesm.mjs: status 1
+<dir>/badesm.mjs:2
+await 1; let y = ;
+                 ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== -c hb.js (hashbang): status 0
+== -c ret.js (return in CommonJS): status 0
+== -c redecl.js: status 1
+(node:PID) Warning: Failed to load the ES module: <dir>/redecl.js. Make sure to set "type": "module" in the nearest package.json file or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+<dir>/redecl.js:1
+const require = 1;
+      ^
+
+SyntaxError: Identifier 'require' has already been declared
+
+Node.js v22.22.0
+
+== -c tla.js: status 1
+(node:PID) Warning: Failed to load the ES module: <dir>/tla.js. Make sure to set "type": "module" in the nearest package.json file or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+<dir>/tla.js:1
+await 1
+^^^^^
+
+SyntaxError: await is only valid in async functions and the top level bodies of modules
+
+Node.js v22.22.0
+
+== -c auto/esm.js: status 0
+== -c auto/redecl.js: status 0
+== -c auto/tla.js: status 0
+== -c -e: status 9
+node: either --check or --eval can be used, not both
+
+== -p 1 -c: status 9
+node: either --check or --eval can be used, not both
+
+== -c, piped, bad: status 1
+[stdin]:1
+let z = ;
+        ^
+
+SyntaxError: Unexpected token ';'
+
+Node.js v22.22.0
+
+== -c -, piped, good: status 0
+== -c, piped import as CommonJS: status 1
+(node:PID) Warning: Failed to load the ES module: [stdin]. Make sure to set "type": "module" in the nearest package.json file or use the .mjs extension.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[stdin]:1
+import fs from "fs";
+^^^^^^
+
+SyntaxError: Cannot use import statement outside a module
+
+Node.js v22.22.0
+
+== -c --input-type=module, piped import: status 0

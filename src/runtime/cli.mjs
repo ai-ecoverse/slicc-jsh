@@ -216,6 +216,8 @@ function parseCommandLine(argv) {
   let script;
   const userArgs = [];
   let interactive = false;
+  // -c / --check: the script's syntax is checked, nothing runs (Node's check_syntax).
+  let check = false;
   // -r / --require modules, in order; `node -`: the program from stdin.
   const preload = [];
   const imports = [];
@@ -366,6 +368,8 @@ function parseCommandLine(argv) {
     }
     if (arg.startsWith('-')) {
       if (arg === '-c' || arg === '--check') {
+        check = true;
+        flags.push(arg);
         i += 1;
         continue;
       }
@@ -392,6 +396,10 @@ function parseCommandLine(argv) {
     return { error: `${argv0}: --input-type=${inputType} is not supported by slicc-jsh (no TypeScript)`, status: 9 };
   }
 
+  if (check && evalCode !== undefined) {
+    return { error: `${argv0}: either --check or --eval can be used, not both`, status: 9 };
+  }
+
   if (evalCode !== undefined) {
     return {
       mode: 'eval',
@@ -411,6 +419,7 @@ function parseCommandLine(argv) {
     return {
       mode: 'file',
       script,
+      check,
       processArgv: [argv0, script, ...userArgs],
       execArgv: [...flags],
       preload,
@@ -428,5 +437,6 @@ function parseCommandLine(argv) {
     imports,
     v8Warnings,
     stdinScript,
+    check,
   };
 }

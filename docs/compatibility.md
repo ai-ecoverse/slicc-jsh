@@ -38,7 +38,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - `NODE_OPTIONS` is read as Node 22 reads it: words with spaces, quotes and escapes; only the options Node allows there; its options before the command line's and out of `execArgv`; Node's errors.
 - Boolean options take `--x` and `--no-x`, and the last form wins. A value that looks like an option counts as missing (`--require --no-warnings`).
 - Also: the [warning flags](#warnings), `--enable-source-maps`, `--preserve-symlinks`, `--preserve-symlinks-main`, `--expose-internals`, `--title`, `--pending-deprecation` and the `--report-*` options (they set `process.report`).
-- `-c`/`--check` is accepted but doesn't check: the script runs.
+- `-c`/`--check` checks the script's syntax and runs nothing, as Node's `check_syntax` does. A file is checked as the module it is: ES module by extension, `"type"`, or detection. Piped input is checked as CommonJS unless `--input-type=module`. A SyntaxError gets the usual report under the script's real path, with exit status 1. Combined with `-e`/`-p`, it's an error (status 9).
 - Any other option, such as `--inspect`, `--watch` or `--experimental-strip-types`, is `bad option` (status 9).
 
 ## Modules and ESM
@@ -81,6 +81,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 **Other members.**
 - `process.chdir` throws Node's `ENOENT`/`ENOTDIR` errors. `process.ppid` comes from the kernel.
 - `process.env` stores strings, as Node's does.
+- `process.umask()` starts as the process's umask in the kernel. jsh finds it once, from the mode the kernel gives a directory it makes in `/tmp`, because a JS program can't read the umask itself. `process.umask(mask)` parses as Node's does. It changes the umask jsh applies to the files it creates, not the kernel's, so children keep the kernel's.
 - `process.getuid`, `getgid` and the like read the kernel's credentials. `process.setuid`, `setgid`, `seteuid`, `setegid`, `setgroups` and `initgroups` follow Node on Linux; they're defined only on slicc-kernel 1.81.0 and later.
 - `process.versions` lists what the runtime has or mirrors: no openssl, brotli, ….
 - `argv0`, `pid`, `version`, `versions`, `arch`, `platform`, `release`, `config` and `features` are read-only, as in Node. `argv[0]` is `execPath`.
@@ -127,20 +128,42 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 
 **`/dev`.** On slicc-kernel 1.69 and later, devices (`/dev/null`, `/dev/zero`, `/dev/urandom`, `/dev/stdout`, `/dev/fd/N`, …) open as kernel descriptors and are read and written as streams, never whole. A link to a device is followed first. `/dev/stdin` and `/dev/fd/0` are `process.stdin`.
 
-**Modes, owners and times.** The kernel's JS file system has no mode bits, owners or times to set. `chmod`, `chown` and `utimes`, with their `l` and `f` forms, check their arguments and that the path exists, as Node's do, and change nothing.
+**Modes.** On slicc-kernel 1.86.0 and later, `chmod`, `fchmod` (and `FileHandle.chmod`, both by the descriptor's path) change the mode in the kernel:
+- They follow a symlink, and only the permission bits count (`mode & 0o7777`, as Linux masks the rest).
+- Only the file's owner or root may change a mode: anyone else gets `EPERM`, with Node's error (`code`, `syscall` `chmod`, `path`).
+- Arguments are parsed as Node 22 parses them: octal strings such as `'755'`, `ERR_INVALID_ARG_VALUE`/`TYPE`, `ERR_OUT_OF_RANGE`.
+- A script a program writes and `chmod`s `0o755` runs by path: spawn, `#!`, binfmt, the shell.
 
-**`mkdir`** without `recursive` checks that the path doesn't exist and then creates it. These are two steps, not one exclusive call, so two programs racing for the same name can both succeed. A missing parent is created rather than giving `ENOENT`. `recursive: true` works as in Node.
+On older kernels `chmod` and `fchmod` check their arguments and that the path exists, and change nothing.
 
-**New files' modes.** `mkdir`, `writeFile` and `open` ignore their `mode` argument: new files are 0666 and directories 0777, less the kernel's umask.
+**Owners and times.** `lchmod`, `chown`, `lchown`, `fchown`, `utimes`, `lutimes` and `futimes` check their arguments and that the path (or fd) exists, as Node's do, and change nothing, on every kernel: the kernel's JS file system has no call for them.
+
+**New files' modes.** On slicc-kernel 1.86.0 and later, a file or directory fs creates gets the mode it asked for, less `process.umask()`, as in Node:
+- `writeFile`, `appendFile`, `open`, `FileHandle`s and `createWriteStream`: `mode`, default `0o666`;
+- `mkdir`, recursive included: `mode`, default `0o777`;
+- `mkdtemp`: `0o700`.
+
+An existing file keeps its mode. `copyFile` gives the copy the source's mode, whether the copy is new or replaces a file, as libuv does. `cp` copies files the same way; the directories it makes get the default mode. On older kernels new files are `0666` and directories `0777`, less the kernel's umask.
+
+**`mkdir`** without `recursive` is the kernel's exclusive mkdir on slicc-kernel 1.86.0 and later. It gives `EEXIST` for an existing name and `ENOENT` for a missing parent (`ENOTDIR` under a file), and of two processes making one name, exactly one succeeds, so a directory works as a lock. That holds among the processes of one kernel, not between two kernels on one origin, such as two tabs ([slicc-kernel#519](https://github.com/ai-ecoverse/slicc-kernel/issues/519)). On older kernels it checks that the path doesn't exist and then creates it. Those are two steps, so two programs racing for the same name can both succeed, and a missing parent is created rather than giving `ENOENT`. `recursive: true` works as in Node, returning the first directory it made.
+
+**`rm` with `recursive`.** `rm`, `rmSync`, `promises.rm` and recursive `rmdir` validate their options as Node does, and `force` forgives a missing path only. On slicc-kernel 1.88.0 and later a tree goes to the kernel in one call. When the kernel refuses part of it (`EACCES`, `EPERM`, a mount point's `EBUSY`), jsh walks what is left, so the error names the entry and the syscall as Node's does (`EACCES: permission denied, rmdir 'a/ro/deep'`); the kernel has removed what it could by then, while Node stops at the first failure. Older kernels take that walk only.
 
 **Not available:** `watch`, `watchFile`, `unwatchFile`, `glob`, `globSync`, `promises.glob`, `promises.watch`, `openAsBlob`, `readv`, `writev`, `fs.Dir` as an export (`opendir` works), and `promises.constants`.
 
 ## `child_process`
 
 **Async.** `spawn`, `execFile` and `exec` (through `sh -c`) run on the kernel's `ctx.spawn`:
-- argv, env and cwd; Node's errors for a bad `cwd` and for a missing command (`ENOENT`);
+- argv, env and cwd; Node's errors for a bad `cwd`, a missing command (`ENOENT`) and a file without `x` (`EACCES`), as `'error'` and then `'close'` with the negative errno, never thrown;
 - stdio `inherit`, `pipe` and `ignore`, with streams on `.stdin`, `.stdout` and `.stderr`;
 - the events `spawn`, `exit`, `close` and `error`; `.kill(signal)`; `.pid`.
+- On slicc-kernel 1.87.0 and later (`ctx.sync.spawn`), the child starts inside `spawn()`, so `.pid` is set when it returns and a `kill()` or `process.kill(child.pid)` right after reaches it, as in Node. On older kernels it starts a tick later, and `.pid` is set by `'spawn'`.
+
+**Finding the command.** A bare name is found on the child's `PATH` (`options.env`'s, else `/usr/bin:/bin`), as `execvp` does, for `spawn`, `execFile`, `spawnSync` and `execFileSync`:
+- The first directory with an executable regular file wins. Directories and files without `x` are passed over, and an empty entry means the cwd.
+- `EACCES` when only files without `x` match.
+- The kernel's commands are files in `/usr/bin` and `/bin`, so `PATH` order decides a clash, as it does for bash in the kernel. A name found nowhere on `PATH` goes to the kernel, which runs its command of that name or gives `ENOENT`.
+- A name with a `/` is never searched.
 
 **Sync.** `spawnSync`, `execSync` and `execFileSync` are Node 22's own option handling and result and throw shapes, on the kernel's `ctx.sync.run`. They need slicc-kernel 1.65.0; on an older kernel they throw `ERR_NOT_SUPPORTED`, naming the version needed. Supported:
 - `encoding`, `input`, `cwd`, `env`;
@@ -177,7 +200,7 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 - Request bodies are read whole before the `'request'` handler runs. A body over 64 MiB gets `413 Payload Too Large`.
 - Responses stream, as Node's: a `write()` before `end()` (or `flushHeaders()`) sends the head and each chunk as it comes, chunked unless a `Content-Length` is set. SSE and long-poll servers work. `end()` alone sends one framed response.
 - Headers can't change once the head is sent (`ERR_HTTP_HEADERS_SENT`).
-- `http.STATUS_CODES` has only the common codes (21 of Node's 60-odd). A status not in it gets an empty reason phrase unless you pass one.
+- `http.STATUS_CODES` is Node 22's whole table. A status not in it gets the reason phrase `unknown`, as in Node.
 - Each response says `Connection: close` unless you set the header: no keep-alive.
 
 **`http` client.**
@@ -322,7 +345,7 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `worker_threads`, `cluster`, `tls`, `http2`, `dns`, `dgram`, `inspector`, `trace_events` | throws `ERR_NOT_SUPPORTED` |
-| `test`, `sqlite`, `sea`, `wasi` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
+| `worker_threads`, `cluster`, `tls`, `http2`, `dns`, `dgram`, `inspector`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
 
-The one global that Node 22 has by default and the runtime doesn't is `BroadcastChannel`.
+The one global that Node 22 has by default and the runtime doesn't is `BroadcastChannel`. The kernel's lockdown makes it `undefined` and not configurable, so jsh can't install one. The platform's `BroadcastChannel` would reach other contexts of the origin around the kernel. Node's own reaches only the threads of one process, which jsh could provide, but only if the kernel left the slot open, as it does for `fetch` and `WebSocket`.

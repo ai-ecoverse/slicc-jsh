@@ -1,0 +1,7 @@
+{
+  "description": "node -c / --check: the script's syntax is checked and nothing runs (exit 0, no output); a SyntaxError is reported under the script's real path as when it runs, exit 1; ES modules by extension, or by detection without a \"type\" (with \"type\": \"commonjs\", module syntax is a SyntaxError after Node's warning), hashbang, return and await as each kind allows; piped input as CommonJS unless --input-type=module; --check with -e or -p is an error (9). Stack frames dropped (Node's are its internals)",
+  "argv": [
+    "main.js"
+  ],
+  "shim": true
+}

@@ -75,7 +75,7 @@ const NOT_YET = [
   'cluster',
   'inspector',
   'trace_events',
-  'was',
+  'wasi',
 ];
 
 function notSupported(id) {

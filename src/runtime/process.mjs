@@ -3,7 +3,7 @@ import { SIGNALS } from './signals.mjs';
 import { assignProcessExitCode, hardExitError, NodeExitError, numericExitCode } from './exit.mjs';
 import { createStdio } from './stdio.mjs';
 import { loadNodeLib } from './node-lib.mjs';
-import { ERR_INVALID_ARG_TYPE, nodeError } from './node-errors.mjs';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, nodeError, validateUint32 } from './node-errors.mjs';
 
 /** Node version reported by the shim (M1 target). */
 export const NODE_SHIM_VERSION = '22.22.0';
@@ -219,7 +219,9 @@ const Process = { process: class extends EventEmitter {
     };
     // Its own name whatever the bundler calls it.
     Object.defineProperty(this.nextTick, 'name', { value: 'nextTick' });
-    this._umask = 0o022;
+    // The kernel's umask, found when first asked for; process.umask(mask)
+    // then changes jsh's own (the kernel's, which children inherit, stays).
+    this._umask = undefined;
     this._cpuPrev = { user: 0, system: 0 };
     // Node exposes process.config (build-time variables). Minimal M1 shape.
     this.config = {
@@ -562,10 +564,43 @@ const Process = { process: class extends EventEmitter {
   }
 
   umask(mask) {
+    this._umask ??= this._kernelUmask();
     if (mask === undefined) return this._umask;
+    // Node's parseFileMode: a uint32, or an octal string.
+    let value = mask ?? undefined;
+    if (typeof value === 'string') {
+      if (!/^[0-7]+$/.test(value)) throw ERR_INVALID_ARG_VALUE('mask', value, 'must be a 32-bit unsigned integer or an octal string');
+      value = Number.parseInt(value, 8);
+    }
+    validateUint32(value, 'mask');
     const prev = this._umask;
-    this._umask = Number(mask) & 0o777;
+    this._umask = value & 0o777;
     return prev;
+  }
+
+  /**
+   * The process's umask in the kernel, which a JS program can't ask for
+   * (/proc isn't in its file system): the mode the kernel gives a directory
+   * made to find out, once, in /tmp (022 if that fails).
+   */
+  _kernelUmask() {
+    if (this._kumask === undefined) {
+      this._kumask = 0o022;
+      const fs = this._ctx?.sync?.fs;
+      const dir = `/tmp/.jsh-umask-${this.pid}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        fs.mkdir(dir);
+        try {
+          const mode = fs.stat(dir).mode;
+          if (typeof mode === 'number') this._kumask = ~mode & 0o777;
+        } finally {
+          fs.rm(dir);
+        }
+      } catch {
+        /* the kernel's default */
+      }
+    }
+    return this._kumask;
   }
 
   cwd() {
@@ -868,7 +903,7 @@ const JSH_INTERNALS = [
   '_assignedExitCode', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
   '_dispatchSignal', '_evalCode', '_exitError', '_forcedExitCode', '_handles', '_nodeLib', '_onExit',
   '_onHardExit', '_options', '_reportSignal', '_reportSignalWrite', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
-  '_stdio', '_stdoutWrite', '_umask', '_uncaughtCapture', '_writeStderr', '_writeStdout',
+  '_stdio', '_stdoutWrite', '_umask', '_kumask', '_uncaughtCapture', '_writeStderr', '_writeStdout',
 ];
 
 /**

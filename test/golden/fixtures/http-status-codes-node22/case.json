@@ -1,0 +1,5 @@
+{
+  "description": "http.STATUS_CODES is Node 22's whole table, in its order, and a server's response gets its reason phrase from it (207, 418, 451, 511 over loopback); a code outside it gets none",
+  "argv": ["script.js"],
+  "shim": true
+}

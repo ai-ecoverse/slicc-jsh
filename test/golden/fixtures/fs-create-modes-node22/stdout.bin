@@ -1,0 +1,33 @@
+mkdtemp: 700
+writeFileSync default: 644
+writeFileSync mode 0o600: 600
+writeFileSync existing, mode 0o777: 600
+writeFileSync wx, mode '640': 640
+writeFileSync mode 0o777 (umask applies): 755
+writeFileSync bad mode: THROW ERR_INVALID_ARG_VALUE The argument 'mode' must be a 32-bit unsigned integer or an octal string. Received 'rw'
+appendFileSync new, mode 0o604: 604
+appendFileSync existing, mode 0o777: 604
+openSync w, 0o700: 700
+openSync existing, 0o777: 700
+openSync wx, 0o444: 444
+promises.open w, 0o660: 640
+open callback a, 0o606: 604
+createWriteStream mode 0o640: 640
+promises.writeFile mode 0o611: 611
+mkdirSync default: 755
+mkdirSync 0o700: 700
+mkdirSync { mode: '750' }: 750
+mkdirSync recursive mode 0o711: 711 711 711
+mkdirSync bad mode: THROW ERR_OUT_OF_RANGE The value of "options.mode" is out of range. It must be >= 0 && <= 4294967295. Received -1
+copyFileSync new: 750
+copyFileSync over 0o600: 750
+promises.copyFile: 750
+umask('077'): 22
+umask now: 77
+writeFileSync under 077: 600
+mkdirSync under 077: 700
+mkdtempSync under 077: 700
+umask 0: 666
+umask('8'): THROW ERR_INVALID_ARG_VALUE The argument 'mask' must be a 32-bit unsigned integer or an octal string. Received '8'
+umask(-1): THROW ERR_OUT_OF_RANGE The value of "mask" is out of range. It must be >= 0 && <= 4294967295. Received -1
+umask(null): THROW ERR_INVALID_ARG_TYPE The "mask" argument must be of type number. Received undefined

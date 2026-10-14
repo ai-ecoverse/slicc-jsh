@@ -20,7 +20,7 @@ import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
 import { probeStdio } from './stdio.mjs';
 import { installFunctionImport } from './function-import.mjs';
 import { patchReplServer } from './node-lib.mjs';
-import { syntaxReport } from './syntax-report.mjs';
+import { checkSyntax, syntaxReport } from './syntax-report.mjs';
 import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
@@ -167,6 +167,19 @@ export async function runNode(ctx, options = {}) {
       /* the report is best effort, as Node's */
     }
     writeStderr(trailer);
+  };
+  /**
+   * `--check` of CommonJS that has module syntax: Node's enrichCJSError
+   * warns, synchronously, before the SyntaxError is reported.
+   */
+  const warnCheckedEsm = (kind, source, filename) => {
+    if (kind !== 'commonjs' || !(shouldRunAsEsm(source) || checkSyntax(source, { kind, filename })?.wrapperRedeclare)) return;
+    if ((processRef?._options ?? []).includes('--no-warnings')) return;
+    writeStderr(
+      `(node:${processRef?.pid ?? ctx.pid}) Warning: Failed to load the ES module: ${filename}. ` +
+        'Make sure to set "type": "module" in the nearest package.json file or use the .mjs extension.\n' +
+        '(Use `node --trace-warnings ...` to show where the warning was created)\n'
+    );
   };
   /**
    * The program ends on an uncaught error (Node's triggerUncaughtException):
@@ -719,7 +732,7 @@ export async function runNode(ctx, options = {}) {
           return dieUncaught(() => printUncaught(err));
         }
       }
-    } else if (parsed.mode === 'empty' && !parsed.stdinScript && (parsed.interactive || process.stdin.isTTY)) {
+    } else if (parsed.mode === 'empty' && !parsed.check && !parsed.stdinScript && (parsed.interactive || process.stdin.isTTY)) {
       // Node's REPL: no script, and stdin a terminal (or -i).
       const status = startRepl();
       if (status !== undefined) return status;
@@ -760,6 +773,16 @@ export async function runNode(ctx, options = {}) {
       // `node -` keeps its `-`; piped input with no argument is [stdin].
       if (!parsed.stdinScript) process.argv[1] = '[stdin]';
       const inputType = inputTypeOf(process._options);
+      if (parsed.check) {
+        // Node checks piped input as CommonJS unless --input-type=module.
+        const kind = inputType === 'module' ? 'module' : 'commonjs';
+        const error = checkSyntax(source, { kind, filename: '[stdin]' });
+        if (error) {
+          warnCheckedEsm(kind, source, '[stdin]');
+          return dieUncaught(() => printUncaught(error));
+        }
+        return 0;
+      }
       const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(source);
       try {
         if (asEsm) {
@@ -877,6 +900,22 @@ export async function runNode(ctx, options = {}) {
       // require of itself, resolve as for any module); process.argv[1] keeps
       // the path as given. --preserve-symlinks-main keeps the link.
       const mainPath = realMainPath(ctx, filePath, process._options);
+      if (parsed.check) {
+        // --check: compiled as the module it is, under its real path, never run.
+        let kind = esm.isEsmFilename(mainPath, source) ? 'module' : 'commonjs';
+        let error = checkSyntax(source, { kind, filename: mainPath });
+        // detect-module: a wrapper name declared at the top level makes an
+        // ES module, unless the package says "commonjs".
+        if (error?.wrapperRedeclare && cjs.findPackageType(mainPath.replace(/\/[^/]*$/, '') || '/')?.type !== 'commonjs') {
+          kind = 'module';
+          error = checkSyntax(source, { kind, filename: mainPath });
+        }
+        if (error) {
+          warnCheckedEsm(kind, source, mainPath);
+          return dieUncaught(() => printUncaught(error));
+        }
+        return 0;
+      }
       try {
         // isEsmFilename covers .mjs, "type":"module", and detect-module for
         // ambiguous .js (not explicit "type":"commonjs").
