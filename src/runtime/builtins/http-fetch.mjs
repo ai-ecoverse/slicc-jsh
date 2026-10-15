@@ -75,11 +75,13 @@ export function connectError(code, host, port, cause, { noNetwork = false } = {}
     e.hostname = name;
   } else {
     const c = typeof code === 'string' && code ? code : 'EIO';
-    e = new Error(`connect ${c} ${name}:${port}`);
+    // A loopback name is the kernel's 127.0.0.1 (IPv4 only), as getaddrinfo answers it.
+    const address = /^(localhost|.*\.localhost)\.?$/i.test(name) ? '127.0.0.1' : name;
+    e = new Error(`connect ${c} ${address}:${port}`);
     e.errno = ERRNO[c] ?? c;
     e.code = c;
     e.syscall = 'connect';
-    e.address = name;
+    e.address = address;
     e.port = Number(port);
   }
   if (cause !== undefined) Object.defineProperty(e, 'cause', { value: cause, configurable: true, writable: true });

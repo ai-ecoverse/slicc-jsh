@@ -271,6 +271,56 @@ describe('http.request without a route: ctx.fetch hands it to the embedder’s t
   });
 });
 
+describe('#189: the fallback\'s errors and res.req as Node gives them', () => {
+  let jsh;
+  let kernel;
+  before(async () => {
+    jsh = await withJsh();
+    const transport = {
+      traits: { manualRedirects: true, encodedBodies: false, crossOrigin: 'any' },
+      async fetch() {
+        return { status: 200, statusText: 'OK', headers: [], body: (async function* () {})(), cancel() {} };
+      },
+    };
+    kernel = await createNodeKernel({ network: { transport } });
+    for (const [rel, data] of packageFiles()) await kernel.writeFile(`/node_modules/@ai-ecoverse/slicc-jsh/${rel}`, data);
+  });
+  after(() => {
+    jsh?.close();
+    kernel?.terminate();
+  });
+  const program189 = program([
+    "const http = require('http'); const https = require('https');",
+    "const err = (e) => [e.code, e.syscall, e.address, e.port, e.hostname, e.message].filter((x) => x !== undefined).join(' ');",
+    "const one = (label, mod, url) => new Promise((resolve) => { mod.get(url, (res) => { console.log(label, res.statusCode, res.req.method, res.req.path, res.req.host, res.req.protocol); res.resume(); res.on('end', resolve); }).on('error', (e) => { console.log(label, err(e)); resolve(); }); });",
+    "await one('http localhost:1', http, 'http://localhost:1/');",
+    "await one('https 127.0.0.1:1', https, 'https://127.0.0.1:1/');",
+    "await one('https localhost:1', https, 'https://localhost:1/');",
+    "await one('http 200', http, 'http://far.example/p?q=1');",
+    "await one('https 200', https, 'https://far.example/s?t=2');",
+  ]);
+
+  // A name the transport can't resolve stays ECONNREFUSED until the kernel
+  // passes the resolver's errno (slicc-kernel#566); jsh maps ENOTFOUND /
+  // EAI_NONAME to getaddrinfo ENOTFOUND when it does, as for net.connect.
+  it('loopback names say 127.0.0.1; https to a closed loopback port is ECONNREFUSED; res.req has method, path, host, protocol', async () => {
+    await kernel.writeFile('/os/e189.js', program189);
+    const r = await kernel.run(['node', 'e189.js'], { cwd: '/os' });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(
+      r.stdout,
+      [
+        'http localhost:1 ECONNREFUSED connect 127.0.0.1 1 connect ECONNREFUSED 127.0.0.1:1',
+        'https 127.0.0.1:1 ECONNREFUSED connect 127.0.0.1 1 connect ECONNREFUSED 127.0.0.1:1',
+        'https localhost:1 ECONNREFUSED connect 127.0.0.1 1 connect ECONNREFUSED 127.0.0.1:1',
+        'http 200 200 GET /p?q=1 far.example http:',
+        'https 200 200 GET /s?t=2 far.example https:',
+        '',
+      ].join('\n')
+    );
+  });
+});
+
 describe('http.request on loopback stays the kernel’s own', () => {
   let jsh;
   before(async () => {

@@ -229,7 +229,9 @@ An existing file keeps its mode. `copyFile` gives the copy the source's mode, wh
 - **Redirects.** Requests use `redirect: 'manual'`, so a 3xx shows as `statusCode` and `Location`, as in Node. A browser transport can't do that (an opaque redirect), so there jsh follows redirects instead (see below).
 - **Refused, not changed.** What fetch can't send fails with `ERR_NOT_SUPPORTED` before anything goes out: the methods it forbids (`CONNECT`, `TRACE`, `TRACK`), and a `GET` or `HEAD` with a body.
 - **Agents.** A request with its own agent (a subclass of `http.Agent`, or one with its own `createConnection`, `addRequest` or `createSocket`, as a proxy's has), a `socketPath`, or a kernel without `ctx.fetch` gets the connect error instead. A plain `new http.Agent(…)` takes the fallback.
-- If `fetch` has no network either, the error is the connect's (`getaddrinfo ENOTFOUND`, `connect ENETUNREACH`).
+- If `fetch` has no network either, the error is the connect's (`getaddrinfo ENOTFOUND`, `connect ENETUNREACH`). A name the transport can't resolve is `ECONNREFUSED` until the kernel passes the resolver's errno ([slicc-kernel#566](https://github.com/ai-ecoverse/slicc-kernel/issues/566)); jsh then reports `getaddrinfo ENOTFOUND`.
+- `https` to the kernel's own loopback (`127.0.0.1`, `localhost`) connects first, so a port nothing listens on is `connect ECONNREFUSED 127.0.0.1:<port>`; the loopback has no TLS, so a listening port is `ERR_NOT_SUPPORTED`.
+- Errors name a loopback name by its address, `127.0.0.1`, as Node's resolver gives it. `res.req` has the request's `method`, `path`, `host` and `protocol`.
 
 **`https` client.** `https.request` and `https.get` take the fetch fallback above every time.
 - `ClientRequest` is an `EventEmitter`, not a stream.

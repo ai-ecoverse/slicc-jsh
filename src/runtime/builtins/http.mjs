@@ -1022,6 +1022,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       super({ autoDestroy: false });
       this.#opts = options;
       this.reusedSocket = false;
+      // Node's: what the request is, readable as res.req's.
+      this.method = String(options.method ?? 'GET').toUpperCase();
+      this.path = options.path ?? '/';
+      this.host = options.hostname ?? options.host ?? 'localhost';
+      this.protocol = options.protocol ?? 'http:';
       for (const [k, v] of Object.entries(options.headers ?? {})) {
         this.#headers[String(k).toLowerCase()] = String(v);
         this.#names[String(k).toLowerCase()] = String(k);
@@ -1548,7 +1553,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       }
       options = {
         protocol: url.protocol,
-        hostname: url.hostname,
+        // Node's urlToHttpOptions: an IPv6 address without its brackets.
+        hostname: url.hostname.startsWith('[') ? url.hostname.slice(1, -1) : url.hostname,
         port: url.port || (url.protocol === 'https:' ? 443 : 80),
         path: `${url.pathname}${url.search}`,
         method: options?.method,

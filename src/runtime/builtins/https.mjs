@@ -5,7 +5,7 @@
  */
 import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
-import { createFetchClient } from './http-fetch.mjs';
+import { connectError, createFetchClient, isLoopbackHost } from './http-fetch.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
 
@@ -61,6 +61,12 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
       rejectTlsOptions(options);
       this.#opts = options;
       this.#headers = headersToObject(options?.headers);
+      // Node's: what the request is, readable as res.req's.
+      // The options as merged over the URL: an overriding path or hostname wins.
+      this.method = String(options?.method ?? 'GET').toUpperCase();
+      this.path = options?.path ?? '/';
+      this.host = String(options?.hostname ?? options?.host ?? 'localhost').replace(/^\[|\]$/g, '');
+      this.protocol = 'https:';
       if (callback) this.once('response', callback);
     }
 
@@ -145,14 +151,23 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
         if (typeof ctx.fetch !== 'function') throw notSupported('https.request');
         const opts = this.#opts;
         const method = (opts.method ?? 'GET').toUpperCase();
-        let host = opts.hostname ?? opts.host ?? 'localhost';
-        let port = opts.port ?? 443;
-        let path = opts.path ?? '/';
-        if (opts.href) {
-          const u = new URL(opts.href);
-          host = u.hostname.replace(/^\[|\]$/g, '');
-          port = u.port || 443;
-          path = `${u.pathname}${u.search}`;
+        // The options as merged over the URL (an overriding path, hostname
+        // or port wins, as in Node).
+        const host = String(opts.hostname ?? opts.host ?? 'localhost').replace(/^\[|\]$/g, '');
+        const port = opts.port ?? 443;
+        const path = opts.path ?? '/';
+        // The kernel's loopback has no TLS (a fetch there is refused, or on
+        // older kernels the transport answers 403): connect first, so a
+        // port nothing listens on is ECONNREFUSED, as Node's.
+        if (isLoopbackHost(host) && typeof ctx.net?.connect === 'function') {
+          let conn;
+          try {
+            conn = await ctx.net.connect({ host: /localhost\.?$/i.test(host) ? '127.0.0.1' : host, port: Number(port) });
+          } catch (err) {
+            throw connectError(err?.code ?? err?.cause?.code ?? 'ECONNREFUSED', host, port, err);
+          }
+          void conn.close?.();
+          throw notSupported("https to the kernel's own loopback (it has no TLS)");
         }
         const incoming = await client.send({
           protocol: 'https:',
@@ -193,7 +208,7 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
       }
       options = {
         protocol: 'https:',
-        hostname: url.hostname,
+        hostname: url.hostname.startsWith('[') ? url.hostname.slice(1, -1) : url.hostname,
         port: url.port || 443,
         path: `${url.pathname}${url.search}`,
         href: url.href,

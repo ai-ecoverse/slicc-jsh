@@ -1,0 +1,3 @@
+https override b.test /override GET
+http ipv6 2001:db8::1 /x
+object form [::1]
