@@ -7,10 +7,16 @@
 function Timeout() {}
 function Immediate() {}
 
-export function createTimers(handles, { onCallbackError, afterCallback, hold = () => false } = {}) {
+export function createTimers(
+  handles,
+  { onCallbackError, afterCallback, hold = () => false, holdImmediate = () => false } = {}
+) {
   // hold(due): whether a timeout that became due at `due` must wait (one
-  // task at a time) for what runs before it: the BroadcastChannel batch being
-  // delivered, for a timeout that became due after the batch started.
+  // task at a time) for what runs before it: the message ports' turn being
+  // delivered, for a timeout that became due after the turn started.
+  // holdImmediate(): whether the program's immediates must wait (Node's
+  // check phase comes after the poll phase that delivers port messages).
+  let inImmediate = 0;
   const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
   const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
   const nativeSetInterval = globalThis.setInterval.bind(globalThis);
@@ -123,12 +129,13 @@ export function createTimers(handles, { onCallbackError, afterCallback, hold = (
     return handle;
   };
 
-  const makeImmediate = (fn, args) => {
+  const makeImmediate = (fn, args, held = true) => {
     if (stopped) return nativeSetTimeout(fn, 0, ...args);
     const state = {
       kind: 'Immediate',
       refed: true,
       id: null,
+      retry: null,
       repeating: false,
     };
     const handle = new Immediate();
@@ -138,9 +145,19 @@ export function createTimers(handles, { onCallbackError, afterCallback, hold = (
 
     const fire = () => {
       if (stopped) return;
+      if (held && holdImmediate()) {
+        state.retry = nativeSetTimeout(fire, 0);
+        return;
+      }
+      state.retry = null;
       byId.delete(state.id);
       handles.delete(state);
-      runMethod(handle, '_onImmediate', args, domain);
+      if (held) inImmediate++;
+      try {
+        runMethod(handle, '_onImmediate', args, domain);
+      } finally {
+        if (held) inImmediate--;
+      }
     };
     state.id = nativeSetTimeout(fire, 0);
     byId.set(state.id, state);
@@ -163,9 +180,8 @@ export function createTimers(handles, { onCallbackError, afterCallback, hold = (
   };
 
   return {
-    /** A tracked timeout or interval is due now and has not run yet. */
-    overdue() {
-      const now = Date.now();
+    /** A tracked timeout or interval was due at `now` and has not run yet. */
+    overdue(now = Date.now()) {
       for (const state of byId.values()) {
         if (state.kind === 'Timeout' && state.due <= now) return true;
       }
@@ -186,6 +202,10 @@ export function createTimers(handles, { onCallbackError, afterCallback, hold = (
       return makeImmediate(fn, args);
     },
     clearImmediate: (handle) => clear(handle, nativeClearTimeout),
+    /** @internal An immediate that is never held (the message ports' own steps). */
+    setImmediateUnheld: (fn) => makeImmediate(fn, [], false),
+    /** @internal Whether one of the program's immediates is running (Node's check phase). */
+    inCheck: () => inImmediate > 0,
     clearPending() {
       for (const [id, state] of byId) {
         if (state.retry) nativeClearTimeout(state.retry);

@@ -1,0 +1,5 @@
+{
+  "description": "server.close(cb) with keep-alive connections, as Node 22 (#215): a busy connection stays open after its response (Keep-Alive still announced; a further request is served), and the callback waits for it to close, after keepAliveTimeout + keepAliveTimeoutBuffer idle or when the client's agent drops it (a timeout=1 hint)",
+  "argv": ["script.js"],
+  "shim": true
+}

@@ -346,8 +346,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       if (this.sendDate && !this.hasHeader('date')) auto.push(['Date', new Date().toUTCString()]);
       const framed =
         noBody || autoChunked || autoLength != null || this.hasHeader('content-length') || /chunked/i.test(String(this.getHeader('transfer-encoding') ?? ''));
-      // A server that is closing ends each connection after its response (Node's).
-      if (!framed || this._server?._closing || /close/i.test(String(this.getHeader('connection') ?? ''))) this.shouldKeepAlive = false;
+      if (!framed || /close/i.test(String(this.getHeader('connection') ?? ''))) this.shouldKeepAlive = false;
       if (!this.hasHeader('connection')) {
         auto.push(['Connection', this.shouldKeepAlive ? 'keep-alive' : 'close']);
         if (this.shouldKeepAlive && this._keepAliveTimeout) auto.push(['Keep-Alive', `timeout=${Math.floor(this._keepAliveTimeout / 1000)}`]);
@@ -403,11 +402,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       this.#socket.write(payload, () => {
         this.finished = true;
         this.emit('finish');
-        if (this._server?._closing && !this.#socket.destroyed) {
-          // close() is waiting (it wins over a keep-alive decided before it
-          // was called, a streamed response's): end our side and let the
-          // client close its own once it has read the response, so close's
-          // callback comes after the client's 'end', as in Node.
+        if (this.shouldKeepAlive && typeof this._onKeptAlive === 'function' && !this.#socket.destroyed) {
+          // Keep-alive: the connection takes its next request, also once
+          // close() was called (Node 22: it closes when idle).
+          this._onKeptAlive();
+        } else if (this._server?._closing && !this.#socket.destroyed) {
+          // close() is waiting on a connection that ends with this response:
+          // end our side and let the client close its own once it has read
+          // the response, so close's callback comes after the client's
+          // 'end', as in Node.
           const socket = this.#socket;
           const done = () => {
             clearTimeout(timer);
@@ -426,9 +429,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
           } catch {
             done();
           }
-        } else if (this.shouldKeepAlive && typeof this._onKeptAlive === 'function' && !this.#socket.destroyed) {
-          // Keep-alive: the connection takes its next request.
-          this._onKeptAlive();
         } else {
           try {
             this.#socket.unref?.();
@@ -528,7 +528,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
    * One connection of a server, as Node's: requests one after another
    * (pipelined ones queued), the connection kept open after a response that
    * may (HTTP/1.1, no `Connection: close`, a framed body), closed after
-   * `keepAliveTimeout` idle, or at once by closeIdleConnections(). A request
+   * `keepAliveTimeout` + `keepAliveTimeoutBuffer` idle (Node 22's margin
+   * over the announced timeout), or at once by closeIdleConnections(). As in
+   * Node, a server that is closing keeps a connection that goes idle after
+   * close() until then (or until the client ends it). A request
    * whose headers don't arrive within `headersTimeout` gets 408. An
    * `Upgrade` request goes to 'upgrade' listeners, with the socket.
    */
@@ -560,7 +563,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       idleTimer = null;
       const ms = server.keepAliveTimeout;
       if (ms > 0) {
-        idleTimer = setTimeout(destroy, ms);
+        idleTimer = setTimeout(destroy, ms + (Number(server.keepAliveTimeoutBuffer) || 0));
         idleTimer.unref?.();
       }
     };
@@ -665,15 +668,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       const req = makeIncomingMessage(socket, body);
       setRequestLine(req, parsed, headers);
       const res = new ServerResponse(req);
-      // Node's shouldKeepAlive: HTTP/1.1 unless the client says close, the
-      // server still open, and below maxRequestsPerSocket.
+      // Node's shouldKeepAlive: HTTP/1.1 unless the client says close, and
+      // below maxRequestsPerSocket. A connection that is open when close()
+      // is called keeps serving as before (Node 22): it closes when idle.
       const max = server.maxRequestsPerSocket;
       res.shouldKeepAlive =
-        parsed.httpVersion !== '1.0' &&
-        !/\bclose\b/.test(connectionTokens) &&
-        server.listening !== false &&
-        !server._closing &&
-        !(max > 0 && served >= max);
+        parsed.httpVersion !== '1.0' && !/\bclose\b/.test(connectionTokens) && !(max > 0 && served >= max);
       res._keepAliveTimeout = server.keepAliveTimeout;
       res._server = server;
       // The client gone before the response ended (an aborted SSE or
@@ -702,7 +702,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         conn.idle = true;
         // The request's 'close' (Node emits it once the response is done).
         if (!req.destroyed) req.destroy();
-        if (server._closing || socket.destroyed) {
+        if (socket.destroyed) {
           destroy();
           return;
         }
@@ -751,7 +751,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       this.#requestListener = requestListener;
       // Node's options for them (lib/_http_server.js storeHTTPOptions):
       // integers >= 0, and headersTimeout no longer than requestTimeout.
-      for (const key of ['requestTimeout', 'headersTimeout', 'keepAliveTimeout']) {
+      for (const key of ['requestTimeout', 'headersTimeout', 'keepAliveTimeout', 'keepAliveTimeoutBuffer']) {
         const value = options?.[key];
         if (value === undefined) continue;
         validateInteger(value, key, 0);
@@ -769,6 +769,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     #requestListener;
     // Node 22's defaults.
     keepAliveTimeout = 5000;
+    keepAliveTimeoutBuffer = 1000;
     headersTimeout = 60000;
     requestTimeout = 300000;
     maxRequestsPerSocket = 0;
@@ -803,8 +804,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       }
     }
     /**
-     * Node 19+: close() also closes the idle connections; the busy ones close
-     * after their response, and the callback waits for them.
+     * Node 19+: close() also closes the idle connections; the busy ones stay
+     * open after their response, as kept-alive ones do, and the callback
+     * waits until every connection has closed.
      */
     close(callback) {
       this._closing = true;
@@ -848,6 +850,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       this.protocol = options.protocol;
       this.scheduling = options.scheduling ?? 'lifo';
       this.keepAliveMsecs = options.keepAliveMsecs ?? 1000;
+      // Node 22: the margin taken off a server's Keep-Alive timeout hint.
+      const buffer = options.agentKeepAliveTimeoutBuffer;
+      this.agentKeepAliveTimeoutBuffer = typeof buffer === 'number' && buffer >= 0 && Number.isFinite(buffer) ? buffer : 1000;
       this.sockets = Object.create(null);
       this.freeSockets = Object.create(null);
       this.requests = Object.create(null);
@@ -910,12 +915,24 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       return net.createConnection(opts, callback);
     }
     /** Node's: a free socket doesn't keep the program alive, and times out after `timeout`. */
+    /**
+     * Node 22's: a server's `Keep-Alive: timeout=N` hint, less
+     * agentKeepAliveTimeoutBuffer, caps the free socket's timeout; a hint
+     * that leaves nothing means the socket can't be reused safely.
+     */
     keepSocketAlive(socket) {
       socket.setKeepAlive?.(true, this.keepAliveMsecs);
       socket.unref?.();
-      const timeout = this.options.timeout;
-      if (timeout > 0 && socket.timeout !== timeout) socket.setTimeout?.(timeout);
-      return true;
+      let timeout = this.options.timeout || 0;
+      let keep = true;
+      const hint = /^timeout=(\d+)/.exec(String(socket._httpMessage?.res?.headers?.['keep-alive'] ?? ''))?.[1];
+      if (hint) {
+        const ms = Math.max(0, Number.parseInt(hint, 10) * 1000 - this.agentKeepAliveTimeoutBuffer);
+        if (ms === 0) keep = false;
+        else if (ms < timeout) timeout = ms;
+      }
+      if (socket.timeout !== timeout) socket.setTimeout?.(timeout);
+      return keep;
     }
     reuseSocket(socket, req) {
       req.reusedSocket = true;
@@ -1221,10 +1238,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         }
         unlisten();
         this.#socket = null;
-        socket._httpMessage = null;
+        // As Node's: the agent's 'free' handler still sees this request (and
+        // its response's Keep-Alive hint) on the socket.
         queueMicrotask(() => {
-          if (socket.destroyed) return;
+          if (socket.destroyed) {
+            if (socket._httpMessage === this) socket._httpMessage = null;
+            return;
+          }
           socket.emit('free');
+          if (socket._httpMessage === this) socket._httpMessage = null;
           handles?.notify?.();
         });
       };
