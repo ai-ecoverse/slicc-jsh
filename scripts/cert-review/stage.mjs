@@ -137,6 +137,11 @@ const neg = join(work, 'neg');
 rmSync(neg, { recursive: true, force: true });
 cpSync(tag, neg, { recursive: true, filter: (src) => !/[/\\](node_modules|dist|\.git)$/.test(src) });
 cpSync(join(prevDir, 'dist'), join(neg, 'dist'), { recursive: true });
+{
+  const p = readJson(join(neg, 'package.json'));
+  p.version = prev;
+  writeFileSync(join(neg, 'package.json'), `${JSON.stringify(p, null, 2)}\n`);
+}
 
 const base = join(work, 'base/node_modules');
 rmSync(join(work, 'base'), { recursive: true, force: true });

@@ -58,6 +58,19 @@ function fixtureNames(dir) {
     .sort();
 }
 
+function goldenParse(skipped) {
+  return (text, units) => {
+    const res = {};
+    for (const u of units) {
+      const e = esc(u);
+      if (new RegExp(`^${e} \\[[\\w-]+\\]: |^${e}: (?!shim skipped)`, 'm').test(text)) res[u] = 'fail';
+      else if (new RegExp(`^(skip )?${e}(: shim skipped| \\[kernel\\]: )`, 'm').test(text) && skipped) res[u] = 'skip';
+      else res[u] = 'pass';
+    }
+    return res;
+  };
+}
+
 function nodeTest(dir, scriptName, harness) {
   return {
     fixtures: (tree) =>
@@ -87,30 +100,14 @@ const SUITES = {
     prefix: 'test/golden/fixtures/',
     harness: ['scripts/golden.mjs', 'scripts/node22.mjs', 'test/integration/helpers.mjs'],
     command: (tree, units) => `${script(tree, 'test:golden')}${units ? ` ${units.join(' ')}` : ''}`,
-    parse(text, units) {
-      const res = {};
-      for (const u of units) {
-        if (new RegExp(`^ok ${esc(u)}$`, 'm').test(text)) res[u] = 'pass';
-        else if (new RegExp(`^${esc(u)}: shim skipped`, 'm').test(text)) res[u] = 'skip';
-        else res[u] = 'fail';
-      }
-      return res;
-    },
+    parse: goldenParse(/: shim skipped/),
   },
   jsh: {
     fixtures: (tree) => fixtureNames(join(tree, 'test/jsh/fixtures')),
     prefix: 'test/jsh/fixtures/',
     harness: ['scripts/jsh-golden.mjs', 'scripts/node22.mjs', 'test/integration/helpers.mjs'],
     command: (tree, units) => `${script(tree, 'test:jsh')}${units ? ` ${units.join(' ')}` : ''}`,
-    parse(text, units) {
-      const res = {};
-      for (const u of units) {
-        if (new RegExp(`^ok ${esc(u)}$`, 'm').test(text)) res[u] = 'pass';
-        else if (new RegExp(`^skip ${esc(u)} \\[kernel\\]`, 'm').test(text)) res[u] = 'skip';
-        else res[u] = 'fail';
-      }
-      return res;
-    },
+    parse: goldenParse(/^skip /),
   },
   integration: nodeTest('integration', 'test:integration', ['test/integration/helpers.mjs', 'test/integration/fixture-npm.mjs', 'scripts/node22.mjs']),
   browser: nodeTest('browser', 'test:browser', ['test/browser/chrome.mjs', 'test/browser/kernel.mjs', 'test/browser/page/']),
@@ -162,6 +159,9 @@ async function runSuite(name, treeName, units) {
     }
   } else {
     res = s.parse(r.text, units ?? (s.fixtures ? s.fixtures(tree) : []));
+    if (r.exit !== 0 && r.exit !== 1) {
+      for (const [u, v] of Object.entries(res)) if (v === 'pass' && !new RegExp(`^ok ${esc(u)}$`, 'm').test(r.text)) res[u] = 'fail';
+    }
   }
   if (r.exit !== 0 && !Object.values(res).includes('fail')) res['(suite exit)'] = 'fail';
   return { suite: name, tree: treeName, exit: r.exit, breach: r.breach, peakMb: r.peakMb, seconds: r.seconds, log: r.log, units: units ?? null, results: res };
