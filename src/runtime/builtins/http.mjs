@@ -515,10 +515,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     let headersTimer = null;
     const conn = { socket, idle: true };
     server._connections.add(conn);
+    let requestTimer = null;
     socket.once('close', () => {
       server._connections.delete(conn);
       clearTimeout(idleTimer);
       clearTimeout(headersTimer);
+      clearTimeout(requestTimer);
+      server._connectionGone?.();
     });
     const destroy = () => {
       try {
@@ -536,18 +539,31 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         idleTimer.unref?.();
       }
     };
+    // Node's 408: the headers within headersTimeout (from the connection, or
+    // a kept-alive one's next request), the whole request within requestTimeout.
+    const timeout408 = () => {
+      if (busy || socket.destroyed) return;
+      try {
+        socket.end('HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n', destroy);
+      } catch {
+        destroy();
+      }
+    };
     const armHeaders = () => {
       if (headersTimer || !(server.headersTimeout > 0)) return;
       headersTimer = setTimeout(() => {
         headersTimer = null;
-        if (busy || socket.destroyed) return;
-        try {
-          socket.end('HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n', destroy);
-        } catch {
-          destroy();
-        }
+        timeout408();
       }, server.headersTimeout);
       headersTimer.unref?.();
+    };
+    const armRequest = () => {
+      if (requestTimer || !(server.requestTimeout > 0)) return;
+      requestTimer = setTimeout(() => {
+        requestTimer = null;
+        timeout408();
+      }, server.requestTimeout);
+      requestTimer.unref?.();
     };
     const pump = () => {
       if (busy || socket.destroyed || buf.length === 0) return;
@@ -565,6 +581,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         return;
       }
       if (parsed.kind !== 'request') return;
+      // The headers are in: headersTimeout is done, the body has requestTimeout.
+      clearTimeout(headersTimer);
+      headersTimer = null;
+      armRequest();
       const headers = headerObj(parsed.rawHeaders);
       const te = String(headers['transfer-encoding'] || '').toLowerCase();
       const connectionTokens = String(headers.connection || '').toLowerCase();
@@ -573,6 +593,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       if (headers.upgrade && /\bupgrade\b/.test(connectionTokens) && server.listenerCount('upgrade') > 0) {
         clearTimeout(headersTimer);
         headersTimer = null;
+        clearTimeout(requestTimer);
+        requestTimer = null;
         socket.off('data', onData);
         server._connections.delete(conn);
         const req = makeIncomingMessage(socket, Buffer.alloc(0));
@@ -608,8 +630,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         body = parsed.bodyPrefix.subarray(0, cl);
         used = headLength + cl;
       }
-      clearTimeout(headersTimer);
-      headersTimer = null;
+      clearTimeout(requestTimer);
+      requestTimer = null;
       // What follows this request (a pipelined one) waits its turn.
       buf = Buffer.from(buf.subarray(used));
       busy = true;
@@ -674,6 +696,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     });
     socket.on('data', onData);
     socket.on('error', (err) => server.emit('clientError', err, socket));
+    // A connection that sends nothing still gets headersTimeout's 408.
+    armHeaders();
   }
 
   function setRequestLine(req, parsed, headers) {
@@ -714,6 +738,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     /** @internal This server's connections, and whether each is between requests. */
     _connections = new Set();
     _closing = false;
+    _connectionGone = null;
 
     /** Node's: the connections waiting for their next request go now. */
     closeIdleConnections() {
@@ -738,10 +763,26 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         }
       }
     }
-    /** Node 19+: close() also closes the idle connections; the busy ones close after their response. */
+    /**
+     * Node 19+: close() also closes the idle connections; the busy ones close
+     * after their response, and the callback waits for them.
+     */
     close(callback) {
       this._closing = true;
-      const r = super.close(callback);
+      let cb = typeof callback === 'function' ? callback : null;
+      let listenerClosed = false;
+      const done = (err) => {
+        if (!cb || (!err && (!listenerClosed || this._connections.size > 0))) return;
+        const fn = cb;
+        cb = null;
+        this._connectionGone = null;
+        fn(err);
+      };
+      this._connectionGone = () => done();
+      const r = super.close((err) => {
+        listenerClosed = true;
+        done(err);
+      });
       this.closeIdleConnections();
       return r;
     }

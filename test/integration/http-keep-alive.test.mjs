@@ -62,4 +62,35 @@ describe('http keep-alive (kernel)', () => {
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, '"HTTP/1.1 408 Request Timeout\\r\\nConnection: close\\r\\n\\r\\n"\n');
   });
+
+  it('headersTimeout covers the headers only (a slow body has requestTimeout), and a connection that sends nothing; close(cb) waits for a busy connection', async () => {
+    const script = [
+      "const http = require('http'); const net = require('net');",
+      'const ev = [];',
+      'const server = http.createServer((req, res) => {',
+      "  let b = ''; req.on('data', (d) => (b += d));",
+      "  req.on('end', () => {",
+      "    if (req.url === '/slowres') { setTimeout(() => { res.end('late'); ev.push('response sent'); }, 150); server.close(() => { ev.push('close cb'); console.log(ev.join(' | ')); }); return; }",
+      "    res.end('body ' + b);",
+      '  });',
+      '});',
+      'server.headersTimeout = 300; server.requestTimeout = 3000;',
+      "server.listen(0, '127.0.0.1', async () => {",
+      '  const port = server.address().port;',
+      "  const r = await new Promise((resolve) => { const s = net.connect(port, '127.0.0.1', () => { s.write('POST /slow HTTP/1.1\\r\\nHost: x\\r\\nContent-Length: 4\\r\\nConnection: close\\r\\n\\r\\n'); setTimeout(() => s.write('data'), 500); }); let out = ''; s.on('data', (d) => (out += d)); s.on('close', () => resolve(out.split('\\r\\n')[0] + ' ' + out.split('\\r\\n\\r\\n')[1])); });",
+      "  console.log('slow body:', r);",
+      "  const silent = await new Promise((resolve) => { const s = net.connect(port, '127.0.0.1'); let out = ''; s.on('data', (d) => (out += d)); s.on('close', () => resolve(JSON.stringify(out))); setTimeout(() => { s.destroy(); resolve('still open'); }, 3000); });",
+      "  console.log('silent connection:', silent);",
+      "  http.get({ port, path: '/slowres', agent: false }, (res) => res.resume());",
+      '});',
+    ].join('\n');
+    const r = await jsh.run(['node', '-e', script]);
+    assert.equal(r.status, 0, r.stderr);
+    // Node checks headersTimeout every 30 s (connectionsCheckingInterval), so
+    // its 408 for the silent connection comes later; jsh's comes on time.
+    assert.equal(
+      r.stdout,
+      'slow body: HTTP/1.1 200 OK body data\nsilent connection: "HTTP/1.1 408 Request Timeout\\r\\nConnection: close\\r\\n\\r\\n"\nresponse sent | close cb\n'
+    );
+  });
 });
