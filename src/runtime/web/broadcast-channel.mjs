@@ -12,16 +12,22 @@
  * order they were made. An open, ref'd channel keeps the program alive.
  *
  * The messages queued when a delivery turn starts are one batch, as a
- * port's queue is drained in one poll phase: while a batch is delivered,
- * `delivering.active` is true, and the timers hold a due timeout until it is
- * done (a slow handler can't let one in between). Messages posted during a
- * batch make the next one, after which due timers run first.
+ * port's queue is drained in one poll phase. Node's timers phase comes
+ * first, so a batch waits while a timer is already due (`delivering.overdue`,
+ * from the timers); once it starts, `delivering.since` is its start and the
+ * timers hold a timeout that becomes due after that until the batch is done
+ * (a slow handler can't let one in between). Messages posted during a batch
+ * make the next one.
  */
 import { nodeError } from '../node-errors.mjs';
 
 const kInspect = Symbol.for('nodejs.util.inspect.custom');
 
-export function createBroadcastChannel({ handles, schedule, delivering = { active: false } }) {
+export function createBroadcastChannel({
+  handles,
+  schedule,
+  delivering = { active: false, since: 0, overdue: () => false },
+}) {
   /** @type {Map<string, Set<BroadcastChannel>>} */
   const channels = new Map();
   const later = schedule ?? ((fn) => setTimeout(fn, 0));
@@ -39,8 +45,15 @@ export function createBroadcastChannel({ handles, schedule, delivering = { activ
     // One message per task, so the microtasks a handler queues run before
     // the next message, as Node's per-message checkpoint has it.
     const step = (due, i) => {
+      if (i === 0 && due.length > 0 && delivering.overdue?.()) {
+        later(() => step(due, 0));
+        return;
+      }
       if (i < due.length) {
-        delivering.active = true;
+        if (i === 0) {
+          delivering.active = true;
+          delivering.since = Date.now();
+        }
         const [ch, data] = due[i];
         ch._deliver(data);
         handles?.notify?.();
