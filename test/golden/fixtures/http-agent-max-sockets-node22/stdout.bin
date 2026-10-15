@@ -1,0 +1,22 @@
+maxSockets 1 keepAlive false
+  sequential ["200 GET /0","200 GET /1","200 GET /2"]
+  parallel ["200 GET /3","200 GET /4","200 GET /5","200 GET /6"]
+  posts ["200 POST /7 seven","200 POST /8 eight","200 GET /9"]
+  closes 10
+maxSockets 1 keepAlive true
+  sequential ["200 GET /0","200 GET /1","200 GET /2"]
+  parallel ["200 GET /3","200 GET /4","200 GET /5","200 GET /6"]
+  posts ["200 POST /7 seven","200 POST /8 eight","200 GET /9"]
+  closes 10
+maxSockets 2 keepAlive false
+  sequential ["200 GET /0","200 GET /1","200 GET /2"]
+  parallel ["200 GET /3","200 GET /4","200 GET /5","200 GET /6"]
+  posts ["200 POST /7 seven","200 POST /8 eight","200 GET /9"]
+  closes 10
+maxSockets 2 keepAlive true
+  sequential ["200 GET /0","200 GET /1","200 GET /2"]
+  parallel ["200 GET /3","200 GET /4","200 GET /5","200 GET /6"]
+  posts ["200 POST /7 seven","200 POST /8 eight","200 GET /9"]
+  closes 10
+order: req finish | res end | res close | req close destroyed=true
+refused: error ECONNREFUSED | close
