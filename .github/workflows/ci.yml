@@ -23,10 +23,12 @@ jobs:
   # ai-ecoverse/slicc-kernel#572): same-repo PR code and a merge group of
   # same-repo PRs go to the bench pool (cloud-run-bench, the only pool this
   # repo is listed on), fork code to ubuntu-latest. It checks out nothing and
-  # runs no PR code. vars.CI_RUNNER overrides it (rollback: ubuntu-latest);
-  # vars.CERT_RUNNER names the pool. macOS stays hosted.
+  # runs no PR code. vars.CI_RUNNER overrides it (rollback: ubuntu-latest),
+  # this job's own runner included, so a pool outage can't block the
+  # rollback; vars.CERT_RUNNER names the pool. A fork's PR runs this job on
+  # ubuntu-latest too. macOS stays hosted.
   runner:
-    runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || vars.CI_RUNNER || vars.CERT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions:
       contents: read
