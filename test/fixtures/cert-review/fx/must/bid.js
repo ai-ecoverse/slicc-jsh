@@ -1,0 +1,15 @@
+const { StringDecoder } = require('string_decoder'); const fs = require('fs'); const { Readable, PassThrough } = require('stream');
+const d = new StringDecoder('utf8'); d.write(Buffer.from('E1', 'hex'));
+const out = [];
+const t = (n, f) => { try { out.push(`${n}: ${f()}`); } catch (e) { out.push(`${n}: ${e.name} ${e.message}`); } };
+t('lastChar instanceof Buffer', () => d.lastChar instanceof Buffer);
+t('lastChar.equals(u8)', () => d.lastChar.equals(new Uint8Array([0xe1, 0, 0, 0])));
+t('lastChar.constructor === Buffer', () => d.lastChar.constructor === Buffer);
+fs.writeFileSync('/tmp/bid', 'x');
+t('readFileSync instanceof Buffer', () => fs.readFileSync('/tmp/bid') instanceof Buffer);
+t('Buffer.concat instanceof', () => Buffer.concat([Buffer.from('a')]) instanceof Buffer);
+t('require(buffer).Buffer === Buffer', () => require('buffer').Buffer === Buffer);
+t('Buffer.isBuffer(lastChar)', () => Buffer.isBuffer(d.lastChar));
+const p = new PassThrough(); p.on('data', (c) => { t('stream chunk instanceof Buffer', () => c instanceof Buffer); t('chunk.equals(u8)', () => c.equals(new Uint8Array([97]))); });
+p.end('a');
+fs.createReadStream('/tmp/bid').on('data', (c) => t('fs stream chunk instanceof Buffer', () => c instanceof Buffer)).on('close', () => console.log(out.join('\n')));

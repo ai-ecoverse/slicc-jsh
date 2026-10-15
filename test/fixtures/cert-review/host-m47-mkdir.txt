@@ -1,0 +1,16 @@
+typeof function function function function function
+mkdirSync new ok 
+mkdirSync existing Error|EEXIST|-17|mkdir|<D>/md|EEXIST: file already exists, mkdir '<D>/md'
+mkdirSync existing recursive ok 
+mkdirSync deep recursive ok "<D>/md/a"
+mkdirSync deep non-recursive Error|ENOENT|-2|mkdir|<D>/md/x/y|ENOENT: no such file or directory, mkdir '<D>/md/x/y'
+mkdirSync on file Error|EEXIST|-17|mkdir|<D>/mf|EEXIST: file already exists, mkdir '<D>/mf'
+mkdirSync on file recursive Error|EEXIST|-17|mkdir|<D>/mf|EEXIST: file already exists, mkdir '<D>/mf'
+mkdirSync under file recursive Error|ENOTDIR|-20|mkdir|<D>/mf/z|ENOTDIR: not a directory, mkdir '<D>/mf/z'
+mkdir cb existing Error|EEXIST|-17|mkdir|<D>/md|EEXIST: file already exists, mkdir '<D>/md'
+mkdir cb existing recursive ok
+promises.mkdir existing Error|EEXIST|-17|mkdir|<D>/md|EEXIST: file already exists, mkdir '<D>/md'
+promises.mkdir existing recursive ok
+mkdirSync mode 700 ok 
+ -> 700
+mkdtempSync ok "string"

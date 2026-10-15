@@ -1,0 +1,1 @@
+let d = ''; process.stdin.on('data', (c) => (d += c)); process.stdin.on('end', () => { console.log('end', JSON.stringify(d), Buffer.isBuffer(Buffer.from(d))); }); process.stdin.on('close', () => console.log('close'));

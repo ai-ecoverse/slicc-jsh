@@ -1,0 +1,1 @@
+const out = []; process.stdin.on('readable', () => { let c; while ((c = process.stdin.read()) !== null) out.push(c.length); }); process.stdin.on('end', () => console.log('readable total', out.reduce((a, b) => a + b, 0)));

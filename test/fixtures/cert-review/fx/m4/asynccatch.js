@@ -1,0 +1,1 @@
+(async () => { try { await Promise.reject(new Error('x')); } catch (e) { console.log('async catch'); setTimeout(() => console.log('timer after exit?'), 0); process.nextTick(() => console.log('tick after exit?')); process.exit(5); } finally { console.log('async finally?'); } })();

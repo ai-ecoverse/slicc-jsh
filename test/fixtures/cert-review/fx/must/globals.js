@@ -1,0 +1,22 @@
+const out = [];
+const t = (n, f) => { try { out.push(`${n}: ${f()}`); } catch (e) { out.push(`${n}: threw ${e.code ?? ''} ${e.message}`); } };
+t('global.process === process', () => global.process === process);
+t('globalThis.process === process', () => globalThis.process === process);
+t('globalThis.Buffer === Buffer', () => globalThis.Buffer === Buffer);
+t('Buffer === require(buffer).Buffer', () => Buffer === require('buffer').Buffer);
+t('typeof globalThis.require', () => typeof globalThis.require);
+t('typeof require', () => typeof require);
+t('Function(return this)().process === process', () => Function('return this')().process === process);
+t('env.HOST_SECRET', () => String(process.env.HOST_SECRET));
+t('typeof process.getBuiltinModule', () => typeof process.getBuiltinModule);
+t('getBuiltinModule(fs) reads host /etc/hosts', () => process.getBuiltinModule ? process.getBuiltinModule('fs').readFileSync('/etc/hosts', 'utf8').length + ' bytes' : 'n/a');
+t('fs.readFileSync(/etc/hosts)', () => require('fs').readFileSync('/etc/hosts', 'utf8').length + ' bytes');
+t('typeof process.binding', () => typeof process.binding);
+t('process.binding(fs)', () => typeof process.binding('fs'));
+t('process.dlopen', () => typeof process.dlopen);
+t('process.config', () => JSON.stringify(process.config).slice(0, 120));
+t('typeof process.config.variables', () => typeof process.config.variables);
+t('process.version', () => process.version);
+t('module.constructor === require(module)', () => module.constructor === require('module'));
+import('node:fs').then((m) => out.push(`import(node:fs): ${typeof m.readFileSync}`), (e) => out.push(`import(node:fs): refused ${e.code ?? ''} ${e.message}`))
+  .then(() => console.log(out.join('\n')));

@@ -1,0 +1,13 @@
+const fs = require('fs');
+const t = (l, f) => { try { f(); console.log(l, 'no-throw'); } catch (e) { console.log(l, e.code); } };
+t('readFile no cb', () => fs.readFile('/nonexistent-x'));
+t('open bad flag missing', () => fs.open('/nonexistent-x', 'zz', () => console.log('cb ran')));
+t('readFileSync bad enc missing', () => fs.readFileSync('/nonexistent-x', { encoding: 'bogus' }));
+t('writeFileSync bad data missing dir', () => fs.writeFileSync('/nonexistent-dir/x', 5));
+t('mkdirSync bad mode', () => fs.mkdirSync('/nonexistent-dir/x/y', { mode: 'zz' }));
+t('rename no cb', () => fs.rename('/a-x', '/b-x'));
+t('statSync bad opt missing', () => fs.statSync('/nonexistent-x', { bigint: 1, throwIfNoEntry: false }));
+t('openSync mode bad missing', () => fs.openSync('/nonexistent-x', 'r', 'zz'));
+t('readSync bad fd type', () => fs.readSync('x', Buffer.alloc(1)));
+t('copyFileSync bad mode', () => fs.copyFileSync('/nonexistent-x', '/y', 99));
+fs.promises.readFile('/nonexistent-x', { encoding: 'bogus' }).catch((e) => console.log('promises readFile bad enc missing', e.code));

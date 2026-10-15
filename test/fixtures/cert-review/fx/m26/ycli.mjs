@@ -1,0 +1,2 @@
+import yargs from 'yargs'; import { hideBin } from 'yargs/helpers';
+yargs(hideBin(process.argv)).scriptName('ycli').command('greet <name>', 'say hi', (y) => y.positional('name', { type: 'string' }).option('loud', { type: 'boolean', alias: 'l' }), (a) => console.log(a.loud ? `HI ${a.name.toUpperCase()}` : `hi ${a.name}`)).option('n', { type: 'number', default: 2 }).demandCommand(1).strict().wrap(80).parse();

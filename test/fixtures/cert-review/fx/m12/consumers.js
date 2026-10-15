@@ -1,0 +1,11 @@
+const crypto = require('crypto'); const fs = require('fs');
+const tgz = fs.readFileSync('pkg.tgz');
+console.log('npm integrity', 'sha512-' + crypto.createHash('sha512').update(tgz).digest('base64'));
+console.log('shasum sha1', crypto.createHash('sha1').update(tgz).digest('hex'));
+const h = crypto.createHash('sha512'); fs.createReadStream('pkg.tgz', { highWaterMark: 3000 }).on('data', (c) => h.update(c)).on('end', () => console.log('streamed integrity', h.digest('base64')));
+const b64u = (b) => Buffer.from(b).toString('base64url');
+const sign = (payload, secret) => { const hd = b64u(JSON.stringify({ alg: 'HS256', typ: 'JWT' })); const pl = b64u(JSON.stringify(payload)); return `${hd}.${pl}.${crypto.createHmac('sha256', secret).update(`${hd}.${pl}`).digest('base64url')}`; };
+const verify = (tok, secret) => { const [hd, pl, sig] = tok.split('.'); const exp = crypto.createHmac('sha256', secret).update(`${hd}.${pl}`).digest(); const got = Buffer.from(sig, 'base64url'); return got.length === exp.length && crypto.timingSafeEqual(got, exp) ? JSON.parse(Buffer.from(pl, 'base64url')) : null; };
+const tok = sign({ sub: '1234567890', name: 'John Doe', iat: 1516239022 }, 'your-256-bit-secret');
+console.log('jwt', tok, tok === 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c');
+console.log('jwt verify', JSON.stringify(verify(tok, 'your-256-bit-secret')), verify(tok, 'wrong'), verify(tok.slice(0, -2) + 'xx', 'your-256-bit-secret'));

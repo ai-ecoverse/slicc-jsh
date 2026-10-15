@@ -1,0 +1,20 @@
+const vm = require('vm');
+const names = ['Worker', 'SharedWorker', 'BroadcastChannel', 'MessageChannel', 'fetch', 'WebSocket', 'XMLHttpRequest', 'EventSource', 'importScripts', 'postMessage', 'close', 'self', 'navigator', 'caches', 'indexedDB', 'FileSystemHandle', 'FileSystemDirectoryHandle', 'StorageManager', 'process', 'require', 'Deno', 'Bun', 'WorkerGlobalScope', 'DedicatedWorkerGlobalScope', 'onmessage', 'location'];
+const probe = `(() => { const out = {}; for (const n of ${JSON.stringify(names)}) { try { out[n] = typeof eval(n); } catch (e) { out[n] = '!' + e.name; } } return out; })()`;
+const show = (o) => Object.entries(o).filter(([, v]) => v !== 'undefined' && v !== '!ReferenceError').map(([k, v]) => k + ':' + v).join(' ') || '(none)';
+const main = vm.runInThisContext(probe);
+console.log('main  ', show(main));
+const ctx = vm.createContext({});
+console.log('ctx   ', show(vm.runInContext(probe, ctx)));
+const viaFn = vm.runInContext('this.constructor.constructor("return globalThis")()', ctx);
+console.log('escape via Function is the program global:', viaFn === globalThis);
+const viaArrow = vm.runInContext('(() => {}).constructor("return this")()', ctx);
+console.log('escape via arrow ctor is the program global:', viaArrow === globalThis);
+const esc = vm.runInContext(`this.constructor.constructor("return " + ${JSON.stringify(probe)})()`, ctx);
+const extra = Object.keys(esc).filter((k) => esc[k] !== main[k]);
+console.log('escape sees more than main:', extra.length ? extra.map((k) => k + ':' + esc[k] + ' vs ' + main[k]).join(' ') : 'no');
+const proto = []; let p = Object.getPrototypeOf(globalThis); while (p && p !== Object.prototype) { proto.push(p.constructor && p.constructor.name); p = Object.getPrototypeOf(p); }
+console.log('global proto chain', proto.join(' > ') || '(Object)');
+const own = Object.getOwnPropertyNames(globalThis).filter((n) => names.includes(n));
+console.log('own capability names on globalThis', own.join(',') || '(none)');
+console.log('fetch in ctx', vm.runInContext('typeof fetch', vm.createContext({})), 'fetch passed in', vm.runInContext('typeof fetch', vm.createContext({ fetch: globalThis.fetch })), 'same fn', vm.runInContext('this.constructor.constructor("return fetch")()', ctx) === globalThis.fetch);

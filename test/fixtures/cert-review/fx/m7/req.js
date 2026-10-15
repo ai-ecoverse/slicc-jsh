@@ -1,0 +1,11 @@
+const fs = require('fs'); const h = require('./h.cjs');
+const d = h.fresh('w-req');
+const store = `${d}/node_modules/.pnpm/dep@1.0.0/node_modules/dep`; fs.mkdirSync(store, { recursive: true });
+fs.writeFileSync(`${store}/package.json`, JSON.stringify({ name: 'dep', version: '1.0.0', main: 'i.js' }));
+fs.writeFileSync(`${store}/i.js`, "exports.where = __filename.replace(process.cwd(), 'CWD'); exports.peer = (() => { try { return require('peer').v; } catch (e) { return e.code; } })();");
+const pstore = `${d}/node_modules/.pnpm/dep@1.0.0/node_modules/peer`; fs.mkdirSync(pstore, { recursive: true }); fs.writeFileSync(`${pstore}/package.json`, '{"name":"peer","main":"p.js"}'); fs.writeFileSync(`${pstore}/p.js`, 'exports.v = "peer-ok"');
+fs.symlinkSync('.pnpm/dep@1.0.0/node_modules/dep', `${d}/node_modules/dep`);
+fs.writeFileSync(`${d}/main.js`, "const m = require('dep'); console.log('require via symlink', m.where, m.peer, require.resolve('dep').replace(process.cwd(), 'CWD'));");
+fs.writeFileSync(`${d}/esm.mjs`, "import m from 'dep'; console.log('import via symlink', m.where, m.peer); console.log('meta', (await import.meta.resolve('dep')).replace('file://' + process.cwd(), 'CWD'));");
+require(`./${d}/main.js`);
+import(`./${d}/esm.mjs`).catch((e) => console.log('esm', e.message));

@@ -1,0 +1,18 @@
+644 script spawnSync Error|EACCES|-13|spawnSync <D>/nx.sh|<D>/nx.sh|["a1"]|spawnSync <D>/nx.sh EACCES status null pid number 0
+644 script execFileSync Error|EACCES|-13|spawnSync <D>/nx.sh|<D>/nx.sh|["a2"]|spawnSync <D>/nx.sh EACCES status null
+644 script spawn returned pid undefined
+644 script spawn error Error|EACCES|-13|spawn <D>/nx.sh|<D>/nx.sh|["a3"]|spawn <D>/nx.sh EACCES pid undefined
+644 script spawn close -13 null
+644 script execFile cb Error|EACCES|-13|spawn <D>/nx.sh|<D>/nx.sh|["a4"]|spawn <D>/nx.sh EACCES
+644 script exec(shell) code 126 "/bin/sh: <D>/nx.sh: Permission denied"
+directory spawnSync Error|EACCES|-13|spawnSync <D>/adir|<D>/adir|["a1"]|spawnSync <D>/adir EACCES status null pid number 0
+directory execFileSync Error|EACCES|-13|spawnSync <D>/adir|<D>/adir|["a2"]|spawnSync <D>/adir EACCES status null
+directory spawn returned pid undefined
+directory spawn error Error|EACCES|-13|spawn <D>/adir|<D>/adir|["a3"]|spawn <D>/adir EACCES pid undefined
+directory spawn close -13 null
+directory execFile cb Error|EACCES|-13|spawn <D>/adir|<D>/adir|["a4"]|spawn <D>/adir EACCES
+directory exec(shell) code 126 "/bin/sh: <D>/adir: is a directory"
+ok spawn pid at return number at spawn event number code 0 ok-ran
+node child pid at return number true
+missing pid at return undefined
+missing error Error|ENOENT|-2|spawn no-such-cmd-zz|no-such-cmd-zz|[]|spawn no-such-cmd-zz ENOENT

@@ -1,0 +1,1 @@
+export default [{ name: 'gc-ps', cmd: 'node gc2.js; sleep 2; ps -eo pid,ppid,stat,comm | tail -n +2 | while read p pp s c; do case $c in yes|sh|bash) [ "$pp" = 1 ] && [ "$p" != "$$" ] && echo "lingering $c";; esac; done; echo checked' }];
