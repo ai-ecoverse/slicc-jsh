@@ -1,0 +1,5 @@
+{
+  "description": "#185: a directory as the command is EACCES, as execve gives it (spawnSync's error, spawn's 'error', execFileSync's throw, and execvp's PATH search when only a directory matches; the kernel says ENOENT, ai-ecoverse/slicc-kernel#626); process.ppid ignores an assignment, in sloppy and strict code",
+  "argv": ["main.js"],
+  "shim": true
+}

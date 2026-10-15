@@ -357,6 +357,19 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
    * kernel refuses with EACCES, as execvp reports it. A name with a '/' is
    * never searched.
    */
+  /**
+   * Linux's execve of a directory is EACCES; the kernel says ENOENT
+   * (ai-ecoverse/slicc-kernel#626). `target` is the path that was run.
+   */
+  function spawnCode(code, target, cwd) {
+    if (code !== 'ENOENT' || typeof target !== 'string' || !target.includes('/')) return code;
+    try {
+      return ctx.sync?.fs?.stat?.(path.resolve(cwd, target))?.isDirectory ? 'EACCES' : code;
+    } catch {
+      return code;
+    }
+  }
+
   function resolveOnPath(file, env, cwd) {
     if (!file || file.includes('/')) return file;
     // libuv's: the child's environment's PATH, else _PATH_DEFPATH.
@@ -383,7 +396,12 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       } catch {
         continue;
       }
-      if (st.isDirectory || (typeof st.mode === 'number' && (st.mode & 0o170000) !== 0o100000 && (st.mode & 0o170000) !== 0)) continue;
+      // execvp passes a directory over too, but remembers it as EACCES.
+      if (st.isDirectory) {
+        denied ??= full;
+        continue;
+      }
+      if (typeof st.mode === 'number' && (st.mode & 0o170000) !== 0o100000 && (st.mode & 0o170000) !== 0) continue;
       if (executable(st)) return full;
       denied ??= full;
     }
@@ -728,7 +746,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     };
 
     const failed = (err) => {
-      const code = err?.code ?? 'ERR_SPAWN_FAILED';
+      const code = spawnCode(err?.code ?? 'ERR_SPAWN_FAILED', argv[0], cwd);
       const errno = RUNTIME_SPAWN_ERRNO[code];
       const error =
         errno !== undefined
@@ -1269,7 +1287,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         }
       }
       raw ??= ctx.sync.run(req);
-      if (raw.error && raw.pid === 0 && raw.status === null) failed = raw.error.code ?? 'ENOENT';
+      if (raw.error && raw.pid === 0 && raw.status === null) failed = spawnCode(raw.error.code ?? 'ENOENT', req.argv[0], req.cwd);
     }
 
     if (failed && !raw?.pid) {

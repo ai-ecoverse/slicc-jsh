@@ -1,15 +1,15 @@
-argv0 writable=false configurable=false TypeError: Cannot assign to read only property 'argv0' of object '#<process>'
-pid writable=false configurable=true TypeError: Cannot assign to read only property 'pid' of object '#<process>'
-version writable=false configurable=true TypeError: Cannot assign to read only property 'version' of object '#<process>'
-versions writable=false configurable=true TypeError: Cannot assign to read only property 'versions' of object '#<process>'
-arch writable=false configurable=true TypeError: Cannot assign to read only property 'arch' of object '#<process>'
-platform writable=false configurable=true TypeError: Cannot assign to read only property 'platform' of object '#<process>'
-release writable=false configurable=true TypeError: Cannot assign to read only property 'release' of object '#<process>'
-config writable=false configurable=true TypeError: Cannot assign to read only property 'config' of object '#<process>'
-features writable=false configurable=false TypeError: Cannot assign to read only property 'features' of object '#<process>'
-ppid writable=true configurable=true assigned
-execPath writable=true configurable=true assigned
-title writable=true configurable=true assigned
+argv0 writable=false configurable=false TypeError: Cannot assign to read only property 'argv0' of object '#<process>' 
+pid writable=false configurable=true TypeError: Cannot assign to read only property 'pid' of object '#<process>' 
+version writable=false configurable=true TypeError: Cannot assign to read only property 'version' of object '#<process>' 
+versions writable=false configurable=true TypeError: Cannot assign to read only property 'versions' of object '#<process>' 
+arch writable=false configurable=true TypeError: Cannot assign to read only property 'arch' of object '#<process>' 
+platform writable=false configurable=true TypeError: Cannot assign to read only property 'platform' of object '#<process>' 
+release writable=false configurable=true TypeError: Cannot assign to read only property 'release' of object '#<process>' 
+config writable=false configurable=true TypeError: Cannot assign to read only property 'config' of object '#<process>' 
+features writable=false configurable=false TypeError: Cannot assign to read only property 'features' of object '#<process>' 
+ppid writable=true configurable=true assigned unchanged=true
+execPath writable=true configurable=true assigned 
+title writable=true configurable=true assigned 
 argv[0] is execPath true argv0 node
 == : status 0
 {"directory":"","filename":"","compact":false,"excludeNetwork":false,"signal":"SIGUSR2","reportOnFatalError":false,"reportOnSignal":false,"reportOnUncaughtException":false,"excludeEnv":false}

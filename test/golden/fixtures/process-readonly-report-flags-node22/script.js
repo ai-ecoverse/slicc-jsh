@@ -5,7 +5,10 @@
 const { spawnSync } = require('child_process');
 const shape = (name) => {
   const d = Object.getOwnPropertyDescriptor(process, name);
-  return d ? `writable=${d.writable} configurable=${d.configurable}` : 'none';
+  // Node's ppid is a native accessor that looks like a data property (an
+  // assignment is ignored); a JS runtime can only make it an accessor with a
+  // setter that ignores it, so "writable" here is whether it can be assigned.
+  return d ? `writable=${d.writable ?? typeof d.set === 'function'} configurable=${d.configurable}` : 'none';
 };
 for (const name of ['argv0', 'pid', 'version', 'versions', 'arch', 'platform', 'release', 'config', 'features', 'ppid', 'execPath', 'title']) {
   let assigned;
@@ -16,7 +19,7 @@ for (const name of ['argv0', 'pid', 'version', 'versions', 'arch', 'platform', '
   } catch (e) {
     assigned = `${e.name}: ${e.message}`;
   }
-  console.log(name, shape(name), assigned);
+  console.log(name, shape(name), assigned, name === 'ppid' ? `unchanged=${process.ppid === before}` : '');
   try {
     process[name] = before;
   } catch {
