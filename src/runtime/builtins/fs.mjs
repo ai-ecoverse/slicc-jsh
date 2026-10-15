@@ -1814,7 +1814,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           try {
             await asyncFs.unlink(abs(p));
           } catch (err) {
-            throw nodeFsError(err?.code || 'ENOENT', 'unlink', p, err);
+            throw nodeFsError(removalCode(err?.code, abs(p)) || 'ENOENT', 'unlink', p, err);
           }
         })()
       );

@@ -105,7 +105,7 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
       program([
         "const fs = require('fs');",
         ERR,
-        "for (const [name, f] of [['rmSync /dev/null', () => fs.rmSync('/dev/null')], ['rmSync /dev/null force', () => fs.rmSync('/dev/null', { force: true })], ['rmSync /dev recursive', () => fs.rmSync('/dev', { recursive: true })], ['unlinkSync /dev/null', () => fs.unlinkSync('/dev/null')], ['promises.rm /dev', () => fs.promises.rm('/dev', { recursive: true })]]) {",
+        "for (const [name, f] of [['rmSync /dev/null', () => fs.rmSync('/dev/null')], ['rmSync /dev/null force', () => fs.rmSync('/dev/null', { force: true })], ['rmSync /dev recursive', () => fs.rmSync('/dev', { recursive: true })], ['unlinkSync /dev/null', () => fs.unlinkSync('/dev/null')], ['promises.unlink /dev/null', () => fs.promises.unlink('/dev/null')], ['unlink callback /dev/null', () => new Promise((res, rej) => fs.unlink('/dev/null', (e) => (e ? rej(e) : res())))], ['promises.rm /dev', () => fs.promises.rm('/dev', { recursive: true })]]) {",
         "  try { await f(); console.log(name, 'ok'); } catch (e) { console.log(name, err(e)); }",
         '}',
         "console.log('/dev/null still there', fs.existsSync('/dev/null'));",
@@ -120,6 +120,8 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
         "rmSync /dev/null force EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
         "rmSync /dev recursive EACCES -13 rmdir /dev EACCES: permission denied, rmdir '/dev'",
         "unlinkSync /dev/null EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
+        "promises.unlink /dev/null EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
+        "unlink callback /dev/null EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
         "promises.rm /dev EACCES -13 rmdir /dev EACCES: permission denied, rmdir '/dev'",
         '/dev/null still there true',
         '',
