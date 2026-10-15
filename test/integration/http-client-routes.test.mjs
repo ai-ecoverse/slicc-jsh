@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
 import { fakeUplink } from '@ai-ecoverse/slicc-kernel/testing';
-import { packageFiles, withJsh } from './helpers.mjs';
+import { kernelAtLeast, kernelVersion, packageFiles, withJsh } from './helpers.mjs';
 
 const program = (lines) => `(async () => {\n${lines.join('\n')}\n})().catch((e) => { console.error(e); process.exit(1); });\n`;
 const GET = [
@@ -315,6 +315,38 @@ describe('#189: the fallback\'s errors and res.req as Node gives them', () => {
         'https localhost:1 ECONNREFUSED connect 127.0.0.1 1 connect ECONNREFUSED 127.0.0.1:1',
         'http 200 200 GET /p?q=1 far.example http:',
         'https 200 200 GET /s?t=2 far.example https:',
+        '',
+      ].join('\n')
+    );
+  });
+});
+
+describe('#189: a name nothing resolves, through nodeTransport (slicc-kernel 1.93.0 passes the resolver\'s errno, #566)', () => {
+  let jsh;
+  before(async () => {
+    jsh = await withJsh();
+  });
+  after(() => jsh?.close());
+
+  it('http.get, https.get and fetch to no-such-host.invalid: getaddrinfo ENOTFOUND, as Node', kernelAtLeast('1.93.0') ? {} : { skip: `slicc-kernel ${kernelVersion} answers ECONNREFUSED` }, async () => {
+    await jsh.kernel.writeFile(
+      '/os/nx.js',
+      program([
+        "const http = require('http'); const https = require('https');",
+        "const err = (e) => [e.code, e.errno, e.syscall, e.hostname, e.message].join(' ');",
+        "await new Promise((r) => http.get('http://no-such-host.invalid/').on('error', (e) => { console.log('http', err(e)); r(); }));",
+        "await new Promise((r) => https.get('https://no-such-host.invalid/x').on('error', (e) => { console.log('https', err(e)); r(); }));",
+        "await fetch('https://no-such-host.invalid/').catch((e) => console.log('fetch', e.message, e.cause && e.cause.code));",
+      ])
+    );
+    const r = await jsh.run(['node', 'nx.js']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(
+      r.stdout,
+      [
+        'http ENOTFOUND -3008 getaddrinfo no-such-host.invalid getaddrinfo ENOTFOUND no-such-host.invalid',
+        'https ENOTFOUND -3008 getaddrinfo no-such-host.invalid getaddrinfo ENOTFOUND no-such-host.invalid',
+        'fetch fetch failed ENOTFOUND',
         '',
       ].join('\n')
     );
