@@ -203,13 +203,20 @@ An existing file keeps its mode. `copyFile` gives the copy the source's mode, wh
 - Responses stream, as Node's: a `write()` before `end()` (or `flushHeaders()`) sends the head and each chunk as it comes, chunked unless a `Content-Length` is set. SSE and long-poll servers work. `end()` alone sends one framed response.
 - Headers can't change once the head is sent (`ERR_HTTP_HEADERS_SENT`).
 - `http.STATUS_CODES` is Node 22's whole table. A status not in it gets the reason phrase `unknown`, as in Node.
-- Each response says `Connection: close` unless you set the header: no keep-alive.
+- Keep-alive works as in Node 22:
+  - A connection stays open after a response that may leave it so: an HTTP/1.1 request without `Connection: close`, a framed body, and the server not closing. Such a response says `Connection: keep-alive` and `Keep-Alive: timeout=N`; any other response says `Connection: close`.
+  - Requests on a connection are served one after another, pipelined ones in order.
+  - An idle connection closes after `server.keepAliveTimeout` (5 s). `closeIdleConnections()`, `closeAllConnections()` and `close()` (which closes idle connections too) end connections as Node's do.
+  - `maxRequestsPerSocket` is honoured. Headers that don't arrive within `headersTimeout` get `408`.
+- An `Upgrade` request goes to `'upgrade'` listeners, with the socket and what followed the head. Without a listener, it is an ordinary request.
+- Header names are written as they were set.
 
 **`http` client.**
 - With a `Content-Length`, request body bytes stream as written. Without one, the body is buffered until `end()` and sent with a computed length. Request bodies aren't sent chunked.
 - `'response'` comes at the head, and the body streams as it arrives: by `Content-Length`, chunked, or until the peer's FIN. `socket.end` half-closes.
 - `http.Agent` follows Node's `_http_agent.js` request path (`addRequest` → `createSocket` → `createConnection`), so **agent-base** subclasses work for plain `http`. `getName`, `destroy`, `keepSocketAlive`, `reuseSocket`, `removeSocket`, and `sockets`/`freeSockets`/`requests` are present.
-- Keep-alive pooling is not implemented. `keepAlive` is accepted; `req.reusedSocket` is always `false`.
+- `http.globalAgent` keeps sockets alive, as in Node 22 (`keepAlive: true`, `scheduling: 'lifo'`, `timeout: 5000`). An agent with `keepAlive` reuses a socket once its response is done (`'free'`, then `req.reusedSocket`), queued requests first. Free sockets don't keep the program alive, and one the server closes leaves the pool. `agent: false`, or an agent without `keepAlive`, sends `Connection: close`.
+- A connection that closes before its response gives `socket hang up` (`ECONNRESET`). A `101` response is `'upgrade'` (response, socket, head), and without a listener the connection closes.
 
 **The fetch fallback** (plain `http` without a route, and every `https` request). The request is sent once it has ended, through jsh's `fetch`: the embedder's transport, and `host.slicc.internal` through the kernel's proxy. What a fetch can't carry, it doesn't:
 - **No raw socket.** `res.socket` and `req.socket` are `null`. There is no `'socket'` or `'connect'` event, no Agent pooling or keep-alive, no `upgrade` or `CONNECT`, no 1xx responses or `Expect: 100-continue`, and no trailers.

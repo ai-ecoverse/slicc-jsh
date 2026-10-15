@@ -124,17 +124,44 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       return this._writableState?.length ?? 0;
     }
 
+    #refed = true;
     ref() {
+      this.#refed = true;
       if (this.#handle) handles.add(this.#handle);
       return this;
     }
     unref() {
+      this.#refed = false;
       if (this.#handle) handles.delete(this.#handle);
       return this;
     }
 
-    setTimeout() {
+    #idleMs = 0;
+    #idleTimer = null;
+    /** Node's socket.setTimeout: 'timeout' after `ms` without activity (0 turns it off). */
+    setTimeout(ms, callback) {
+      this.#idleMs = Number(ms) || 0;
+      if (typeof callback === 'function') {
+        if (this.#idleMs > 0) this.once('timeout', callback);
+        else this.removeListener('timeout', callback);
+      }
+      this._touch();
       return this;
+    }
+    get timeout() {
+      return this.#idleMs || undefined;
+    }
+    /** @internal Activity: restart the idle timer. */
+    _touch() {
+      if (this.#idleTimer) clearTimeout(this.#idleTimer);
+      this.#idleTimer = null;
+      if (this.#idleMs > 0 && !this.destroyed) {
+        this.#idleTimer = setTimeout(() => {
+          this.#idleTimer = null;
+          if (!this.destroyed) this.emit('timeout');
+        }, this.#idleMs);
+        this.#idleTimer.unref?.();
+      }
     }
     setNoDelay() {
       return this;
@@ -255,7 +282,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
         for (;;) {
           // Track each read so settlement notifies drainLoop (socket handle alone
           // stays ref'd and would not wake waitForProgress).
-          const { value, done } = await trackPromise(handles, this.#reader.read());
+          // An unref'd socket (an idle keep-alive one) doesn't keep the program alive.
+          const reading = this.#reader.read();
+          const { value, done } = await (this.#refed ? trackPromise(handles, reading) : reading);
+          if (this.#idleTimer) this._touch();
           if (done) {
             this.#readableEof = true;
             // Yield so prior push(buf) nextTicks can run before EOF.
@@ -316,6 +346,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
     }
 
     _write(chunk, encoding, callback) {
+      if (this.#idleTimer) this._touch();
       const bytes =
         typeof chunk === 'string'
           ? Buffer.from(chunk, encoding)
@@ -359,6 +390,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
 
     _destroy(err, callback) {
       this.destroyed = true;
+      if (this.#idleTimer) clearTimeout(this.#idleTimer);
+      this.#idleTimer = null;
       const halfClosedCleanly = this.#finishConnStarted;
       this.#finishConnStarted = true;
       this.#dropHandle();
