@@ -64,8 +64,16 @@ describe('process.exit on ctx.sync.exit (kernel)', () => {
       '-e',
       [
         "const c = require('child_process').spawn('node', ['/os/self-stop.js']);",
-        "let out = ''; c.stdout.on('data', (d) => (out += d));",
-        "setTimeout(() => { console.log('stopped', c.exitCode === null, JSON.stringify(out)); c.kill('SIGCONT'); }, 500);",
+        // The child stops itself right after 'before' (one synchronous
+        // call), so wait for that line rather than a fixed time: a slow
+        // spawn would otherwise get SIGCONT before its SIGSTOP and stay
+        // stopped, as on Linux.
+        "let out = '';",
+        "c.stdout.on('data', (d) => {",
+        "  out += d;",
+        "  if (out !== 'before\\n') return;",
+        "  setTimeout(() => { console.log('stopped', c.exitCode === null, JSON.stringify(out)); c.kill('SIGCONT'); }, 200);",
+        "});",
         "c.on('close', (code, sig) => console.log('closed', code, sig, JSON.stringify(out)));",
       ].join('\n'),
     ]);
