@@ -19,9 +19,63 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Picks the runner for the Linux jobs (slicc-kernel's decider, kernel
+  # ai-ecoverse/slicc-kernel#572): same-repo PR code and a merge group of
+  # same-repo PRs go to the bench pool (cloud-run-bench, the only pool this
+  # repo is listed on), fork code to ubuntu-latest. It checks out nothing and
+  # runs no PR code. vars.CI_RUNNER overrides it (rollback: ubuntu-latest),
+  # this job's own runner included, so a pool outage can't block the
+  # rollback; vars.CERT_RUNNER names the pool. A fork's PR runs this job on
+  # ubuntu-latest too. macOS stays hosted.
+  runner:
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || vars.CI_RUNNER || vars.CERT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      runner: ${{ steps.pick.outputs.runner }}
+    steps:
+      - id: pick
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          FORCED: ${{ vars.CI_RUNNER }}
+          POOL: ${{ vars.CERT_RUNNER || 'cloud-run-bench' }}
+        with:
+          script: |
+            const hosted = 'ubuntu-latest';
+            const pick = async (runner, why) => {
+              core.setOutput('runner', runner);
+              await core.summary.addRaw(`runner: ${runner} (${why})\n`).write();
+            };
+            if (process.env.FORCED) return await pick(process.env.FORCED, 'vars.CI_RUNNER');
+            const pool = process.env.POOL;
+            const { owner, repo } = context.repo;
+            if (context.eventName === 'pull_request') {
+              const head = context.payload.pull_request.head.repo;
+              const same = head && head.full_name === `${owner}/${repo}`;
+              return same ? await pick(pool, 'same-repo PR') : await pick(hosted, 'fork PR');
+            }
+            if (context.eventName === 'merge_group') {
+              const base = context.payload.merge_group.base_ref.replace('refs/heads/', '');
+              const q = await github.graphql(
+                `query($o:String!,$n:String!,$b:String!){repository(owner:$o,name:$n){mergeQueue(branch:$b){entries(first:100){nodes{pullRequest{number isCrossRepository}}}}}}`,
+                { o: owner, n: repo, b: base }
+              );
+              const entries = q.repository.mergeQueue?.entries?.nodes ?? [];
+              const forks = entries.filter((e) => e.pullRequest?.isCrossRepository !== false);
+              return forks.length === 0
+                ? await pick(pool, `merge group, ${entries.length} same-repo entries`)
+                : await pick(hosted, `merge group with a fork or unknown PR: ${forks.map((e) => e.pullRequest?.number).join(', ')}`);
+            }
+            await pick(hosted, context.eventName);
+
   ci:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    needs: runner
+    runs-on: ${{ needs.runner.outputs.runner }}
+    # The bench pool runs the serial steps about 1.7x slower than hosted
+    # (Golden 299 s vs 175 s, cert 188 s vs 86 s on the first pool run).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       # The baselines' host Node 22.22.0 (scripts/node22.mjs reads $NODE22),
@@ -70,7 +124,7 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Golden (host Node 22)
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: npm run test:golden
       - name: jsh parity (host Node 22 baseline, kernel jsh)
         timeout-minutes: 5
@@ -83,7 +137,7 @@ jobs:
         timeout-minutes: 10
         run: npm run test:cert
       - name: Node parallel slice (track pass/fail; non-strict)
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: npm run test:node-parallel
       - name: Pack (files allowlist)
         run: |
@@ -132,11 +186,12 @@ jobs:
     # #!/usr/bin/env jsh script, re-run upgrades), (b) no Node and no
     # terminal fails with the instructions, the "yes, download Node" path on
     # a pseudo-terminal (test/install/answer-tty.py), and (c) --uninstall.
+    needs: runner
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && needs.runner.outputs.runner || matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -156,7 +211,8 @@ jobs:
     # facade (SLICC_CDP_URL); then the skills corpus that uses it. Each run
     # is compared with the host jsh on the same browser (#73). One Chromium
     # at a time, under 3 GB.
-    runs-on: ubuntu-latest
+    needs: runner
+    runs-on: ${{ needs.runner.outputs.runner }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -168,7 +224,14 @@ jobs:
       - name: Build
         run: npm run build
       - name: Chrome for Testing (config.chrome, with slicc-cdp)
-        run: npm run browser -- --with-deps
+        # Chrome's system libraries need root: hosted runners have sudo, and
+        # the bench pool's image ships them (no root there).
+        run: |
+          if [ "$(id -u)" = 0 ] || sudo -n true 2>/dev/null; then
+            npm run browser -- --with-deps
+          else
+            npm run browser
+          fi
       - name: Browser suite
         timeout-minutes: 10
         run: npm run test:browser
