@@ -13,6 +13,41 @@ const root = fileURLToPath(new URL('../..', import.meta.url));
 const modules = new URL('../../node_modules/@ai-ecoverse/', import.meta.url);
 export const BASE = ['wasm-bash', 'wasm-coreutils', 'wasi-pnpm'];
 
+/**
+ * What seven's CDP guard (slicc-bios's src/seed/guard.js) answers itself,
+ * without asking the browser: bindings and scripts for later documents,
+ * session-wide overrides and the Debugger domains. The relay refuses them
+ * the same way, so a `sliccy:browser` that needs one fails here as on seven.
+ */
+export const SEVEN_REFUSES = new Set([
+  'Page.addScriptToEvaluateOnNewDocument',
+  'Page.addScriptToEvaluateOnLoad',
+  'Runtime.addBinding',
+  'Page.setBypassCSP',
+  'Network.setExtraHTTPHeaders',
+  'Network.setUserAgentOverride',
+  'Emulation.setUserAgentOverride',
+  'Emulation.setLocaleOverride',
+  'Emulation.setTimezoneOverride',
+  'Network.setCacheDisabled',
+  'Network.emulateNetworkConditions',
+  'Network.setBlockedURLs',
+]);
+export const SEVEN_REFUSED = 'refused, as seven’s CDP guard refuses it';
+
+function refused(text) {
+  let message;
+  try {
+    message = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const { id, method, sessionId } = message ?? {};
+  const debug = typeof method === 'string' && /^(Debugger|DOMDebugger|EventBreakpoints)\./.test(method);
+  if (!SEVEN_REFUSES.has(method) && !debug) return null;
+  return JSON.stringify({ id, ...(sessionId ? { sessionId } : {}), error: { code: -32000, message: SEVEN_REFUSED } });
+}
+
 /** One WebSocket to the harness browser per kernel CDP client. */
 function relay(page, browser) {
   const sockets = new Map();
@@ -31,6 +66,8 @@ function relay(page, browser) {
       };
       sockets.set(id, { ws, queued });
     } else if (m !== undefined) {
+      const answer = refused(m);
+      if (answer) return void deliver(id, answer);
       const entry = sockets.get(id);
       if (!entry) return;
       if (entry.ws.readyState === WebSocket.OPEN) entry.ws.send(m);
@@ -91,7 +128,7 @@ export async function booted(chrome, t, { cdp = true, webSocket = false } = {}) 
  * (SLICCY_BROWSER=/path/to.tgz) a local tarball, served to the kernel from
  * /pack/ and installed on the host from its path.
  */
-export const SLICCY_BROWSER = process.env.SLICCY_BROWSER ?? '@ai-ecoverse/sliccy-browser@0.1.1';
+export const SLICCY_BROWSER = process.env.SLICCY_BROWSER ?? '@ai-ecoverse/sliccy-browser@0.1.3';
 
 /**
  * npm pack this repo (and copy a local SLICCY_BROWSER) into `dir`; the jsh
