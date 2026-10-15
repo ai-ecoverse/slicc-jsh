@@ -162,8 +162,8 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build
-      - name: Chromium
-        run: npx playwright-core install --with-deps --no-shell chromium
+      - name: Chrome for Testing (config.chrome, with slicc-cdp)
+        run: npm run browser -- --with-deps
       - name: Browser suite
         timeout-minutes: 10
         run: npm run test:browser
