@@ -135,7 +135,8 @@ cpSync(join(pubDir, 'dist'), join(tag, 'dist'), { recursive: true });
 
 const neg = join(work, 'neg');
 rmSync(neg, { recursive: true, force: true });
-cpSync(tag, neg, { recursive: true, filter: (src) => !/[/\\](node_modules|dist|\.git)$/.test(src) });
+const topLevel = new Set(['node_modules', 'dist', '.git'].map((d) => join(tag, d)));
+cpSync(tag, neg, { recursive: true, verbatimSymlinks: true, filter: (src) => !topLevel.has(src) });
 cpSync(join(prevDir, 'dist'), join(neg, 'dist'), { recursive: true });
 {
   const p = readJson(join(neg, 'package.json'));
