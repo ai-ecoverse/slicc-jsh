@@ -25,7 +25,7 @@ import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
 import { createWebSocket } from './web/websocket.mjs';
-import { createBroadcastChannel } from './web/broadcast-channel.mjs';
+import { createPorts } from './web/broadcast-channel.mjs';
 
 const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
 
@@ -353,18 +353,37 @@ export async function runNode(ctx, options = {}) {
   // writable and empty (slicc-kernel 1.92.0+). The platform's is never used.
   // (worker_threads exports it on every kernel.)
   const bcSlot = Object.getOwnPropertyDescriptor(globalThis, 'BroadcastChannel');
-  const delivering = { active: false, since: 0, overdue: () => timers.overdue() };
-  const JshBroadcastChannel = createBroadcastChannel({
+  const delivering = {
+    active: false,
+    pending: false,
+    since: 0,
+    overdue: (at) => timers.overdue(at),
+    inCheck: () => timers.inCheck(),
+  };
+  const ports = createPorts({
     handles,
-    schedule: (fn) => timers.setImmediate(fn),
+    schedule: (fn) => timers.setImmediateUnheld(fn),
     delivering,
   });
+  const JshBroadcastChannel = ports.BroadcastChannel;
   const BroadcastChannel =
     bcSlot && bcSlot.value === undefined && !bcSlot.get && (bcSlot.writable || bcSlot.configurable) ? JshBroadcastChannel : undefined;
   process._broadcastChannel = JshBroadcastChannel;
+  process._ports = ports;
+  // Node's MessageChannel / MessagePort, in-process, on the same turns as
+  // BroadcastChannel (where the kernel leaves their slots writable).
+  const portSlot = (name) => {
+    const d = Object.getOwnPropertyDescriptor(globalThis, name);
+    return !d || d.writable || d.configurable;
+  };
+  const messagePorts = {
+    ...(portSlot('MessageChannel') ? { MessageChannel: ports.MessageChannel } : {}),
+    ...(portSlot('MessagePort') ? { MessagePort: ports.MessagePort } : {}),
+  };
 
   const timers = createTimers(handles, {
     hold: (due) => delivering.active && due > delivering.since,
+    holdImmediate: () => delivering.active || delivering.pending,
     afterCallback: () => flushTicks(),
     onCallbackError: (err) => {
       if (isExitError(err) || getDidExit()) {
@@ -417,6 +436,7 @@ export async function runNode(ctx, options = {}) {
     fetch,
     WebSocket,
     ...(BroadcastChannel ? { BroadcastChannel } : {}),
+    ...messagePorts,
     // A Proxy that remembers its target and handler (node-inspect-extracted's),
     // so util.types.isProxy and inspect's showProxy / <Revoked Proxy> are Node's.
     Proxy: trackingProxy(),

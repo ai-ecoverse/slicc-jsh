@@ -1,0 +1,6 @@
+{
+  "description": "BroadcastChannel and MessageChannel ordering as Node 22 (#215): ports drain in the order they were made, in the poll phase (before immediates, after an already-due timer), one message per task; a port the turn hasn't reached takes a message posted during it; a port with a 'message' listener keeps the program alive. Needs slicc-kernel 1.92.0's writable BroadcastChannel slot",
+  "kernel": "1.92.0",
+  "argv": ["script.js"],
+  "shim": true
+}

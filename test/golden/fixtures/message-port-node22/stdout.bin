@@ -1,0 +1,18 @@
+new MessagePort: TypeError ERR_CONSTRUCT_CALL_INVALID Constructor cannot be called
+clone DataCloneError 25
+missing TypeError ERR_MISSING_ARGS Not enough arguments to MessagePort.postMessage
+ab after transfer 0
+after close sync; hasRef p2 true
+post after close ok
+p2 "a" ports=0 MessageEvent target=true
+p2 {"n":1} ports=0 MessageEvent target=true
+p2 {} ports=0 MessageEvent target=true
+p2 {"p":{}} ports=1 MessageEvent target=true
+p1 close
+p2 close
+receive {"message":"q1"} {"message":"q2"} undefined
+unstarted hasRef false with listener true unref false
+MessageChannel {
+  port1: [MessagePort [EventTarget]],
+  port2: [MessagePort [EventTarget]]
+}

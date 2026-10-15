@@ -271,13 +271,13 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
         return {
           isInternalThread: false,
           isMainThread: true,
-          MessagePort: globalThis.MessagePort,
-          MessageChannel: globalThis.MessageChannel,
+          MessagePort: process._ports?.MessagePort ?? globalThis.MessagePort,
+          MessageChannel: process._ports?.MessageChannel ?? globalThis.MessageChannel,
           markAsUncloneable: () => {},
           markAsUntransferable: () => {},
           isMarkedAsUntransferable: () => false,
           moveMessagePortToContext: (port) => port,
-          receiveMessageOnPort: () => undefined,
+          receiveMessageOnPort: (port) => process._ports?.receiveMessageOnPort(port),
           resourceLimits: {},
           postMessageToThread: async () => {
             throw Object.assign(new Error('slicc-jsh: worker_threads.postMessageToThread is not supported yet'), { code: 'ERR_NOT_SUPPORTED' });

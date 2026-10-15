@@ -1,0 +1,8 @@
+bc first: bc 1 | bc 2 | mc x
+mc first: mc x | mc y | bc 1 | bc 2
+immediate between: bc 1 | bc 2 | mc x | mc tick | mc micro | imm
+immediate first: mc x | mc y | imm | imm from handler | imm from handler
+post from an immediate: imm 1 | imm 2 | mc x
+ping-pong: p2 ping | p1 pong | p2 ping | imm | p1 pong | p2 ping | imm
+timer vs port: mc x | t0
+kept alive, got late

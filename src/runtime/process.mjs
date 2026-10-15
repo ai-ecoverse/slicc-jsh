@@ -920,7 +920,7 @@ const OWN_INTERNALS = ['_getActiveHandles', '_getActiveRequests', '_rawDebug'];
  * and `for … in`. Declared up front, so a later assignment stays hidden too.
  */
 const JSH_INTERNALS = [
-  '_assignedExitCode', '_broadcastChannel', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
+  '_assignedExitCode', '_broadcastChannel', '_ports', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
   '_dispatchSignal', '_evalCode', '_exitError', '_forcedExitCode', '_handles', '_nodeLib', '_onExit',
   '_onHardExit', '_options', '_reportSignal', '_reportSignalWrite', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
   '_stdio', '_stdoutWrite', '_umask', '_kumask', '_uncaughtCapture', '_writeStderr', '_writeStdout',

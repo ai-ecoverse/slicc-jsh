@@ -1,0 +1,5 @@
+{
+  "description": "Node 22's MessageChannel / MessagePort in-process (#215): new MessagePort() is ERR_CONSTRUCT_CALL_INVALID; postMessage's DataCloneError and ERR_MISSING_ARGS, an ArrayBuffer and a port transferred; onmessage starts the port; close() delivers what was posted, then 'close' on both ends; hasRef; receiveMessageOnPort; inspect",
+  "argv": ["script.js"],
+  "shim": true
+}
