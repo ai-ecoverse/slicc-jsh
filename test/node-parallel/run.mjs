@@ -40,6 +40,10 @@ if (!process.env.NP_FILES) {
   for (let start = 0; start < allFiles.length; start += BATCH) starts.push(start);
   // A batch's own lines (# PASS …) go to stdout as they come; the results
   // are collected in file order whatever order the batches end in.
+  // A failed batch ends the run: the others still running are killed first
+  // (each is its own process and kernel), then the parent exits 1.
+  const running = new Set();
+  let failing = false;
   const runBatch = (start) =>
     new Promise((resolve) => {
       const out = join(scratch, `batch-${start}.json`);
@@ -47,9 +51,17 @@ if (!process.env.NP_FILES) {
         env: { ...process.env, NP_FILES: JSON.stringify(allFiles.slice(start, start + BATCH)), NP_RESULTS: out },
         stdio: ['ignore', 'inherit', 'inherit'],
       });
-      child.on('close', (status, signal) => {
+      running.add(child);
+      child.on('close', async (status, signal) => {
+        running.delete(child);
+        if (failing) return;
         if (status !== 0 || !existsSync(out)) {
+          failing = true;
           console.error(`node-parallel: batch from ${allFiles[start]} ended with ${status ?? signal}`);
+          const others = [...running].map((c) => new Promise((done) => c.once('close', done)));
+          for (const c of running) c.kill('SIGKILL');
+          await Promise.all(others);
+          rmSync(scratch, { recursive: true, force: true });
           process.exit(1);
         }
         resolve(JSON.parse(readFileSync(out, 'utf8')));
