@@ -71,7 +71,9 @@ jobs:
   ci:
     needs: runner
     runs-on: ${{ needs.runner.outputs.runner }}
-    timeout-minutes: 15
+    # The bench pool runs the serial steps about 1.7x slower than hosted
+    # (Golden 299 s vs 175 s, cert 188 s vs 86 s on the first pool run).
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       # The baselines' host Node 22.22.0 (scripts/node22.mjs reads $NODE22),
@@ -120,7 +122,7 @@ jobs:
       - name: Lint
         run: npm run lint
       - name: Golden (host Node 22)
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: npm run test:golden
       - name: jsh parity (host Node 22 baseline, kernel jsh)
         timeout-minutes: 5
@@ -133,7 +135,7 @@ jobs:
         timeout-minutes: 10
         run: npm run test:cert
       - name: Node parallel slice (track pass/fail; non-strict)
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: npm run test:node-parallel
       - name: Pack (files allowlist)
         run: |
