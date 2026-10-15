@@ -95,9 +95,9 @@ function modeOf(dir) {
   return 'node';
 }
 
-function normaliser(hostDir, kdir) {
+function normaliser(...dirs) {
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`(/private)?(${esc(hostDir)}|${esc(kdir)})`, 'g');
+  const re = new RegExp(`(/private)?(${dirs.map(esc).join('|')})`, 'g');
   return (s) =>
     s
       .replace(re, '/M')
@@ -148,10 +148,20 @@ async function casesFor(dir, mode) {
 }
 
 const hostCache = new Map();
-function hostRun(dir, c, pkgName, norm) {
+const hostDirs = new Set();
+function hostDir(dir, pkgName) {
+  const d = join(work, 'hostfx', pkgName, dir);
+  if (!hostDirs.has(d)) {
+    rmSync(d, { recursive: true, force: true });
+    cpSync(join(fx, dir), d, { recursive: true, verbatimSymlinks: true });
+    hostDirs.add(d);
+  }
+  return d;
+}
+function hostRun(dir, c, pkgName) {
   const key = `${dir}\u0000${c.name}${c.hostJsh || c.shell ? `\u0000${pkgName}` : ''}`;
   if (hostCache.has(key)) return hostCache.get(key);
-  const cwd = join(fx, dir, c.cwd ?? '');
+  const cwd = join(hostDir(dir, c.hostJsh || c.shell ? pkgName : 'node'), c.cwd ?? '');
   let r;
   if (c.shell) {
     r = spawnSync('/bin/bash', ['-c', c.shell], {
@@ -201,11 +211,11 @@ async function runDirs(pkgName, pkgDir) {
     const kdir = user === 'root' ? `/os/${dir}` : `/home/${user}/${dir}`;
     for (const f of walk(join(fx, dir))) await k.writeFile(`${kdir}/${relative(join(fx, dir), f).replaceAll('\\', '/')}`, readFileSync(f));
     if (user !== 'root') await krun(k, ['bash', '-c', `chown -R ${user}:${user} ${kdir}`], { cwd: '/' }, 120_000);
-    const norm = normaliser(join(fx, dir), kdir);
+    const norm = normaliser(hostDir(dir, 'node'), kdir, hostDir(dir, pkgName));
     for (const c of cases) {
       const opts = { cwd: `${kdir}${c.cwd ? `/${c.cwd}` : ''}`, ...(user !== 'root' ? { user } : {}), ...(c.stdin !== undefined ? { stdin: c.stdin } : {}) };
       const r = await krun(k, c.argv, opts, c.timeout ?? CASE_MS);
-      const h = hostRun(dir, c, pkgName, norm);
+      const h = hostRun(dir, c, pkgName);
       const a = render(c, r, norm);
       const b = render(c, h, norm);
       const same = a === b && r.status !== 'TIMEOUT';

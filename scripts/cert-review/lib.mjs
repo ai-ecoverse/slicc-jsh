@@ -27,7 +27,13 @@ export const readJson = (file) => JSON.parse(readFileSync(file, 'utf8'));
 export function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
-    if (statSync(p).isDirectory()) walk(p, out);
+    let st;
+    try {
+      st = statSync(p);
+    } catch {
+      continue;
+    }
+    if (st.isDirectory()) walk(p, out);
     else out.push(p);
   }
   return out;
