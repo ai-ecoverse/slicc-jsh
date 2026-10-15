@@ -102,8 +102,9 @@ const ACCEPTED_DIFF = new Set([
 const MAX_BUFFER = 4 * 1024 * 1024;
 
 // spawnSync's semantics, without blocking the shim and the other cases:
-// stdin carries the case's (or nothing), a timeout sends SIGTERM, a signal
-// is reported as `signal NAME`, and more than MAX_BUFFER of output throws.
+// stdin carries the case's (or nothing), a signal is reported as
+// `signal NAME`, and a timeout (SIGTERM, then ETIMEDOUT) or more than
+// MAX_BUFFER of output throws.
 function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(node22Bin(), argv, {
@@ -125,7 +126,11 @@ function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {
         out[name].push(chunk);
       });
     }
-    const timer = setTimeout(() => child.kill(), timeoutMs);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
     child.on('error', (error) => {
       clearTimeout(timer);
       reject(error);
@@ -133,6 +138,11 @@ function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {
     child.on('close', (status, signal) => {
       clearTimeout(timer);
       if (overflow) return reject(new Error(`${argv.join(' ')}: output over ${MAX_BUFFER} bytes`));
+      if (timedOut) {
+        const error = new Error(`${argv.join(' ')}: timed out after ${timeoutMs} ms`);
+        error.code = 'ETIMEDOUT';
+        return reject(error);
+      }
       resolve({
         status: status ?? (signal ? `signal ${signal}` : 1),
         stdout: Buffer.concat(out.stdout).toString('utf8'),
