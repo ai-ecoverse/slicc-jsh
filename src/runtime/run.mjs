@@ -353,12 +353,18 @@ export async function runNode(ctx, options = {}) {
   // writable and empty (slicc-kernel 1.92.0+). The platform's is never used.
   // (worker_threads exports it on every kernel.)
   const bcSlot = Object.getOwnPropertyDescriptor(globalThis, 'BroadcastChannel');
-  const JshBroadcastChannel = createBroadcastChannel({ handles, schedule: (fn) => timers.setImmediate(fn) });
+  const delivering = { active: false, since: 0, overdue: () => timers.overdue() };
+  const JshBroadcastChannel = createBroadcastChannel({
+    handles,
+    schedule: (fn) => timers.setImmediate(fn),
+    delivering,
+  });
   const BroadcastChannel =
     bcSlot && bcSlot.value === undefined && !bcSlot.get && (bcSlot.writable || bcSlot.configurable) ? JshBroadcastChannel : undefined;
   process._broadcastChannel = JshBroadcastChannel;
 
   const timers = createTimers(handles, {
+    hold: (due) => delivering.active && due > delivering.since,
     afterCallback: () => flushTicks(),
     onCallbackError: (err) => {
       if (isExitError(err) || getDidExit()) {

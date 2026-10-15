@@ -7,7 +7,10 @@
 function Timeout() {}
 function Immediate() {}
 
-export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
+export function createTimers(handles, { onCallbackError, afterCallback, hold = () => false } = {}) {
+  // hold(due): whether a timeout that became due at `due` must wait (one
+  // task at a time) for what runs before it: the BroadcastChannel batch being
+  // delivered, for a timeout that became due after the batch started.
   const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
   const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
   const nativeSetInterval = globalThis.setInterval.bind(globalThis);
@@ -80,6 +83,7 @@ export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
       kind: 'Timeout',
       refed: true,
       id: null,
+      retry: null,
       repeating,
     };
     const handle = new Timeout();
@@ -87,14 +91,32 @@ export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
     attachRefApi(handle, state);
     const domain = currentDomain();
 
+    const retry = () => {
+      state.retry = null;
+      fire();
+    };
     const fire = () => {
       if (stopped) return;
+      if (hold(state.due)) {
+        state.retry ??= nativeSetTimeout(retry, 0);
+        return;
+      }
+      if (state.retry) {
+        nativeClearTimeout(state.retry);
+        state.retry = null;
+      }
       if (!state.repeating) {
         byId.delete(state.id);
         handles.delete(state);
+      } else {
+        // As Node reschedules an interval: from when its callback starts.
+        state.due = Date.now() + state.delay;
       }
       runMethod(handle, '_onTimeout', args, domain);
     };
+    // Node's delay: a number from 1 up (anything else is 1).
+    state.delay = delay >= 1 && delay <= 2147483647 ? Number(delay) : 1;
+    state.due = Date.now() + state.delay;
     state.id = repeating ? nativeSetInterval(fire, delay ?? 0) : nativeSetTimeout(fire, delay ?? 0);
     byId.set(state.id, state);
     handles.add(state);
@@ -135,11 +157,20 @@ export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
     if (state) {
       byId.delete(id);
       handles.delete(state);
+      if (state.retry) nativeClearTimeout(state.retry);
     }
     nativeClear(id);
   };
 
   return {
+    /** A tracked timeout or interval is due now and has not run yet. */
+    overdue() {
+      const now = Date.now();
+      for (const state of byId.values()) {
+        if (state.kind === 'Timeout' && state.due <= now) return true;
+      }
+      return false;
+    },
     setTimeout: (fn, delay, ...args) => {
       if (typeof fn !== 'function') return nativeSetTimeout(fn, delay, ...args);
       return makeTimeout(fn, delay, args, false);
@@ -157,6 +188,7 @@ export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
     clearImmediate: (handle) => clear(handle, nativeClearTimeout),
     clearPending() {
       for (const [id, state] of byId) {
+        if (state.retry) nativeClearTimeout(state.retry);
         if (state.repeating) nativeClearInterval(id);
         else nativeClearTimeout(id);
         handles.delete(state);
