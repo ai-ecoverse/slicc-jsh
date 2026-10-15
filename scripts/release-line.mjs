@@ -19,8 +19,8 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { replaceSection } from './release-body.mjs';
 
-const MARK = '<!-- release-line -->';
 const PROVENANCE = 'https://slsa.dev/provenance/v1';
 const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const name = manifest.name;
@@ -94,11 +94,9 @@ const line = `${name}@${version} gitHead=${meta.gitHead} sha256=${sha256} integr
 console.log(line);
 if (dryRun) process.exit(0);
 
-// Only this script's block (its marker and the fenced line after it) is
-// replaced; what the release body has before and after it stays.
+// Only this job's section (<!-- release-line --> … <!-- /release-line -->)
+// is replaced; the rest of the body, cert-review's section included, stays.
 const body = execFileSync('gh', ['release', 'view', tag, '--json', 'body', '--jq', '.body'], { encoding: 'utf8' });
-const block = `${MARK}\n\`\`\`\n${line}\n\`\`\``;
-const own = new RegExp(`${MARK}\\n\`\`\`\\n[^\\n]*\\n\`\`\``);
-const notes = own.test(body) ? body.replace(own, block) : `${body.trimEnd()}\n\n${block}\n`;
+const notes = replaceSection(body, 'release-line', `\`\`\`\n${line}\n\`\`\``);
 execFileSync('gh', ['release', 'edit', tag, '--notes-file', '-'], { input: notes, stdio: ['pipe', 'inherit', 'inherit'] });
 console.log(`wrote the line into the ${tag} release`);
