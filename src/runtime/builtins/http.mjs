@@ -2,6 +2,7 @@
  * node:http over net (ctx.net loopback) + IncomingMessage / ServerResponse.
  */
 import { trackPromise } from '../async-handles.mjs';
+import { ERR_OUT_OF_RANGE, validateInteger } from '../node-errors.mjs';
 import { EventEmitter } from './events.mjs';
 import { createFetchClient, isLoopbackHost } from './http-fetch.mjs';
 
@@ -345,7 +346,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       if (this.sendDate && !this.hasHeader('date')) auto.push(['Date', new Date().toUTCString()]);
       const framed =
         noBody || autoChunked || autoLength != null || this.hasHeader('content-length') || /chunked/i.test(String(this.getHeader('transfer-encoding') ?? ''));
-      if (!framed || /close/i.test(String(this.getHeader('connection') ?? ''))) this.shouldKeepAlive = false;
+      // A server that is closing ends each connection after its response (Node's).
+      if (!framed || this._server?._closing || /close/i.test(String(this.getHeader('connection') ?? ''))) this.shouldKeepAlive = false;
       if (!this.hasHeader('connection')) {
         auto.push(['Connection', this.shouldKeepAlive ? 'keep-alive' : 'close']);
         if (this.shouldKeepAlive && this._keepAliveTimeout) auto.push(['Keep-Alive', `timeout=${Math.floor(this._keepAliveTimeout / 1000)}`]);
@@ -401,7 +403,30 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       this.#socket.write(payload, () => {
         this.finished = true;
         this.emit('finish');
-        if (this.shouldKeepAlive && typeof this._onKeptAlive === 'function' && !this.#socket.destroyed) {
+        if (this._server?._closing && !this.#socket.destroyed) {
+          // close() is waiting (it wins over a keep-alive decided before it
+          // was called, a streamed response's): end our side and let the
+          // client close its own once it has read the response, so close's
+          // callback comes after the client's 'end', as in Node.
+          const socket = this.#socket;
+          const done = () => {
+            clearTimeout(timer);
+            try {
+              socket.destroy();
+            } catch {
+              /* ignore */
+            }
+          };
+          const timer = setTimeout(done, 2000);
+          timer.unref?.();
+          socket.once('end', done);
+          socket.once('close', done);
+          try {
+            socket.end();
+          } catch {
+            done();
+          }
+        } else if (this.shouldKeepAlive && typeof this._onKeptAlive === 'function' && !this.#socket.destroyed) {
           // Keep-alive: the connection takes its next request.
           this._onKeptAlive();
         } else {
@@ -650,6 +675,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         !server._closing &&
         !(max > 0 && served >= max);
       res._keepAliveTimeout = server.keepAliveTimeout;
+      res._server = server;
       // The client gone before the response ended (an aborted SSE or
       // long-poll): Node's 'close' on both, so the handler can stop.
       const gone = () => {
@@ -723,6 +749,19 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       // Peer may FIN after the request while we still write the response.
       super({ ...options, allowHalfOpen: true });
       this.#requestListener = requestListener;
+      // Node's options for them (lib/_http_server.js storeHTTPOptions):
+      // integers >= 0, and headersTimeout no longer than requestTimeout.
+      for (const key of ['requestTimeout', 'headersTimeout', 'keepAliveTimeout']) {
+        const value = options?.[key];
+        if (value === undefined) continue;
+        validateInteger(value, key, 0);
+        this[key] = value;
+      }
+      // Node: headersTimeout defaults to min(60 s, requestTimeout).
+      if (options?.headersTimeout === undefined) this.headersTimeout = Math.min(60000, this.requestTimeout);
+      if (this.requestTimeout > 0 && this.headersTimeout > 0 && this.headersTimeout > this.requestTimeout) {
+        throw ERR_OUT_OF_RANGE('headersTimeout', '<= requestTimeout', this.headersTimeout);
+      }
       this.on('connection', (socket) => {
         handleConnection(socket, this.#requestListener, this);
       });

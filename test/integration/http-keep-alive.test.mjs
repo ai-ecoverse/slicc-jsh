@@ -93,4 +93,26 @@ describe('http keep-alive (kernel)', () => {
       'slow body: HTTP/1.1 200 OK body data\nsilent connection: "HTTP/1.1 408 Request Timeout\\r\\nConnection: close\\r\\n\\r\\n"\nresponse sent | close cb\n'
     );
   });
+
+  it('#195: createServer({ headersTimeout, requestTimeout }) takes them (a partial request gets 408 before 3 s), and close(cb) waits for a slow request, which ends without an error', async () => {
+    const script = [
+      "const http = require('http'); const net = require('net');",
+      'const t0 = Date.now();',
+      'const ev = [];',
+      "const server = http.createServer({ headersTimeout: 800, requestTimeout: 800 }, (req, res) => {",
+      "  if (req.url === '/slow') { server.close(() => ev.push('close cb')); setTimeout(() => res.end('slow done'), 300); } else res.end('ok');",
+      '});',
+      "console.log('options', server.headersTimeout, server.requestTimeout);",
+      "server.listen(0, '127.0.0.1', async () => {",
+      '  const port = server.address().port;',
+      "  const r = await new Promise((resolve) => { const s = net.connect(port, '127.0.0.1', () => s.write('GET / HTTP/1.1\\r\\nHost: x\\r\\n')); let b = ''; s.on('data', (d) => (b += d)); s.on('close', () => resolve(b.split('\\r\\n')[0] + ' within 3 s: ' + (Date.now() - t0 < 3000))); });",
+      "  console.log('partial request:', r);",
+      "  http.get({ port, path: '/slow' }, (res) => { let b = ''; res.on('data', (d) => (b += d)); res.on('end', () => ev.push('end ' + b)); }).on('error', (e) => ev.push('client error ' + e.message));",
+      '});',
+      "process.on('exit', () => console.log(ev.join(' | ')));",
+    ].join('\n');
+    const r = await jsh.run(['node', '-e', script]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'options 800 800\npartial request: HTTP/1.1 408 Request Timeout within 3 s: true\nend slow done | close cb\n');
+  });
 });
