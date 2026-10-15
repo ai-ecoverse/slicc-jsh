@@ -81,7 +81,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 **Other members.**
 - `process.chdir` throws Node's `ENOENT`/`ENOTDIR` errors. `process.ppid` comes from the kernel.
 - `process.env` stores strings, as Node's does.
-- `process.umask()` starts as the process's umask in the kernel. jsh finds it once, from the mode the kernel gives a directory it makes in `/tmp`, because a JS program can't read the umask itself. `process.umask(mask)` parses as Node's does. It changes the umask jsh applies to the files it creates, not the kernel's, so children keep the kernel's.
+- `process.umask()` starts as the process's umask in the kernel. jsh reads it once, from `/proc/self/status` on slicc-kernel 1.89.0 and later. On older kernels JS programs have no `/proc`, so jsh finds it from the mode the kernel gives a directory it makes in `/tmp`. `process.umask(mask)` parses as Node's does. It changes the umask jsh applies to the files it creates, not the kernel's, so children keep the kernel's.
 - `process.getuid`, `getgid` and the like read the kernel's credentials. `process.setuid`, `setgid`, `seteuid`, `setegid`, `setgroups` and `initgroups` follow Node on Linux; they're defined only on slicc-kernel 1.81.0 and later.
 - `process.versions` lists what the runtime has or mirrors: no openssl, brotli, ….
 - `argv0`, `pid`, `version`, `versions`, `arch`, `platform`, `release`, `config` and `features` are read-only, as in Node. `argv[0]` is `execPath`.

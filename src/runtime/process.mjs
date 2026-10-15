@@ -579,14 +579,24 @@ const Process = { process: class extends EventEmitter {
   }
 
   /**
-   * The process's umask in the kernel, which a JS program can't ask for
-   * (/proc isn't in its file system): the mode the kernel gives a directory
-   * made to find out, once, in /tmp (022 if that fails).
+   * The process's umask in the kernel: /proc/self/status's `Umask:` line
+   * where JS programs have /proc (slicc-kernel 1.89.0+, #529); before that
+   * the mode the kernel gives a directory made to find out, once, in /tmp
+   * (022 if that fails too).
    */
   _kernelUmask() {
     if (this._kumask === undefined) {
       this._kumask = 0o022;
       const fs = this._ctx?.sync?.fs;
+      try {
+        const m = /^Umask:\s*([0-7]+)/m.exec(new TextDecoder().decode(fs.readFile('/proc/self/status')));
+        if (m) {
+          this._kumask = Number.parseInt(m[1], 8) & 0o777;
+          return this._kumask;
+        }
+      } catch {
+        /* no /proc for JS programs: probe */
+      }
       const dir = `/tmp/.jsh-umask-${this.pid}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
       try {
         fs.mkdir(dir);
