@@ -1,0 +1,7 @@
+{
+  "description": "spawn / spawnSync / execFile / execFileSync find a bare name on the child's PATH as execvp does: the first directory with an executable file wins, a directory or a file without x is passed over, EACCES when only files without x match, ENOENT when nothing does; an empty entry is the cwd; a name with a '/' is never searched. The scripts are chmod'ed from JS, so the shim side needs slicc-kernel 1.86.0; /bin/sh from wasm-bash",
+  "kernel": "1.86.0",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-bash"]
+}

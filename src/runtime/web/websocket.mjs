@@ -12,6 +12,9 @@ const OPEN = 1;
 const CLOSING = 2;
 const CLOSED = 3;
 
+/** RFC 9110's token, which a subprotocol must be. */
+const TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
 function toProtocols(protocols) {
   if (protocols == null) return undefined;
   if (typeof protocols === 'string') return protocols;
@@ -106,14 +109,33 @@ export function createWebSocket(ctx, { handles, trackPromise, getNet } = {}) {
 
     constructor(url, protocols) {
       super();
+      // The WHATWG constructor's checks (undici's, in Node 22): a URL, ws: or
+      // wss: (http: and https: become them), no fragment, valid protocols.
+      let parsed;
+      try {
+        parsed = new URL(String(url));
+      } catch (err) {
+        throw new DOMException(String(err), 'SyntaxError');
+      }
+      if (parsed.protocol === 'http:') parsed.protocol = 'ws:';
+      else if (parsed.protocol === 'https:') parsed.protocol = 'wss:';
+      if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') {
+        throw new DOMException(`Expected a ws: or wss: protocol, got ${parsed.protocol}`, 'SyntaxError');
+      }
+      if (parsed.hash || parsed.href.endsWith('#')) throw new DOMException('Got fragment', 'SyntaxError');
+      const list = toProtocols(protocols);
+      const names = list === undefined ? [] : Array.isArray(list) ? list : [list];
+      if (new Set(names).size !== names.length || names.some((n) => !TOKEN.test(n))) {
+        throw new DOMException('Invalid Sec-WebSocket-Protocol value', 'SyntaxError');
+      }
       if (typeof ctx.websocket !== 'function') {
         const err = new Error('slicc-jsh: WebSocket is not supported in slicc-jsh yet');
         err.code = 'ERR_NOT_SUPPORTED';
         throw err;
       }
-      const href = String(url);
+      const href = parsed.href;
       this.#url = href;
-      this.#open(href, toProtocols(protocols));
+      this.#open(href, list);
     }
 
     get url() {

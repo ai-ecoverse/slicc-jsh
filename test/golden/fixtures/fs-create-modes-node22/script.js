@@ -1,0 +1,63 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+process.umask(0o022);
+const work = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'cm-')));
+process.chdir(work);
+const perm = (p) => (fs.statSync(p).mode & 0o7777).toString(8);
+const show = (label, f) => {
+  let v;
+  try {
+    v = f();
+  } catch (e) {
+    v = `THROW ${e.code} ${e.message}`;
+  }
+  console.log(`${label}: ${v}`);
+};
+(async () => {
+  show('mkdtemp', () => perm(work));
+  show('writeFileSync default', () => (fs.writeFileSync('a', 'x'), perm('a')));
+  show('writeFileSync mode 0o600', () => (fs.writeFileSync('b', 'x', { mode: 0o600 }), perm('b')));
+  show('writeFileSync existing, mode 0o777', () => (fs.writeFileSync('b', 'y', { mode: 0o777 }), perm('b')));
+  show("writeFileSync wx, mode '640'", () => (fs.writeFileSync('c', 'x', { flag: 'wx', mode: '640' }), perm('c')));
+  show('writeFileSync mode 0o777 (umask applies)', () => (fs.writeFileSync('d', 'x', { mode: 0o777 }), perm('d')));
+  show('writeFileSync bad mode', () => fs.writeFileSync('e', 'x', { mode: 'rw' }));
+  show('appendFileSync new, mode 0o604', () => (fs.appendFileSync('f', 'x', { mode: 0o604 }), perm('f')));
+  show('appendFileSync existing, mode 0o777', () => (fs.appendFileSync('f', 'x', { mode: 0o777 }), perm('f')));
+  show('openSync w, 0o700', () => (fs.closeSync(fs.openSync('g', 'w', 0o700)), perm('g')));
+  show('openSync existing, 0o777', () => (fs.closeSync(fs.openSync('g', 'w', 0o777)), perm('g')));
+  show('openSync wx, 0o444', () => (fs.closeSync(fs.openSync('h', 'wx', 0o444)), perm('h')));
+  const fh = await fs.promises.open('i', 'w', 0o660);
+  await fh.close();
+  show('promises.open w, 0o660', () => perm('i'));
+  await new Promise((r) => fs.open('j', 'a', 0o606, (e, fd) => (fs.closeSync(fd), r())));
+  show('open callback a, 0o606', () => perm('j'));
+  await new Promise((r) => fs.createWriteStream('k', { mode: 0o640 }).end('x', r));
+  show('createWriteStream mode 0o640', () => perm('k'));
+  await fs.promises.writeFile('l', 'x', { mode: 0o611 });
+  show('promises.writeFile mode 0o611', () => perm('l'));
+  show('mkdirSync default', () => (fs.mkdirSync('m'), perm('m')));
+  show('mkdirSync 0o700', () => (fs.mkdirSync('n', 0o700), perm('n')));
+  show("mkdirSync { mode: '750' }", () => (fs.mkdirSync('o', { mode: '750' }), perm('o')));
+  show('mkdirSync recursive mode 0o711', () => (fs.mkdirSync('p/q/r', { recursive: true, mode: 0o711 }), [perm('p'), perm('p/q'), perm('p/q/r')].join(' ')));
+  show('mkdirSync bad mode', () => fs.mkdirSync('s', { mode: -1 }));
+  fs.writeFileSync('src', '#!/bin/sh\n');
+  fs.chmodSync('src', 0o750);
+  show('copyFileSync new', () => (fs.copyFileSync('src', 'dst'), perm('dst')));
+  fs.writeFileSync('dst2', 'old', { mode: 0o600 });
+  show('copyFileSync over 0o600', () => (fs.copyFileSync('src', 'dst2'), perm('dst2')));
+  await fs.promises.copyFile('src', 'dst3');
+  show('promises.copyFile', () => perm('dst3'));
+  show("umask('077')", () => process.umask('077').toString(8));
+  show('umask now', () => process.umask().toString(8));
+  show('writeFileSync under 077', () => (fs.writeFileSync('t', 'x'), perm('t')));
+  show('mkdirSync under 077', () => (fs.mkdirSync('u'), perm('u')));
+  show('mkdtempSync under 077', () => perm(fs.mkdtempSync('v-')));
+  show('umask 0', () => (process.umask(0), fs.writeFileSync('w', 'x', { mode: 0o666 }), perm('w')));
+  show("umask('8')", () => process.umask('8'));
+  show('umask(-1)', () => process.umask(-1));
+  show('umask(null)', () => process.umask(null));
+  process.umask(0o022);
+  process.chdir(os.tmpdir());
+  fs.rmSync(work, { recursive: true, force: true });
+})();

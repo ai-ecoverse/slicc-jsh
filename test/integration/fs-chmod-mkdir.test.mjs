@@ -228,7 +228,7 @@ describe('older kernels: the fallback (no ctx.fs.chmod)', () => {
   });
   after(() => jsh?.close());
 
-  it('chmod validates, checks the path and changes nothing; mkdir checks then creates', fallback, async () => {
+  it('chmod validates, checks the path, changes nothing and warns once; mkdir checks then creates', fallback, async () => {
     await jsh.kernel.writeFile(
       '/os/old.js',
       program([
@@ -246,6 +246,8 @@ describe('older kernels: the fallback (no ctx.fs.chmod)', () => {
     );
     const r = await jsh.run(['node', 'old.js']);
     assert.equal(r.status, 0, r.stderr);
+    // Said once, not silently: three chmods, one warning.
+    assert.equal(r.stderr.match(/Warning: fs\.chmod and fs\.fchmod change nothing on this slicc-kernel/g)?.length, 1, r.stderr);
     assert.equal(
       r.stdout,
       [

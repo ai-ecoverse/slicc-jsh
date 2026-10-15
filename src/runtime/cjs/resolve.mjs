@@ -376,6 +376,9 @@ const BUILTIN_NAMES = new Set([
   'stream/consumers',
   'stream/web',
   'sys',
+  'inspector',
+  'trace_events',
+  'wasi',
 ]);
 
 function isBuiltinName(name) {

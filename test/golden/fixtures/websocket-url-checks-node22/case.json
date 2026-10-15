@@ -1,0 +1,5 @@
+{
+  "description": "new WebSocket checks its URL and protocols as Node 22's (undici's WHATWG constructor, #180): another scheme, a fragment or no URL is a SyntaxError DOMException; http: and https: become ws: and wss:; .url is the parsed href; a duplicate or a non-token protocol is a SyntaxError",
+  "argv": ["script.js"],
+  "shim": true
+}

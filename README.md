@@ -131,12 +131,12 @@ This table is the summary. Details, quirks and the libraries behind each module 
 
 | Area | Supported | Differs | Not available |
 |---|---|---|---|
-| [`node` command](docs/compatibility.md#the-node-command) | `-e`, `-p`, `-i`, `-`, `-r`, `--import`, `--input-type`, `NODE_OPTIONS`, warning flags, `--enable-source-maps`, `--report-*`, `--stack-trace-limit` | `--max-old-space-size` and `--trace-uncaught` are accepted and do nothing; `--check` runs the script | inspector and debugger flags, `--watch`, TypeScript |
+| [`node` command](docs/compatibility.md#the-node-command) | `-e`, `-p`, `-i`, `-`, `-c`/`--check`, `-r`, `--import`, `--input-type`, `NODE_OPTIONS`, warning flags, `--enable-source-maps`, `--report-*`, `--stack-trace-limit` | `--max-old-space-size` and `--trace-uncaught` are accepted and do nothing | inspector and debugger flags, `--watch`, TypeScript |
 | [Modules, ESM](docs/compatibility.md#modules-and-esm) | CommonJS with Node's resolution, ESM, `import()`, `import.meta`, CJS↔ESM interop, `require(esm)`, `exports`/`imports`, source maps, `--preserve-symlinks` | in the kernel, the `slicc` condition comes first | `module.register`/`registerHooks`, native addons, `.ts` files |
 | [`process`](docs/compatibility.md#process-and-the-end-of-a-program) | exit codes and `'exit'`, signals, `kill`, `chdir`, `env`, `report`, `execve`, `emitWarning`, `loadEnvFile` | `exit()` ends at once from kernel 1.65; `kill(self)` from 1.72; `setuid` & co. from 1.81 | — |
 | [stdio, `tty`](docs/compatibility.md#stdio-tty-and-signals) | Node streams, `isTTY`, `setRawMode`, `columns`/`rows`, `'resize'` | signal handlers and raw mode take effect a moment after the call; `isatty` knows fds 0–2 only | — |
-| [`fs`](docs/compatibility.md#fs) | sync, callback, promise and stream forms, `file:` URLs, symlinks, `cp`, `statfs`, `/dev` (kernel 1.69) | `chmod`, `chown`, `utimes` change nothing; `mkdir` isn't exclusive; `linkSync` only on `tmpfs`; `statfs` is the browser's storage estimate | `watch`, `watchFile`, `glob`, `openAsBlob`, `readv`/`writev` |
-| [`child_process`](docs/compatibility.md#child_process) | `spawn`, `exec`, `execFile`; `spawnSync`, `execSync`, `execFileSync` (kernel 1.65) | fd stdio order from 1.70; `detached` from 1.74; `argv0` from 1.76 | `fork`; stdio slots past fd 2 |
+| [`fs`](docs/compatibility.md#fs) | sync, callback, promise and stream forms, `file:` URLs, symlinks, `cp`, `statfs`, `/dev` (kernel 1.69) | `chmod` and new files' modes from kernel 1.86, before that they change nothing; `chown`, `utimes` change nothing; `mkdir` exclusive from 1.86; `linkSync` only on `tmpfs`; `statfs` is the browser's storage estimate | `watch`, `watchFile`, `glob`, `openAsBlob`, `readv`/`writev` |
+| [`child_process`](docs/compatibility.md#child_process) | `spawn`, `exec`, `execFile`; `spawnSync`, `execSync`, `execFileSync` (kernel 1.65) | fd stdio order from 1.70; `detached` from 1.74; `argv0` from 1.76; `.pid` at return from 1.87 | `fork`; stdio slots past fd 2 |
 | [`net`, `http`, `https`](docs/compatibility.md#net-http-and-https) | TCP and HTTP/1.1 servers and clients on the kernel's loopback, and to other hosts where the kernel's uplink routes them; streamed responses; `http.Agent` subclasses; `https` client | without a route, `http` goes through `fetch`, as `https` always does: no raw socket, Agent pooling, upgrade/`CONNECT`, 100-continue or trailers; normalized headers; buffered upload; redirects followed in the browser. No keep-alive | `tls`, `https.createServer`, client certificates, Unix sockets |
 | [`fetch`, `WebSocket`](docs/compatibility.md#fetch-and-websocket) | the globals, over the kernel's network | loopback URLs reach servers of this kernel; refused connects as Node's from kernel 1.59.1 | — |
 | [`crypto`](docs/compatibility.md#crypto) | hashes, HMAC, PBKDF2, HKDF, scrypt, AES and 3DES ciphers, secret keys, random, `webcrypto` | — | asymmetric keys, sign/verify, DH/ECDH, RSA, primes, X509 |
@@ -165,6 +165,10 @@ The package needs `slicc-kernel` 1.53.2 or later. These features need a newer ke
 | `child_process` `detached: true` makes a new session and process group | 1.74.0 | the child stays in the program's group |
 | a child sees `options.argv0` as its `argv[0]` | 1.76.0 | `argv0` only shows in error messages |
 | `process.setuid`, `setgid`, `seteuid`, `setegid`, `setgroups`, `initgroups` | 1.81.0 | not defined |
+| `fs.chmod`, `fchmod` and `FileHandle.chmod` change the mode; new files get the mode asked for, less the umask; `copyFile` keeps the source's mode | 1.86.0 | they change nothing; new files get the kernel's default mode |
+| `fs.mkdir` without `recursive` is exclusive (`EEXIST`/`ENOENT` from the kernel; one winner among processes) | 1.86.0 | it checks, then creates, and makes a missing parent |
+| `child.pid` is set when `spawn()` returns | 1.87.0 | it is set by the `'spawn'` event |
+| a recursive `fs.rm` is one kernel call | 1.88.0 | jsh walks the tree |
 
 ## Develop
 

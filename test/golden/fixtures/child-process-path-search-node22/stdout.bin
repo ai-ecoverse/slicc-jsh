@@ -1,0 +1,16 @@
+a:b hello: 0 hello-from-a x
+b:a hello: 0 hello-from-b x
+a:b onlyb: 0 onlyb x
+a:b skipme (no x in a): 0 skipme-b x
+a:b dirhit (a directory in a): 0 dirhit-b x
+a:b noexec (no x anywhere): error EACCES -13 spawnSync noexec noexec
+a:b missing: error ENOENT -2 spawnSync missing-zz missing-zz
+empty entry is the cwd: 0 here-cwd x
+a/hello relative to cwd: 0 hello-from-a x
+spawn a:b hello: 0 hello-from-a y
+spawn b:a hello: 0 hello-from-b y
+spawn noexec: error EACCES -13 spawn noexec noexec spawn noexec EACCES
+spawn missing: error ENOENT -2 spawn missing-zz missing-zz spawn missing-zz ENOENT
+execFileSync: onlyb z
+execFileSync noexec: EACCES spawnSync noexec spawnSync noexec EACCES
+execFile: null hello-from-b w

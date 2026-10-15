@@ -18,6 +18,8 @@ const BOOLEAN_FLAGS = new Set([
   '--expose-internals',
   // Node prints a thrown non-Error's site with it; accepted (the report is the usual one).
   '--trace-uncaught',
+  // Node prints the stack on SIGINT with it; accepted (no stack is printed).
+  '--trace-sigint',
   // Source maps for stacks and error reports (source-maps.mjs).
   '--enable-source-maps',
   // process.report's settings (process-members.mjs).
@@ -109,7 +111,8 @@ export function parseNodeOptions(text, argv0 = 'node') {
     if (name.startsWith('--no-') && ENV_VALUED.has(`--${name.slice(5)}`)) {
       return { error: `${argv0}: ${raw} is an invalid negation because it is not a boolean option`, status: 9 };
     }
-    if (word === '--' || !allowed.has(name)) return { error: `${argv0}: ${raw} is not allowed in NODE_OPTIONS`, status: 9 };
+    // Node names an option given with a value with its `=` (`--eval= is not allowed`).
+    if (word === '--' || !allowed.has(name)) return { error: `${argv0}: ${eq === -1 ? raw : `${raw}=`} is not allowed in NODE_OPTIONS`, status: 9 };
     const alias = ENV_ALIASES[name];
     const canonical = alias?.length === 1 ? alias[0] : name;
     const takesValue = ENV_VALUED.has(canonical);
@@ -216,6 +219,8 @@ function parseCommandLine(argv) {
   let script;
   const userArgs = [];
   let interactive = false;
+  // -c / --check: the script's syntax is checked, nothing runs (Node's check_syntax).
+  let check = false;
   // -r / --require modules, in order; `node -`: the program from stdin.
   const preload = [];
   const imports = [];
@@ -366,6 +371,8 @@ function parseCommandLine(argv) {
     }
     if (arg.startsWith('-')) {
       if (arg === '-c' || arg === '--check') {
+        check = true;
+        flags.push(arg);
         i += 1;
         continue;
       }
@@ -392,6 +399,10 @@ function parseCommandLine(argv) {
     return { error: `${argv0}: --input-type=${inputType} is not supported by slicc-jsh (no TypeScript)`, status: 9 };
   }
 
+  if (check && evalCode !== undefined) {
+    return { error: `${argv0}: either --check or --eval can be used, not both`, status: 9 };
+  }
+
   if (evalCode !== undefined) {
     return {
       mode: 'eval',
@@ -411,6 +422,7 @@ function parseCommandLine(argv) {
     return {
       mode: 'file',
       script,
+      check,
       processArgv: [argv0, script, ...userArgs],
       execArgv: [...flags],
       preload,
@@ -428,5 +440,6 @@ function parseCommandLine(argv) {
     imports,
     v8Warnings,
     stdinScript,
+    check,
   };
 }

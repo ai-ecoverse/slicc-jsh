@@ -149,6 +149,11 @@ function markSpan(code, pos, message) {
     const decl = declarationSpan(code, pos);
     if (decl) return decl;
   }
+  // V8 marks the `await` itself (acorn stops at what follows it).
+  if (/^await is only valid/.test(message)) {
+    const at = code.lastIndexOf('await', pos);
+    if (at !== -1 && /^\s*$/.test(code.slice(at + 5, pos))) return [at, at + 5];
+  }
   if (!invalid) {
     try {
       const t = acorn.tokenizer(code.slice(pos), { ecmaVersion: 'latest', allowHashBang: true }).getToken();
@@ -292,4 +297,53 @@ export function syntaxReport(source, { kind, filename, error }) {
       stack: `${filename}:${line}\n${text}\n${eoi && pos < lineEnd ? '' : ' '.repeat((pos >= lineEnd ? pos : from) - lineStart)}${carets}\n\nSyntaxError: ${message}`,
     };
   }
+}
+
+/**
+ * `node --check`: the source compiled as the module it is, nothing run
+ * (Node's internal/main/check_syntax). Returns null when it compiles, else
+ * the SyntaxError, its report under `filename` (a path, as Node names a
+ * checked file, not a URL).
+ */
+export function checkSyntax(source, { kind, filename }) {
+  // A hashbang line goes, its newline stays (lines keep their numbers).
+  const body = source.startsWith('#!') ? (source.includes('\n') ? source.slice(source.indexOf('\n')) : '') : source;
+  let error;
+  if (kind === 'module') {
+    try {
+      acorn.parse(body, { ecmaVersion: 'latest', sourceType: 'module', allowAwaitOutsideFunction: true });
+      return null;
+    } catch (err) {
+      if (!(err instanceof SyntaxError)) throw err;
+      error = new SyntaxError(err.message);
+    }
+  } else {
+    try {
+      // eslint-disable-next-line no-new-func
+      new Function('exports', 'require', 'module', '__filename', '__dirname', body);
+      return null;
+    } catch (err) {
+      if (!(err instanceof SyntaxError)) throw err;
+      error = err;
+      // A top-level declaration of a wrapper name: module syntax to Node's
+      // containsModuleSyntax (detect-module then takes it as an ES module).
+      if (/has already been declared/.test(err.message) && /\b(exports|require|module|__filename|__dirname)\b/.test(err.message)) {
+        Object.defineProperty(error, 'wrapperRedeclare', { value: true, configurable: true });
+      }
+    }
+  }
+  let stack = syntaxReport(source, { kind, filename, error })?.stack;
+  if (!stack) {
+    // Valid as a script, not inside the CommonJS wrapper (`const require`):
+    // V8 marks the wrapper's name on the first line it is declared on.
+    const lines = body.split('\n');
+    const n = Math.max(0, lines.findIndex((l) => /\b(exports|require|module|__filename|__dirname)\b/.test(l)));
+    const line = lines[n] ?? '';
+    const at = /\b(exports|require|module|__filename|__dirname)\b/.exec(line);
+    const col = at ? at.index : 0;
+    stack = `${filename}:${n + 1}\n${line}\n${' '.repeat(col)}^\n\nSyntaxError: ${error.message}`;
+  }
+  Object.defineProperty(error, '_prettyStack', { value: stack, configurable: true, writable: true });
+  error.stack = stack;
+  return error;
 }

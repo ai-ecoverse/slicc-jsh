@@ -271,6 +271,43 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       throw nodeFsError(err?.code || 'EIO', syscall, pathArg, err);
     }
   };
+  let warnedNoChmod = false;
+  /** A kernel before 1.86.0 can't change a mode: say so once, rather than not at all. */
+  const warnNoChmod = () => {
+    if (warnedNoChmod) return;
+    warnedNoChmod = true;
+    try {
+      process?.emitWarning?.('fs.chmod and fs.fchmod change nothing on this slicc-kernel: it needs 1.86.0 or later (ctx.fs.chmod)', {
+        code: 'JSH_NO_CHMOD',
+      });
+    } catch {
+      /* no process yet */
+    }
+  };
+  const umaskNow = () => (typeof process?.umask === 'function' ? process.umask() : 0o022);
+  const kernelUmask = () => (typeof process?._kernelUmask === 'function' ? process._kernelUmask() : 0o022);
+  /**
+   * The mode a create asked for, as Node's open / mkdir give it: `mode`
+   * (else `def`) less the program's umask. The kernel made the file with
+   * `def` less its own umask; null when that is already it (or the kernel
+   * can't chmod: before 1.86.0 the mode stays the kernel's).
+   */
+  const createMode = (mode, def) => {
+    if (!kernelChmod) return null;
+    // The default mode under the kernel's own umask is what the kernel made.
+    if (process?._umask === undefined && (mode === undefined || (mode & 0o7777) === def)) return null;
+    const want = (mode ?? def) & ~umaskNow() & 0o7777;
+    return want === (def & ~kernelUmask() & 0o7777) ? null : want;
+  };
+  /** After a create: give the new file or directory the mode Node would. */
+  const applyCreateMode = (target, want) => {
+    if (want == null) return;
+    try {
+      syncFs.chmod(target, want);
+    } catch {
+      /* a mount without modes keeps what it has, as its chmod does */
+    }
+  };
   const wrapBuffer = (bytes) => (Buffer ? Buffer.from(bytes) : bytes);
   const optEncoding = (options) =>
     typeof options === 'string' ? options : options?.encoding ?? null;
@@ -338,7 +375,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         nofollow: !!(flags & 0o400000),
       };
     }
-    const f = flags == null ? 'r' : String(flags);
+    const f = flags == null ? 'r' : flags;
+    // Node's stringToFlags: anything else is ERR_INVALID_ARG_VALUE.
+    if (!VALID_FLAGS.has(f)) throw ERR_INVALID_ARG_VALUE('flags', flags);
     const readable = f.includes('r') || f === 'a+' || f === 'w+' || f === 'ax+' || f === 'wx+';
     const writable =
       f.includes('w') || f.includes('a') || f === 'r+' || f === 'rs+' || f === 'as+' || f === 'wx' || f === 'ax';
@@ -558,6 +597,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     const pathArg = p;
     const target = abs(p);
     const recursive = options === true || options?.recursive === true;
+    // Node's mkdir: `mode` (or the options as a mode), default 0o777, less the umask.
+    const modeArg = typeof options === 'number' || typeof options === 'string' ? options : isPlainOptionsObject(options) ? options.mode : undefined;
+    const dirMode = createMode(parseFileMode(modeArg, isPlainOptionsObject(options) ? 'options.mode' : 'mode', 0o777), 0o777);
     if (!recursive) {
       if (exclusiveMkdir) {
         // The kernel answers EEXIST / ENOENT / ENOTDIR itself, so of two
@@ -567,6 +609,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         } catch (err) {
           throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
         }
+        applyCreateMode(target, dirMode);
         return;
       }
       if (syncFs.exists(target)) throw nodeFsError('EEXIST', 'mkdir', pathArg);
@@ -599,12 +642,14 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         } catch {
           st = null;
         }
-        if (st && !st.isDirectory) throw nodeFsError('ENOTDIR', 'mkdir', pathArg);
+        // The path itself a file: EEXIST; a file on the way: ENOTDIR (Node's).
+        if (st && !st.isDirectory) throw nodeFsError(cur === target ? 'EEXIST' : 'ENOTDIR', 'mkdir', pathArg);
         continue;
       }
       try {
         syncFs.mkdir(cur);
         firstAbs ??= cur;
+        applyCreateMode(cur, dirMode);
       } catch (err) {
         if (err?.code === 'EEXIST') continue;
         throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
@@ -832,6 +877,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
     },
     writeFileSync(p, data, options) {
+      // Node's validateStringAfterArrayBufferView, before anything else.
+      if (typeof data !== 'string' && !ArrayBuffer.isView(data)) {
+        throw ERR_INVALID_ARG_TYPE('data', ['string', 'Buffer', 'TypedArray', 'DataView'], data);
+      }
       const bytes = encodeAs(data, optEncoding(options));
       const flag = optFlag(options, 'w');
       // A descriptor: write at its position (stdout/stderr included).
@@ -847,7 +896,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       const pathArg = p;
       const target = abs(p);
       if (isDevicePath(target)) return writeThroughDescriptor(p, bytes, flag);
-      if (flag.includes('x') && syncFs.exists(target)) throw nodeFsError('EEXIST', 'open', pathArg);
+      // Node's open: options.mode (default 0o666) for a file it creates.
+      const want = createMode(isPlainOptionsObject(options) ? parseFileMode(options.mode, 'mode', 0o666) : undefined, 0o666);
+      const existed = want != null || flag.includes('x') ? syncFs.exists(target) : true;
+      if (flag.includes('x') && existed) throw nodeFsError('EEXIST', 'open', pathArg);
       if (flag.startsWith('r')) {
         // r+: the file must exist; write from the start, keep what's beyond.
         let cur;
@@ -871,13 +923,17 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
       }
+      if (!existed) applyCreateMode(target, want);
     },
     appendFileSync(p, data, options) {
+      if (typeof data !== 'string' && !ArrayBuffer.isView(data)) {
+        throw ERR_INVALID_ARG_TYPE('data', ['string', 'Buffer', 'TypedArray', 'DataView'], data);
+      }
       const next = encodeAs(data, optEncoding(options));
       // A flag other than append (Node allows any) writes as writeFileSync does.
       const flag = optFlag(options, 'a');
       if (!flag.includes('a')) {
-        syncApi.writeFileSync(p, next, { flag });
+        syncApi.writeFileSync(p, next, { flag, ...(isPlainOptionsObject(options) && options.mode !== undefined ? { mode: options.mode } : {}) });
         return;
       }
       if (typeof p === 'number') {
@@ -898,9 +954,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       if (isDevicePath(target)) return writeThroughDescriptor(p, next, flag);
       // 'ax' / 'ax+': O_EXCL, as the open behind Node's appendFile has it.
       if (flag.includes('x') && syncFs.exists(target)) throw nodeFsError('EEXIST', 'open', pathArg);
+      const want = createMode(isPlainOptionsObject(options) ? parseFileMode(options.mode, 'mode', 0o666) : undefined, 0o666);
+      let existed = true;
       try {
         let prev = new Uint8Array(0);
-        if (syncFs.exists(target)) prev = syncFs.readFile(target);
+        existed = syncFs.exists(target);
+        if (existed) prev = syncFs.readFile(target);
         const merged = new Uint8Array(prev.length + next.length);
         merged.set(prev);
         merged.set(next, prev.length);
@@ -908,6 +967,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
       }
+      if (!existed) applyCreateMode(target, want);
     },
     existsSync(p) {
       try {
@@ -1047,8 +1107,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
     },
     openSync(p, flags = 'r', mode) {
-      void mode;
       const pathArg = p;
+      // Node's order: the path, the flags, the mode, then the file system.
+      validatePathType(p);
+      parseFileMode(mode, 'mode', 0o666);
       if (pathArg === '/dev/stdin' || pathArg === '/dev/fd/0') {
         return 0;
       }
@@ -1099,6 +1161,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         } catch (err) {
           throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
         }
+        // Node's open: `mode` (default 0o666) less the umask, for the file it made.
+        applyCreateMode(target, createMode(parseFileMode(mode, 'mode', 0o666), 0o666));
       } else if (fl.truncate) {
         try {
           syncFs.writeFile(target, new Uint8Array(0));
@@ -1276,6 +1340,15 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'copyfile', src, err, dest);
       }
+      // libuv's copyfile gives the copy the source's mode, a new copy or not.
+      if (kernelChmod && typeof st.mode === 'number') {
+        const perm = st.mode & 0o7777;
+        try {
+          if ((syncFs.stat(to).mode & 0o7777) !== perm) syncFs.chmod(to, perm);
+        } catch {
+          /* a mount without modes */
+        }
+      }
     },
     cpSync(src, dest, options) {
       getCp().cpSync(src, dest, options);
@@ -1299,10 +1372,15 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         // Sync errors show the template, the promise form the name it tried.
         if (!parentOk) throw nodeFsError('ENOENT', 'mkdtemp', namedError ? name : `${prefix}XXXXXX`);
         try {
-          syncFs.mkdir(target);
+          // Exclusive where the kernel has it: a name taken meanwhile is tried again.
+          if (exclusiveMkdir) syncFs.mkdir(target, { recursive: false });
+          else syncFs.mkdir(target);
         } catch (err) {
+          if (err?.code === 'EEXIST') continue;
           throw nodeFsError(err?.code || 'ENOENT', 'mkdtemp', `${prefix}XXXXXX`, err);
         }
+        // mkdtemp(3): 0700, less the umask.
+        applyCreateMode(target, createMode(0o700, 0o777));
         return optEncoding(options) === 'buffer' ? wrapBuffer(encoder.encode(name)) : name;
       }
       throw nodeFsError('EEXIST', 'mkdtemp', `${prefix}XXXXXX`);
@@ -1325,18 +1403,15 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     },
     // chmod goes to the kernel where it has one (1.86.0+; it follows a
     // symlink, and only the owner or root may: EPERM). Otherwise, and for
-    // lchmod, chown and utimes, which the kernel's JS fs doesn't have: these
-    // check that the path exists, as Node's do, and change nothing.
+    // chown and utimes, which the kernel's JS fs doesn't have: these check
+    // that the path exists, as Node's do, and change nothing (chmod says so
+    // once, as a warning).
     chmodSync(p, mode) {
       validatePathType(p);
       mode = parseFileMode(mode, 'mode');
       if (kernelChmod) return chmodPath(abs(p), mode, 'chmod', p);
       mustExist(p, 'chmod');
-    },
-    lchmodSync(p, mode) {
-      validatePathType(p);
-      parseFileMode(mode, 'mode');
-      mustExist(p, 'lchmod');
+      warnNoChmod();
     },
     fchmodSync(fd, mode) {
       validatedFd(fd);
@@ -1346,6 +1421,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       // errors name no path).
       if (!ent) throw nodeFsError('EBADF', 'fchmod', undefined);
       if (kernelChmod) chmodPath(ent.path, mode, 'fchmod');
+      else warnNoChmod();
     },
     chownSync(p, uid, gid) {
       validatePathType(p);
@@ -1657,8 +1733,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         })()
       );
     },
-    lchmod(p, ...args) {
-      return track((async () => syncApi.lchmodSync(p, ...args))());
+    // Linux has no lchmod: Node's promise form says so, and fs has none.
+    lchmod() {
+      return track(
+        Promise.reject(Object.assign(new Error('The lchmod() method is not implemented'), { code: 'ERR_METHOD_NOT_IMPLEMENTED' }))
+      );
     },
     chown(p, ...args) {
       return track((async () => syncApi.chownSync(p, ...args))());
@@ -1808,7 +1887,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
 
   function openStreamFd(p, flags, options, onOpen, onError) {
     try {
-      const fileFd = options?.fd != null ? options.fd : syncApi.openSync(p, flags);
+      const fileFd = options?.fd != null ? options.fd : syncApi.openSync(p, flags, options?.mode);
       onOpen(fileFd);
     } catch (err) {
       onError(err);
@@ -1954,7 +2033,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       write(chunk, enc, cb) {
         try {
           if (!opened) {
-            fd = syncApi.openSync(p, flags);
+            fd = syncApi.openSync(p, flags, options?.mode);
             opened = true;
             if (!openEmitted) {
               openEmitted = true;
@@ -2194,7 +2273,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     truncate: callbackify(syncApi.truncateSync),
     ftruncate: callbackify(syncApi.ftruncateSync),
     chmod: callbackify(syncApi.chmodSync, { minArgsBeforeCb: 2 }),
-    lchmod: callbackify(syncApi.lchmodSync, { minArgsBeforeCb: 2 }),
     fchmod: callbackify(syncApi.fchmodSync, { minArgsBeforeCb: 2 }),
     chown: callbackify(syncApi.chownSync, { minArgsBeforeCb: 3 }),
     lchown: callbackify(syncApi.lchownSync, { minArgsBeforeCb: 3 }),
@@ -2279,7 +2357,16 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
 const isURL = (self) => Boolean(self?.href && self.protocol && self.auth === undefined && self.path === undefined);
 
 /** Functions whose first two arguments are paths (the rest: the first). */
+const VALID_FLAGS = new Set(['r', 'rs', 'sr', 'r+', 'rs+', 'sr+', 'w', 'wx', 'xw', 'w+', 'wx+', 'xw+', 'a', 'ax', 'xa', 'as', 'sa', 'a+', 'ax+', 'xa+', 'as+', 'sa+']);
 const TWO_PATHS = new Set(['rename', 'link', 'symlink', 'copyFile', 'cp']);
+/** What Node's errors call those paths. */
+const PATH_NAMES = {
+  rename: ['oldPath', 'newPath'],
+  link: ['existingPath', 'newPath'],
+  symlink: ['target', 'path'],
+  copyFile: ['src', 'dest'],
+  cp: ['src', 'dest'],
+};
 
 /**
  * Node's getValidatedPath / toPathIfFileURL: a path argument may be a
@@ -2288,10 +2375,16 @@ const TWO_PATHS = new Set(['rename', 'link', 'symlink', 'copyFile', 'cp']);
  */
 function acceptFileUrls(api, { async = false } = {}) {
   let fileURLToPath;
-  const toPath = (value) => {
-    if (!isURL(value)) return value;
+  // Node's nullCheck: a path with a NUL byte, as a string, bytes or a URL.
+  const nullCheck = (value, name) => {
+    const bad = typeof value === 'string' ? value.includes('\u0000') : value instanceof Uint8Array && value.includes(0);
+    if (bad) throw ERR_INVALID_ARG_VALUE(name, value, 'must be a string, Uint8Array, or URL without null bytes');
+    return value;
+  };
+  const toPath = (value, name) => {
+    if (!isURL(value)) return nullCheck(value, name);
     fileURLToPath ??= globalThis.process?._builtin?.('url').fileURLToPath;
-    return fileURLToPath(value);
+    return nullCheck(fileURLToPath(value), name);
   };
   const wrap = (name, fn) => {
     const count = TWO_PATHS.has(name.replace(/Sync$/, '')) ? 2 : 1;
@@ -2309,7 +2402,8 @@ function acceptFileUrls(api, { async = false } = {}) {
     const wrapped = {
       [name](...args) {
         try {
-          for (let i = 0; i < count && i < args.length; i++) args[i] = toPath(args[i]);
+          const names = PATH_NAMES[name.replace(/Sync$/, '')] ?? ['path'];
+          for (let i = 0; i < count && i < args.length; i++) args[i] = toPath(args[i], names[i]);
         } catch (err) {
           return onBadPath(err, args);
         }
