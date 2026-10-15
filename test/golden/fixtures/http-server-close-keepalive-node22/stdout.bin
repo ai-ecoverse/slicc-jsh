@@ -1,0 +1,4 @@
+buffers 1000 1000
+kept: response keep-alive timeout=2 | at +500 ms the cb has not fired | close cb after the idle timeout
+short hint: response timeout=1 | close cb
+request after close(): response 1 keep-alive | response 2 keep-alive | close cb

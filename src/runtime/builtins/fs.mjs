@@ -734,28 +734,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     return euid() === 0 ? 'EPERM' : 'EACCES';
   };
   const euid = () => (typeof process?.geteuid === 'function' ? process.geteuid() : 0);
-  /**
-   * Whether this user may remove an entry of `dir` (w and x on it), as
-   * Linux checks before rmdir and unlink: Node's rimraf tries rmdir first,
-   * so it reports a refused directory before touching what's in it.
-   */
-  const mayRemoveIn = (dir) => {
-    const uid = euid();
-    if (uid === 0) return true;
-    let st;
-    try {
-      st = syncFs.stat(dir);
-    } catch {
-      return true;
-    }
-    const mode = st.mode ?? 0o777;
-    const gid = typeof process?.getegid === 'function' ? process.getegid() : 0;
-    const groups = typeof process?.getgroups === 'function' ? process.getgroups() : [];
-    if (st.uid === uid) return (mode & 0o300) === 0o300;
-    if (st.gid === gid || groups.includes(st.gid)) return (mode & 0o030) === 0o030;
-    return (mode & 0o003) === 0o003;
-  };
-
   function rimrafSync(shown, target, recursive) {
     let st;
     try {
@@ -787,8 +765,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     rmTreeSync(shown, target);
   }
 
+  // Children first, then the directory, as Node 22's rm (std::filesystem's
+  // walk for rmSync, and promises.rm alike): a directory the user may not
+  // remove from fails on its first entry's unlink, not on its own rmdir.
   function rmTreeSync(shown, target) {
-    if (!mayRemoveIn(path.dirname(target))) throw nodeFsError('EACCES', 'rmdir', shown);
     let names;
     try {
       names = syncFs.readdir(target);
