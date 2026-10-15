@@ -1,0 +1,5 @@
+PATH=/nonexistent ENOENT spawnSync sh sh
+no PATH 0 ran
+default 0 ran
+execFileSync ENOENT spawnSync sh
+async ENOENT spawn sh ENOENT

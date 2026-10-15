@@ -71,9 +71,11 @@ const NOT_YET = [
   'http2',
   'dgram',
   'dns',
+  'dns/promises',
   'tls',
   'cluster',
   'inspector',
+  'inspector/promises',
   'trace_events',
   'wasi',
 ];
