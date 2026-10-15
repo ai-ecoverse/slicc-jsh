@@ -103,8 +103,9 @@ function withoutColorEnv(env) {
 const MAX_BUFFER = 4 * 1024 * 1024;
 
 // spawnSync's semantics without blocking the other fixtures: stdin is a pipe
-// with case.json `stdin` (else closed at once), a timeout sends SIGTERM and
-// the status is then 1, and more than MAX_BUFFER on stdout or stderr throws.
+// with case.json `stdin` (else closed at once), and a timeout (SIGTERM, then
+// ETIMEDOUT) or more than MAX_BUFFER on stdout or stderr throws, so a hung
+// run is never recorded or compared as a golden.
 function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(node22Bin(), argv, {
@@ -128,7 +129,11 @@ function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
         out[name].push(chunk);
       });
     }
-    const timer = setTimeout(() => child.kill(), timeoutMs);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
     child.on('error', (error) => {
       clearTimeout(timer);
       reject(error);
@@ -136,6 +141,11 @@ function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
     child.on('close', (status) => {
       clearTimeout(timer);
       if (overflow) return reject(new Error(`${argv.join(' ')}: output over ${MAX_BUFFER} bytes`));
+      if (timedOut) {
+        const error = new Error(`${argv.join(' ')}: timed out after ${timeoutMs} ms`);
+        error.code = 'ETIMEDOUT';
+        return reject(error);
+      }
       resolve({
         status: status ?? 1,
         stdout: Buffer.concat(out.stdout),
