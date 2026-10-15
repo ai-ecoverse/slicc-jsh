@@ -10,12 +10,18 @@
  * A message is structuredClone'd when it's posted and delivered on a later
  * turn, as a MessageEvent, to every other open channel of its name, in the
  * order they were made. An open, ref'd channel keeps the program alive.
+ *
+ * The messages queued when a delivery turn starts are one batch, as a
+ * port's queue is drained in one poll phase: while a batch is delivered,
+ * `delivering.active` is true, and the timers hold a due timeout until it is
+ * done (a slow handler can't let one in between). Messages posted during a
+ * batch make the next one, after which due timers run first.
  */
 import { nodeError } from '../node-errors.mjs';
 
 const kInspect = Symbol.for('nodejs.util.inspect.custom');
 
-export function createBroadcastChannel({ handles, schedule }) {
+export function createBroadcastChannel({ handles, schedule, delivering = { active: false } }) {
   /** @type {Map<string, Set<BroadcastChannel>>} */
   const channels = new Map();
   const later = schedule ?? ((fn) => setTimeout(fn, 0));
@@ -34,12 +40,14 @@ export function createBroadcastChannel({ handles, schedule }) {
     // the next message, as Node's per-message checkpoint has it.
     const step = (due, i) => {
       if (i < due.length) {
+        delivering.active = true;
         const [ch, data] = due[i];
         ch._deliver(data);
         handles?.notify?.();
         later(() => step(due, i + 1));
         return;
       }
+      delivering.active = false;
       if (inbox.size > 0) {
         later(() => step(takeDue(), 0));
         return;

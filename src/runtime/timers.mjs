@@ -7,7 +7,7 @@
 function Timeout() {}
 function Immediate() {}
 
-export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
+export function createTimers(handles, { onCallbackError, afterCallback, hold = () => false } = {}) {
   const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
   const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
   const nativeSetInterval = globalThis.setInterval.bind(globalThis);
@@ -80,6 +80,7 @@ export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
       kind: 'Timeout',
       refed: true,
       id: null,
+      retry: null,
       repeating,
     };
     const handle = new Timeout();
@@ -87,8 +88,22 @@ export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
     attachRefApi(handle, state);
     const domain = currentDomain();
 
+    // hold(): a due timeout waits (one task at a time) for what must run
+    // before it, the BroadcastChannel batch being delivered.
+    const retry = () => {
+      state.retry = null;
+      fire();
+    };
     const fire = () => {
       if (stopped) return;
+      if (hold()) {
+        state.retry ??= nativeSetTimeout(retry, 0);
+        return;
+      }
+      if (state.retry) {
+        nativeClearTimeout(state.retry);
+        state.retry = null;
+      }
       if (!state.repeating) {
         byId.delete(state.id);
         handles.delete(state);
@@ -135,6 +150,7 @@ export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
     if (state) {
       byId.delete(id);
       handles.delete(state);
+      if (state.retry) nativeClearTimeout(state.retry);
     }
     nativeClear(id);
   };
@@ -157,6 +173,7 @@ export function createTimers(handles, { onCallbackError, afterCallback } = {}) {
     clearImmediate: (handle) => clear(handle, nativeClearTimeout),
     clearPending() {
       for (const [id, state] of byId) {
+        if (state.retry) nativeClearTimeout(state.retry);
         if (state.repeating) nativeClearInterval(id);
         else nativeClearTimeout(id);
         handles.delete(state);
