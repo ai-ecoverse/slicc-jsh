@@ -2,16 +2,21 @@
 # the curl | sh installer (install.sh) on Linux and macOS.
 name: ci
 
+# A pull request runs on pull_request, and the merge queue's commit (which
+# becomes main's, merge method MERGE) on merge_group. A push runs nothing:
+# a branch push repeated its PR's run, and main's push the queue's.
+# workflow_dispatch runs it by hand on any ref.
 on:
-  push:
   pull_request:
+  merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/renovate/') }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ci:
