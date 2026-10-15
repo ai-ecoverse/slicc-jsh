@@ -1,0 +1,5 @@
+{
+  "description": "#195: createServer's timeout options as Node's (headersTimeout defaults to min(60 s, requestTimeout)), and close(cb) during a streamed response (written before close) comes after the client's 'end'",
+  "argv": ["script.js"],
+  "shim": true
+}

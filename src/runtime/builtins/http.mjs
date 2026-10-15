@@ -403,13 +403,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       this.#socket.write(payload, () => {
         this.finished = true;
         this.emit('finish');
-        if (this.shouldKeepAlive && typeof this._onKeptAlive === 'function' && !this.#socket.destroyed) {
-          // Keep-alive: the connection takes its next request.
-          this._onKeptAlive();
-        } else if (this._server?._closing && !this.#socket.destroyed) {
-          // close() is waiting: end our side and let the client close its
-          // own once it has read the response, so close's callback comes
-          // after the client's 'end', as in Node.
+        if (this._server?._closing && !this.#socket.destroyed) {
+          // close() is waiting (it wins over a keep-alive decided before it
+          // was called, a streamed response's): end our side and let the
+          // client close its own once it has read the response, so close's
+          // callback comes after the client's 'end', as in Node.
           const socket = this.#socket;
           const done = () => {
             clearTimeout(timer);
@@ -428,6 +426,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
           } catch {
             done();
           }
+        } else if (this.shouldKeepAlive && typeof this._onKeptAlive === 'function' && !this.#socket.destroyed) {
+          // Keep-alive: the connection takes its next request.
+          this._onKeptAlive();
         } else {
           try {
             this.#socket.unref?.();
@@ -750,12 +751,14 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       this.#requestListener = requestListener;
       // Node's options for them (lib/_http_server.js storeHTTPOptions):
       // integers >= 0, and headersTimeout no longer than requestTimeout.
-      for (const key of ['headersTimeout', 'requestTimeout', 'keepAliveTimeout']) {
+      for (const key of ['requestTimeout', 'headersTimeout', 'keepAliveTimeout']) {
         const value = options?.[key];
         if (value === undefined) continue;
         validateInteger(value, key, 0);
         this[key] = value;
       }
+      // Node: headersTimeout defaults to min(60 s, requestTimeout).
+      if (options?.headersTimeout === undefined) this.headersTimeout = Math.min(60000, this.requestTimeout);
       if (this.requestTimeout > 0 && this.headersTimeout > 0 && this.headersTimeout > this.requestTimeout) {
         throw ERR_OUT_OF_RANGE('headersTimeout', '<= requestTimeout', this.headersTimeout);
       }
