@@ -26,6 +26,34 @@ jobs:
     if: github.ref == 'refs/heads/main'
     uses: ai-ecoverse/slicc-shared-web/.github/workflows/node-release.yml@v1.20.0
     with:
-      node-version: '24.21.0'
+      # renovate: datasource=node-version depName=node versioning=node
+      node-version: '24.22.0'
       test: npm test
     secrets: inherit
+
+  # The release line for the cert lane: when the release job published (a v*
+  # tag on this commit), the tarball re-fetched from the registry, its
+  # gitHead, sha256, sha512 integrity and npm provenance commit checked
+  # against the released commit, plus whether main contains it (onMain),
+  # written into the GitHub release's body.
+  release-line:
+    needs: release
+    if: needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          # renovate: datasource=node-version depName=node versioning=node
+          node-version: '24.22.0'
+      - name: Release line
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --tags --force origin
+          node scripts/release-line.mjs
