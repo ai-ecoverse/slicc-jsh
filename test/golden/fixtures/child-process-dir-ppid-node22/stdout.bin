@@ -1,0 +1,7 @@
+spawnSync dir: ["EACCES",-13,"spawnSync <work>/adir","<work>/adir",["x"]] null 0
+execFileSync dir: EACCES -13 spawnSync <work>/adir EACCES
+PATH with only a directory: EACCES
+ppid after an assignment unchanged: true number
+in a module: no throw true 
+spawn dir error: EACCES -13 spawn <work>/adir EACCES undefined
+close -13

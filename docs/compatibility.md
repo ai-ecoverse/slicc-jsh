@@ -79,7 +79,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - SIGPIPE is ignored from the start, as in Node, so a write to a pipe whose reader is gone fails with `EPIPE`. stdout and stderr are never really destroyed (Node's `dummyDestroy`): every failed write emits `'error'` again. `console` swallows only the first one, so a program that keeps logging to a dead pipe ends with status 1, as Node's does. Removing the last `'SIGPIPE'` listener brings back the default action (death by the signal, 141).
 
 **Other members.**
-- `process.chdir` throws Node's `ENOENT`/`ENOTDIR` errors. `process.ppid` comes from the kernel.
+- `process.chdir` throws Node's `ENOENT`/`ENOTDIR` errors. `process.ppid` comes from the kernel: on each read from `/proc` on slicc-kernel 1.89.0 and later (1 once the parent has ended), else the value at start. As in Node, an assignment to it changes nothing.
 - `process.env` stores strings, as Node's does.
 - `process.umask()` and `process.umask(mask)` work on the kernel's umask on slicc-kernel 1.92.0 and later (`ctx.sync.umask`). A child inherits it, and the kernel applies it to what the program creates. Arguments are parsed as Node's are. As in Node 22, calling it with no argument prints no warning (DEP0139 is documentation-only there).
 - Older kernels:
@@ -166,8 +166,8 @@ An existing file keeps its mode. `copyFile` gives the copy the source's mode, wh
 
 **Finding the command.** A bare name is found on the child's `PATH` (`options.env`'s, else `/usr/bin:/bin`), as `execvp` does, for `spawn`, `execFile`, `spawnSync` and `execFileSync`:
 - The first directory with an executable regular file wins. Directories and files without `x` are passed over, and an empty entry means the cwd.
-- `EACCES` when only files without `x` match.
-- The kernel's commands are files in `/usr/bin` and `/bin`, so `PATH` order decides a clash, as it does for bash in the kernel. A name found nowhere on `PATH` goes to the kernel, which runs its command of that name or gives `ENOENT`.
+- `EACCES` when only files without `x`, or directories, match. A directory run by path is `EACCES` too, as `execve` gives it (the kernel says `ENOENT`, [slicc-kernel#626](https://github.com/ai-ecoverse/slicc-kernel/issues/626)).
+- The kernel's commands are files in `/usr/bin` and `/bin`, so `PATH` order decides a clash, as it does for bash in the kernel. A name found nowhere on the child's `PATH` is `ENOENT`, as in Node, even when the kernel knows a command of that name (`env: { PATH: '/nonexistent' }` doesn't find `sh`).
 - A name with a `/` is never searched.
 
 **Sync.** `spawnSync`, `execSync` and `execFileSync` are Node 22's own option handling and result and throw shapes, on the kernel's `ctx.sync.run`. They need slicc-kernel 1.65.0; on an older kernel they throw `ERR_NOT_SUPPORTED`, naming the version needed. Supported:
@@ -357,7 +357,7 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `cluster`, `tls`, `http2`, `dns`, `dgram`, `inspector`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `cluster`, `tls`, `http2`, `dns`, `dns/promises`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
 
 **`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, and `BroadcastChannel`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).

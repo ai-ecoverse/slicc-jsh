@@ -352,11 +352,25 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
    * file, empty entries meaning the cwd. The kernel's commands are files in
    * /usr/bin and /bin, so PATH order decides a clash, as bash in the kernel
    * does. Returns the path to run, or the name when nothing on PATH is
-   * executable: then the kernel resolves it (its commands, else ENOENT), or,
-   * when only files without x were found, the first of those, which the
-   * kernel refuses with EACCES, as execvp reports it. A name with a '/' is
+   * executable: then a path on it that isn't there, so the spawn is ENOENT
+   * as Node's (the kernel would find its own command by name, whatever
+   * PATH says), or, when only directories or files without x were found,
+   * the first of those, which the spawn reports as EACCES, as execvp does. A name with a '/' is
    * never searched.
    */
+  /**
+   * Linux's execve of a directory is EACCES; the kernel says ENOENT
+   * (ai-ecoverse/slicc-kernel#626). `target` is the path that was run.
+   */
+  function spawnCode(code, target, cwd) {
+    if (code !== 'ENOENT' || typeof target !== 'string' || !target.includes('/')) return code;
+    try {
+      return ctx.sync?.fs?.stat?.(path.resolve(cwd, target))?.isDirectory ? 'EACCES' : code;
+    } catch {
+      return code;
+    }
+  }
+
   function resolveOnPath(file, env, cwd) {
     if (!file || file.includes('/')) return file;
     // libuv's: the child's environment's PATH, else _PATH_DEFPATH.
@@ -383,11 +397,20 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       } catch {
         continue;
       }
-      if (st.isDirectory || (typeof st.mode === 'number' && (st.mode & 0o170000) !== 0o100000 && (st.mode & 0o170000) !== 0)) continue;
+      // execvp passes a directory over too, but remembers it as EACCES.
+      if (st.isDirectory) {
+        denied ??= full;
+        continue;
+      }
+      if (typeof st.mode === 'number' && (st.mode & 0o170000) !== 0o100000 && (st.mode & 0o170000) !== 0) continue;
       if (executable(st)) return full;
       denied ??= full;
     }
-    return denied ?? file;
+    if (denied) return denied;
+    // Nothing on the child's PATH: Node's ENOENT. The kernel would find its
+    // command by name whatever PATH says, so run a path that isn't there.
+    const first = pathVar.split(':')[0];
+    return path.resolve(cwd, first === '' ? '.' : first, file);
   }
 
   /** Kernel stdio for a slot: a jsh fd becomes a pipe that jsh serves. */
@@ -728,7 +751,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     };
 
     const failed = (err) => {
-      const code = err?.code ?? 'ERR_SPAWN_FAILED';
+      const code = spawnCode(err?.code ?? 'ERR_SPAWN_FAILED', argv[0], cwd);
       const errno = RUNTIME_SPAWN_ERRNO[code];
       const error =
         errno !== undefined
@@ -1269,7 +1292,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         }
       }
       raw ??= ctx.sync.run(req);
-      if (raw.error && raw.pid === 0 && raw.status === null) failed = raw.error.code ?? 'ENOENT';
+      if (raw.error && raw.pid === 0 && raw.status === null) failed = spawnCode(raw.error.code ?? 'ENOENT', req.argv[0], req.cwd);
     }
 
     if (failed && !raw?.pid) {

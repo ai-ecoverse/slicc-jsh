@@ -377,6 +377,8 @@ const BUILTIN_NAMES = new Set([
   'stream/web',
   'sys',
   'inspector',
+  'inspector/promises',
+  'dns/promises',
   'trace_events',
   'wasi',
 ]);

@@ -1,0 +1,6 @@
+{
+  "description": "#192: a bare command is looked up on the child's own env.PATH: with PATH=/nonexistent, sh is ENOENT (spawnSync, spawn, execFileSync), as Node's, though the kernel knows sh by name; without PATH in env, libuv's /usr/bin:/bin finds it. /bin/sh from wasm-bash",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-bash"]
+}

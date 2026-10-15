@@ -954,6 +954,28 @@ function nodeShape(process) {
     const desc = Object.getOwnPropertyDescriptor(process, name);
     if (desc && 'value' in desc) Object.defineProperty(process, name, { value: desc.value, writable: false, enumerable: true, configurable });
   }
+  // Node's ppid: asked of the OS on each read (a parent that ends makes it
+  // 1), and an assignment changes nothing. /proc says it on slicc-kernel
+  // 1.89.0+; before that, the value at start.
+  const startPpid = process.ppid;
+  let procPpid = true;
+  Object.defineProperty(process, 'ppid', {
+    get() {
+      if (procPpid) {
+        try {
+          const m = /^PPid:\s*(\d+)/m.exec(new TextDecoder().decode(process._ctx.sync.fs.readFile('/proc/self/status')));
+          if (m) return Number(m[1]);
+        } catch {
+          /* no /proc for JS programs */
+        }
+        procPpid = false;
+      }
+      return startPpid;
+    },
+    set() {},
+    enumerable: true,
+    configurable: true,
+  });
   // Each version is read-only too, as Node's.
   for (const key of Object.keys(process.versions ?? {})) {
     Object.defineProperty(process.versions, key, { value: process.versions[key], writable: false, enumerable: true, configurable: true });
