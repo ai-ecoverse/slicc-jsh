@@ -1,0 +1,5 @@
+{
+  "description": "ClientRequest's method / host / path as Node's: options merged over a URL win (https.request(url, { hostname, path })), an IPv6 URL's host has no brackets, an object form's host stays as given",
+  "argv": ["script.js"],
+  "shim": true
+}

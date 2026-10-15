@@ -1553,7 +1553,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       }
       options = {
         protocol: url.protocol,
-        hostname: url.hostname,
+        // Node's urlToHttpOptions: an IPv6 address without its brackets.
+        hostname: url.hostname.startsWith('[') ? url.hostname.slice(1, -1) : url.hostname,
         port: url.port || (url.protocol === 'https:' ? 443 : 80),
         path: `${url.pathname}${url.search}`,
         method: options?.method,

@@ -62,10 +62,10 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
       this.#opts = options;
       this.#headers = headersToObject(options?.headers);
       // Node's: what the request is, readable as res.req's.
-      const u = options?.href ? new URL(options.href) : null;
+      // The options as merged over the URL: an overriding path or hostname wins.
       this.method = String(options?.method ?? 'GET').toUpperCase();
-      this.path = u ? `${u.pathname}${u.search}` : (options?.path ?? '/');
-      this.host = u ? u.hostname.replace(/^\[|\]$/g, '') : (options?.hostname ?? options?.host ?? 'localhost');
+      this.path = options?.path ?? '/';
+      this.host = String(options?.hostname ?? options?.host ?? 'localhost').replace(/^\[|\]$/g, '');
       this.protocol = 'https:';
       if (callback) this.once('response', callback);
     }
@@ -151,15 +151,11 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
         if (typeof ctx.fetch !== 'function') throw notSupported('https.request');
         const opts = this.#opts;
         const method = (opts.method ?? 'GET').toUpperCase();
-        let host = opts.hostname ?? opts.host ?? 'localhost';
-        let port = opts.port ?? 443;
-        let path = opts.path ?? '/';
-        if (opts.href) {
-          const u = new URL(opts.href);
-          host = u.hostname.replace(/^\[|\]$/g, '');
-          port = u.port || 443;
-          path = `${u.pathname}${u.search}`;
-        }
+        // The options as merged over the URL (an overriding path, hostname
+        // or port wins, as in Node).
+        const host = String(opts.hostname ?? opts.host ?? 'localhost').replace(/^\[|\]$/g, '');
+        const port = opts.port ?? 443;
+        const path = opts.path ?? '/';
         // The kernel's loopback has no TLS (a fetch there is refused, or on
         // older kernels the transport answers 403): connect first, so a
         // port nothing listens on is ECONNREFUSED, as Node's.
@@ -212,7 +208,7 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
       }
       options = {
         protocol: 'https:',
-        hostname: url.hostname,
+        hostname: url.hostname.startsWith('[') ? url.hostname.slice(1, -1) : url.hostname,
         port: url.port || 443,
         path: `${url.pathname}${url.search}`,
         href: url.href,
