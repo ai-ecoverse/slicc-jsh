@@ -287,7 +287,10 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
           parentPort: null,
           workerData: null,
           BroadcastChannel: process._broadcastChannel,
-          setEnvironmentData: (key, value) => (value === undefined ? environmentData.delete(key) : environmentData.set(key, value)),
+          setEnvironmentData(key, value) {
+            if (value === undefined) environmentData.delete(key);
+            else environmentData.set(key, value);
+          },
           getEnvironmentData: (key) => environmentData.get(key),
         };
       })()),

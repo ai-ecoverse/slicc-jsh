@@ -48,5 +48,28 @@ setTimeout(() => {
   a.close();
   b.close();
   other.unref();
-  // other is unref'd, the rest closed: the program ends.
+  // Microtasks a handler queues run before the next message (Node's checkpoint per message).
+  const x = new BroadcastChannel('m');
+  const y = new BroadcastChannel('m');
+  const z = new BroadcastChannel('m');
+  const order = [];
+  y.onmessage = (e) => {
+    order.push(`y ${e.data}`);
+    queueMicrotask(() => order.push(`y micro ${e.data}`));
+    Promise.resolve().then(() => Promise.resolve()).then(() => order.push(`y deep ${e.data}`));
+  };
+  z.onmessage = (e) => order.push(`z ${e.data}`);
+  x.onmessage = (e) => order.push(`x ${e.data}`);
+  x.postMessage('m1');
+  x.postMessage('m2');
+  y.postMessage('m3');
+  setTimeout(() => {
+    console.log(order.join(' | '));
+    x.close();
+    y.close();
+    z.close();
+    const wt = require('worker_threads');
+    console.log('setEnvironmentData returns', wt.setEnvironmentData('k', 1), wt.getEnvironmentData('k'));
+    // other is unref'd, the rest closed: the program ends.
+  }, 30);
 }, 20);

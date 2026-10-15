@@ -9,3 +9,5 @@ c got "from b"
 after close: InvalidStateError 11 BroadcastChannel is closed.
 closed inspect: BroadcastChannel { name: 'room', active: false }
 ref/unref return the channel: true true
+x m3 | y m1 | y micro m1 | y deep m1 | y m2 | y micro m2 | y deep m2 | z m1 | z m2 | z m3
+setEnvironmentData returns undefined 1

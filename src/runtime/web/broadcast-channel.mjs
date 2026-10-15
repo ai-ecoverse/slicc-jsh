@@ -30,14 +30,33 @@ export function createBroadcastChannel({ handles, schedule }) {
     // Hold the program until the messages are delivered, as queued port messages do.
     flushing = { kind: 'broadcast-message' };
     handles?.add(flushing);
-    later(() => {
+    // One message per task, so the microtasks a handler queues run before
+    // the next message, as Node's per-message checkpoint has it.
+    const step = (due, i) => {
+      if (i < due.length) {
+        const [ch, data] = due[i];
+        ch._deliver(data);
+        handles?.notify?.();
+        later(() => step(due, i + 1));
+        return;
+      }
+      if (inbox.size > 0) {
+        later(() => step(takeDue(), 0));
+        return;
+      }
       handles?.delete(flushing);
       flushing = null;
-      const due = [...inbox.entries()].sort(([x], [y]) => x._order - y._order);
-      inbox.clear();
-      for (const [ch, messages] of due) for (const data of messages) ch._deliver(data);
       handles?.notify?.();
-    });
+    };
+    later(() => step(takeDue(), 0));
+  };
+  const takeDue = () => {
+    const due = [];
+    for (const [ch, messages] of [...inbox.entries()].sort(([x], [y]) => x._order - y._order)) {
+      for (const data of messages) due.push([ch, data]);
+    }
+    inbox.clear();
+    return due;
   };
 
   class BroadcastChannel extends EventTarget {
