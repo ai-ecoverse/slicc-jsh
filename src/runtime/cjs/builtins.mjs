@@ -3,6 +3,7 @@ import { createChildProcess } from '../builtins/child-process.mjs';
 import { createEvents } from '../builtins/events.mjs';
 import { createFs } from '../builtins/fs.mjs';
 import { createHttp } from '../builtins/http.mjs';
+import { createFetch } from '../web/fetch.mjs';
 import { createHttps } from '../builtins/https.mjs';
 import { createNet } from '../builtins/net.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
@@ -209,13 +210,15 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     return net;
   };
   let http;
+  let kernelFetch;
   const getHttp = () => {
-    if (!http) http = createHttp({ ctx, process, Buffer, handles, getStream, net: getNet() });
+    // Its fetch fallback (no route) goes through jsh's own fetch, as fetch() does.
+    if (!http) http = createHttp({ ctx, process, Buffer, handles, getStream, net: getNet(), getFetch: () => (kernelFetch ??= createFetch(ctx, { handles, getHttp })) });
     return http;
   };
   let https;
   const getHttps = () => {
-    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles });
+    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles, getStream });
     return https;
   };
   let tty;

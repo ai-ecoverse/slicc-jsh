@@ -1,10 +1,11 @@
 /**
- * node:https — createServer awaits kernel TLS; client request/get use ctx.fetch.
- * Prefer redirect: 'manual' (Node-like). On transports that reject it (browser
- * fetchTransport → ENOTSUP), fall back to 'follow' so plain GETs still work.
+ * node:https — createServer awaits kernel TLS; client request/get go through
+ * the fetch client http shares (http-fetch.mjs): redirect: 'manual' where the
+ * transport can, the response body streamed.
  */
 import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
+import { createFetchClient } from './http-fetch.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
 
@@ -12,13 +13,6 @@ function notSupported(what) {
   const err = new Error(`slicc-jsh: '${what}' is not supported yet (no TLS on ctx.net)`);
   err.code = 'ERR_NOT_SUPPORTED';
   return err;
-}
-
-function isManualRedirectUnsupported(err) {
-  const code = err?.cause?.code ?? err?.code;
-  if (code === 'ENOTSUP') return true;
-  const msg = String(err?.cause?.message ?? err?.message ?? '');
-  return /redirect:\s*manual/i.test(msg);
 }
 
 function rejectTlsOptions(options) {
@@ -45,25 +39,8 @@ function headersToObject(headers) {
   return out;
 }
 
-export function createHttps({ ctx, Buffer, http, handles }) {
-  // Kernel rejects redirect:'manual' with ENOTSUP before send() when the
-  // transport lacks traits.manualRedirects (browser fetchTransport). Remember
-  // per process so we do not probe twice on every request.
-  let manualRedirects = true;
-
-  /** ctx.fetch with redirect:manual, falling back to follow when unsupported. */
-  async function fetchHttp(url, init) {
-    if (!manualRedirects) {
-      return ctx.fetch(url, { ...init, redirect: 'follow' });
-    }
-    try {
-      return await ctx.fetch(url, { ...init, redirect: 'manual' });
-    } catch (err) {
-      if (!isManualRedirectUnsupported(err)) throw err;
-      manualRedirects = false;
-      return ctx.fetch(url, { ...init, redirect: 'follow' });
-    }
-  }
+export function createHttps({ ctx, Buffer, http, handles, getStream }) {
+  const client = createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODES: http?.STATUS_CODES });
 
   function createServer() {
     throw notSupported('https.createServer');
@@ -168,35 +145,31 @@ export function createHttps({ ctx, Buffer, http, handles }) {
         if (typeof ctx.fetch !== 'function') throw notSupported('https.request');
         const opts = this.#opts;
         const method = (opts.method ?? 'GET').toUpperCase();
-        const host = opts.hostname ?? opts.host ?? 'localhost';
-        const port = opts.port ? `:${opts.port}` : '';
-        const path = opts.path ?? '/';
-        const url = opts.href ?? `https://${host}${port}${path}`;
-        const body =
-          method === 'GET' || method === 'HEAD'
-            ? undefined
-            : this.#body.length
-              ? Buffer.concat(this.#body)
-              : undefined;
-        const res = await fetchHttp(url, {
+        let host = opts.hostname ?? opts.host ?? 'localhost';
+        let port = opts.port ?? 443;
+        let path = opts.path ?? '/';
+        if (opts.href) {
+          const u = new URL(opts.href);
+          host = u.hostname.replace(/^\[|\]$/g, '');
+          port = u.port || 443;
+          path = `${u.pathname}${u.search}`;
+        }
+        const incoming = await client.send({
+          protocol: 'https:',
+          host,
+          port,
+          path,
           method,
           headers: this.#headers,
-          body,
+          body: this.#body.length ? Buffer.concat(this.#body) : undefined,
           signal: this.#abort.signal,
+          req: this,
         });
-        if (this.#destroyed) return;
-        const ab = method === 'HEAD' ? new ArrayBuffer(0) : await res.arrayBuffer();
-        if (this.#destroyed) return;
-        const buf = Buffer.from(ab);
-        const incoming = http.IncomingMessage(null, buf);
-        incoming.statusCode = res.status;
-        incoming.statusMessage = res.statusText;
-        incoming.headers = Object.create(null);
-        incoming.rawHeaders = [];
-        res.headers.forEach((value, key) => {
-          incoming.headers[String(key).toLowerCase()] = value;
-          incoming.rawHeaders.push(key, value);
-        });
+        if (this.#destroyed) {
+          incoming.destroy();
+          return;
+        }
+        this.res = incoming;
         queueMicrotask(() => {
           if (this.#destroyed) return;
           this.emit('response', incoming);
