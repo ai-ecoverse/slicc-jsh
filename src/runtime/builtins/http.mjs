@@ -1022,6 +1022,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       super({ autoDestroy: false });
       this.#opts = options;
       this.reusedSocket = false;
+      // Node's: what the request is, readable as res.req's.
+      this.method = String(options.method ?? 'GET').toUpperCase();
+      this.path = options.path ?? '/';
+      this.host = options.hostname ?? options.host ?? 'localhost';
+      this.protocol = options.protocol ?? 'http:';
       for (const [k, v] of Object.entries(options.headers ?? {})) {
         this.#headers[String(k).toLowerCase()] = String(v);
         this.#names[String(k).toLowerCase()] = String(k);

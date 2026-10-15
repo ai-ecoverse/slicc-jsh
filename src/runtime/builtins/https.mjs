@@ -5,7 +5,7 @@
  */
 import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
-import { createFetchClient } from './http-fetch.mjs';
+import { connectError, createFetchClient, isLoopbackHost } from './http-fetch.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
 
@@ -61,6 +61,12 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
       rejectTlsOptions(options);
       this.#opts = options;
       this.#headers = headersToObject(options?.headers);
+      // Node's: what the request is, readable as res.req's.
+      const u = options?.href ? new URL(options.href) : null;
+      this.method = String(options?.method ?? 'GET').toUpperCase();
+      this.path = u ? `${u.pathname}${u.search}` : (options?.path ?? '/');
+      this.host = u ? u.hostname.replace(/^\[|\]$/g, '') : (options?.hostname ?? options?.host ?? 'localhost');
+      this.protocol = 'https:';
       if (callback) this.once('response', callback);
     }
 
@@ -153,6 +159,19 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
           host = u.hostname.replace(/^\[|\]$/g, '');
           port = u.port || 443;
           path = `${u.pathname}${u.search}`;
+        }
+        // The kernel's loopback has no TLS (a fetch there is refused, or on
+        // older kernels the transport answers 403): connect first, so a
+        // port nothing listens on is ECONNREFUSED, as Node's.
+        if (isLoopbackHost(host) && typeof ctx.net?.connect === 'function') {
+          let conn;
+          try {
+            conn = await ctx.net.connect({ host: /localhost\.?$/i.test(host) ? '127.0.0.1' : host, port: Number(port) });
+          } catch (err) {
+            throw connectError(err?.code ?? err?.cause?.code ?? 'ECONNREFUSED', host, port, err);
+          }
+          void conn.close?.();
+          throw notSupported("https to the kernel's own loopback (it has no TLS)");
         }
         const incoming = await client.send({
           protocol: 'https:',
