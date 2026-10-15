@@ -47,7 +47,10 @@ describe('child_process detached (kernel terminal)', () => {
         "const cp = require('child_process');",
         `cp.spawn(process.execPath, ['-e', ${JSON.stringify(child('/tmp/det-on'))}], { stdio: 'ignore', detached: true }).unref();`,
         `cp.spawn(process.execPath, ['-e', ${JSON.stringify(child('/tmp/det-off'))}], { stdio: 'ignore' });`,
-        "setTimeout(() => console.log('ready'), 600);",
+        // Ready once both children have looked at /dev/tty (a fixed wait
+        // lost to a slow spawn: ^C then came before the attached child's mark).
+        "const marked = () => ['/tmp/det-on.tty', '/tmp/det-off.tty'].every((f) => require('fs').existsSync(f));",
+        "const poll = setInterval(() => { if (marked()) { clearInterval(poll); console.log('ready'); } }, 50);",
         'setTimeout(() => {}, 20000);',
         '',
       ].join('\n'),
