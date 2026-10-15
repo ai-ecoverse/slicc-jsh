@@ -7,11 +7,12 @@
  * skip() → SKIP (not PASS). STRICT=1 exits 1 on any FAIL.
  *
  * The files run in batches of BATCH (default 40), each batch in a process
- * (and kernel) of its own, one after another: in one process the kernel's
- * memory for all of them (test-string-decoder alone takes a 512 MB Buffer)
- * grows past mem-guard's 2 GB per process.
+ * (and kernel) of its own, NP_JOBS (default 2) at a time: in one process the
+ * kernel's memory for all of them (test-string-decoder alone takes a 512 MB
+ * Buffer) grows past mem-guard's 2 GB per process, and two batches stay
+ * under its 3 GB for the tree (1.1 GB at peak locally; 3 jobs, 1.7 GB).
  */
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { readdirSync, readFileSync, writeFileSync, mkdtempSync, cpSync, rmSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -24,6 +25,7 @@ const fixturesDir = join(here, 'fixtures');
 const nodeCommonDir = join(here, 'node-common');
 const TIMEOUT_MS = 20_000;
 const BATCH = Math.max(1, Number(process.env.BATCH) || 40);
+const JOBS = Math.max(1, Number(process.env.NP_JOBS) || 2);
 
 const allFiles = readdirSync(fixturesDir)
   .filter((f) => f.startsWith('test-') && f.endsWith('.js'))
@@ -33,20 +35,36 @@ const allFiles = readdirSync(fixturesDir)
 
 // The parent: each batch in a child process (this file, with NP_FILES).
 if (!process.env.NP_FILES) {
-  const results = [];
   const scratch = mkdtempSync(join(tmpdir(), 'node-parallel-'));
-  for (let start = 0; start < allFiles.length; start += BATCH) {
-    const out = join(scratch, `batch-${start}.json`);
-    const r = spawnSync(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], {
-      env: { ...process.env, NP_FILES: JSON.stringify(allFiles.slice(start, start + BATCH)), NP_RESULTS: out },
-      stdio: ['ignore', 'inherit', 'inherit'],
+  const starts = [];
+  for (let start = 0; start < allFiles.length; start += BATCH) starts.push(start);
+  // A batch's own lines (# PASS …) go to stdout as they come; the results
+  // are collected in file order whatever order the batches end in.
+  const runBatch = (start) =>
+    new Promise((resolve) => {
+      const out = join(scratch, `batch-${start}.json`);
+      const child = spawn(process.execPath, [...process.execArgv, fileURLToPath(import.meta.url)], {
+        env: { ...process.env, NP_FILES: JSON.stringify(allFiles.slice(start, start + BATCH)), NP_RESULTS: out },
+        stdio: ['ignore', 'inherit', 'inherit'],
+      });
+      child.on('close', (status, signal) => {
+        if (status !== 0 || !existsSync(out)) {
+          console.error(`node-parallel: batch from ${allFiles[start]} ended with ${status ?? signal}`);
+          process.exit(1);
+        }
+        resolve(JSON.parse(readFileSync(out, 'utf8')));
+      });
     });
-    if (r.status !== 0 || !existsSync(out)) {
-      console.error(`node-parallel: batch from ${allFiles[start]} ended with ${r.status ?? r.signal}`);
-      process.exit(1);
+  const batches = new Array(starts.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < starts.length) {
+      const i = next++;
+      batches[i] = await runBatch(starts[i]);
     }
-    results.push(...JSON.parse(readFileSync(out, 'utf8')));
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(JOBS, starts.length) }, worker));
+  const results = batches.flat();
   rmSync(scratch, { recursive: true, force: true });
 
   const pass = results.filter((r) => r.status === 'PASS');
