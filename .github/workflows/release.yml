@@ -22,6 +22,8 @@ concurrency:
 
 jobs:
   release:
+    # Publish only from main, also when dispatched by hand from another branch.
+    if: github.ref == 'refs/heads/main'
     uses: ai-ecoverse/slicc-shared-web/.github/workflows/node-release.yml@v1.14.0
     with:
       node-version: '24.21.0'
