@@ -11,6 +11,8 @@ import assert from 'node:assert/strict';
 import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
 
 const needs = kernelAtLeast('1.86.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.fs.chmod (1.86.0)` };
+const has192 = kernelAtLeast('1.92.0') ? {} : { skip: `slicc-kernel ${kernelVersion}: no ctx.umask / writable BroadcastChannel slot (1.92.0)` };
+const old192 = kernelAtLeast('1.92.0') ? { skip: `slicc-kernel ${kernelVersion} leaves the BroadcastChannel slot open` } : {};
 
 describe('process.umask and new files under a user’s umask (kernel)', () => {
   let jsh;
@@ -65,13 +67,49 @@ describe('modules and globals jsh leaves out (kernel)', () => {
     assert.equal(r.stdout, 'undefined undefined\nERR_METHOD_NOT_IMPLEMENTED The lchmod() method is not implemented\n');
   });
 
-  it('BroadcastChannel is undefined and locked by the kernel', async () => {
+  it('BroadcastChannel: before slicc-kernel 1.92.0 the kernel locks the slot (undefined)', old192, async () => {
     const r = await jsh.run([
       'node',
       '-e',
-      "const d = Object.getOwnPropertyDescriptor(globalThis, 'BroadcastChannel'); console.log(typeof BroadcastChannel, d && d.configurable, d && d.writable)",
+      "const d = Object.getOwnPropertyDescriptor(globalThis, 'BroadcastChannel'); console.log(typeof BroadcastChannel, d && d.configurable, d && d.writable, typeof require('worker_threads').BroadcastChannel)",
     ]);
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout, 'undefined false false\n');
+    assert.equal(r.stdout, 'undefined false false function\n');
+  });
+
+  it('BroadcastChannel (1.92.0+) is jsh’s, never the platform’s: in-process only, not across programs', has192, async () => {
+    await jsh.kernel.writeFile(
+      '/os/bc-listen.js',
+      [
+        "const ch = new BroadcastChannel('shared-name');",
+        "ch.onmessage = (e) => { console.log('LEAK', JSON.stringify(e.data)); };",
+        "setTimeout(() => { console.log('listener heard nothing'); ch.close(); }, 1500);",
+      ].join('\n')
+    );
+    await jsh.kernel.writeFile(
+      '/os/bc-post.js',
+      [
+        "const native = /\\[native code\\]/.test(Function.prototype.toString.call(BroadcastChannel));",
+        "console.log('native', native, 'worker_threads same', require('worker_threads').BroadcastChannel === BroadcastChannel);",
+        "const a = new BroadcastChannel('shared-name'); const b = new BroadcastChannel('shared-name');",
+        "b.onmessage = (e) => { console.log('in-process', e.data); };",
+        "let n = 0; const t = setInterval(() => { a.postMessage('ping ' + n++); if (n === 5) { clearInterval(t); setTimeout(() => { a.close(); b.close(); }, 50); } }, 100);",
+      ].join('\n')
+    );
+    const [listener, poster] = await Promise.all([jsh.run(['node', 'bc-listen.js']), jsh.run(['node', 'bc-post.js'])]);
+    assert.equal(poster.status, 0, poster.stderr);
+    assert.equal(poster.stdout, 'native false worker_threads same true\nin-process ping 0\nin-process ping 1\nin-process ping 2\nin-process ping 3\nin-process ping 4\n');
+    assert.equal(listener.status, 0, listener.stderr);
+    assert.equal(listener.stdout, 'listener heard nothing\n');
+  });
+
+  it('process.umask(mask) (1.92.0+) is the kernel’s: a child inherits it', has192, async () => {
+    const r = await jsh.run([
+      'node',
+      '-e',
+      "const cp = require('child_process'); console.log(process.umask(0o027).toString(8), process.umask().toString(8)); console.log(cp.spawnSync('node', ['-e', 'console.log(process.umask().toString(8))'], { encoding: 'utf8' }).stdout.trim()); require('fs').writeFileSync('/tmp/um27', 'x', { mode: 0o666 }); console.log((require('fs').statSync('/tmp/um27').mode & 0o777).toString(8));",
+    ]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, '22 27\n27\n640\n');
   });
 });

@@ -81,7 +81,10 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 **Other members.**
 - `process.chdir` throws Node's `ENOENT`/`ENOTDIR` errors. `process.ppid` comes from the kernel.
 - `process.env` stores strings, as Node's does.
-- `process.umask()` starts as the process's umask in the kernel. jsh reads it once, from `/proc/self/status` on slicc-kernel 1.89.0 and later. On older kernels JS programs have no `/proc`, so jsh finds it from the mode the kernel gives a directory it makes in `/tmp`. `process.umask(mask)` parses as Node's does. It changes the umask jsh applies to the files it creates, not the kernel's, so children keep the kernel's.
+- `process.umask()` and `process.umask(mask)` work on the kernel's umask on slicc-kernel 1.92.0 and later (`ctx.sync.umask`). A child inherits it, and the kernel applies it to what the program creates. Arguments are parsed as Node's are. As in Node 22, calling it with no argument prints no warning (DEP0139 is documentation-only there).
+- Older kernels:
+  - `process.umask()` starts as the kernel's umask. jsh reads it once, from `/proc/self/status` on 1.89.0 and later, or before that from the mode the kernel gives a directory jsh makes in `/tmp`.
+  - `process.umask(mask)` changes only the umask jsh applies to the files it creates; children keep the kernel's.
 - `process.getuid`, `getgid` and the like read the kernel's credentials. `process.setuid`, `setgid`, `seteuid`, `setegid`, `setgroups` and `initgroups` follow Node on Linux; they're defined only on slicc-kernel 1.81.0 and later.
 - `process.versions` lists what the runtime has or mirrors: no openssl, brotli, ….
 - `argv0`, `pid`, `version`, `versions`, `arch`, `platform`, `release`, `config` and `features` are read-only, as in Node. `argv[0]` is `execPath`.
@@ -140,7 +143,7 @@ On older kernels `chmod` and `fchmod` check their arguments and that the path ex
 
 **Arguments first.** As in Node, fs checks its arguments before it touches the file system: open's flags, the data of `writeFile`/`appendFile`, and every `mode`. A path with a NUL byte is `ERR_INVALID_ARG_VALUE` (`existsSync` says `false`).
 
-**New files' modes.** On slicc-kernel 1.86.0 and later, a file or directory fs creates gets the mode it asked for, less `process.umask()`, as in Node:
+**New files' modes.** On slicc-kernel 1.86.0 and later, a file or directory fs creates gets the mode it asked for, less `process.umask()`, as in Node. On 1.92.0 and later the kernel creates it with that mode, so there's never a moment with another; on 1.86.0 to 1.91.x jsh `chmod`s it right after:
 - `writeFile`, `appendFile`, `open`, `FileHandle`s and `createWriteStream`: `mode`, default `0o666`;
 - `mkdir`, recursive included: `mode`, default `0o777`;
 - `mkdtemp`: `0o700`.
@@ -354,7 +357,14 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `worker_threads`, `cluster`, `tls`, `http2`, `dns`, `dgram`, `inspector`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `cluster`, `tls`, `http2`, `dns`, `dgram`, `inspector`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
 
-The one global that Node 22 has by default and the runtime doesn't is `BroadcastChannel`. The kernel's lockdown makes it `undefined` and not configurable, so jsh can't install one. The platform's `BroadcastChannel` would reach other contexts of the origin around the kernel. Node's own reaches only the threads of one process, which jsh could provide, but only if the kernel left the slot open, as it does for `fetch` and `WebSocket`.
+**`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, and `BroadcastChannel`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).
+
+**`BroadcastChannel`** is Node 22's, within one program:
+- Channels of one name get each other's messages: a structured clone, delivered as a `MessageEvent` on a later turn, to each channel in the order the channels were made. A channel never gets its own messages.
+- `close()`, `ref()`/`unref()`, `onmessage`, and Node's errors are as in Node. An open channel keeps the program alive.
+- Separate programs never hear each other, as separate Node processes don't.
+- It never touches the platform's `BroadcastChannel`, which the kernel withholds on purpose because it would reach other contexts of the origin.
+- It is the global on slicc-kernel 1.92.0 and later, where the lockdown leaves the slot writable. Before that the global stays `undefined`, and only `require('worker_threads').BroadcastChannel` has it.

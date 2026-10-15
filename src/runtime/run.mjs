@@ -25,6 +25,7 @@ import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
 import { createWebSocket } from './web/websocket.mjs';
+import { createBroadcastChannel } from './web/broadcast-channel.mjs';
 
 const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
 
@@ -348,6 +349,14 @@ export async function runNode(ctx, options = {}) {
   const fetch = createFetch(ctx, { handles, getHttp: () => process._builtin('http') });
   const restorePlatform = trackPlatformAsync(handles);
   const WebSocket = createWebSocket(ctx, { handles, trackPromise, getNet: () => process._builtin('net') });
+  // Node's BroadcastChannel, in-process, where the kernel leaves the slot
+  // writable and empty (slicc-kernel 1.92.0+). The platform's is never used.
+  // (worker_threads exports it on every kernel.)
+  const bcSlot = Object.getOwnPropertyDescriptor(globalThis, 'BroadcastChannel');
+  const JshBroadcastChannel = createBroadcastChannel({ handles, schedule: (fn) => timers.setImmediate(fn) });
+  const BroadcastChannel =
+    bcSlot && bcSlot.value === undefined && !bcSlot.get && (bcSlot.writable || bcSlot.configurable) ? JshBroadcastChannel : undefined;
+  process._broadcastChannel = JshBroadcastChannel;
 
   const timers = createTimers(handles, {
     afterCallback: () => flushTicks(),
@@ -401,6 +410,7 @@ export async function runNode(ctx, options = {}) {
     clearImmediate: timers.clearImmediate,
     fetch,
     WebSocket,
+    ...(BroadcastChannel ? { BroadcastChannel } : {}),
     // A Proxy that remembers its target and handler (node-inspect-extracted's),
     // so util.types.isProxy and inspect's showProxy / <Revoked Proxy> are Node's.
     Proxy: trackingProxy(),

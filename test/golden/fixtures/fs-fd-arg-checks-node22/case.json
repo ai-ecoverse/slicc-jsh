@@ -1,5 +1,6 @@
 {
-  "description": "Node's argument checks before the call: fd (int32 >= 0) of the f* calls, then mode / len / uid / gid / times, a path's type; callback forms throw them at the call. util.setTraceSigInt takes any value; util.getCallSite warns with type ExperimentalWarning",
+  "description": "Node's argument checks before the call: fd (int32 >= 0) of the f* calls, then mode / len / uid / gid / times, a path's type; callback forms throw them at the call. util.setTraceSigInt takes any value; util.getCallSite warns with type ExperimentalWarning (shim side on slicc-kernel 1.86.0+: before it, chmod's one-time JSH_NO_CHMOD warning is a deliberate difference)",
+  "kernel": "1.86.0",
   "argv": [
     "script.js"
   ],

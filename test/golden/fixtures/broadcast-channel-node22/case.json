@@ -1,0 +1,6 @@
+{
+  "description": "BroadcastChannel as Node 22's, within one program: channels of one name get each other's messages (a structured clone, a MessageEvent, on a later turn, in the order they were made), never their own, another name's never; onmessage and addEventListener; close() (posting after it is InvalidStateError), the missing-argument and DataCloneError errors, inspect, worker_threads.BroadcastChannel is the global; an open channel keeps the program alive until close() or unref(). Needs slicc-kernel 1.92.0's writable slot",
+  "kernel": "1.92.0",
+  "argv": ["script.js"],
+  "shim": true
+}
