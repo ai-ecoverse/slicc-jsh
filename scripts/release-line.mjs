@@ -94,8 +94,11 @@ const line = `${name}@${version} gitHead=${meta.gitHead} sha256=${sha256} integr
 console.log(line);
 if (dryRun) process.exit(0);
 
+// Only this script's block (its marker and the fenced line after it) is
+// replaced; what the release body has before and after it stays.
 const body = execFileSync('gh', ['release', 'view', tag, '--json', 'body', '--jq', '.body'], { encoding: 'utf8' });
-const kept = body.split(MARK)[0].trimEnd();
-const notes = `${kept}\n\n${MARK}\n\`\`\`\n${line}\n\`\`\`\n`;
+const block = `${MARK}\n\`\`\`\n${line}\n\`\`\``;
+const own = new RegExp(`${MARK}\\n\`\`\`\\n[^\\n]*\\n\`\`\``);
+const notes = own.test(body) ? body.replace(own, block) : `${body.trimEnd()}\n\n${block}\n`;
 execFileSync('gh', ['release', 'edit', tag, '--notes-file', '-'], { input: notes, stdio: ['pipe', 'inherit', 'inherit'] });
 console.log(`wrote the line into the ${tag} release`);
