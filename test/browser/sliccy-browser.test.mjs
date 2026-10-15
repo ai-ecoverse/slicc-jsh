@@ -4,8 +4,9 @@
  * `@ai-ecoverse/sliccy-browser` from the registry, both with `pnpm add -g`
  * inside the kernel, as seven's catalog installs packages; CDP to kernel
  * processes as seven has it: SLICC_CDP_URL, the kernel's 127.0.0.1:9222,
- * behind the kernel's `cdp` hook. Every script also runs on the host jsh
- * against the same browser, and both must print the same.
+ * behind the kernel's `cdp` hook, with what seven's CDP guard refuses
+ * refused. Every script also runs on the host jsh against the same browser,
+ * and both must print the same.
  *
  * SLICCY_BROWSER overrides the package (a registry spec, or a tarball's path).
  */
@@ -16,7 +17,7 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { launch } from './chrome.mjs';
 import { hostJshWith } from './host.mjs';
-import { booted, installJshAndBrowser, packJsh, SLICCY_BROWSER } from './kernel.mjs';
+import { booted, installJshAndBrowser, packJsh, SEVEN_REFUSED, SLICCY_BROWSER } from './kernel.mjs';
 import { startSite } from './site.mjs';
 
 const pack = mkdtempSync(join(tmpdir(), 'jsh-browser-pack-'));
@@ -63,6 +64,18 @@ const RESOLVE = `const browser = require('sliccy:browser');
 const ns = await import('sliccy:browser');
 console.log(Object.keys(browser).sort().join(','));
 console.log('import', ns.default === browser, ns.ensureTab === browser.ensureTab);
+`;
+
+/** A CDP method seven's guard refuses: its error, at once, not a hang. */
+const REFUSE = `const ws = new WebSocket(process.env.SLICC_CDP_URL);
+await new Promise((resolve) => (ws.onopen = resolve));
+const started = Date.now();
+const reply = await new Promise((resolve) => {
+  ws.onmessage = ({ data }) => resolve(JSON.parse(data));
+  ws.send(JSON.stringify({ id: 7, method: 'Runtime.addBinding', params: { name: 'probe' } }));
+});
+console.log(reply.id, reply.error?.message, Date.now() - started < 5000);
+ws.close();
 `;
 
 /** The #73 checklist, one line each; the script ends on its own (no process.exit). */
@@ -146,6 +159,12 @@ test('sliccy:browser in the kernel jsh, against the harness browser, as on the h
     const expected = '__esModule,cookie,default,ensureTab,eval,evalAsync,fetch,findTab,localStorage,websocket\nimport true true\n';
     assert.deepEqual(kernel, { status: 0, stdout: expected, stderr: '' });
     assert.deepEqual(onHost, { status: 0, stdout: expected, stderr: '' });
+  });
+
+  await t.test("a method seven's CDP guard refuses fails at once with the guard's error", async () => {
+    await k.write('/home/t/refuse.jsh', REFUSE);
+    const kernel = await k.run(['timeout', '30', 'jsh', '/home/t/refuse.jsh']);
+    assert.deepEqual(kernel, { status: 0, stdout: `7 ${SEVEN_REFUSED} true\n`, stderr: '' });
   });
 
   await t.test('the #73 checklist: same answers as the host jsh, and the script ends on its own', async () => {

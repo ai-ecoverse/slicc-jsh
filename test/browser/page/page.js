@@ -7,7 +7,8 @@
  * opens the connection through slicc-extension (`sliccExtension.cdp`) or the
  * local proxy's `/cdp` WebSocket; here it is relayed, one connection per
  * kernel client, to the harness Chromium's own browser endpoint (the test's
- * `cdpOut` binding and `cdpIn`), as slicc-kernel's cdp.test.mjs does. The
+ * `cdpOut` binding and `cdpIn`), as slicc-kernel's cdp.test.mjs does, and
+ * the relay refuses what seven's CDP guard refuses (kernel.mjs). The
  * kernel then serves it to its processes on 127.0.0.1:9222 and sets
  * SLICC_CDP_URL, exactly as in seven.
  */
