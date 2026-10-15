@@ -564,8 +564,15 @@ const Process = { process: class extends EventEmitter {
   }
 
   umask(mask) {
-    this._umask ??= this._kernelUmask();
-    if (mask === undefined) return this._umask;
+    // slicc-kernel 1.92.0 (#564): the kernel's own umask, which children
+    // inherit and the kernel applies to what the program creates.
+    const sync = this._ctx?.sync;
+    const kernel = typeof sync?.umask === 'function';
+    if (mask === undefined) {
+      if (kernel) return sync.umask();
+      this._umask ??= this._kernelUmask();
+      return this._umask;
+    }
     // Node's parseFileMode: a uint32, or an octal string.
     let value = mask ?? undefined;
     if (typeof value === 'string') {
@@ -573,6 +580,8 @@ const Process = { process: class extends EventEmitter {
       value = Number.parseInt(value, 8);
     }
     validateUint32(value, 'mask');
+    if (kernel) return sync.umask(value & 0o777);
+    this._umask ??= this._kernelUmask();
     const prev = this._umask;
     this._umask = value & 0o777;
     return prev;
@@ -585,6 +594,7 @@ const Process = { process: class extends EventEmitter {
    * (022 if that fails too).
    */
   _kernelUmask() {
+    if (typeof this._ctx?.sync?.umask === 'function') return this._ctx.sync.umask();
     if (this._kumask === undefined) {
       this._kumask = 0o022;
       const fs = this._ctx?.sync?.fs;
@@ -910,7 +920,7 @@ const OWN_INTERNALS = ['_getActiveHandles', '_getActiveRequests', '_rawDebug'];
  * and `for … in`. Declared up front, so a later assignment stays hidden too.
  */
 const JSH_INTERNALS = [
-  '_assignedExitCode', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
+  '_assignedExitCode', '_broadcastChannel', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
   '_dispatchSignal', '_evalCode', '_exitError', '_forcedExitCode', '_handles', '_nodeLib', '_onExit',
   '_onHardExit', '_options', '_reportSignal', '_reportSignalWrite', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
   '_stdio', '_stdoutWrite', '_umask', '_kumask', '_uncaughtCapture', '_writeStderr', '_writeStdout',

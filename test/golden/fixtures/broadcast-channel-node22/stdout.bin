@@ -1,0 +1,11 @@
+worker_threads export is the global: true function
+inspect: BroadcastChannel { name: 'room', active: true } name: room onmessageerror: null
+errors: TypeError ERR_MISSING_ARGS The "name" argument must be specified | TypeError ERR_MISSING_ARGS The "message" argument must be specified | DataCloneError 25
+posted (same turn)
+a got "from b"
+b got MessageEvent {"n":1,"list":[1,2],"when":"1970-01-01T00:00:00.000Z","map":{}} same=false date=true map=true origin="" source=null ports=0
+c got {"n":1,"list":[1,2],"when":"1970-01-01T00:00:00.000Z","map":{}}
+c got "from b"
+after close: InvalidStateError 11 BroadcastChannel is closed.
+closed inspect: BroadcastChannel { name: 'room', active: false }
+ref/unref return the channel: true true

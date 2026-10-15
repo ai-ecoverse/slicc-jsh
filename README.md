@@ -147,7 +147,7 @@ This table is the summary. Details, quirks and the libraries behind each module 
 | [`util`, `console`, `os`, `path`, `url`](docs/compatibility.md#util-console-os-path-url-querystring-punycode) | Node's own lib files | `os` reports the kernel (loopback only, Linux constants) | — |
 | [`vm`](docs/compatibility.md#vm) | scripts, contexts, `compileFunction`, dynamic `import()` | one realm: a context isn't a separate realm | `vm.Module`, `timeout`, `breakOnSigint`, `measureMemory` |
 | [`async_hooks`, `domain`, `perf_hooks`, `v8`, …](docs/compatibility.md#async_hooks-domain-perf_hooks-v8-and-diagnostics) | `AsyncResource`, `domain`, `diagnostics_channel`, `perf_hooks`, `v8` statistics | `createHook` hooks never run; domains don't follow promises | `AsyncLocalStorage`, `v8.serialize`, heap snapshots |
-| [Workers and the rest](docs/compatibility.md#modules-that-are-not-available) | — | — | `worker_threads`, `cluster`, `tls`, `http2`, `dns`, `dgram`, `inspector`, `trace_events`, `test`, `sqlite`, `wasi` |
+| [Workers and the rest](docs/compatibility.md#modules-that-are-not-available) | `worker_threads` as the main thread, `BroadcastChannel` within a program (the global from kernel 1.92) | `new Worker` throws `ERR_NOT_SUPPORTED` | `cluster`, `tls`, `http2`, `dns`, `dgram`, `inspector`, `trace_events`, `test`, `sqlite`, `wasi` |
 
 ## Kernel requirements
 
@@ -169,6 +169,8 @@ The package needs `slicc-kernel` 1.53.2 or later. These features need a newer ke
 | `fs.mkdir` without `recursive` is exclusive (`EEXIST`/`ENOENT` from the kernel; one winner among processes) | 1.86.0 | it checks, then creates, and makes a missing parent |
 | `child.pid` is set when `spawn()` returns | 1.87.0 | it is set by the `'spawn'` event |
 | a recursive `fs.rm` is one kernel call | 1.88.0 | jsh walks the tree |
+| `process.umask(mask)` sets the kernel's umask (children inherit it); new files are created with their mode | 1.92.0 | jsh's own umask; it `chmod`s new files after (1.86.0+) |
+| the `BroadcastChannel` global | 1.92.0 | `undefined`; `worker_threads.BroadcastChannel` has it |
 
 ## Develop
 

@@ -292,8 +292,15 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
    * `def` less its own umask; null when that is already it (or the kernel
    * can't chmod: before 1.86.0 the mode stays the kernel's).
    */
+  // slicc-kernel 1.92.0 (#564): ctx.sync.umask, and a mode on the kernel's
+  // creating writeFile / mkdir / open, which it applies less the umask, so
+  // a new file never has another mode, even for a moment.
+  const kernelModes = typeof ctx.sync?.umask === 'function';
+  /** The options that give a kernel create its mode (1.92.0+), else none. */
+  const createOpts = (mode, def, extra) =>
+    kernelModes ? { ...extra, mode: (mode ?? def) & 0o7777 } : extra;
   const createMode = (mode, def) => {
-    if (!kernelChmod) return null;
+    if (!kernelChmod || kernelModes) return null;
     // The default mode under the kernel's own umask is what the kernel made.
     if (process?._umask === undefined && (mode === undefined || (mode & 0o7777) === def)) return null;
     const want = (mode ?? def) & ~umaskNow() & 0o7777;
@@ -599,13 +606,14 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     const recursive = options === true || options?.recursive === true;
     // Node's mkdir: `mode` (or the options as a mode), default 0o777, less the umask.
     const modeArg = typeof options === 'number' || typeof options === 'string' ? options : isPlainOptionsObject(options) ? options.mode : undefined;
-    const dirMode = createMode(parseFileMode(modeArg, isPlainOptionsObject(options) ? 'options.mode' : 'mode', 0o777), 0o777);
+    const askedMode = parseFileMode(modeArg, isPlainOptionsObject(options) ? 'options.mode' : 'mode', 0o777);
+    const dirMode = createMode(askedMode, 0o777);
     if (!recursive) {
       if (exclusiveMkdir) {
         // The kernel answers EEXIST / ENOENT / ENOTDIR itself, so of two
         // processes making one name exactly one succeeds.
         try {
-          syncFs.mkdir(target, { recursive: false });
+          syncFs.mkdir(target, createOpts(askedMode, 0o777, { recursive: false }));
         } catch (err) {
           throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
         }
@@ -647,7 +655,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         continue;
       }
       try {
-        syncFs.mkdir(cur);
+        syncFs.mkdir(cur, createOpts(askedMode, 0o777));
         firstAbs ??= cur;
         applyCreateMode(cur, dirMode);
       } catch (err) {
@@ -897,7 +905,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       const target = abs(p);
       if (isDevicePath(target)) return writeThroughDescriptor(p, bytes, flag);
       // Node's open: options.mode (default 0o666) for a file it creates.
-      const want = createMode(isPlainOptionsObject(options) ? parseFileMode(options.mode, 'mode', 0o666) : undefined, 0o666);
+      const askedMode = isPlainOptionsObject(options) ? parseFileMode(options.mode, 'mode', 0o666) : undefined;
+      const want = createMode(askedMode, 0o666);
       const existed = want != null || flag.includes('x') ? syncFs.exists(target) : true;
       if (flag.includes('x') && existed) throw nodeFsError('EEXIST', 'open', pathArg);
       if (flag.startsWith('r')) {
@@ -919,7 +928,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         return;
       }
       try {
-        syncFs.writeFile(target, bytes);
+        syncFs.writeFile(target, bytes, createOpts(askedMode, 0o666));
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
       }
@@ -954,7 +963,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       if (isDevicePath(target)) return writeThroughDescriptor(p, next, flag);
       // 'ax' / 'ax+': O_EXCL, as the open behind Node's appendFile has it.
       if (flag.includes('x') && syncFs.exists(target)) throw nodeFsError('EEXIST', 'open', pathArg);
-      const want = createMode(isPlainOptionsObject(options) ? parseFileMode(options.mode, 'mode', 0o666) : undefined, 0o666);
+      const askedMode = isPlainOptionsObject(options) ? parseFileMode(options.mode, 'mode', 0o666) : undefined;
+      const want = createMode(askedMode, 0o666);
       let existed = true;
       try {
         let prev = new Uint8Array(0);
@@ -963,7 +973,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         const merged = new Uint8Array(prev.length + next.length);
         merged.set(prev);
         merged.set(next, prev.length);
-        syncFs.writeFile(target, merged);
+        syncFs.writeFile(target, merged, existed ? undefined : createOpts(askedMode, 0o666));
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
       }
@@ -1156,13 +1166,14 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       if (fl.exclusive && exists) throw nodeFsError('EEXIST', 'open', pathArg);
       if (!exists) {
         if (!fl.create) throw nodeFsError('ENOENT', 'open', pathArg);
+        const askedMode = parseFileMode(mode, 'mode', 0o666);
         try {
-          syncFs.writeFile(target, new Uint8Array(0));
+          syncFs.writeFile(target, new Uint8Array(0), createOpts(askedMode, 0o666));
         } catch (err) {
           throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
         }
         // Node's open: `mode` (default 0o666) less the umask, for the file it made.
-        applyCreateMode(target, createMode(parseFileMode(mode, 'mode', 0o666), 0o666));
+        applyCreateMode(target, createMode(askedMode, 0o666));
       } else if (fl.truncate) {
         try {
           syncFs.writeFile(target, new Uint8Array(0));
@@ -1373,7 +1384,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         if (!parentOk) throw nodeFsError('ENOENT', 'mkdtemp', namedError ? name : `${prefix}XXXXXX`);
         try {
           // Exclusive where the kernel has it: a name taken meanwhile is tried again.
-          if (exclusiveMkdir) syncFs.mkdir(target, { recursive: false });
+          if (exclusiveMkdir) syncFs.mkdir(target, createOpts(0o700, 0o700, { recursive: false }));
           else syncFs.mkdir(target);
         } catch (err) {
           if (err?.code === 'EEXIST') continue;

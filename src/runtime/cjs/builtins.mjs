@@ -63,12 +63,12 @@ const BUILTIN_LIST = [
   'util/types',
   'v8',
   'vm',
+  'worker_threads',
   'zlib',
 ];
 
 const NOT_YET = [
   'http2',
-  'worker_threads',
   'dgram',
   'dns',
   'tls',
@@ -251,8 +251,46 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   /** Set by createCjs once Module is built — Node exports the constructor itself. */
   let ModuleExport = null;
 
+  let workerThreads;
   const implemented = {
     process: () => process,
+    // One thread: the main one. BroadcastChannel talks within the program;
+    // a Worker can't be made yet.
+    worker_threads: () =>
+      (workerThreads ??= (() => {
+        const environmentData = new Map();
+        class Worker {
+          constructor() {
+            const err = new Error("slicc-jsh: worker_threads.Worker is not supported yet");
+            err.code = 'ERR_NOT_SUPPORTED';
+            throw err;
+          }
+        }
+        return {
+          isInternalThread: false,
+          isMainThread: true,
+          MessagePort: globalThis.MessagePort,
+          MessageChannel: globalThis.MessageChannel,
+          markAsUncloneable: () => {},
+          markAsUntransferable: () => {},
+          isMarkedAsUntransferable: () => false,
+          moveMessagePortToContext: (port) => port,
+          receiveMessageOnPort: () => undefined,
+          resourceLimits: {},
+          postMessageToThread: async () => {
+            throw Object.assign(new Error('slicc-jsh: worker_threads.postMessageToThread is not supported yet'), { code: 'ERR_NOT_SUPPORTED' });
+          },
+          threadId: 0,
+          threadName: '',
+          SHARE_ENV: Symbol.for('nodejs.worker_threads.SHARE_ENV'),
+          Worker,
+          parentPort: null,
+          workerData: null,
+          BroadcastChannel: process._broadcastChannel,
+          setEnvironmentData: (key, value) => (value === undefined ? environmentData.delete(key) : environmentData.set(key, value)),
+          getEnvironmentData: (key) => environmentData.get(key),
+        };
+      })()),
     buffer: () => (bufferExports ??= bufferModule(Buffer)),
     console: () => console,
     // lib/constants.js (deprecated, DEP0008, documentation only): os's
