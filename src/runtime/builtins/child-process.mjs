@@ -3,7 +3,7 @@
  * spawnSync / execSync / execFileSync on ctx.sync.run (slicc-kernel 1.65.0+).
  * fork stays ERR_NOT_SUPPORTED.
  */
-import { kernelVersion } from '../kernel-version.mjs';
+import { kernelAtLeast, kernelVersion } from '../kernel-version.mjs';
 import { trackPromise } from '../async-handles.mjs';
 import {
   ERR_INVALID_ARG_TYPE,
@@ -362,8 +362,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
    * Linux's execve of a directory is EACCES; the kernel says ENOENT
    * (ai-ecoverse/slicc-kernel#626). `target` is the path that was run.
    */
+  // From slicc-kernel 1.93.0 (#630) the kernel says EACCES itself.
+  const kernelDirEacces = kernelAtLeast(ctx, '1.93.0');
   function spawnCode(code, target, cwd) {
-    if (code !== 'ENOENT' || typeof target !== 'string' || !target.includes('/')) return code;
+    if (kernelDirEacces || code !== 'ENOENT' || typeof target !== 'string' || !target.includes('/')) return code;
     try {
       return ctx.sync?.fs?.stat?.(path.resolve(cwd, target))?.isDirectory ? 'EACCES' : code;
     } catch {

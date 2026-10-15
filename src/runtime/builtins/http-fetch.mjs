@@ -67,7 +67,14 @@ export function connectError(code, host, port, cause, { noNetwork = false } = {}
   // With no network at all (fetch's ENETUNREACH), a name is one nothing resolves.
   const unresolved = code === 'ENOENT' || code === 'EAI_NONAME' || code === 'ENOTFOUND' || (noNetwork && code === 'ENETUNREACH');
   let e;
-  if (unresolved && !isIp(name)) {
+  // A resolver that couldn't answer for now (slicc-kernel 1.93.0 passes it): Node's EAI_AGAIN.
+  if (code === 'EAI_AGAIN' && !isIp(name)) {
+    e = new Error(`getaddrinfo EAI_AGAIN ${name}`);
+    e.errno = ERRNO.EAI_AGAIN ?? -3001;
+    e.code = 'EAI_AGAIN';
+    e.syscall = 'getaddrinfo';
+    e.hostname = name;
+  } else if (unresolved && !isIp(name)) {
     e = new Error(`getaddrinfo ENOTFOUND ${name}`);
     e.errno = ERRNO.EAI_NONAME;
     e.code = 'ENOTFOUND';

@@ -14,7 +14,7 @@ import {
   validateObject,
   validateUint32,
 } from '../node-errors.mjs';
-import { kernelVersion } from '../kernel-version.mjs';
+import { kernelAtLeast, kernelVersion } from '../kernel-version.mjs';
 
 // Node's argument checks (lib/internal/fs/utils.js), before any call.
 /** getValidatedFd: an int32 >= 0. */
@@ -611,7 +611,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     if (!recursive) {
       if (exclusiveMkdir) {
         // The kernel answers EEXIST / ENOENT / ENOTDIR itself, so of two
-        // processes making one name exactly one succeeds.
+        // processes making one name exactly one succeeds. 1.93.0 and 1.94.0
+        // say EIO for '/' (#659, fixed in 1.94.1): it always exists.
+        if (target === '/' && mkdirRootEio) throw nodeFsError('EEXIST', 'mkdir', pathArg);
         try {
           syncFs.mkdir(target, createOpts(askedMode, 0o777, { recursive: false }));
         } catch (err) {
@@ -707,6 +709,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   // below runs on what is left, so the error names the entry and the
   // syscall, as Node's does.
   const kernelRm = kernelVersion(ctx) !== null;
+  const kernelRefusesDev = kernelAtLeast(ctx, '1.93.0');
+  const mkdirRootEio = kernelAtLeast(ctx, '1.93.0') && !kernelAtLeast(ctx, '1.94.1');
 
   /**
    * Node's rimrafSync (lib/internal/fs/rimraf.js): a missing entry is
@@ -720,7 +724,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
    * Linux refuses it, EACCES for a user, EPERM for root. Else the code as is.
    */
   const removalCode = (code, target) => {
-    if (code !== 'ENOENT') return code;
+    // From slicc-kernel 1.93.0 (#641) the kernel refuses these itself.
+    if (code !== 'ENOENT' || kernelRefusesDev) return code;
     try {
       syncFs.lstat(target);
     } catch {
