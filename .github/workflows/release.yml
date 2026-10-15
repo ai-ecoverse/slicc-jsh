@@ -34,7 +34,8 @@ jobs:
   # The release line for the cert lane: when the release job published (a v*
   # tag on this commit), the tarball re-fetched from the registry, its
   # gitHead, sha256, sha512 integrity and npm provenance commit checked
-  # against the released commit and written into the GitHub release's body.
+  # against the released commit, plus whether main contains it (onMain),
+  # written into the GitHub release's body.
   release-line:
     needs: release
     if: needs.release.result == 'success'

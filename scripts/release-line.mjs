@@ -4,11 +4,12 @@
  * the package as the registry serves it, re-fetched and hashed, written into
  * the GitHub release's body:
  *
- *   @ai-ecoverse/slicc-jsh@X.Y.Z gitHead=… sha256=… integrity=sha512-… provenance=…
+ *   @ai-ecoverse/slicc-jsh@X.Y.Z gitHead=… sha256=… integrity=sha512-… provenance=… onMain=true
  *
  * gitHead is the registry's, provenance the commit in npm's SLSA provenance
  * attestation; both must be the released commit, and the tarball's sha512
- * must be the registry's integrity, or this fails.
+ * must be the registry's integrity, or this fails. onMain is whether main
+ * contains gitHead (GitHub's compare main...gitHead is identical or behind).
  *
  * Usage (release.yml, after the release job):
  *   node scripts/release-line.mjs            # the v* tag on HEAD, if any
@@ -21,7 +22,10 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 const MARK = '<!-- release-line -->';
 const PROVENANCE = 'https://slsa.dev/provenance/v1';
-const name = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).name;
+const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const name = manifest.name;
+const repo =
+  process.env.GITHUB_REPOSITORY ?? /github\.com[/:]([^/]+\/[^/.]+)/.exec(manifest.repository?.url ?? '')?.[1];
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const git = (...a) => execFileSync('git', a, { encoding: 'utf8' }).trim();
@@ -81,7 +85,12 @@ for (const [what, sha] of [
   if (sha !== commit) throw new Error(`${what} ${sha} is not ${tag}'s commit ${commit}`);
 }
 
-const line = `${name}@${version} gitHead=${meta.gitHead} sha256=${sha256} integrity=${integrity} provenance=${provenance}`;
+const compare = execFileSync('gh', ['api', `repos/${repo}/compare/main...${meta.gitHead}`, '--jq', '.status'], {
+  encoding: 'utf8',
+}).trim();
+const onMain = compare === 'identical' || compare === 'behind';
+
+const line = `${name}@${version} gitHead=${meta.gitHead} sha256=${sha256} integrity=${integrity} provenance=${provenance} onMain=${onMain}`;
 console.log(line);
 if (dryRun) process.exit(0);
 
