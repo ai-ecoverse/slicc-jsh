@@ -8,8 +8,12 @@
  *   node test/integration/cert/run.mjs              # all suites
  *   CASES=./cases.mjs node test/integration/cert/run.mjs
  *   node test/integration/cert/run.mjs case-name
+ *
+ * Each case runs host Node and the shim at the same time, and CERT_JOBS
+ * cases (default 4) run at once on the one kernel, each in its own
+ * directories; each case's line is printed in case order.
  */
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import {
   cpSync,
   mkdirSync,
@@ -95,23 +99,74 @@ const ACCEPTED_DIFF = new Set([
   'g-no-internal-stack',
 ]);
 
+const MAX_BUFFER = 4 * 1024 * 1024;
+
+// spawnSync's semantics, without blocking the shim and the other cases:
+// stdin carries the case's (or nothing), a signal is reported as
+// `signal NAME`, and a timeout (SIGTERM, then ETIMEDOUT) or more than
+// MAX_BUFFER of output throws.
 function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {
-  const result = spawnSync(node22Bin(), argv, {
-    // As under npx: Node's own messages name it `node`.
-    argv0: 'node',
-    cwd,
-    input: stdin ?? '',
-    env: node22Env({ ...process.env, npm_config_yes: 'true', ...(env ?? {}) }),
-    timeout: timeoutMs,
-    encoding: 'utf8',
-    maxBuffer: 4 * 1024 * 1024,
+  return new Promise((resolve, reject) => {
+    const child = spawn(node22Bin(), argv, {
+      // As under npx: Node's own messages name it `node`.
+      argv0: 'node',
+      cwd,
+      env: node22Env({ ...process.env, npm_config_yes: 'true', ...(env ?? {}) }),
+    });
+    const out = { stdout: [], stderr: [] };
+    let size = 0;
+    let overflow = false;
+    for (const name of ['stdout', 'stderr']) {
+      child[name].on('data', (chunk) => {
+        size += chunk.length;
+        if (size > MAX_BUFFER && !overflow) {
+          overflow = true;
+          child.kill();
+        }
+        out[name].push(chunk);
+      });
+    }
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on('close', (status, signal) => {
+      clearTimeout(timer);
+      if (overflow) return reject(new Error(`${argv.join(' ')}: output over ${MAX_BUFFER} bytes`));
+      if (timedOut) {
+        const error = new Error(`${argv.join(' ')}: timed out after ${timeoutMs} ms`);
+        error.code = 'ETIMEDOUT';
+        return reject(error);
+      }
+      resolve({
+        status: status ?? (signal ? `signal ${signal}` : 1),
+        stdout: Buffer.concat(out.stdout).toString('utf8'),
+        stderr: Buffer.concat(out.stderr).toString('utf8'),
+      });
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end(stdin ?? '');
   });
-  if (result.error) throw result.error;
-  return {
-    status: result.status ?? (result.signal ? `signal ${result.signal}` : 1),
-    stdout: result.stdout ?? '',
-    stderr: result.stderr ?? '',
+}
+
+const JOBS = Math.max(1, Number(process.env.CERT_JOBS) || 4);
+
+async function pool(items, run) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await run(items[i]);
+    }
   };
+  await Promise.all(Array.from({ length: Math.min(JOBS, items.length) }, worker));
+  return out;
 }
 
 /** Mask pids, paths, timings, and Node machinery frames (per 0.1.0-4 bar). */
@@ -158,7 +213,7 @@ for (const suite of suites) {
   let diffCount = 0;
   let failed = 0;
 
-  for (const c of list) {
+  const runCase = async (c) => {
     const hd = join(HOST_ROOT, suite.name.replace(/\.mjs$/, ''), c.name);
     mkdirSync(hd, { recursive: true });
     const kd = `/os/${c.name}`;
@@ -178,13 +233,7 @@ for (const suite of suites) {
       await k.writeFile(`${kd}/${rel}`, new TextEncoder().encode(content));
     }
 
-    const hostRaw = runNode22(c.argv, { cwd: hd, stdin: c.stdin, env: c.env });
-    const real = realpathSync(hd);
-    const host = {
-      status: hostRaw.status,
-      stdout: normalize(hostRaw.stdout, real, hd, kd),
-      stderr: normalize(hostRaw.stderr, real, hd, kd),
-    };
+    const hosted = runNode22(c.argv, { cwd: hd, stdin: c.stdin, env: c.env });
 
     const t0 = Date.now();
     let shim;
@@ -201,6 +250,13 @@ for (const suite of suites) {
       shim = { status: String(e.message), stdout: '', stderr: '' };
     }
     shim.ms = Date.now() - t0;
+    const hostRaw = await hosted;
+    const real = realpathSync(hd);
+    const host = {
+      status: hostRaw.status,
+      stdout: normalize(hostRaw.stdout, real, hd, kd),
+      stderr: normalize(hostRaw.stderr, real, hd, kd),
+    };
     shim.stdout = normalize(shim.stdout ?? '', real, hd, kd);
     shim.stderr = normalize(shim.stderr ?? '', real, hd, kd);
 
@@ -212,11 +268,7 @@ for (const suite of suites) {
     const exact = same.status && same.stdout && same.stderr;
     const accepted = ACCEPTED_DIFF.has(c.name);
     const pass = exact || (c.m1gap && m1GapShimAccepts(shim)) || accepted;
-    if (exact) sameCount++;
-    else diffCount++;
-    if (!pass) failed++;
-
-    results.push({
+    const result = {
       name: c.name,
       m1gap: !!c.m1gap,
       accepted,
@@ -224,7 +276,7 @@ for (const suite of suites) {
       pass,
       host,
       shim: { status: shim.status, stdout: shim.stdout, stderr: shim.stderr, ms: shim.ms },
-    });
+    };
 
     let tag;
     if (exact) tag = 'SAME';
@@ -244,7 +296,15 @@ for (const suite of suites) {
         .map(([k2]) => k2)
         .join(',')})`;
     }
-    console.log(`# ${c.m1gap ? 'M1-GAP ' : ''}${tag} ${c.name} (${shim.ms} ms)`);
+    return { result, exact, line: `# ${c.m1gap ? 'M1-GAP ' : ''}${tag} ${c.name} (${shim.ms} ms)` };
+  };
+
+  for (const { result, exact, line } of await pool(list, runCase)) {
+    console.log(line);
+    results.push(result);
+    if (exact) sameCount++;
+    else diffCount++;
+    if (!result.pass) failed++;
   }
 
   const outFile = join(certDir, `last-diff-${suite.name.replace(/\.mjs$/, '')}.json`);
