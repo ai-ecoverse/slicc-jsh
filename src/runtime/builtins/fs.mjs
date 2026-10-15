@@ -714,6 +714,43 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
    * directory. `shown` is the path as the error should name it (the caller's
    * path joined with '/' and each name, as Node's Buffer concat does).
    */
+  /**
+   * A removal the kernel answered ENOENT for, of an entry that is still there
+   * (a /dev device: the kernel keeps them, ai-ecoverse/slicc-kernel#637): as
+   * Linux refuses it, EACCES for a user, EPERM for root. Else the code as is.
+   */
+  const removalCode = (code, target) => {
+    if (code !== 'ENOENT') return code;
+    try {
+      syncFs.lstat(target);
+    } catch {
+      return code;
+    }
+    return euid() === 0 ? 'EPERM' : 'EACCES';
+  };
+  const euid = () => (typeof process?.geteuid === 'function' ? process.geteuid() : 0);
+  /**
+   * Whether this user may remove an entry of `dir` (w and x on it), as
+   * Linux checks before rmdir and unlink: Node's rimraf tries rmdir first,
+   * so it reports a refused directory before touching what's in it.
+   */
+  const mayRemoveIn = (dir) => {
+    const uid = euid();
+    if (uid === 0) return true;
+    let st;
+    try {
+      st = syncFs.stat(dir);
+    } catch {
+      return true;
+    }
+    const mode = st.mode ?? 0o777;
+    const gid = typeof process?.getegid === 'function' ? process.getegid() : 0;
+    const groups = typeof process?.getgroups === 'function' ? process.getgroups() : [];
+    if (st.uid === uid) return (mode & 0o300) === 0o300;
+    if (st.gid === gid || groups.includes(st.gid)) return (mode & 0o030) === 0o030;
+    return (mode & 0o003) === 0o003;
+  };
+
   function rimrafSync(shown, target, recursive) {
     let st;
     try {
@@ -726,8 +763,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       try {
         syncFs.unlink(target);
       } catch (err) {
-        if (err?.code === 'ENOENT') return;
-        throw nodeFsError(err?.code || 'EIO', 'unlink', shown, err);
+        const code = removalCode(err?.code, target);
+        if (code === 'ENOENT') return;
+        throw nodeFsError(code || 'EIO', 'unlink', shown, err);
       }
       return;
     }
@@ -735,7 +773,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     if (kernelRm) {
       try {
         syncFs.rm(target);
-        return;
+        // The kernel may say it removed what it keeps (/dev): check.
+        if (!syncFs.exists(target)) return;
       } catch {
         /* the walk names the entry that fails */
       }
@@ -744,6 +783,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   }
 
   function rmTreeSync(shown, target) {
+    if (!mayRemoveIn(path.dirname(target))) throw nodeFsError('EACCES', 'rmdir', shown);
     let names;
     try {
       names = syncFs.readdir(target);
@@ -767,8 +807,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         try {
           syncFs.unlink(childTarget);
         } catch (err) {
-          if (err?.code === 'ENOENT') continue;
-          throw nodeFsError(err?.code || 'EIO', 'unlink', child, err);
+          const code = removalCode(err?.code, childTarget);
+          if (code === 'ENOENT') continue;
+          throw nodeFsError(code || 'EIO', 'unlink', child, err);
         }
       }
     }
@@ -776,9 +817,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     try {
       syncFs.rm(target);
     } catch (err) {
-      if (err?.code === 'ENOENT') return;
-      throw nodeFsError(err?.code || 'EIO', 'rmdir', shown, err);
+      const code = removalCode(err?.code, target);
+      if (code === 'ENOENT') return;
+      throw nodeFsError(code || 'EIO', 'rmdir', shown, err);
     }
+    if (syncFs.exists(target)) throw nodeFsError(euid() === 0 ? 'EPERM' : 'EACCES', 'rmdir', shown);
   }
 
   // How many symlinks a path may pass through before the kernel refuses it
@@ -1106,7 +1149,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       try {
         syncFs.unlink(abs(p));
       } catch (err) {
-        throw nodeFsError(err?.code || 'ENOENT', 'unlink', pathArg, err);
+        throw nodeFsError(removalCode(err?.code, abs(p)) || 'ENOENT', 'unlink', pathArg, err);
       }
     },
     renameSync(from, to) {
@@ -1771,7 +1814,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           try {
             await asyncFs.unlink(abs(p));
           } catch (err) {
-            throw nodeFsError(err?.code || 'ENOENT', 'unlink', p, err);
+            throw nodeFsError(removalCode(err?.code, abs(p)) || 'ENOENT', 'unlink', p, err);
           }
         })()
       );

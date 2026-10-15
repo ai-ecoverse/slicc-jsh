@@ -99,6 +99,36 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
     );
   });
 
+  it('/dev as a user (#188): rmSync of /dev/null and of /dev recursively throw EACCES, as Node; /dev/null stays', async () => {
+    await jsh.kernel.writeFile(
+      '/tmp/devrm.js',
+      program([
+        "const fs = require('fs');",
+        ERR,
+        "for (const [name, f] of [['rmSync /dev/null', () => fs.rmSync('/dev/null')], ['rmSync /dev/null force', () => fs.rmSync('/dev/null', { force: true })], ['rmSync /dev recursive', () => fs.rmSync('/dev', { recursive: true })], ['unlinkSync /dev/null', () => fs.unlinkSync('/dev/null')], ['promises.unlink /dev/null', () => fs.promises.unlink('/dev/null')], ['unlink callback /dev/null', () => new Promise((res, rej) => fs.unlink('/dev/null', (e) => (e ? rej(e) : res())))], ['promises.rm /dev', () => fs.promises.rm('/dev', { recursive: true })]]) {",
+        "  try { await f(); console.log(name, 'ok'); } catch (e) { console.log(name, err(e)); }",
+        '}',
+        "console.log('/dev/null still there', fs.existsSync('/dev/null'));",
+      ])
+    );
+    const r = await jsh.run(['node', '/tmp/devrm.js'], { user: 'cone', cwd: '/tmp' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(
+      r.stdout,
+      [
+        "rmSync /dev/null EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
+        "rmSync /dev/null force EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
+        "rmSync /dev recursive EACCES -13 rmdir /dev EACCES: permission denied, rmdir '/dev'",
+        "unlinkSync /dev/null EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
+        "promises.unlink /dev/null EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
+        "unlink callback /dev/null EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
+        "promises.rm /dev EACCES -13 rmdir /dev EACCES: permission denied, rmdir '/dev'",
+        '/dev/null still there true',
+        '',
+      ].join('\n')
+    );
+  });
+
   it('a 500-file tree with a symlink out of it goes; the link target stays', async () => {
     await jsh.kernel.writeFile(
       '/tmp/big.js',
