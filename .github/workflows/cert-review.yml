@@ -1,6 +1,8 @@
 name: cert-review
 
 on:
+  pull_request:
+    branches: [bb/jsh-certification-in-ci-cert-review-yml-thr_mh52qfzxjt]
   workflow_run:
     workflows: [Release]
     types: [completed]
@@ -31,7 +33,7 @@ jobs:
   plan:
     name: cert-review / plan
     if: >-
-      github.event_name == 'workflow_dispatch' || (
+      github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && startsWith(github.head_ref, 'cert-review-proof/')) || (
         github.event.workflow_run.conclusion == 'success' &&
         github.event.workflow_run.head_branch == 'main' &&
         github.event.workflow_run.event == 'push' &&
@@ -79,6 +81,10 @@ jobs:
             version=$(git tag --points-at "$RUN_SHA" 'v*' | sed 's/^v//' | grep -E "$semver" | sort -V | tail -1 || true)
             [ -n "$version" ] || skip "Release on $RUN_SHA tagged no version: nothing was published"
           else
+            if [ "$EVENT" = pull_request ]; then
+              IN_VERSION=$(jq -r .version .github/cert-review-proof.json) IN_PREV=$(jq -r '.prev // ""' .github/cert-review-proof.json)
+              IN_DRY_RUN=$(jq -r '.dry_run // true' .github/cert-review-proof.json)
+            fi
             version=$IN_VERSION prev=$IN_PREV dry_run=$IN_DRY_RUN
             [[ "$version" =~ $semver ]] || { echo "::error::version '$version' is not x.y.z"; exit 1; }
             [ -z "$prev" ] || [[ "$prev" =~ $semver ]] || { echo "::error::prev '$prev' is not x.y.z"; exit 1; }
