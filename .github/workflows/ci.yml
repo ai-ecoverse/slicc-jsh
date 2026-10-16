@@ -30,12 +30,13 @@ jobs:
   # ai-ecoverse/slicc-kernel#572): same-repo PR code and a merge group of
   # same-repo PRs go to the pool vars.CERT_RUNNER names (cloud-run-job: one
   # fresh Cloud Run Jobs execution per job), fork code to ubuntu-latest. It checks out nothing and
-  # runs no PR code. vars.CI_RUNNER overrides it (rollback: ubuntu-latest),
-  # this job's own runner included, so a pool outage can't block the
-  # rollback; vars.CERT_RUNNER names the pool. A fork's PR runs this job on
-  # ubuntu-latest too. macOS stays hosted.
+  # runs no PR code. vars.CI_RUNNER overrides it (rollback: ubuntu-latest);
+  # vars.CERT_RUNNER names the pool. The decider itself is a few seconds of
+  # work, so it runs hosted rather than paying the pool's cold start (about
+  # 90 s on cloud-run-job), and a pool outage can't block it. macOS stays
+  # hosted.
   runner:
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || vars.CI_RUNNER || vars.CERT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
@@ -228,12 +229,12 @@ jobs:
     # #!/usr/bin/env jsh script, re-run upgrades), (b) no Node and no
     # terminal fails with the instructions, the "yes, download Node" path on
     # a pseudo-terminal (test/install/answer-tty.py), and (c) --uninstall.
-    needs: runner
+    # About 20 s of work, so it runs hosted on both OSes, not on the pool.
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && needs.runner.outputs.runner || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
