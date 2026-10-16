@@ -71,6 +71,37 @@ describe('loopback fetch streams (kernel)', () => {
     assert.equal(r.stdout, 'read after abort AbortError\nserver: went away\n');
   });
 
+  it('a chunk that arrived before the abort is not read after it: the read rejects, as Node gives it', async () => {
+    // The 4th event arrives while the program waits, before ac.abort(). Node
+    // errors the body on abort, which clears what it had queued, so the next
+    // read rejects. jsh's tracked body read one chunk ahead into a stream of
+    // its own, so that read got event 4 (#241).
+    const source = [
+      "const http = require('http');",
+      'const srv = http.createServer((req, res) => {',
+      "  res.writeHead(200, { 'content-type': 'text/event-stream' }); res.flushHeaders();",
+      "  for (let n = 1; n <= 4; n++) setTimeout(() => res.write(`data: ${n}\\n\\n`), n < 4 ? 20 * n : 75);",
+      "  res.on('close', () => console.log('server: went away'));",
+      '});',
+      "srv.listen(0, '127.0.0.1', async () => {",
+      '  const ac = new AbortController();',
+      '  const r = await fetch(`http://127.0.0.1:${srv.address().port}/`, { signal: ac.signal });',
+      '  const reader = r.body.getReader();',
+      '  const td = new TextDecoder();',
+      "  let got = '';",
+      "  while ((got.match(/\\n\\n/g) || []).length < 3) got += td.decode((await reader.read()).value);",
+      '  await new Promise((r) => setTimeout(r, 300));',
+      '  ac.abort();',
+      "  try { const v = await reader.read(); console.log('read resolved', JSON.stringify(td.decode(v.value))); } catch (e) { console.log('read after abort', e.name); }",
+      '  srv.close(); srv.closeAllConnections();',
+      '});',
+    ].join('\n');
+    await jsh.kernel.writeFile('/os/abort-queued.js', source);
+    const r = await jsh.run(['node', 'abort-queued.js'], { cwd: '/os' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'read after abort AbortError\nserver: went away\n');
+  });
+
   it('reads 3 events of a never-ending SSE stream, aborts, and the server sees the client go', async () => {
     const source = [
       "const http = require('http');",
