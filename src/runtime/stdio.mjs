@@ -191,10 +191,18 @@ export function createStdio({ ctx, process, Buffer, handles, info = {} }) {
       let inFlight = false;
       let held = false;
       // Reading keeps the program alive while someone consumes: flowing, or a
-      // 'readable' listener. pause() lets it end, as Node's readStop does.
+      // 'readable' listener. A paused pipe or file still reads ahead until
+      // its buffer is full (readable-stream's maybeReadMore; Node's onpause
+      // readStop is undone by it), so a read in flight then keeps the
+      // program alive too, and an EOF that comes after pause() still gives
+      // 'end' and 'close', as in Node (ai-ecoverse/slicc-jsh#289: with the
+      // EOF later than the data, the program ended first, printing nothing).
+      // A terminal's pause() lets the program end.
       const update = () => {
         const state = stream._readableState;
-        const want = inFlight && !stream.destroyed && (stream.readableFlowing !== false || state.readableListening);
+        const readAhead = type !== 'tty' && !state.ended && state.length < state.highWaterMark;
+        const want =
+          inFlight && !stream.destroyed && (stream.readableFlowing !== false || state.readableListening || readAhead);
         if (want && !held) {
           handles.add(handle);
           held = true;
