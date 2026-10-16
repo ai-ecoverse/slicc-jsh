@@ -1,0 +1,5 @@
+script done
+pbkdf2 ok 0a38253555ce37f5
+hkdf ok 9ca0d662557439e3
+scrypt ok 9f1f8695838e682c
+hkdf 2 ok 24156e2c35525baa
