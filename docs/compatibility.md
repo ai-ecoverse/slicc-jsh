@@ -15,6 +15,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - [`child_process`](#child_process)
 - [`net`, `http` and `https`](#net-http-and-https)
 - [`tls`](#tls)
+- [`http2`](#http2)
 - [`fetch` and `WebSocket`](#fetch-and-websocket)
 - [`crypto`](#crypto)
 - [`zlib`](#zlib)
@@ -272,6 +273,25 @@ What doesn't need a handshake is Node's:
 
 The golden `tls-node22` checks the export list and these behaviours against Node 22.22.0.
 
+## `http2`
+
+`require('http2')` and `import … from 'node:http2'` load with Node 22.22.0's exports. Packages that require `http2` at load but use it only behind an option load and run over HTTP/1.1. **axios** (unless `httpVersion: 2`), the AWS SDK v3's **@smithy/node-http-handler** (`NodeHttpHandler`), googleapis and superagent are examples. got and fastify also need `dns` at load.
+
+There are no HTTP/2 sessions: h2 needs TLS on `ctx.net`, and h2c needs a frame layer jsh doesn't have. These calls throw `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (…)`) when they're made:
+- `http2.connect`, after Node's checks of its arguments (`ERR_HTTP2_UNSUPPORTED_PROTOCOL` for another scheme);
+- `listen()` on `createServer`'s and `createSecureServer`'s servers;
+- `performServerHandshake`.
+
+What's Node's:
+- `constants`, all 240, read-only as in Node.
+- `getDefaultSettings()`.
+- `getPackedSettings`/`getUnpackedSettings`: Node's checks (`ERR_HTTP2_INVALID_SETTING_VALUE` with `actual`, `min` and `max`), byte order and the `maxHeaderSize` warning. As in Node 22.22.0, `getPackedSettings` returns `undefined` when there are custom settings.
+- `sensitiveHeaders`.
+- `Http2ServerRequest` (a `Readable`) and `Http2ServerResponse` (a `Stream`), for `instanceof` and subclassing.
+- `createServer` (a `net.Server`) and `createSecureServer` (a `tls.Server`, ALPN `h2`), with Node's option checks, `setTimeout` and `updateSettings`.
+
+The golden `http2-node22` checks these against Node 22.22.0.
+
 ## `fetch` and `WebSocket`
 
 `globalThis.fetch` and `globalThis.WebSocket` run on the kernel's `ctx.fetch` and `ctx.websocket`. A request in flight keeps the program alive, and so does reading its body. `new WebSocket` checks its URL and protocols as Node 22's does: `http:` and `https:` become `ws:` and `wss:`, another scheme, a fragment, a duplicate or a non-token protocol is a `SyntaxError` `DOMException`, and `.url` is the parsed URL.
@@ -396,7 +416,7 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `cluster`, `http2`, `dns`, `dns/promises`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `cluster`, `dns`, `dns/promises`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
 
 **`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, `BroadcastChannel`, `MessageChannel`, `MessagePort` and `receiveMessageOnPort`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).
