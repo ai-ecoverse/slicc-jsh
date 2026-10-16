@@ -1,6 +1,6 @@
 # Node compatibility
 
-slicc-jsh's `node` targets Node v22.22.0. This page lists, module by module, what works, what differs from Node and what isn't there. The [README](../README.md#node-compatibility) has the one-table summary, and [Kernel requirements](../README.md#kernel-requirements) lists the features that need a newer slicc-kernel than 1.53.2.
+slicc-jsh's `node` targets Node v22.22.0. This page lists, module by module: what works, what differs from Node and what isn't there. The [README](../README.md#node-compatibility) has the one-table summary, and [Kernel requirements](../README.md#kernel-requirements) lists the features that need a newer slicc-kernel than 1.53.2.
 
 Where a module is Node's own code, the file is carried unchanged from Node v22.22.0's `lib/` in [`src/node-lib`](../src/node-lib/README.md). What those files ask of Node's C++ comes from `src/runtime/node-bindings.mjs`. The other bundled libraries are pinned in `package.json`; [NOTICE](../NOTICE) lists every one.
 
