@@ -131,6 +131,13 @@ jobs:
         run: npm run lint
       - name: Golden (host Node 22)
         timeout-minutes: 8
+        # On the bench pool (9 CPUs, shared with other jobs) six fixtures at
+        # once, each a host Node and a kernel with its workers, starved them: node-options-node22's ~50 children
+        # outlasted the 30 s shim limit, and the fixtures that compare timers
+        # with I/O flipped (#241). Three at once there; hosted runners keep
+        # golden.mjs's default (their CPU count, at most 6).
+        env:
+          GOLDEN_JOBS: ${{ needs.runner.outputs.runner != 'ubuntu-latest' && '3' || '' }}
         run: npm run test:golden
       - name: jsh parity (host Node 22 baseline, kernel jsh)
         timeout-minutes: 5
