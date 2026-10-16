@@ -83,7 +83,7 @@ function treeOf(rootPid, table) {
 export function guarded(cmd, args, { cwd, env, log, timeoutMs, caps = CAPS }) {
   return new Promise((resolvePromise) => {
     const fd = openSync(log, 'w');
-    const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', fd, fd] });
+    const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', fd, fd], detached: true });
     let breach = null;
     let peakKb = 0;
     const kill = () => {
