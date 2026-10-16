@@ -1,0 +1,41 @@
+{
+  "description": "NODE_OPTIONS errors as Node 22's: not allowed, requires an argument, unterminated string, invalid escape, a value that looks like an option, a short option with = (the first half is node-options-node22)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/i1.mjs",
+      "from": "i1.mjs"
+    },
+    {
+      "path": "/os/package.json",
+      "from": "package.json"
+    },
+    {
+      "path": "/os/r q.js",
+      "from": "r q.js"
+    },
+    {
+      "path": "/os/r\"q.js",
+      "from": "r\"q.js"
+    },
+    {
+      "path": "/os/r1.js",
+      "from": "r1.js"
+    },
+    {
+      "path": "/os/r2.js",
+      "from": "r2.js"
+    },
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    },
+    {
+      "path": "/os/show.js",
+      "from": "show.js"
+    }
+  ]
+}
