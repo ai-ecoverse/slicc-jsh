@@ -248,13 +248,13 @@ export function createFetch(ctx, { handles, getHttp } = {}) {
     }
     // A server of this kernel: its own sockets (the platform's fetch would
     // go to the host's loopback, or nowhere in a browser).
-    // Not the kernel's own loopback ctx.fetch: on 1.110.1 it still differs
-    // from undici in three ways (ai-ecoverse/slicc-kernel#822, #834, #888):
-    // the request has none of undici's default headers (accept,
-    // accept-language, sec-fetch-mode, user-agent, accept-encoding; declined
-    // in slicc-kernel#599), it is sent with `connection: close`, and an
-    // abort no longer reaches the body once a GC has taken the Request
-    // (slicc-kernel#888, the bug #271 fixed here).
+    // Not the kernel's own loopback ctx.fetch: it still differs from undici
+    // in two ways (ai-ecoverse/slicc-kernel#822, #834): the request has none
+    // of undici's default headers (accept, accept-language, sec-fetch-mode,
+    // user-agent, accept-encoding; declined in slicc-kernel#599), and it is
+    // sent with `connection: close`. (A third, an abort lost once a GC had
+    // taken the Request, is fixed from slicc-kernel 1.110.5:
+    // slicc-kernel#888, the bug #271 fixed here.)
     let request;
     let target = null;
     try {
