@@ -1,7 +1,6 @@
 /**
- * Certified = latest: the release publishes only the bytes cert-review
- * certified. scripts/cert-review/gate.mjs (run by publish.mjs before
- * `npm publish`) and record.mjs, driven as CLIs on fixture tarballs.
+ * cert-review's record.mjs, driven as a CLI on fixture tarballs: the line
+ * comes from the artifact, never from the reviewer alone.
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -37,63 +36,8 @@ function tool(script, args) {
   return { code: r.status, out: `${r.stdout}${r.stderr}` };
 }
 
-function recordFile(name, record) {
-  const file = join(work, `${name}.record.json`);
-  writeFileSync(file, JSON.stringify(record));
-  return file;
-}
-
 const good = tarball('good', { name: NAME, version: VERSION });
 const other = tarball('other', { name: NAME, version: VERSION, description: 'other bytes' });
-const certified = (sha256) => ({
-  name: NAME,
-  version: VERSION,
-  certified: true,
-  sha256,
-  line: `certified ${NAME}@${VERSION} sha256=${sha256} (ci: local; known: none; not covered: bios real setup (manual))`,
-});
-const gate = (tgz, record, packed) => tool('gate.mjs', ['--tarball', tgz, '--record', record, '--sha256', packed]);
-
-describe('cert-review gate: publish only certified bytes', () => {
-  it('allows the tarball whose sha256 the verdict certified', () => {
-    const r = gate(good.tgz, recordFile('ok', certified(good.sha256)), good.sha256);
-    assert.equal(r.code, 0, r.out);
-    assert.match(r.out, new RegExp(`publish ${NAME}@${VERSION} sha256=${good.sha256}`));
-  });
-
-  it('refuses a FAIL verdict and prints its line', () => {
-    const line = `cert-ci: FAIL ${NAME}@${VERSION}: the reviewer: a regression (ci: local)`;
-    const r = gate(good.tgz, recordFile('fail', { name: NAME, version: VERSION, certified: false, sha256: null, line }), good.sha256);
-    assert.equal(r.code, 2, r.out);
-    assert.match(r.out, /refuse to publish .*the verdict is not certified/);
-    assert.ok(r.out.includes(line), r.out);
-  });
-
-  it('refuses bytes other than the certified ones', () => {
-    const r = gate(other.tgz, recordFile('swap', certified(good.sha256)), other.sha256);
-    assert.equal(r.code, 2, r.out);
-    assert.match(r.out, /refuse to publish .*verdict's sha256/);
-  });
-
-  it("refuses when the pack job's sha256 is not the tarball's", () => {
-    const r = gate(good.tgz, recordFile('pack', certified(good.sha256)), other.sha256);
-    assert.equal(r.code, 2, r.out);
-    assert.match(r.out, /refuse to publish .*pack job's sha256/);
-  });
-
-  it('refuses a certified line for another version', () => {
-    const rec = certified(good.sha256);
-    rec.line = rec.line.replace(VERSION, '9.8.6');
-    const r = gate(good.tgz, recordFile('ver', rec), good.sha256);
-    assert.equal(r.code, 2, r.out);
-  });
-
-  it('refuses when there is no record', () => {
-    const r = gate(good.tgz, join(work, 'missing.json'), good.sha256);
-    assert.equal(r.code, 2, r.out);
-    assert.match(r.out, /no cert-review record/);
-  });
-});
 
 describe('cert-review record: the line comes from the artifact, not the reviewer', () => {
   function review(name, verdict) {

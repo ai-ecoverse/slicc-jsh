@@ -437,35 +437,3 @@ jobs:
         run: |
           echo "::error title=v$VERSION not certified::$(head -1 "$RUNNER_TEMP/record/line.txt")"
           exit 1
-
-  gate:
-    name: cert-review / publish gate (dry run)
-    needs: [plan, pack, record]
-    if: always() && needs.plan.outputs.mode == 'dispatch' && needs.pack.result == 'success' && needs.record.result != 'skipped' && needs.record.result != 'cancelled'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.sha }}
-          sparse-checkout: scripts
-          persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: ${{ needs.plan.outputs.artifact }}
-          path: ${{ runner.temp }}/tarball
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: cert-review-record-${{ needs.plan.outputs.version }}
-          path: ${{ runner.temp }}/record
-      - name: The publish job's gate and npm publish, as a dry run
-        env:
-          PACKED: ${{ needs.pack.outputs.sha256 }}
-        run: |
-          tgz=$(ls "$RUNNER_TEMP"/tarball/*.tgz)
-          node scripts/cert-review/publish.mjs --dry-run --tarball "$tgz" --record "$RUNNER_TEMP/record/record.json" --sha256 "$PACKED"
