@@ -41,6 +41,7 @@ function resolvePrev() {
   }
   const tag = JSON.parse(execFileSync('npm', ['view', NAME, 'dist-tags', '--json'], { encoding: 'utf8' })).certified;
   if (tag && earlier.includes(tag)) return { prev: tag, from: `npm's certified dist-tag (no earlier release body carries a cert-review line)` };
+  if (tag) return { prev: null, from: `npm's certified dist-tag is ${tag}, not before v${version}, and no earlier release body carries a cert-review line: dispatch with prev` };
   return { prev: null, from: 'no certified earlier release' };
 }
 
