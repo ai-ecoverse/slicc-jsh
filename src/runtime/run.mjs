@@ -135,7 +135,8 @@ function trackPlatformAsync(handles) {
 export async function runNode(ctx, options = {}) {
   installStackPrepare();
   const handles = createHandleTable();
-  const nextTick = createNextTick();
+  // A tick wakes the loop when it waits on a handle (drainLoop).
+  const nextTick = createNextTick(() => handles.notify());
   let exitStatus;
   let lastEvalCode;
   let restoreGlobals = () => {};

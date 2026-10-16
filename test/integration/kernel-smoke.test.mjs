@@ -443,7 +443,9 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
           "  s.on('end',()=>ev.push('end'));",
           "  s.on('close',h=>ev.push('close:'+h));",
           "  s.write('hello'); s.end();",
-          "  setTimeout(()=>{ console.log('server',ev.join(',')); srv.close(); },50);",
+          // 50 ms after the server's close (a second one would show), not
+          // after the connection: under load the FIN can take longer.
+          "  s.once('close',()=>setTimeout(()=>{ console.log('server',ev.join(',')); srv.close(); },50));",
           '});',
           "srv.listen(0,'127.0.0.1',()=>{",
           '  const c=net.connect(srv.address().port,"127.0.0.1");',
