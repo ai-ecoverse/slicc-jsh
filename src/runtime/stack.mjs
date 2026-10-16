@@ -12,6 +12,9 @@ import { encodeFilePath } from './builtins/url.mjs';
 const KERNEL_HINT =
   /node-process-worker|runJsProcess|createNodeKernel|data:text\/javascript|@ai-ecoverse\/slicc-kernel|\/slicc-kernel\/|slicc-jsh\/dist\/|at new Function\b/i;
 
+/** An eval origin this long names a data: URL (a path is at most PATH_MAX). */
+const LONG_ORIGIN = 65536;
+
 function isLoaderImplFrame(frame) {
   // Our Module.prototype._compile / Module._extensions['.js'] live in the bundle.
   const method = frame.getMethodName?.();
@@ -26,16 +29,28 @@ function isLoaderImplFrame(frame) {
 function isKernelFrame(frame) {
   if (frame?.[kWrapped]) return false;
   if (isLoaderImplFrame(frame)) return true;
+  // The runtime's own code: the kernel imports it from a data: URL of the
+  // whole bundle (MBs), so its frames' file name and text are that long.
+  // Decide on the name's start, before anything formats or scans the text
+  // (a regex over it per frame made each stack take milliseconds).
+  const file = frame.getFileName?.() || '';
+  if (file.startsWith('data:')) return true;
+  // Code the bundle compiles (its vendored builtins) has no file: its eval
+  // origin (`eval at evalCjs (data:…)`), and its text, hold the bundle's URL.
+  // V8 builds that origin as a rope, and reading any of it copies it whole,
+  // so its length decides: no path is that long, only a data: URL.
+  if (!file) {
+    const origin = frame.getEvalOrigin?.();
+    if (typeof origin === 'string' && (origin.length > LONG_ORIGIN || KERNEL_HINT.test(origin))) return true;
+  }
   // An ES module's loader lines (export getters, hoisted imports) come
   // before its own first line: they are the runtime's, not the file's.
   const esmFile = resolveFile(frame, parseSite(frame));
   const esmExtra = esmFile ? esmFrames.get(esmFile) : undefined;
   if (esmExtra !== undefined && adjustLine(frame.getLineNumber?.()) - esmExtra < 1) return true;
-  const file = frame.getFileName?.() || '';
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
   const fn = frame.getFunctionName?.() || '';
   if (KERNEL_HINT.test(file) || KERNEL_HINT.test(text) || KERNEL_HINT.test(fn)) return true;
-  if (file.startsWith('data:')) return true;
   // An eval of the runtime's own (no file, no line, no name): a vm script's caller.
   if (!file && frame.getLineNumber?.() == null && (!fn || fn === 'eval')) return true;
   // Never surface fabricated or accidental node:internal frames from the shim.
