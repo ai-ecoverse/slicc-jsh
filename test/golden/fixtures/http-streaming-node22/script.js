@@ -19,8 +19,15 @@ const srv = http.createServer((req, res) => {
     if (req.url === '/sse') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
       res.flushHeaders();
+      // Three events, then the stream stays open and quiet. A 4th sent while
+      // the client is about to abort can be read after the abort, in Node
+      // too (its chunk is already in the TextDecoderStream), which made the
+      // `read after abort` line come and go under load (#241).
       let n = 0;
-      const tick = setInterval(() => res.write(`id: ${++n}\ndata: event ${n}\n\n`), 20);
+      const tick = setInterval(() => {
+        res.write(`id: ${++n}\ndata: event ${n}\n\n`);
+        if (n === 3) clearInterval(tick);
+      }, 20);
       // (A request's own 'close' is its body's end: the response's tells the client went.)
       res.on('close', () => {
         clearInterval(tick);
