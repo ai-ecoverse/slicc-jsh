@@ -29,7 +29,7 @@ let behaviour = direct.length > 0;
 let why = direct.length ? `shipped files changed: ${direct.slice(0, 8).join(', ')}${direct.length > 8 ? ', …' : ''}` : '';
 
 function distOf(ref, dir, devDependenciesFrom) {
-  archive(dir, ref);
+  archive(dir, ref, repo);
   sh('npm', ['ci', '--ignore-scripts', ...npmFlags], { cwd: dir });
   if (devDependenciesFrom) {
     const p = readJson(join(dir, 'package.json'));
@@ -61,10 +61,9 @@ if (!behaviour && manifest.length) {
     } else why = `only devDependencies changed (${manifest.join(', ')}), and dist/ and NOTICE build identical on the base and the head`;
   }
 }
-if (!behaviour && !why) why = files.length ? `not behaviour: no shipped file changed (${files.length} file(s): tests, docs, CI)` : 'not behaviour: no change';
+if (!behaviour && !why) why = files.length ? `no shipped file changed (${files.length} file(s): tests, docs, CI)` : 'no change';
+if (!behaviour && !why.startsWith('not behaviour: ')) why = `not behaviour: ${why}`;
 const result = { base: values.base, head: values.head, behaviour, why, files };
 writeFileSync(join(work, 'shipped.json'), `${JSON.stringify(result, null, 2)}\n`);
 if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `behaviour=${behaviour}\nwhy=${why.replace(/\n/g, ' ')}\n`);
-if (!behaviour && !why.startsWith('not behaviour')) result.why = why = `not behaviour: ${why}`;
-writeFileSync(join(work, 'shipped.json'), `${JSON.stringify(result, null, 2)}\n`);
 console.log(`shipped: ${behaviour ? 'behaviour' : 'not behaviour'}: ${why}`);
