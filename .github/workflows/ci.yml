@@ -186,6 +186,28 @@ jobs:
           path: ${{ runner.temp }}/ai-ecoverse-slicc-jsh-*.tgz
           if-no-files-found: error
 
+  probe-rm:
+    # PROBE (#249, not for merge): Linux rmdir/rimraf on a host, as a user.
+    needs: runner
+    strategy:
+      matrix:
+        on: [hosted, bench]
+    runs-on: ${{ matrix.on == 'bench' && needs.runner.outputs.runner || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.22.0'
+      - run: |
+          id; uname -a; stat -c '%n %a %U' / /dev /tmp; findmnt /dev || true
+          node -e "try { require('fs').rmSync('/dev', { recursive: true }) } catch (e) { console.log('rmSync /dev', e.code, e.syscall, e.path) }"
+          node -e "try { require('fs').rmdirSync('/dev') } catch (e) { console.log('rmdirSync /dev', e.code) }"
+          mkdir -p $RUNNER_TEMP/p && for i in 1 2 3; do node scripts/probe-rm555.js $RUNNER_TEMP/p; done
+          python3 -c "import os; os.makedirs('/tmp/q/a/b', exist_ok=True); open('/tmp/q/a/b/f','w').close(); os.chmod('/tmp/q/a', 0o555)
+          try: os.rmdir('/tmp/q/a/b')
+          except OSError as e: print('rmdir nonempty in 0555 parent:', e.strerror)"
+
   install:
     # install.sh from this checkout, against the published package, in a
     # throwaway HOME: (a) with Node 22 (install an older version, a
