@@ -1,9 +1,11 @@
 /**
- * fs.rm with recursive under users: 'enforce'. On slicc-kernel 1.88.0+
- * (ctx.kernel) a tree goes to the kernel in one call; when that call is
- * refused partway, jsh walks what is left so the error names the entry and
- * the syscall as Node's rimraf does (host Node 22.22.0 gives the strings
- * asserted here). Older kernels take the walk only, with the same errors.
+ * fs.rm with recursive under users: 'enforce'. jsh runs Node 22's rimraf
+ * (lib/internal/fs/rimraf.js) step for step over the kernel's calls:
+ * rmSync rmdir()s a directory first and only empties it on ENOTEMPTY /
+ * EEXIST / EPERM; fs.rm and fs.promises.rm do the same with a directory's
+ * entries side by side. rmdir(2) of a directory with entries checks the
+ * parent's permission first (EACCES), as Linux does. Host Node 22.22.0 gives
+ * the strings and the entries left asserted here.
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -99,7 +101,7 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
     );
   });
 
-  it('/dev as a user (#188, #215): rmSync of /dev/null and of /dev recursively throw EACCES, /dev naming its first entry\'s unlink as Node; /dev/null stays', async () => {
+  it('/dev as a user (#188, #249): rmSync of /dev/null and of /dev recursively throw EACCES, /dev naming its own rmdir as Node; /dev/null stays', async () => {
     await jsh.kernel.writeFile(
       '/tmp/devrm.js',
       program([
@@ -114,10 +116,17 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
     );
     const r = await jsh.run(['node', '/tmp/devrm.js'], { user: 'cone', cwd: '/tmp' });
     assert.equal(r.status, 0, r.stderr);
-    // Node 22 removes a tree children first: the first entry's unlink is
-    // what a user is refused, not /dev's rmdir.
+    // rmdir('/dev') as a user: Linux refuses it on '/' (not writable) before
+    // it looks at /dev's entries, so rimraf stops there. Host Node 22.22.0 as
+    // a user on hosted ubuntu-latest and on the bench pool: EACCES rmdir /dev
+    // (ai-ecoverse/slicc-jsh#249; #215 had it as the first entry's unlink).
     const first = `/dev/${/^first (.+)$/m.exec(r.stdout)[1]}`;
-    const dev = `EACCES -13 unlink ${first} EACCES: permission denied, unlink '${first}'`;
+    // Before slicc-kernel 1.86.0 jsh doesn't check modes (the kernel's are
+    // defaults it doesn't enforce): rmdir is ENOTEMPTY, and the first entry's
+    // unlink is refused.
+    const dev = kernelAtLeast('1.86.0')
+      ? "EACCES -13 rmdir /dev EACCES: permission denied, rmdir '/dev'"
+      : `EACCES -13 unlink ${first} EACCES: permission denied, unlink '${first}'`;
     assert.equal(
       r.stdout,
       [
@@ -130,6 +139,51 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
         "unlink callback /dev/null EACCES -13 unlink /dev/null EACCES: permission denied, unlink '/dev/null'",
         `promises.rm /dev ${dev}`,
         '/dev/null still there true',
+        '',
+      ].join('\n')
+    );
+  });
+
+  it('a 0555 subdirectory of the user\'s own tree: rmSync stops at its rmdir and keeps the rest; rm and promises.rm remove its siblings, as Node (#249)', needs, async () => {
+    // test/fixtures/cert-review/fx/m51/rm.js's t6. Node's rmSync rmdir()s
+    // t6, a and b (ENOTEMPTY, so on to their entries, in readdir order),
+    // then c: EACCES, b being 0555. Nothing is removed. Node's callback
+    // rimraf works through each directory's entries side by side: x, ln and
+    // a/y go, b's entries are refused. Node's thread pool may report c's
+    // rmdir or z's unlink first (host Node 22.22.0: about half and half);
+    // jsh's steps run in the order they're issued, so c's rmdir.
+    await jsh.kernel.writeFile(
+      '/tmp/rm555.js',
+      program([
+        "const fs = require('fs'), path = require('path');",
+        ERR,
+        "const tree = (root) => { fs.mkdirSync(path.join(root, 'a/b/c'), { recursive: true }); for (const f of ['x', 'a/y', 'a/b/z', 'a/b/c/w']) fs.writeFileSync(path.join(root, f), f); fs.symlinkSync('a/y', path.join(root, 'ln')); };",
+        "const ls = (p) => { const o = []; const w = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) { const q = path.join(d, e.name); o.push(path.relative(p, q)); if (e.isDirectory()) w(q); } }; w(p); return o.join(' '); };",
+        "const t = 't6';",
+        "const tries = {",
+        "  rmSync: () => fs.rmSync(t, { recursive: true }),",
+        "  'rm callback': () => new Promise((res, rej) => fs.rm(t, { recursive: true }, (e) => (e ? rej(e) : res()))),",
+        "  'promises.rm': () => fs.promises.rm(t, { recursive: true }),",
+        "};",
+        "for (const [name, f] of Object.entries(tries)) {",
+        "  tree(t); fs.chmodSync('t6/a/b', 0o555);",
+        "  try { await f(); console.log(name, 'ok'); } catch (e) { console.log(name, err(e)); }",
+        "  console.log(' left', ls(t)); fs.chmodSync('t6/a/b', 0o755); fs.rmSync(t, { recursive: true });",
+        "}",
+      ])
+    );
+    const r = await jsh.run(['node', '/tmp/rm555.js'], { user: 'cone', cwd: '/tmp' });
+    assert.equal(r.status, 0, r.stderr);
+    const c = "EACCES -13 rmdir t6/a/b/c EACCES: permission denied, rmdir 't6/a/b/c'";
+    assert.equal(
+      r.stdout,
+      [
+        `rmSync ${c}`,
+        ' left a a/b a/b/c a/b/c/w a/b/z a/y ln x',
+        `rm callback ${c}`,
+        ' left a a/b a/b/c a/b/c/w a/b/z',
+        `promises.rm ${c}`,
+        ' left a a/b a/b/c a/b/c/w a/b/z',
         '',
       ].join('\n')
     );

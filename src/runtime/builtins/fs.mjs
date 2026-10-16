@@ -703,21 +703,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     return opts;
   }
 
-  // slicc-kernel 1.88.0+ (ctx.kernel, #518; so 1.84.1+, whose recursive rm
-  // has Node's result): a tree goes to the kernel in one call. When that
-  // fails partway (EACCES / EPERM, a mount point's EBUSY, …), the walk
-  // below runs on what is left, so the error names the entry and the
-  // syscall, as Node's does.
-  const kernelRm = kernelVersion(ctx) !== null;
   const kernelRefusesDev = kernelAtLeast(ctx, '1.93.0');
   const mkdirRootEio = kernelAtLeast(ctx, '1.93.0') && !kernelAtLeast(ctx, '1.94.1');
 
-  /**
-   * Node's rimrafSync (lib/internal/fs/rimraf.js): a missing entry is
-   * skipped; a file is unlinked; a directory's children go first, then the
-   * directory. `shown` is the path as the error should name it (the caller's
-   * path joined with '/' and each name, as Node's Buffer concat does).
-   */
   /**
    * A removal the kernel answered ENOENT for, of an entry that is still there
    * (a /dev device: the kernel keeps them, ai-ecoverse/slicc-kernel#637): as
@@ -734,79 +722,253 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     return euid() === 0 ? 'EPERM' : 'EACCES';
   };
   const euid = () => (typeof process?.geteuid === 'function' ? process.geteuid() : 0);
-  function rimrafSync(shown, target, recursive) {
+
+  /**
+   * Linux's may_delete() of an entry of `dirTarget`, as rmdir(2) checks it
+   * before it looks at the entry's contents: write and search permission on
+   * the directory (EACCES), and its sticky bit (EPERM unless the caller owns
+   * the entry or the directory). Root passes. Null when allowed.
+   */
+  // Before slicc-kernel 1.86.0 (no chmod) the modes it reports are its
+  // defaults, which it doesn't enforce: nothing to check there.
+  function deleteRefused(dirTarget, entry) {
+    const uid = euid();
+    if (uid === 0 || !kernelChmod) return null;
+    let dir;
+    try {
+      dir = syncFs.lstat(dirTarget);
+    } catch {
+      return null;
+    }
+    if (typeof dir.mode !== 'number') return null;
+    const groups = new Set(typeof process?.getgroups === 'function' ? process.getgroups() : []);
+    if (typeof process?.getegid === 'function') groups.add(process.getegid());
+    const bits = dir.uid === uid ? (dir.mode >> 6) & 7 : groups.has(dir.gid) ? (dir.mode >> 3) & 7 : dir.mode & 7;
+    if ((bits & 3) !== 3) return 'EACCES';
+    if (dir.mode & 0o1000 && dir.uid !== uid && entry?.uid !== uid) return 'EPERM';
+    return null;
+  }
+
+  /**
+   * rmdir(2) on the kernel, whose rm is recursive: a directory with entries
+   * fails, with EACCES / EPERM when its parent refuses the removal (Linux
+   * checks that first), else ENOTEMPTY; an empty one goes to the kernel's rm.
+   */
+  function rmdirOnly(shown, target) {
     let st;
     try {
       st = syncFs.lstat(target);
     } catch (err) {
-      if (err?.code === 'ENOENT') return;
-      st = null;
+      throw nodeFsError(err?.code || 'ENOENT', 'rmdir', shown, err);
     }
-    if (!st?.isDirectory) {
-      try {
-        syncFs.unlink(target);
-      } catch (err) {
-        const code = removalCode(err?.code, target);
-        if (code === 'ENOENT') return;
-        throw nodeFsError(code || 'EIO', 'unlink', shown, err);
-      }
-      return;
-    }
-    if (!recursive) throw rmIsDirectoryError(shown);
-    if (kernelRm) {
-      try {
-        syncFs.rm(target);
-        // The kernel may say it removed what it keeps (/dev): check.
-        if (!syncFs.exists(target)) return;
-      } catch {
-        /* the walk names the entry that fails */
-      }
-    }
-    rmTreeSync(shown, target);
-  }
-
-  // Children first, then the directory, as Node 22's rm (std::filesystem's
-  // walk for rmSync, and promises.rm alike): a directory the user may not
-  // remove from fails on its first entry's unlink, not on its own rmdir.
-  function rmTreeSync(shown, target) {
+    if (!st.isDirectory) throw nodeFsError('ENOTDIR', 'rmdir', shown);
     let names;
     try {
       names = syncFs.readdir(target);
     } catch (err) {
-      if (err?.code === 'ENOENT') return;
-      throw nodeFsError(err?.code || 'EIO', 'scandir', shown, err);
+      throw nodeFsError(err?.code || 'EIO', 'rmdir', shown, err);
     }
-    const sep = String(shown).endsWith('/') ? '' : '/';
-    for (const name of names) {
-      const child = `${shown}${sep}${name}`;
-      const childTarget = path.join(target, name);
-      let st;
-      try {
-        st = syncFs.lstat(childTarget);
-      } catch (err) {
-        if (err?.code === 'ENOENT') continue;
-        throw nodeFsError(err?.code || 'EIO', 'lstat', child, err);
-      }
-      if (st.isDirectory) rmTreeSync(child, childTarget);
-      else {
-        try {
-          syncFs.unlink(childTarget);
-        } catch (err) {
-          const code = removalCode(err?.code, childTarget);
-          if (code === 'ENOENT') continue;
-          throw nodeFsError(code || 'EIO', 'unlink', child, err);
-        }
-      }
-    }
-    // Empty now: the kernel's rm takes it as rmdir would.
+    if (names.length > 0) throw nodeFsError(deleteRefused(path.dirname(target), st) ?? 'ENOTEMPTY', 'rmdir', shown);
     try {
       syncFs.rm(target);
     } catch (err) {
-      const code = removalCode(err?.code, target);
-      if (code === 'ENOENT') return;
-      throw nodeFsError(code || 'EIO', 'rmdir', shown, err);
+      throw nodeFsError(removalCode(err?.code, target) || 'EIO', 'rmdir', shown, err);
     }
+    // The kernel may say it removed what it keeps (/dev).
     if (syncFs.exists(target)) throw nodeFsError(euid() === 0 ? 'EPERM' : 'EACCES', 'rmdir', shown);
+  }
+
+  function unlinkOnly(shown, target) {
+    try {
+      syncFs.unlink(target);
+    } catch (err) {
+      throw nodeFsError(removalCode(err?.code, target) || 'EIO', 'unlink', shown, err);
+    }
+  }
+
+  function lstatOrNull(target) {
+    try {
+      return syncFs.lstat(target);
+    } catch (err) {
+      if (err?.code === 'ENOENT') return null;
+      return undefined;
+    }
+  }
+
+  function readdirOf(shown, target) {
+    try {
+      return syncFs.readdir(target);
+    } catch (err) {
+      throw nodeFsError(err?.code || 'EIO', 'scandir', shown, err);
+    }
+  }
+
+  const childOf = (shown, name) => `${shown}${String(shown).endsWith('/') ? '' : '/'}${name}`;
+  // Node's (lib/internal/fs/rimraf.js).
+  const notEmptyErrorCodes = new Set(['ENOTEMPTY', 'EEXIST', 'EPERM']);
+  const retryErrorCodes = new Set(['EBUSY', 'EMFILE', 'ENFILE', 'ENOTEMPTY', 'EPERM']);
+  const sleepMs = (ms) => {
+    try {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    } catch {
+      /* no Atomics.wait here: retry at once */
+    }
+  };
+
+  /**
+   * Node 22's rimrafSync, step for step over the kernel's calls: a
+   * directory is rmdir()ed first, and only on ENOTEMPTY / EEXIST / EPERM are
+   * its entries (in readdir order) removed and the rmdir tried again; any
+   * other error ends the walk where it is. So a tree whose subdirectory
+   * can't be emptied fails on that subdirectory's own rmdir (EACCES) and
+   * keeps what came after it, as Node's does. `shown` is the path as the
+   * error names it (the caller's path joined with '/' and each name).
+   */
+  function rimrafSync(shown, target, opts) {
+    const st = lstatOrNull(target);
+    if (st === null) return;
+    try {
+      if (st?.isDirectory) rmdirSyncTree(shown, target, opts, null);
+      else unlinkSyncRetry(shown, target, opts);
+    } catch (err) {
+      if (err?.code === 'ENOENT') return;
+      if (err?.code === 'EPERM') return rmdirSyncTree(shown, target, opts, err);
+      if (err?.code !== 'EISDIR') throw err;
+      rmdirSyncTree(shown, target, opts, err);
+    }
+  }
+
+  function unlinkSyncRetry(shown, target, opts) {
+    const tries = opts.maxRetries + 1;
+    for (let i = 1; i <= tries; i++) {
+      try {
+        return unlinkOnly(shown, target);
+      } catch (err) {
+        if (retryErrorCodes.has(err?.code) && i < tries && opts.retryDelay > 0) sleepMs(i * opts.retryDelay);
+        else if (err?.code === 'ENOENT') return;
+        else if (i === tries) throw err;
+      }
+    }
+  }
+
+  function rmdirSyncTree(shown, target, opts, originalErr) {
+    try {
+      rmdirOnly(shown, target);
+    } catch (err) {
+      if (err?.code === 'ENOENT') return;
+      if (err?.code === 'ENOTDIR') throw originalErr || err;
+      if (notEmptyErrorCodes.has(err?.code)) {
+        for (const name of readdirOf(shown, target)) rimrafSync(childOf(shown, name), path.join(target, name), opts);
+        const tries = opts.maxRetries + 1;
+        for (let i = 1; i <= tries; i++) {
+          try {
+            return rmdirOnly(shown, target);
+          } catch (e) {
+            if (retryErrorCodes.has(e?.code) && i < tries && opts.retryDelay > 0) sleepMs(i * opts.retryDelay);
+            else if (e?.code === 'ENOENT') return;
+            else if (i === tries) throw e;
+          }
+        }
+      }
+      throw originalErr || err;
+    }
+  }
+
+  /**
+   * Node 22's callback rimraf (fs.rm, fs.promises.rm): the same steps, but
+   * a directory's entries are removed side by side, so an error in one
+   * subtree doesn't stop its siblings, and the first error to come back is
+   * the one reported. The steps run here in the order they are issued, one
+   * call each (Node's thread pool may answer two of them in either order;
+   * the entries left are the same).
+   */
+  function rimrafConcurrent(shown, target, opts) {
+    const queue = [];
+    const step = (fn) => queue.push(fn);
+    let result;
+    const rimraf = (sh, t, cb) => {
+      let retries = 0;
+      const CB = (err) => {
+        if (err) {
+          if (retryErrorCodes.has(err.code) && retries < opts.maxRetries) {
+            retries++;
+            return step(() => one(sh, t, CB));
+          }
+          if (err.code === 'ENOENT') err = null;
+        }
+        cb(err);
+      };
+      one(sh, t, CB);
+    };
+    const one = (sh, t, cb) =>
+      step(() => {
+        const st = lstatOrNull(t);
+        if (st === null) return cb(null);
+        if (st?.isDirectory) return rmdir(sh, t, null, cb);
+        step(() => {
+          let err = null;
+          try {
+            unlinkOnly(sh, t);
+          } catch (e) {
+            err = e;
+          }
+          if (err) {
+            if (err.code === 'ENOENT') return cb(null);
+            if (err.code === 'EISDIR' || err.code === 'EPERM') return rmdir(sh, t, err, cb);
+          }
+          cb(err);
+        });
+      });
+    const rmdir = (sh, t, originalErr, cb) =>
+      step(() => {
+        let err = null;
+        try {
+          rmdirOnly(sh, t);
+        } catch (e) {
+          err = e;
+        }
+        if (err) {
+          if (notEmptyErrorCodes.has(err.code)) return children(sh, t, cb);
+          if (err.code === 'ENOTDIR') return cb(originalErr);
+        }
+        cb(err);
+      });
+    const rmdirAgain = (sh, t, cb) =>
+      step(() => {
+        try {
+          rmdirOnly(sh, t);
+          cb(null);
+        } catch (e) {
+          cb(e);
+        }
+      });
+    const children = (sh, t, cb) =>
+      step(() => {
+        let files;
+        try {
+          files = readdirOf(sh, t);
+        } catch (e) {
+          return cb(e);
+        }
+        let left = files.length;
+        if (left === 0) return rmdirAgain(sh, t, cb);
+        let done = false;
+        for (const name of files) {
+          rimraf(childOf(sh, name), path.join(t, name), (err) => {
+            if (done) return;
+            if (err) {
+              done = true;
+              return cb(err);
+            }
+            if (--left === 0) rmdirAgain(sh, t, cb);
+          });
+        }
+      });
+    rimraf(shown, target, (err) => {
+      result = { err };
+    });
+    while (queue.length > 0) queue.shift()();
+    if (result?.err) throw result.err;
   }
 
   // How many symlinks a path may pass through before the kernel refuses it
@@ -871,6 +1033,24 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       }
     }
     return out;
+  }
+
+  /** fs.rm / fs.promises.rm: rmSync's checks, then Node's callback rimraf. */
+  function rmConcurrent(p, options) {
+    const pathArg = p;
+    const target = abs(p);
+    const opts = validateRmOptions(options);
+    if (!opts.force || !opts.recursive) {
+      let st;
+      try {
+        st = syncFs.lstat(target);
+      } catch (err) {
+        const code = err?.code || 'ENOENT';
+        if (!opts.force || (code !== 'ENOENT' && code !== 'ENOTDIR')) throw nodeFsError(code, 'lstat', pathArg, err);
+      }
+      if (st?.isDirectory && !opts.recursive) throw rmIsDirectoryError(pathArg);
+    }
+    rimrafConcurrent(pathArg, target, opts);
   }
 
   const syncApi = {
@@ -1127,7 +1307,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         }
         if (st?.isDirectory && !opts.recursive) throw rmIsDirectoryError(pathArg);
       }
-      rimrafSync(pathArg, target, opts.recursive);
+      rimrafSync(pathArg, target, opts);
     },
     unlinkSync(p) {
       const pathArg = p;
@@ -1735,7 +1915,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       return track((async () => mkdirSync(p, options))());
     },
     rm(p, options = {}) {
-      return track((async () => syncApi.rmSync(p, options))());
+      return track((async () => rmConcurrent(p, options))());
     },
     rmdir(p, options = {}) {
       return track((async () => syncApi.rmdirSync(p, options))());
@@ -2279,10 +2459,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     rm(p, options, callback) {
       const cb = typeof options === 'function' ? options : callback;
       const opts = typeof options === 'function' ? undefined : options;
-      if (typeof cb === 'function') return opts === undefined ? callbackify(syncApi.rmSync)(p, cb) : callbackify(syncApi.rmSync)(p, opts, cb);
+      if (typeof cb === 'function') return opts === undefined ? callbackify(rmConcurrent)(p, cb) : callbackify(rmConcurrent)(p, opts, cb);
       let err = null;
       try {
-        syncApi.rmSync(p, opts);
+        rmConcurrent(p, opts);
       } catch (e) {
         // Node validates the options before it starts: those throw here.
         if (isArgError(e)) throw e;
