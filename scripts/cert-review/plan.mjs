@@ -33,18 +33,18 @@ const certifiedLine = (v) => new RegExp(`certified ${NAME.replace('/', '\\/')}@$
 
 function resolvePrev() {
   const releases = JSON.parse(gh('api', `repos/${repo}/releases?per_page=100`, '--paginate', '--slurp')).flat();
+  const published = JSON.parse(execFileSync('npm', ['view', NAME, 'versions', '--json'], { encoding: 'utf8' }));
   const bodies = new Map(releases.map((r) => [r.tag_name.replace(/^v/, ''), r.body ?? '']));
   for (const v of [...earlier].reverse()) {
     const body = bodies.get(v) ?? '';
     const section = /<!-- cert-review -->([\s\S]*?)<!-- \/cert-review -->/.exec(body)?.[1] ?? '';
-    if (certifiedLine(v).test(section)) {
+    if (certifiedLine(v).test(section) && published.includes(v)) {
       const known = /known: ([^;)]*)/.exec(section.match(certifiedLine(v))?.input.slice(section.search(certifiedLine(v))) ?? '')?.[1];
-      return { prev: v, from: `the v${v} release body's cert-review line`, known: known && known !== 'none' ? known.split(/,\s*/) : [] };
+      return { prev: v, from: `the v${v} release body's cert-review line (and v${v} is on npm)`, known: known && known !== 'none' ? known.split(/,\s*/) : [] };
     }
   }
   const tag = JSON.parse(execFileSync('npm', ['view', NAME, 'dist-tags', '--json'], { encoding: 'utf8' })).certified;
   if (tag && earlier.includes(tag)) return { prev: tag, from: `npm's certified dist-tag (no earlier release body carries a cert-review line)` };
-  const published = JSON.parse(execFileSync('npm', ['view', NAME, 'versions', '--json'], { encoding: 'utf8' }));
   const onNpm = [...earlier].reverse().find((v) => published.includes(v));
   if (onNpm) return { prev: onNpm, from: `the newest earlier version on npm (npm latest is certified; no earlier release body carries a cert-review line)` };
   return { prev: null, from: 'no certified earlier release' };
@@ -128,7 +128,7 @@ const md = [
   `- previous: v${prev} (${prevCommit.slice(0, 8)}), from ${resolved.from}`,
   `- subject: v${version} (${commit.slice(0, 8)}); releases in the delta: ${releasesBetween.map((v) => `v${v}`).join(', ')}`,
   `- kernels (devDependency aliases, users enforce): ${kernels.join(', ')}, plus the tag's own devDependency kernel`,
-  `- trees: tag = v${version}'s tests with the published dist; neg = the same tests with v${prev}'s published dist`,
+  `- trees: tag = v${version}'s tests with the dist of the tarball under review (the release's artifact); neg = the same tests with v${prev}'s published dist`,
   '',
   '## Pull requests in the delta',
   '',
@@ -144,7 +144,7 @@ const md = [
   '',
   '## Method (test/cert-review/review.txt)',
   '',
-  '1. Bytes: the published tarball against the rebuild at the tag.',
+  '1. Bytes: the tarball under review against a second pack at the tag.',
   '2. Suites per kernel: golden, jsh parity, integration, test:cert, node-parallel on tag; on neg for every unit the delta touched and every unit that failed on tag.',
   `3. m-fixtures per kernel (test/fixtures/cert-review/fx) against host Node 22.22.0 as user cone, for v${version} and v${prev}; rows ${ROWS.map((r) => r.name).join(', ')} under enforce as root, cone and cone2.`,
   '4. The browser suite on tag with its devDependency kernel.',
