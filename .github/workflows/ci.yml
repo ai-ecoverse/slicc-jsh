@@ -8,7 +8,7 @@ name: ci
 # workflow_dispatch runs it by hand on any ref.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
   merge_group:
   workflow_dispatch:
 
@@ -291,6 +291,7 @@ jobs:
     name: cert
     permissions:
       actions: read
+      checks: read
       contents: read
       issues: write
       pull-requests: write

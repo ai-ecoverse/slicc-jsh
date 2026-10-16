@@ -13,6 +13,43 @@ env:
   CLAUDE_CODE_VERSION: '2.1.295'
 
 jobs:
+  guard:
+    name: cert-review / self-guard
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: write
+    outputs:
+      status: ${{ steps.guard.outputs.status }}
+      touched: ${{ steps.guard.outputs.touched }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Changes to cert-review itself need the coordinator's approval on this exact head
+        id: guard
+        uses: ai-ecoverse/slicc-shared-web/.github/actions/cert-self-guard@64467c916d5c6936992da7fad0be74b653bc303d
+        with:
+          paths: |
+            .github/workflows/cert*.yml
+            .github/workflows/ci.yml
+            .github/workflows/release.yml
+            scripts/cert-review/**
+            scripts/release-line.mjs
+            scripts/release-body.mjs
+            scripts/release-outcome.mjs
+            .releaserc.json
+            test/cert-review/**
+            test/fixtures/cert-review/**
+            .github/actions/cert-self-guard/**
+
   scope:
     name: cert-review / scope
     if: github.event_name == 'pull_request'
@@ -451,7 +488,7 @@ jobs:
 
   verdict:
     name: cert-review / verdict
-    needs: [scope, record, merge-group]
+    needs: [guard, scope, record, merge-group]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -467,10 +504,16 @@ jobs:
           READY: ${{ needs.scope.outputs.ready }}
           SCOPE: ${{ needs.scope.result }}
           GROUP: ${{ needs.merge-group.result }}
+          GUARD: ${{ needs.guard.result }}
+          GUARD_STATUS: ${{ needs.guard.outputs.status }}
         run: |
           if [ "$EVENT" != pull_request ] && [ "$EVENT" != merge_group ]; then
             echo "cert-review runs on pull requests and merge groups ($EVENT)"
             exit 0
+          fi
+          if [ "$GUARD" != success ]; then
+            echo "::error title=cert-review self-guard::${GUARD_STATUS:-$GUARD}: a change to cert-review's own workflow, tools or fixtures needs the coordinator's cert-review-approved label on this exact head"
+            exit 1
           fi
           if [ "$EVENT" = merge_group ]; then
             [ "$GROUP" = success ] || { echo "::error::a pull request in the group has no successful cert-review on the head that entered the queue"; exit 1; }
