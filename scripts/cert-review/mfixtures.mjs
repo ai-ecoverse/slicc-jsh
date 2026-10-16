@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { ARGV, ROWS, ROW_DIRS, SKIP } from '../../test/cert-review/fixtures.mjs';
+import { ARGV, NORMALIZE, ROWS, ROW_DIRS, SKIP, SKIP_CASES } from '../../test/cert-review/fixtures.mjs';
 import { npmFlags, readJson, root, sh, walk } from './lib.mjs';
 
 const { values } = parseArgs({
@@ -228,11 +228,18 @@ async function runDirs(pkgName, pkgDir, pick = null) {
     let k = await fresh();
     const norm = normaliser(hostDir(dir, 'node'), kdir, hostDir(dir, pkgName));
     for (const c of cases) {
+      const key = `${dir}/${c.name}`;
+      if (SKIP_CASES[key]) {
+        results[key] = { status: 'skip', why: SKIP_CASES[key] };
+        continue;
+      }
+      const extra = NORMALIZE.filter(([re]) => re.test(key)).flatMap(([, subs]) => subs);
+      const normCase = (t) => extra.reduce((acc, [re, to]) => acc.replace(re, to), norm(t));
       const opts = { cwd: `${kdir}${c.cwd ? `/${c.cwd}` : ''}`, ...(user !== 'root' ? { user } : {}), ...(c.stdin !== undefined ? { stdin: c.stdin } : {}) };
       const r = await krun(k, c.argv, opts, c.timeout ?? CASE_MS);
       const h = hostRun(dir, c, pkgName);
-      const a = render(c, r, norm);
-      const b = render(c, h, norm);
+      const a = render(c, r, normCase);
+      const b = render(c, h, normCase);
       const same = a === b && r.status !== 'TIMEOUT';
       results[`${dir}/${c.name}`] = { status: same ? 'same' : 'diff', jsh: a.slice(0, 4000), node: same ? undefined : b.slice(0, 4000) };
       if (r.status === 'TIMEOUT' || String(r.status).startsWith('ERROR')) {
