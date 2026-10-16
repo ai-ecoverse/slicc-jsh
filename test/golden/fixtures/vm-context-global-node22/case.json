@@ -1,0 +1,13 @@
+{
+  "description": "vm: a context's top-level this / globalThis is the context's global (not the sandbox), its properties the sandbox's, the ECMAScript builtins on it, as Node 22 (#281)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
