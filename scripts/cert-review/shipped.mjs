@@ -14,7 +14,9 @@ const ALWAYS = [
   /^scripts\/build(-host)?\.mjs$/,
   /^scripts\/(strip-own-scripts|generate-notice)\.mjs$/,
   /^(LICENSE|NOTICE|README\.md|install\.sh|\.releaserc\.json|\.npmrc|\.npmignore)$/,
-  /^\.github\/workflows\/release\.yml$/,
+  /^\.github\/workflows\/(release|ci|cert-review|cert-carry)\.yml$/,
+  /^scripts\/(cert-review\/|release-(line|body)\.mjs$|strip-pack-scripts\.mjs$)/,
+  /^test\/cert-review\//,
 ];
 const MANIFEST = /^package(-lock)?\.json$/;
 const SHIPPED_FIELDS = ['name', 'type', 'bin', 'main', 'exports', 'files', 'engines', 'slicc', 'dependencies', 'optionalDependencies', 'peerDependencies', 'bundleDependencies', 'bundledDependencies', 'publishConfig'];

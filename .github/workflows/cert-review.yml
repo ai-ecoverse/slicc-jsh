@@ -28,6 +28,7 @@ jobs:
       base: ${{ steps.refs.outputs.base }}
       version: ${{ steps.refs.outputs.version }}
       prev: ${{ steps.refs.outputs.prev }}
+      ready: ${{ steps.refs.outputs.ready }}
       head_sha256: ${{ steps.pack.outputs.head_sha256 }}
       base_sha256: ${{ steps.pack.outputs.base_sha256 }}
     steps:
@@ -50,6 +51,7 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           N: ${{ github.event.pull_request.number }}
           FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          READY: ${{ contains(github.event.pull_request.labels.*.name, 'merge-ok') }}
         run: |
           set -euo pipefail
           git fetch -q origin "$BASE_REF"
@@ -58,6 +60,7 @@ jobs:
             echo "head=$HEAD_SHA"
             echo "base=$base"
             echo "fork=$FORK"
+            echo "ready=$READY"
             echo "version=0.0.0-pr.$N"
             echo "prev=0.0.0-base.$N"
           } | tee -a "$GITHUB_OUTPUT"
@@ -69,7 +72,7 @@ jobs:
         run: node scripts/cert-review/shipped.mjs --base "$BASE" --head "$HEAD_SHA" --work "$RUNNER_TEMP/shipped"
       - name: Pack the head and the base, as the release packs
         id: pack
-        if: steps.shipped.outputs.behaviour == 'true' && steps.refs.outputs.fork != 'true'
+        if: steps.shipped.outputs.behaviour == 'true' && steps.refs.outputs.fork != 'true' && steps.refs.outputs.ready == 'true'
         env:
           BASE: ${{ steps.refs.outputs.base }}
           HEAD_SHA: ${{ steps.refs.outputs.head }}
@@ -96,7 +99,7 @@ jobs:
   plan:
     name: cert-review / plan
     needs: scope
-    if: needs.scope.outputs.behaviour == 'true' && needs.scope.outputs.fork != 'true'
+    if: needs.scope.outputs.behaviour == 'true' && needs.scope.outputs.fork != 'true' && needs.scope.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -327,7 +330,7 @@ jobs:
   record:
     name: cert-review / record
     needs: [scope, plan, bench, review]
-    if: always() && needs.scope.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository
+    if: always() && needs.scope.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository && (needs.scope.outputs.behaviour != 'true' || needs.scope.outputs.ready == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -457,6 +460,7 @@ jobs:
           BEHAVIOUR: ${{ needs.scope.outputs.behaviour }}
           WHY: ${{ needs.scope.outputs.why }}
           VERDICT: ${{ needs.record.outputs.verdict }}
+          READY: ${{ needs.scope.outputs.ready }}
           SCOPE: ${{ needs.scope.result }}
           GROUP: ${{ needs.merge-group.result }}
         run: |
@@ -477,6 +481,10 @@ jobs:
           if [ "$BEHAVIOUR" != true ]; then
             echo "$WHY"
             exit 0
+          fi
+          if [ "$READY" != true ]; then
+            echo "::error title=cert-review waits for merge-ok::this pull request changes shipped behaviour ($WHY); the certifying review runs once it is labelled merge-ok, and again on each later push"
+            exit 1
           fi
           [ "$VERDICT" = certified ] || { echo "::error::cert-review: $VERDICT (see the record and the pull request comment)"; exit 1; }
           echo "certified"
