@@ -39,7 +39,13 @@ jobs:
         with:
           paths: |
             .github/workflows/cert*.yml
+            .github/workflows/ci.yml
+            .github/workflows/release.yml
             scripts/cert-review/**
+            scripts/release-line.mjs
+            scripts/release-body.mjs
+            scripts/release-outcome.mjs
+            .releaserc.json
             test/cert-review/**
             test/fixtures/cert-review/**
             .github/actions/cert-self-guard/**
