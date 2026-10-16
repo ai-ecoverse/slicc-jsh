@@ -8,13 +8,14 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
+import { createNodeKernel as createKernel186 } from 'kernel-cert-186/node';
 import { WebSocketServer } from 'ws';
 import { openLoopbackWebSocket } from '../../src/runtime/web/websocket-loopback.mjs';
 import { packageFiles } from './helpers.mjs';
 
-async function withCdp(answer) {
+async function withCdp(answer, createKernel = createNodeKernel) {
   const opened = [];
-  const kernel = await createNodeKernel({
+  const kernel = await createKernel({
     cdp: async () => {
       const conn = {
         onmessage: null,
@@ -42,9 +43,16 @@ const echo = ({ id, method }) => [
   ...(method === 'Target.setDiscoverTargets' ? [{ method: 'Target.targetCreated', params: { n: 1 } }] : []),
 ];
 
-describe('WebSocket to the kernel loopback', () => {
+// Both paths a loopback WebSocket can take: the kernel's own ctx.websocket
+// (slicc-kernel 1.106.3 and later, the devDependency) and jsh's RFC 6455
+// client over the kernel's sockets (older kernels; 1.86.0 here). Node's
+// answers are the same on both.
+for (const [path, createKernel] of [
+  ['ctx.websocket, slicc-kernel 1.106.3+', createNodeKernel],
+  ["jsh's own client, slicc-kernel 1.86.0", createKernel186],
+]) describe(`WebSocket to the kernel loopback (${path})`, () => {
   it('reaches the CDP facade at SLICC_CDP_URL: commands, a 70 kB answer, events, a clean close', async () => {
-    const { kernel, opened, run, close } = await withCdp(echo);
+    const { kernel, opened, run, close } = await withCdp(echo, createKernel);
     try {
       await kernel.writeFile(
         '/os/cdp.js',
@@ -74,7 +82,7 @@ ws.onclose = (e) => console.log('close', e.code, e.wasClean, ws.readyState);
   });
 
   it('a jsh script sees the facade through fetch and WebSocket alike', async () => {
-    const { kernel, run, close } = await withCdp(echo);
+    const { kernel, run, close } = await withCdp(echo, createKernel);
     try {
       await kernel.writeFile(
         '/os/both.jsh',
@@ -100,7 +108,7 @@ console.log('answer', answer.id, answer.result.method);
   });
 
   it('a refused loopback port is an error Event with ECONNREFUSED and no close, as Node 22', async () => {
-    const { kernel, run, close } = await withCdp(echo);
+    const { kernel, run, close } = await withCdp(echo, createKernel);
     try {
       await kernel.writeFile(
         '/os/refused.js',
@@ -116,7 +124,7 @@ ws.onclose = () => console.log('close');
   });
 
   it('the facade with no browser attached refuses the upgrade (503): an error Event', async () => {
-    const kernel = await createNodeKernel();
+    const kernel = await createKernel();
     try {
       for (const [rel, data] of packageFiles()) await kernel.writeFile(`/node_modules/@ai-ecoverse/slicc-jsh/${rel}`, data);
       await kernel.writeFile(
@@ -128,7 +136,9 @@ ws.onerror = (e) => console.log('error', e.error.cause.code, e.error.cause.messa
       );
       assert.deepEqual(await kernel.run(['node', 'nohost.js'], { cwd: '/os' }), {
         status: 0,
-        stdout: 'error EPROTO the server answered the upgrade with 503\n',
+        // The cause's message is the kernel's or jsh's (Node's ErrorEvent
+        // has no cause): the kernel names the status text too.
+        stdout: `error EPROTO the server answered the upgrade with 503${createKernel === createNodeKernel ? ' Service Unavailable' : ''}\n`,
         stderr: '',
       });
     } finally {
@@ -137,7 +147,7 @@ ws.onerror = (e) => console.log('error', e.error.cause.code, e.error.cause.messa
   });
 
   it('holds a server to RFC 6455, as undici does: masked, reserved-bit and long control frames, a bad handshake, the closing handshake', async () => {
-    const { kernel, run, close } = await withCdp(echo);
+    const { kernel, run, close } = await withCdp(echo, createKernel);
     try {
       await kernel.writeFile(
         '/os/strict.js',

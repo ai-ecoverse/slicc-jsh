@@ -4,6 +4,7 @@
  */
 
 import { NodeExitError } from '../exit.mjs';
+import { kernelAtLeast } from '../kernel-version.mjs';
 import { kernelRoute } from './loopback.mjs';
 import { openLoopbackWebSocket } from './websocket-loopback.mjs';
 
@@ -92,6 +93,12 @@ function loopbackRoute(href) {
 }
 
 export function createWebSocket(ctx, { handles, trackPromise, getNet } = {}) {
+  // slicc-kernel 1.106.3 (ai-ecoverse/slicc-kernel#822, #834): the kernel's
+  // own loopback ctx.websocket answers as undici does (the handshake checks,
+  // the close after the server has the echo and closed the connection, the
+  // refused upgrade), so a loopback URL goes to it. Older kernels: jsh's own
+  // RFC 6455 client over the kernel's sockets.
+  const kernelLoopback = kernelAtLeast(ctx, '1.106.3');
   class WebSocket extends EventTarget {
     static CONNECTING = CONNECTING;
     static OPEN = OPEN;
@@ -225,12 +232,13 @@ export function createWebSocket(ctx, { handles, trackPromise, getNet } = {}) {
     #open(url, protocols) {
       // Track the open promise so drainLoop stays alive until error fires
       // (without a handle the process can exit before the catch runs — m2g/ws2.js).
-      // A loopback URL is a server of this kernel (as fetch has it): RFC 6455
-      // over the kernel's sockets. Anything else, ctx.websocket: the
-      // platform's network, through the kernel's transport.
-      // (Not the kernel's loopback ctx.websocket: on 1.103.4 its close event
-      // comes before the server has the echo, ai-ecoverse/slicc-kernel#822.)
-      const route = getNet ? loopbackRoute(url) : null;
+      // A loopback URL is a server of this kernel (as fetch has it). From
+      // slicc-kernel 1.106.3 ctx.websocket reaches it as undici would; before
+      // that its close came before the server had the echo
+      // (ai-ecoverse/slicc-kernel#822), so jsh speaks RFC 6455 over the
+      // kernel's sockets there. Anything else, ctx.websocket: the platform's
+      // network, through the kernel's transport.
+      const route = getNet && !kernelLoopback ? loopbackRoute(url) : null;
       const open = (async () => {
         try {
           const socket = route
