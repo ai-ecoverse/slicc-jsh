@@ -6,8 +6,12 @@ const L = [];
 try { new MessagePort(); } catch (e) { L.push(`new MessagePort: ${e.name} ${e.code} ${e.message}`); }
 const { port1, port2 } = new MessageChannel();
 port2.onmessage = (e) => L.push(`p2 ${JSON.stringify(e.data)} ports=${e.ports.length} ${e.constructor.name} target=${e.target === port2}`);
-port1.addEventListener('close', () => L.push('p1 close'));
-port2.addEventListener('close', () => L.push('p2 close'));
+// Printed once both ends have closed: a 50 ms timer raced port2's close in
+// host Node itself under load (#241).
+let closes = 0;
+const closed = () => { if (++closes === 2) setImmediate(report); };
+port1.addEventListener('close', () => { L.push('p1 close'); closed(); });
+port2.addEventListener('close', () => { L.push('p2 close'); closed(); });
 port1.postMessage('a');
 port1.postMessage({ n: 1 });
 try { port1.postMessage(() => {}); } catch (e) { L.push(`clone ${e.name} ${e.code}`); }
@@ -20,7 +24,7 @@ port1.postMessage({ p: mc.port1 }, [mc.port1]);
 port1.close();
 L.push(`after close sync; hasRef p2 ${port2.hasRef()}`);
 try { port1.postMessage('after close'); L.push('post after close ok'); } catch (e) { L.push(`post after close ${e.code}`); }
-setTimeout(() => {
+function report() {
   console.log(L.join('\n'));
   const c = new MessageChannel();
   c.port1.postMessage('q1'); c.port1.postMessage('q2');
@@ -28,4 +32,4 @@ setTimeout(() => {
   console.log('unstarted hasRef', c.port2.hasRef(), 'with listener', (c.port2.on('message', () => {}), c.port2.hasRef()), 'unref', (c.port2.unref(), c.port2.hasRef()));
   console.log(require('util').inspect(new MessageChannel(), { depth: 0 }));
   mc.port2.close();
-}, 50);
+}
