@@ -253,7 +253,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 
 ## `tls`
 
-`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports, so a package that requires `tls` at load runs as long as it doesn't make a TLS connection. **ws** is one: its `ws://` server over an `http` server's `'upgrade'`, and its client, run as in Node. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load as well, but a tunnel that needs TLS throws.
+`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports, so a package that requires `tls` at load runs as long as it doesn't make a TLS connection. **ws** is one: its `ws://` server over an `http` server's `'upgrade'`, and its client, run as in Node. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too, but loading is all: https-proxy-agent's tunnel needs `tls.connect`, and http-proxy-agent fails at request time even over a plain `http://` proxy, because jsh's `ClientRequest` has no `_implicitHeader()` ([#323](https://github.com/ai-ecoverse/slicc-jsh/issues/323)).
 
 The kernel's sockets (`ctx.net`) have no TLS, so whatever needs a handshake throws `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (no TLS on ctx.net)`, as `https.createServer` does) when it's called, not when the module loads:
 - `tls.connect`, after Node's checks of `checkServerIdentity` and `minDHSize`.
