@@ -82,7 +82,7 @@ function installJshGlobals(bindings) {
 
 /**
  * Platform promises that settle on work outside JS (WebCrypto, WebAssembly
- * compilation) keep the program alive while pending, as Node's thread-pool
+ * compilation, WebGPU) keep the program alive while pending, as Node's thread-pool
  * requests do. Returns the undo.
  */
 function trackPlatformAsync(handles) {
@@ -119,6 +119,18 @@ function trackPlatformAsync(handles) {
     'wrapKey',
   ]);
   wrap(globalThis.WebAssembly, ['compile', 'compileStreaming', 'instantiate', 'instantiateStreaming']);
+  // WebGPU: a request to the GPU process (an adapter, a device, a pipeline
+  // compiled, a buffer mapped after the queue's work) is I/O in flight, as
+  // fetch is (ai-ecoverse/slicc-ortllama#24). Not GPUDevice.lost: it stays
+  // pending for the device's whole life.
+  if (globalThis.navigator?.gpu) {
+    wrap(globalThis.GPU?.prototype, ['requestAdapter']);
+    wrap(globalThis.GPUAdapter?.prototype, ['requestDevice']);
+    wrap(globalThis.GPUBuffer?.prototype, ['mapAsync']);
+    wrap(globalThis.GPUQueue?.prototype, ['onSubmittedWorkDone']);
+    wrap(globalThis.GPUDevice?.prototype, ['createComputePipelineAsync', 'createRenderPipelineAsync', 'popErrorScope']);
+    wrap(globalThis.GPUShaderModule?.prototype, ['getCompilationInfo']);
+  }
   return () => {
     for (const fn of undo.reverse()) fn();
   };

@@ -149,15 +149,29 @@ export function packJsh(dir) {
  * runs scripts long after an install).
  */
 export async function installJshAndBrowser(k, chrome, tgz) {
-  // The kernel's 127.0.0.1 is its own loopback (slicc-kernel 1.91.0, #510):
-  // the harness server on the real machine is host.slicc.internal there,
-  // which the kernel hands to the page's transport as 127.0.0.1.
-  const packUrl = `${chrome.url.replace('//127.0.0.1:', '//host.slicc.internal:')}pack/`;
-  const jsh = await k.run(['pnpm', 'add', '-g', `${packUrl}${tgz}`]);
-  if (jsh.status !== 0) throw new Error(`pnpm add -g slicc-jsh: ${jsh.stderr || jsh.stdout}`);
+  const packUrl = packUrlOf(chrome);
+  const jsh = await addJsh(k, packUrl, tgz);
   const spec = SLICCY_BROWSER.startsWith('/') ? `${packUrl}${basename(SLICCY_BROWSER)}` : SLICCY_BROWSER;
   const browser = await k.run(['pnpm', 'add', '-g', spec]);
   if (browser.status !== 0) throw new Error(`pnpm add -g ${spec}: ${browser.stderr || browser.stdout}`);
   await k.reboot();
   return { jsh, browser };
+}
+
+// The kernel's 127.0.0.1 is its own loopback (slicc-kernel 1.91.0, #510):
+// the harness server on the real machine is host.slicc.internal there,
+// which the kernel hands to the page's transport as 127.0.0.1.
+const packUrlOf = (chrome) => `${chrome.url.replace('//127.0.0.1:', '//host.slicc.internal:')}pack/`;
+
+async function addJsh(k, packUrl, tgz) {
+  const jsh = await k.run(['pnpm', 'add', '-g', `${packUrl}${tgz}`]);
+  if (jsh.status !== 0) throw new Error(`pnpm add -g slicc-jsh: ${jsh.stderr || jsh.stdout}`);
+  return jsh;
+}
+
+/** slicc-jsh alone, as installJshAndBrowser installs it, then a fresh kernel. */
+export async function installJsh(k, chrome, tgz) {
+  const jsh = await addJsh(k, packUrlOf(chrome), tgz);
+  await k.reboot();
+  return jsh;
 }
