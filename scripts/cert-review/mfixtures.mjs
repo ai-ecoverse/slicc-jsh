@@ -171,7 +171,7 @@ function hostRun(dir, c, pkgName) {
   const cwd = join(hostDir(dir, c.hostJsh || c.shell ? pkgName : 'node'), c.cwd ?? '');
   let r;
   if (c.shell) {
-    r = spawnSync('/bin/bash', ['-c', c.shell], {
+    r = isolated('/bin/bash', ['-c', c.shell], {
       cwd,
       encoding: 'utf8',
       timeout: 60_000,
@@ -179,9 +179,9 @@ function hostRun(dir, c, pkgName) {
       env: { HOME: process.env.HOME, LANG: 'C.UTF-8', PATH: `${hostJsh(pkgName)}:/usr/bin:/bin` },
     });
   } else if (c.hostJsh) {
-    r = spawnSync(join(hostJsh(pkgName), 'jsh'), c.hostJsh, { cwd, encoding: 'utf8', timeout: 60_000, env: { HOME: process.env.HOME, PATH: `${hostJsh(pkgName)}:/usr/bin:/bin` } });
+    r = isolated(join(hostJsh(pkgName), 'jsh'), c.hostJsh, { cwd, encoding: 'utf8', timeout: 60_000, env: { HOME: process.env.HOME, PATH: `${hostJsh(pkgName)}:/usr/bin:/bin` } });
   } else {
-    r = spawnSync(c.host[0], c.host.slice(1), { cwd, encoding: 'utf8', timeout: 60_000, env: { HOME: process.env.HOME, PATH: `${dirnameOf(NODE22)}:/usr/bin:/bin` } });
+    r = isolated(c.host[0], c.host.slice(1), { cwd, encoding: 'utf8', timeout: 60_000, env: { HOME: process.env.HOME, PATH: `${dirnameOf(NODE22)}:/usr/bin:/bin` } });
   }
   const res = { status: r.status ?? r.signal, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
   hostCache.set(key, res);
@@ -189,6 +189,8 @@ function hostRun(dir, c, pkgName) {
 }
 
 const dirnameOf = (p) => p.replace(/\/[^/]+$/, '');
+const SETSID = spawnSync('setsid', ['--version'], { encoding: 'utf8' }).status === 0;
+const isolated = (cmd, args, opts) => (SETSID ? spawnSync('setsid', ['--wait', cmd, ...args], opts) : spawnSync(cmd, args, opts));
 
 function render(c, r, norm) {
   if (c.statusOnly) return `rc=${r.status === 0 ? 0 : 'nonzero'}`;

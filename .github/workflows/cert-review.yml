@@ -148,13 +148,13 @@ jobs:
         if: startsWith(matrix.part, 'suites-')
         env:
           TREE: ${{ matrix.part == 'suites-tag' && 'tag' || 'neg' }}
-        run: node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --tree "$TREE"
+        run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --tree "$TREE"
 
       - name: m-fixtures and rows against host Node 22.22.0 (one shard)
         if: startsWith(matrix.part, 'fixtures-')
         env:
           SHARD: ${{ matrix.part == 'fixtures-1' && '1/2' || '2/2' }}
-        run: node scripts/cert-review/mfixtures.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --shard "$SHARD"
+        run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/mfixtures.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --shard "$SHARD"
 
       - name: Chrome for Testing (the tag's config.chrome)
         if: matrix.part == 'browser'
@@ -167,7 +167,7 @@ jobs:
           fi
       - name: Browser suite on tag
         if: matrix.part == 'browser'
-        run: node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag
+        run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
@@ -258,6 +258,7 @@ jobs:
         with:
           use_bedrock: 'true'
           github_token: ${{ github.token }}
+          allowed_bots: 'github-merge-queue'
           show_full_output: ${{ github.event_name == 'workflow_dispatch' }}
           claude_args: |
             --model ${{ vars.CERT_BEDROCK_MODEL || 'global.anthropic.claude-opus-5-5' }}
@@ -294,7 +295,7 @@ jobs:
 
   record:
     name: cert-review / record
-    needs: [plan, review]
+    needs: [plan, bench, review]
     if: always() && needs.plan.outputs.go == 'true' && needs.review.result != 'cancelled'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -309,6 +310,7 @@ jobs:
       VERSION: ${{ needs.plan.outputs.version }}
       DRY_RUN: ${{ needs.plan.outputs.dry_run }}
       PLAN_COMMIT: ${{ needs.plan.outputs.commit }}
+      UPSTREAM: ${{ needs.bench.result == 'success' && needs.review.result || format('bench {0}', needs.bench.result) }}
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -336,7 +338,7 @@ jobs:
           dry=''
           [ "$DRY_RUN" = true ] && dry=--dry-run
           if node scripts/cert-review/record.mjs --version "$VERSION" --review "$RUNNER_TEMP/cert-review" \
-            --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" $dry; then
+            --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" --upstream "$UPSTREAM" $dry; then
             echo "conclusion=success" >> "$GITHUB_OUTPUT"
           else
             echo "conclusion=failure" >> "$GITHUB_OUTPUT"
