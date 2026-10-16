@@ -37,10 +37,14 @@ function resolvePrev() {
   for (const v of [...earlier].reverse()) {
     const body = bodies.get(v) ?? '';
     const section = /<!-- cert-review -->([\s\S]*?)<!-- \/cert-review -->/.exec(body)?.[1] ?? '';
-    if (certifiedLine(v).test(section)) return { prev: v, from: `the v${v} release body's cert-review line` };
+    if (certifiedLine(v).test(section)) {
+      const known = /known: ([^;)]*)/.exec(section.match(certifiedLine(v))?.input.slice(section.search(certifiedLine(v))) ?? '')?.[1];
+      return { prev: v, from: `the v${v} release body's cert-review line`, known: known && known !== 'none' ? known.split(/,\s*/) : [] };
+    }
   }
   const tag = JSON.parse(execFileSync('npm', ['view', NAME, 'dist-tags', '--json'], { encoding: 'utf8' })).certified;
   if (tag && earlier.includes(tag)) return { prev: tag, from: `npm's certified dist-tag (no earlier release body carries a cert-review line)` };
+  if (tag) return { prev: null, from: `npm's certified dist-tag is ${tag}, not before v${version}, and no earlier release body carries a cert-review line: dispatch with prev` };
   return { prev: null, from: 'no certified earlier release' };
 }
 
@@ -102,6 +106,7 @@ const plan = {
   version,
   prev,
   prevFrom: resolved.from,
+  prevKnown: resolved.known ?? null,
   commit,
   prevCommit,
   releasesBetween,

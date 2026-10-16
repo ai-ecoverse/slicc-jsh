@@ -16,6 +16,7 @@ const { values } = parseArgs({
     user: { type: 'string', default: 'cone' },
     timeout: { type: 'string', default: '20000' },
     shard: { type: 'string', default: '1/1' },
+    case: { type: 'string', default: '' },
   },
 });
 const work = resolve(values.work);
@@ -272,6 +273,24 @@ process.on('unhandledRejection', (e) => {
 });
 
 const pkgs = { new: stage.published.dir, prev: stage.previous.dir };
+if (values.case) {
+  const pick = new Map();
+  for (const key of values.case.split(',')) {
+    const i = key.indexOf('/');
+    if (!pick.has(key.slice(0, i))) pick.set(key.slice(0, i), new Set());
+    pick.get(key.slice(0, i)).add(key.slice(i + 1));
+  }
+  const res = {};
+  for (const name of values.pkg.split(',')) {
+    for (const [key, r] of Object.entries(await runDirs(name, pkgs[name], pick))) res[`${name} ${key}`] = r;
+  }
+  mkdirSync(join(out, 'reruns'), { recursive: true });
+  const file = join(out, 'reruns', `${Date.now()}.json`);
+  writeFileSync(file, `${JSON.stringify(res, null, 1)}\n`);
+  for (const [key, r] of Object.entries(res)) console.log(`${r.status.toUpperCase()} ${key}${r.status === 'diff' ? `\n--- jsh\n${r.jsh}\n--- node\n${r.node}` : ''}`);
+  console.log(`mfixtures: wrote ${file}`);
+  process.exit(0);
+}
 const all = {};
 for (const name of values.pkg.split(',')) {
   const res = { ...(await runDirs(name, pkgs[name])), ...(await runRows(name, pkgs[name])) };

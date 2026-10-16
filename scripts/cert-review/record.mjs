@@ -23,7 +23,7 @@ const { values } = parseArgs({
 const WORKFLOW = '.github/workflows/release.yml';
 const SLSA = 'https://slsa.dev/provenance/v1';
 const NOT_COVERED = ['bios real setup (manual)'];
-const DIST_TAG = 'the certified dist-tag is moved by hand from this line';
+const DIST_TAG = 'certified tag: pending (ffj)';
 const { version, repo } = values;
 const problems = [];
 const facts = {};
@@ -196,7 +196,7 @@ const ci = values.run ? `ci: ${values.run}` : 'ci: local';
 const tail = `not covered: ${NOT_COVERED.join(', ')}`;
 let line;
 if (!problems.length && review?.verdict === 'certified') {
-  line = `certified ${NAME}@${version} sha256=${facts.sha256} (${ci}; known: ${review.known.length ? review.known.join(', ') : 'none'}; ${tail})`;
+  line = `certified ${NAME}@${version} sha256=${facts.sha256} (${ci}; known: ${review.known.length ? review.known.join(', ') : 'none'}; ${tail}; ${DIST_TAG})`;
 } else {
   const why = [
     ...(review?.verdict === 'fail' ? [`the reviewer: ${review.reason || 'no reason given'}`] : []),
@@ -214,7 +214,7 @@ const checks = [
   `- provenance: ${facts.provenance ? `${facts.provenance.workflow.path}@${facts.provenance.workflow.ref}, commit ${facts.provenance.gitCommit}` : '?'}`,
   `- gitHead ${facts.gitHead ?? '?'}, tag v${version} ${facts.tagCommit ?? '?'}, onMain=${facts.onMain ?? '?'} (main...commit ${facts.compare ?? '?'})`,
   `- signatures: ${facts.signatures ?? '?'}`,
-  certified ? `- dist-tag: ${DIST_TAG}` : '- dist-tag: not moved (not certified)',
+  certified ? `- dist-tag: ${DIST_TAG}: thr_ffj7dxt28v re-hashes the registry tarball and moves the certified dist-tag by hand from this line` : '- dist-tag: not moved (not certified)',
 ].join('\n');
 const trouble = problems.length ? `\n\n**Problems:**\n${problems.map((p) => `- ${p}`).join('\n')}` : '';
 const section = `${comment}\n\n**Checked by record, in code:**\n${checks}\n\n\`\`\`\n${line}\n\`\`\`${trouble}`;
