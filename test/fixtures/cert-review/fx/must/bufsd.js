@@ -1,0 +1,14 @@
+const out = [];
+const t = (n, f) => { try { out.push(`${n}: ${f()}`); } catch (e) { out.push(`${n}: ${e.name} ${e.code} ${e.message}`); } };
+const b = Buffer.from('abc');
+t('compare(str, buf)', () => Buffer.compare('abc', b));
+t('compare(buf, 1)', () => Buffer.compare(b, 1));
+t('compare(buf, u8)', () => Buffer.compare(b, new Uint8Array([97, 98, 99])));
+t('equals(str)', () => b.equals('abc'));
+t('equals(u8)', () => b.equals(new Uint8Array([97, 98, 99])));
+t('b.compare({})', () => b.compare({}));
+const { StringDecoder } = require('string_decoder');
+t('StringDecoder() no new', () => { const d = StringDecoder('utf8'); return d.write(Buffer.from([0xe2, 0x82])) + '|' + d.write(Buffer.from([0xac])) + '|' + d.end(); });
+t('StringDecoder() instanceof', () => StringDecoder('hex') instanceof StringDecoder);
+t('StringDecoder(bad)', () => StringDecoder('nope'));
+console.log(out.join('\n'));

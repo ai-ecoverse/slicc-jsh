@@ -1,0 +1,13 @@
+import * as web from 'node:stream/web';
+console.log(Object.keys(web).sort().join(','));
+console.log(web.ReadableStream === globalThis.ReadableStream, web.TextEncoderStream === globalThis.TextEncoderStream, web.CompressionStream === globalThis.CompressionStream);
+const rs = new web.ReadableStream({ start(c) { c.enqueue('x'); c.enqueue('y'); c.close(); } });
+const out = []; await rs.pipeThrough(new web.TransformStream({ transform(ch, c) { c.enqueue(ch.toUpperCase()); } })).pipeTo(new web.WritableStream({ write(ch) { out.push(ch); } }));
+console.log(out.join(''));
+const { Readable } = await import('node:stream');
+const nr = Readable.fromWeb(new web.ReadableStream({ start(c) { c.enqueue(new Uint8Array([104, 105])); c.close(); } }));
+let s = ''; for await (const ch of nr) s += ch; console.log('fromWeb', s);
+const back = Readable.toWeb(Readable.from(['q'])); const rd = back.getReader(); console.log('toWeb', (await rd.read()).value);
+const cs = new web.ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('zip me zip me')); c.close(); } }).pipeThrough(new web.CompressionStream('gzip')).pipeThrough(new web.DecompressionStream('gzip')).pipeThrough(new web.TextDecoderStream());
+let t = ''; for await (const ch of cs) t += ch; console.log('gzip roundtrip', t);
+const q = new web.ByteLengthQueuingStrategy({ highWaterMark: 4 }); console.log(q.highWaterMark, q.size(new Uint8Array(3)), new web.CountQueuingStrategy({ highWaterMark: 2 }).size());

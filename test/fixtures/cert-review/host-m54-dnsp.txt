@@ -1,0 +1,7 @@
+dns/promises loaded
+node:dns/promises loaded
+inspector/promises loaded
+node:inspector/promises loaded
+dns loaded
+inspector loaded
+import dns/promises loaded

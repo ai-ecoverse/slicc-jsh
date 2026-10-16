@@ -1,0 +1,15 @@
+const fs = require('fs'); const { fresh, t } = require('./h.cjs');
+const d = fresh('w-enc'); const f = `${d}/b`; fs.writeFileSync(f, Buffer.from([0xe9, 0x41, 0xff, 0x00, 0xc3, 0xa9]));
+for (const e of ['utf8', 'latin1', 'base64', 'hex', 'ascii', 'ucs2', 'base64url', 'binary']) t('read ' + e, () => fs.readFileSync(f, e));
+t('read buffer enc', () => [...fs.readFileSync(f, { encoding: 'buffer' })]); t('read null enc', () => Buffer.isBuffer(fs.readFileSync(f, { encoding: null })));
+t('write hex', () => { fs.writeFileSync(`${d}/h`, '414243', 'hex'); return fs.readFileSync(`${d}/h`, 'utf8'); });
+t('write base64 opts', () => { fs.writeFileSync(`${d}/h`, 'aGk=', { encoding: 'base64' }); return fs.readFileSync(`${d}/h`, 'utf8'); });
+t('write latin1', () => { fs.writeFileSync(`${d}/h`, 'é', 'latin1'); return [...fs.readFileSync(`${d}/h`)]; });
+t('append hex', () => { fs.appendFileSync(`${d}/h`, '21', 'hex'); return [...fs.readFileSync(`${d}/h`)]; });
+t('read bad enc', () => fs.readFileSync(f, 'nope'));
+t('readdir buffer', () => fs.readdirSync(d, { encoding: 'buffer' }).map((b) => Buffer.isBuffer(b) && b.toString()).sort());
+t('readdir withFileTypes buffer', () => fs.readdirSync(d, { encoding: 'buffer', withFileTypes: true }).map((x) => Buffer.isBuffer(x.name)));
+fs.readFile(f, 'latin1', (e, s) => console.log('cb read latin1', e && e.code, JSON.stringify(s)));
+require('fs/promises').readFile(f, 'base64').then((s) => console.log('promise read base64', s));
+require('fs/promises').writeFile(`${d}/p`, '7a7a', 'hex').then(() => console.log('promise write hex', fs.readFileSync(`${d}/p`, 'utf8')));
+require('fs/promises').appendFile(`${d}/p`, 'x', { flag: 'wx' }).then(() => console.log('appendFile wx ok?'), (e) => console.log('promise appendFile wx', e.code, e.syscall));

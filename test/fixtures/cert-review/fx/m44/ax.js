@@ -1,0 +1,4 @@
+const fs = require('fs'), f = require('path').join(require('os').tmpdir(), 'axprobe'); fs.writeFileSync(f, 'x');
+for (const [l, fn] of [['openSync ax', () => fs.closeSync(fs.openSync(f, 'ax'))], ['openSync ax+', () => fs.closeSync(fs.openSync(f, 'ax+'))], ['openSync xa', () => fs.closeSync(fs.openSync(f, 'xa'))], ['writeFileSync flag ax', () => fs.writeFileSync(f, 'q', { flag: 'ax' })], ['appendFileSync (default a) flag ax', () => fs.appendFileSync(f, 'q', { flag: 'ax' })], ['openSync wx', () => fs.closeSync(fs.openSync(f, 'wx'))], ['promises open ax', null]]) {
+  if (!fn) continue; try { fn(); console.log(l, 'opened'); } catch (e) { console.log(l, e.code); } }
+fs.promises.open(f, 'ax').then((h) => { console.log('promises ax opened'); return h.close(); }, (e) => console.log('promises ax', e.code)).then(() => fs.open(f, 'ax', (e) => { console.log('cb ax', e ? e.code : 'opened'); fs.unlinkSync(f); }));

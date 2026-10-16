@@ -19,6 +19,23 @@
       ],
       "matchCurrentVersion": "22.22.0",
       "enabled": false
+    },
+    {
+      "description": "cert-review kernels (scripts/cert-review/stage.mjs): kernel-cert-new follows the npm certified dist-tag, so it is always the newest certified slicc-kernel, in its own PR (nothing resolves @certified at run time).",
+      "matchDepNames": [
+        "kernel-cert-new"
+      ],
+      "followTag": "certified",
+      "groupName": "cert-review kernel",
+      "groupSlug": "cert-review-kernel"
+    },
+    {
+      "description": "cert-review kernels: kernel-cert-186 (1.86.0) and kernel-cert-floor (1.72.0) are fixed legs; they never move.",
+      "matchDepNames": [
+        "kernel-cert-186",
+        "kernel-cert-floor"
+      ],
+      "enabled": false
     }
   ]
 }

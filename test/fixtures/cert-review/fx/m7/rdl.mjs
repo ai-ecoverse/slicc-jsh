@@ -1,0 +1,13 @@
+import fs from 'node:fs'; import p from 'node:fs/promises'; import h from './h.cjs';
+const d = h.fresh('w-rdl'); const o = h.fresh('w-rdl-out');
+fs.writeFileSync(`${o}/of`, ''); fs.mkdirSync(`${o}/osub`); fs.writeFileSync(`${o}/osub/og`, '');
+fs.mkdirSync(`${d}/r/a`, { recursive: true }); fs.writeFileSync(`${d}/r/top`, ''); fs.writeFileSync(`${d}/r/a/mid`, '');
+fs.symlinkSync('../../w-rdl-out', `${d}/r/ln`); console.log('link resolves', fs.existsSync(`${d}/r/ln/of`));
+const s = (a) => JSON.stringify(a.sort());
+console.log('readdirSync recursive        ', s(fs.readdirSync(`${d}/r`, { recursive: true })));
+console.log('readdirSync recursive wft    ', s(fs.readdirSync(`${d}/r`, { recursive: true, withFileTypes: true }).map((e) => `${e.parentPath}|${e.name}`)));
+console.log('readdir cb recursive         ', s(await new Promise((r) => fs.readdir(`${d}/r`, { recursive: true }, (e, l) => r(l)))));
+console.log('promises.readdir recursive   ', s(await p.readdir(`${d}/r`, { recursive: true })));
+console.log('promises.readdir rec wft     ', s((await p.readdir(`${d}/r`, { recursive: true, withFileTypes: true })).map((e) => `${e.parentPath}|${e.name}`)));
+const od = []; for await (const e of await p.opendir(`${d}/r`, { recursive: true })) od.push(`${e.parentPath}|${e.name}`); console.log('opendir recursive            ', s(od));
+const ods = []; const dir = fs.opendirSync(`${d}/r`, { recursive: true }); let e; while ((e = dir.readSync())) ods.push(`${e.parentPath}|${e.name}`); dir.closeSync(); console.log('opendirSync recursive        ', s(ods));

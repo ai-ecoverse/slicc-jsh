@@ -1,0 +1,13 @@
+const cp = require('child_process');
+const sh = (r) => JSON.stringify({ keys: Object.keys(r).sort(), pid: r.pid > 0, status: r.status, signal: r.signal, stdout: r.stdout == null ? r.stdout : String(r.stdout), stderr: r.stderr == null ? r.stderr : String(r.stderr), output: r.output && r.output.map((x) => (x == null ? x : String(x))), error: r.error && { code: r.error.code, errno: r.error.errno, syscall: r.error.syscall, path: r.error.path, spawnargs: r.error.spawnargs, message: r.error.message } });
+console.log('echo', sh(cp.spawnSync('echo', ['hi', 'there'])));
+console.log('exit3', sh(cp.spawnSync('sh', ['-c', 'echo out; echo err >&2; exit 3'])));
+console.log('missing', sh(cp.spawnSync('no-such-cmd-xyz', ['a'])));
+console.log('encoding', sh(cp.spawnSync('printf', ['%s', 'é'], { encoding: 'utf8' })), typeof cp.spawnSync('true', { encoding: 'utf8' }).stdout);
+console.log('buffer?', Buffer.isBuffer(cp.spawnSync('echo', ['x']).stdout));
+console.log('input', sh(cp.spawnSync('cat', { input: 'from input' })));
+console.log('input buffer', sh(cp.spawnSync('wc', ['-c'], { input: Buffer.alloc(70000, 1) })).replace(/ +/g, ' '));
+console.log('input typed array', String(cp.spawnSync('cat', { input: new Uint8Array([104, 105]) }).stdout));
+console.log('signal', sh(cp.spawnSync('sh', ['-c', 'kill -TERM $$'])));
+console.log('env', String(cp.spawnSync('sh', ['-c', 'echo $FOO-$PATH_SET'], { env: { FOO: 'bar', PATH_SET: 'x', PATH: process.env.PATH } }).stdout).trim());
+console.log('cwd /', String(cp.spawnSync('pwd', { cwd: '/' }).stdout).trim());

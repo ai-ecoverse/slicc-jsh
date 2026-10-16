@@ -1,0 +1,12 @@
+typeof function function function function function
+initial 644 644
+spawnSync 644 Error|EACCES|-13|spawnSync <D>/s.sh|<D>/s.sh|spawnSync <D>/s.sh EACCES
+chmodded 755 755
+spawnSync 755 status=0 out="spawned-ok a1"
+spawnSync node shebang 755 status=0 out="node-shebang-ok a1"
+execFileSync 755 ok "spawned-ok b1"
+execSync by path ok "spawned-ok c1"
+spawn async code=0 out="spawned-ok d1"
+back 644
+spawnSync 644 again Error|EACCES|-13|spawnSync <D>/s.sh|<D>/s.sh|spawnSync <D>/s.sh EACCES
+spawnSync 700 status=0 out="spawned-ok a1"

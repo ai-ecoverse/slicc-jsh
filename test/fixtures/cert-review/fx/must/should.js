@@ -1,0 +1,16 @@
+const out = []; const t = (n, f) => { try { out.push(`${n}: ${f()}`); } catch (e) { out.push(`${n}: ${e.name} ${e.code} ${e.message}`); } };
+t('new Error().stack[0]', () => new Error().stack.split('\n')[0]);
+t('new Error("").stack[0]', () => new Error('').stack.split('\n')[0]);
+t('new TypeError().stack[0]', () => new TypeError().stack.split('\n')[0]);
+t('captureStackTrace({})', () => { const o = {}; Error.captureStackTrace(o); return o.stack.split('\n')[0]; });
+t('captureStackTrace({message})', () => { const o = { message: 'm' }; Error.captureStackTrace(o); return o.stack.split('\n')[0]; });
+t('captureStackTrace({name,message})', () => { const o = { name: 'N', message: 'm' }; Error.captureStackTrace(o); return o.stack.split('\n')[0]; });
+const { StringDecoder } = require('string_decoder');
+t('new StringDecoder(nope)', () => new StringDecoder('nope'));
+t('new StringDecoder(1)', () => new StringDecoder(1));
+t('module.constructor === require(module)', () => module.constructor === require('module'));
+t('Buffer.compare(b,1)', () => Buffer.compare(Buffer.from('a'), 1));
+t('Buffer.from(b).equals(true)', () => Buffer.from('a').equals(true));
+t('Buffer.from(b).equals(1.5)', () => Buffer.from('a').equals(1.5));
+console.log(out.join('\n'));
+setTimeout(function named() { throw new TypeError('t1'); }, 5);

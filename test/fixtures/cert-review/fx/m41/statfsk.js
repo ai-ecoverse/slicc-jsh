@@ -1,0 +1,1 @@
+const s = require('fs').statfsSync('/'); console.log(JSON.stringify({ type: s.type, bsize: s.bsize, blocks: s.blocks, bfree: s.bfree, bavail: s.bavail, files: s.files, ffree: s.ffree, GiB: (s.blocks * s.bsize / 2 ** 30).toFixed(2) }));

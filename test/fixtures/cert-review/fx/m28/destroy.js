@@ -1,0 +1,4 @@
+const cp = require('child_process');
+const CHILD = 'process.on("SIGPIPE", () => {}); let n = 0; const w = () => { try { const ok = process.stdout.write("x".repeat(1000) + "\\n"); n++; if (n > 5000) { console.error("never failed"); process.exit(0); } ok ? setImmediate(w) : process.stdout.once("drain", w); } catch (e) { console.error("sync throw", e.code); process.exit(2); } }; process.stdout.on("error", (e) => { console.error("child EPIPE", e.code); process.exit(1); }); w();';
+const run = (label, at) => new Promise((res) => { const c = cp.spawn(process.execPath, ['-e', CHILD], { stdio: ['ignore', 'pipe', 'pipe'] }); let err = ''; c.stderr.on('data', (d) => (err += d)); if (at === 'now') c.stdout.destroy(); else c.stdout.once('data', () => c.stdout.destroy()); c.on('close', (code, sig) => { console.log(label, code, sig, JSON.stringify(err.trim())); res(); }); });
+(async () => { await run('destroy now', 'now'); await run('destroy after data', 'data'); })();

@@ -1,0 +1,9 @@
+typeof function function function function function
+before 644
+chmodSync Error|EPERM|-1|chmod|<X>|EPERM: operation not permitted, chmod '<X>'
+chmod cb Error|EPERM|-1|chmod|<X>|EPERM: operation not permitted, chmod '<X>'
+promises.chmod Error|EPERM|-1|chmod|<X>|EPERM: operation not permitted, chmod '<X>'
+fchmodSync Error|EPERM|-1|fchmod|undefined|EPERM: operation not permitted, fchmod
+fchmod cb Error|EPERM|-1|fchmod|undefined|EPERM: operation not permitted, fchmod
+filehandle.chmod Error|EPERM|-1|fchmod|undefined|EPERM: operation not permitted, fchmod
+after 644

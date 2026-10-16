@@ -1,0 +1,7 @@
+worker_threads true 0 null function function true
+workerData null resourceLimits {}
+Worker constructed
+1
+got b:{"n":1,"s":"x"} b:"two" port:mc
+post after close InvalidStateError
+name ch

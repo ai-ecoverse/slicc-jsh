@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["src/orig.js", "src/entry.js"],
+  "sourcesContent": ["function helper(x) {\n  if (x > 2) {\n    throw new Error('from original source');\n  }\n  return helper(x + 1);\n}\nexport function run() { return helper(0); }\n", "import { run } from './orig.js';\ntry { run(); } catch (e) { console.log(e.stack.split('\\n').slice(0, 3).map((l) => l.replace(/\\(.*[\\\\/]/, '(').trim()).join(' | ')); }\nrun();\n"],
+  "mappings": ";AAAA,SAAS,OAAO,GAAG;AACjB,MAAI,IAAI,GAAG;AACT,UAAM,IAAI,MAAM,sBAAsB;AAAA,EACxC;AACA,SAAO,OAAO,IAAI,CAAC;AACrB;AACO,SAAS,MAAM;AAAE,SAAO,OAAO,CAAC;AAAG;;;ACL1C,IAAI;AAAE,MAAI;AAAG,SAAS,GAAG;AAAE,UAAQ,IAAI,EAAE,MAAM,MAAM,IAAI,EAAE,MAAM,GAAG,CAAC,EAAE,IAAI,CAAC,MAAM,EAAE,QAAQ,aAAa,GAAG,EAAE,KAAK,CAAC,EAAE,KAAK,KAAK,CAAC;AAAG;AACpI,IAAI;",
+  "names": []
+}

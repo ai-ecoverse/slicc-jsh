@@ -1,0 +1,16 @@
+const keys = Object.keys(process).sort();
+console.log('keys', keys.length, keys.join(','));
+const d = (k) => { const x = Object.getOwnPropertyDescriptor(process, k); return x ? `${k}:${x.enumerable ? 'E' : '-'}${x.configurable ? 'C' : '-'}${'value' in x ? (x.writable ? 'W' : 'v') : ''}${x.get ? 'g' : ''}${x.set ? 's' : ''}` : `${k}:none`; };
+console.log('desc', ['stdin', 'stdout', 'stderr', 'title', 'exitCode', '_exiting', 'argv0', 'env', 'pid', 'version', 'report', 'allowedNodeEnvironmentFlags', 'binding', 'dlopen', 'execve', 'mainModule', 'domain', 'features', 'config'].map(d).join(' '));
+const m = ['_debugEnd', '_debugProcess', '_fatalException', '_kill', '_linkedBinding', '_preload_modules', '_tickCallback', 'allowedNodeEnvironmentFlags', 'assert', 'binding', 'debugPort', 'dlopen', 'execve', 'finalization', 'mainModule', 'moduleLoadList', 'openStdin', 'reallyExit', 'report', 'setSourceMapsEnabled', 'sourceMapsEnabled', 'setuid', 'setgid', 'seteuid', 'setegid', 'setgroups', 'initgroups', 'getuid', 'getgroups'];
+console.log('types', m.map((k) => `${k}:${typeof process[k]}`).join(' '));
+const f = process.allowedNodeEnvironmentFlags;
+console.log('envflags', f instanceof Set, f.size > 50, f.has('--max-old-space-size'), f.has('--enable-source-maps'), f.has('--require'), f.has('-r'), f.has('--inspect'), f.has('--nope'));
+console.log('openStdin same', process.openStdin() === process.stdin); process.stdin.pause(); process.stdin.unref?.();
+console.log('mainModule', process.mainModule === require.main, 'moduleLoadList', Array.isArray(process.moduleLoadList));
+console.log('debugPort', typeof process.debugPort, 'preload', JSON.stringify(process._preload_modules));
+console.log('sourceMapsEnabled', process.sourceMapsEnabled);
+const r = process.report;
+console.log('report', typeof r.getReport, typeof r.writeReport, r.signal, r.reportOnUncaughtException, r.reportOnSignal, r.reportOnFatalError, typeof r.directory, r.compact);
+const rep = r.getReport();
+console.log('report keys', Object.keys(rep).slice(0, 12).join(','), 'header has', ['reportVersion', 'event', 'trigger', 'nodejsVersion', 'arch', 'platform', 'osName'].filter((k) => k in rep.header).join(','));
