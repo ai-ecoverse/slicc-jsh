@@ -56,6 +56,7 @@ jobs:
       - if: steps.head.outputs.current == 'true'
         run: npm ci
       - if: steps.head.outputs.current == 'true'
+        id: semantic-release
         name: semantic-release decides the version, tags it and writes the GitHub release; npm publishing is the publish job's
         run: npx semantic-release
         continue-on-error: true
@@ -71,11 +72,16 @@ jobs:
           done
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
           echo "release tags: ${tags:-none}"
+      - name: The tag job fails whenever semantic-release failed (a tag it made still publishes)
+        if: steps.head.outputs.current == 'true'
+        env:
+          SEMANTIC_RELEASE: ${{ steps.semantic-release.outcome }}
+        run: node scripts/release-outcome.mjs
 
   publish:
     name: release / publish
     needs: tag
-    if: github.ref == 'refs/heads/main' && needs.tag.outputs.tags != ''
+    if: always() && github.ref == 'refs/heads/main' && needs.tag.outputs.tags != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -92,7 +98,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       - name: npm publish the tagged commit, with provenance
         id: publish
         env:
@@ -105,6 +111,9 @@ jobs:
             echo "@ai-ecoverse/slicc-jsh@$version is already on npm"
             exit 0
           fi
+          head=$(git rev-parse HEAD)
+          tagged=$(git rev-parse "v$version^{commit}")
+          [ "$head" = "$tagged" ] || { echo "::error::refuse to publish: HEAD is $head, tag v$version is $tagged"; exit 1; }
           npm version "$version" --no-git-tag-version --allow-same-version
           npm publish --provenance --access public --tag latest
 
@@ -152,3 +161,25 @@ jobs:
         run: |
           prev=$(npm view @ai-ecoverse/slicc-jsh versions --json | jq -r '.[]' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | awk -v v="$VERSION" '$0 != v' | tail -1)
           node scripts/cert-review/carry.mjs --from "v$prev" --to "v$VERSION" --release "v$VERSION"
+
+  alert:
+    name: release / alert on failure
+    needs: [tag, publish, verify]
+    if: always() && github.ref == 'refs/heads/main' && (needs.tag.result == 'failure' || needs.publish.result == 'failure' || needs.verify.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      TAG: ${{ needs.tag.result }}
+      PUBLISH: ${{ needs.publish.result }}
+      VERIFY: ${{ needs.verify.result }}
+      TAGS: ${{ needs.tag.outputs.tags }}
+    steps:
+      - name: An issue, so the failure is seen without anyone polling
+        run: |
+          gh issue create --title "release of ${GITHUB_SHA:0:12} failed in run $GITHUB_RUN_ID" \
+            --body "$(printf 'The release of %s failed in %s.\n\n- tag: %s (tags: %s)\n- publish: %s\n- verify: %s\n' "$GITHUB_SHA" "$RUN_URL" "$TAG" "${TAGS:-none}" "$PUBLISH" "$VERIFY")"
