@@ -292,7 +292,7 @@ function spawnError(command, args, code, message) {
 }
 
 /** Emit spawn ENOENT then close(-2), matching Node (missing command or cwd). */
-function failSpawnEnoent(child, process, handles, file, argv) {
+function failSpawnEnoent(child, process, handles, file, argv, closeLater) {
   const error = spawnError(file, argv, 'ENOENT', `spawn ${file} ENOENT`);
   try {
     child.stdout?.push?.(null);
@@ -312,7 +312,7 @@ function failSpawnEnoent(child, process, handles, file, argv) {
     }
     child.exitCode = -2;
     child._markClosing?.();
-    setTimeout(() => {
+    closeLater(() => {
       try {
         child.emit('close', -2, null);
       } catch {
@@ -320,7 +320,7 @@ function failSpawnEnoent(child, process, handles, file, argv) {
       }
       child._release?.();
       handles.notify?.();
-    }, 20);
+    });
   });
 }
 
@@ -329,6 +329,24 @@ function failSpawnEnoent(child, process, handles, file, argv) {
  */
 export function createChildProcess({ ctx, process, Buffer, handles, getStream, getFs }) {
   const path = createPath(() => process.cwd());
+
+  // Spawns on a kernel without ctx.sync.spawn (before 1.87.0), until they settle.
+  const inflightSpawns = new Set();
+  /**
+   * The 'close' of a spawn that failed at run time (ENOENT, EACCES, …).
+   * Node's comes after its stdio pipes' EOF, on the next loop turn (after
+   * that turn's immediates), and its spawn() is synchronous: a spawn the
+   * 'error' handler starts (execFile of a missing command) has reported its
+   * own error by then. Here a spawn settles later on a kernel without
+   * ctx.sync.spawn, so the close also waits for the spawns in flight; it
+   * waited a fixed 20 ms, which a loaded kernel's spawns outlast.
+   */
+  function closeLater(fn) {
+    setImmediate(function later() {
+      if (inflightSpawns.size === 0) return fn();
+      Promise.allSettled([...inflightSpawns]).then(() => setImmediate(later));
+    });
+  }
 
   /**
    * The open file behind a descriptor jsh's fs opened itself (fs.openSync),
@@ -699,7 +717,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       const bad = checkSpawnCwd(ctx, cwd);
       if (bad) releaseAll();
       if (bad === 'ENOENT') {
-        failSpawnEnoent(child, process, handles, file, args);
+        failSpawnEnoent(child, process, handles, file, args, closeLater);
         return;
       }
       if (bad === 'ENOTDIR') {
@@ -783,11 +801,11 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
           child._markClosing();
           // After error handlers (which may call execFile → async spawn) so
           // their 'error' logs before this 'close' (Node order on ENOENT).
-          setTimeout(() => {
+          closeLater(() => {
             safeEmit(child, 'close', errno, null);
             child._release();
             handles.notify?.();
-          }, 20);
+          });
         } else {
           finish(child, 1, null);
         }
@@ -816,6 +834,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
 
     const spawnPromise = ctx.spawn(request);
     trackPromise(handles, spawnPromise);
+    inflightSpawns.add(spawnPromise);
+    const settled = () => inflightSpawns.delete(spawnPromise);
+    spawnPromise.then(settled, settled);
     spawnPromise.then(releaseAll, releaseAll);
     spawnPromise.then((kernelChild) => {
       child._bindKernel(kernelChild);
@@ -871,7 +892,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         }
         child.spawnfile = file;
         child.spawnargs = [typeof opts.argv0 === 'string' ? opts.argv0 : file, ...argv];
-        failSpawnEnoent(child, process, handles, file, argv);
+        failSpawnEnoent(child, process, handles, file, argv, closeLater);
         return child;
       }
     }

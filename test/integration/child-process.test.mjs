@@ -64,6 +64,31 @@ c.on('close', (code, sig) => {
     }
   });
 
+  it("spawn ENOENT: its 'close' comes after every spawn its 'error' handler started has reported, as in Node", async () => {
+    // Node's spawn() is synchronous, and a failed spawn's 'close' comes on
+    // the next loop turn: 20 execFile()s of a missing command from the
+    // 'error' handler have all called back by then. On a kernel without
+    // ctx.sync.spawn (before 1.87.0) jsh's spawns settle later, and the
+    // 'close' came after a fixed 20 ms: on 1.86.0, after 0 of the 20
+    // (cp/enoent.js flipped under load, ai-ecoverse/slicc-jsh#236).
+    const { run, close } = await withJsh();
+    try {
+      const r = await cp(
+        run,
+        `
+const { spawn, execFile } = require('child_process');
+let n = 0;
+const c = spawn('definitely-not-a-cmd-xyz', ['a']);
+c.on('error', () => { for (let i = 0; i < 20; i++) execFile('definitely-not-a-cmd-xyz', () => n++); });
+c.on('close', (code) => console.log('close', code, 'after', n));
+`
+      );
+      assert.equal(r.stdout, 'close -2 after 20\n');
+    } finally {
+      close();
+    }
+  });
+
   it('spawn: SIGTERM kill → exit(null, SIGTERM)', async () => {
     const { run, close } = await withJsh();
     try {
