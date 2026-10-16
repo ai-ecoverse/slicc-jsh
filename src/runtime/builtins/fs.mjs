@@ -284,6 +284,17 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       /* no process yet */
     }
   };
+  let recursiveRmdirWarned = false;
+  /** DEP0147, once per process, as Node's. */
+  const emitRecursiveRmdirWarning = () => {
+    if (recursiveRmdirWarned) return;
+    recursiveRmdirWarned = true;
+    process?.emitWarning?.(
+      'In future versions of Node.js, fs.rmdir(path, { recursive: true }) will be removed. Use fs.rm(path, { recursive: true }) instead',
+      'DeprecationWarning',
+      'DEP0147'
+    );
+  };
   const umaskNow = () => (typeof process?.umask === 'function' ? process.umask() : 0o022);
   const kernelUmask = () => (typeof process?._kernelUmask === 'function' ? process._kernelUmask() : 0o022);
   /**
@@ -1264,6 +1275,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     rmdirSync(p, options = {}) {
       const pathArg = p;
       const target = abs(p);
+      // Node 22 (lib/fs.js emitRecursiveRmdirWarning), for rmdir, rmdirSync
+      // and promises.rmdir alike, which all come here.
+      if (options?.recursive) emitRecursiveRmdirWarning();
       let st;
       try {
         st = syncFs.lstat(target);

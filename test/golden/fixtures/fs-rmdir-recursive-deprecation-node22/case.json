@@ -1,0 +1,13 @@
+{
+  "description": "fs.rmdir / rmdirSync / promises.rmdir with recursive: DEP0147 once per process, to stderr and 'warning' listeners, as Node 22 (#280)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
