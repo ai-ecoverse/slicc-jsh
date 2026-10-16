@@ -25,6 +25,7 @@ jobs:
       why: ${{ steps.shipped.outputs.why }}
       fork: ${{ steps.refs.outputs.fork }}
       head: ${{ steps.refs.outputs.head }}
+      pr_head: ${{ steps.refs.outputs.pr_head }}
       base: ${{ steps.refs.outputs.base }}
       version: ${{ steps.refs.outputs.version }}
       prev: ${{ steps.refs.outputs.prev }}
@@ -37,14 +38,14 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: The pull request's head commit (the tools stay main's, at the base)
+      - name: The candidate and the pull request's head (the tools stay main's, at the base)
         env:
           N: ${{ github.event.pull_request.number }}
-        run: git fetch -q origin "+refs/pull/$N/head:refs/remotes/pr/head"
+        run: git fetch -q origin "$GITHUB_SHA" "+refs/pull/$N/head:refs/remotes/pr/head"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: The head, its merge base with main, and whether the pull request is a fork's
+      - name: The candidate (the pull request merged onto current main), its base (main), and whether it is a fork's
         id: refs
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -54,10 +55,11 @@ jobs:
           READY: ${{ contains(github.event.pull_request.labels.*.name, 'merge-ok') }}
         run: |
           set -euo pipefail
-          git fetch -q origin "$BASE_REF"
-          base=$(git merge-base FETCH_HEAD "$HEAD_SHA")
+          candidate=$GITHUB_SHA
+          base=$(git rev-parse "$candidate^1")
           {
-            echo "head=$HEAD_SHA"
+            echo "head=$candidate"
+            echo "pr_head=$HEAD_SHA"
             echo "base=$base"
             echo "fork=$FORK"
             echo "ready=$READY"
@@ -70,7 +72,7 @@ jobs:
           BASE: ${{ steps.refs.outputs.base }}
           HEAD_SHA: ${{ steps.refs.outputs.head }}
         run: node scripts/cert-review/shipped.mjs --base "$BASE" --head "$HEAD_SHA" --work "$RUNNER_TEMP/shipped"
-      - name: Pack the head and the base, as the release packs
+      - name: Pack the candidate and the base, as the release packs
         id: pack
         if: steps.shipped.outputs.behaviour == 'true' && steps.refs.outputs.fork != 'true' && steps.refs.outputs.ready == 'true'
         env:
@@ -111,10 +113,10 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: The pull request's head commit (the tools stay main's, at the base)
+      - name: The candidate and the pull request's head (the tools stay main's, at the base)
         env:
           N: ${{ github.event.pull_request.number }}
-        run: git fetch -q origin "+refs/pull/$N/head:refs/remotes/pr/head"
+        run: git fetch -q origin "$GITHUB_SHA" "+refs/pull/$N/head:refs/remotes/pr/head"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -163,10 +165,10 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: The pull request's head commit (the tools stay main's, at the base)
+      - name: The candidate and the pull request's head (the tools stay main's, at the base)
         env:
           N: ${{ github.event.pull_request.number }}
-        run: git fetch -q origin "+refs/pull/$N/head:refs/remotes/pr/head"
+        run: git fetch -q origin "$GITHUB_SHA" "+refs/pull/$N/head:refs/remotes/pr/head"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22.22.0'
@@ -243,10 +245,10 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: The pull request's head commit (the tools stay main's, at the base)
+      - name: The candidate and the pull request's head (the tools stay main's, at the base)
         env:
           N: ${{ github.event.pull_request.number }}
-        run: git fetch -q origin "+refs/pull/$N/head:refs/remotes/pr/head"
+        run: git fetch -q origin "$GITHUB_SHA" "+refs/pull/$N/head:refs/remotes/pr/head"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22.22.0'
@@ -284,7 +286,7 @@ jobs:
       - name: The review instructions
         env:
           TOOLS: ${{ github.event.pull_request.base.sha }}
-          SUBJECT: pull request #${{ github.event.pull_request.number }} (head ${{ needs.scope.outputs.head }})
+          SUBJECT: pull request #${{ github.event.pull_request.number }} (head ${{ needs.scope.outputs.pr_head }}, merged onto main as ${{ needs.scope.outputs.head }})
           BASE: main at ${{ needs.scope.outputs.base }}
         run: node scripts/cert-review/prompt.mjs > "$RUNNER_TEMP/review-prompt.txt"
       - name: Claude Code (pinned, installed before any secret is in the job's steps)
@@ -342,7 +344,8 @@ jobs:
       verdict: ${{ steps.record.outputs.verdict }}
     env:
       N: ${{ github.event.pull_request.number }}
-      HEAD_SHA: ${{ needs.scope.outputs.head }}
+      HEAD_SHA: ${{ needs.scope.outputs.pr_head }}
+      CANDIDATE: ${{ needs.scope.outputs.head }}
       VERSION: ${{ needs.scope.outputs.version }}
       BEHAVIOUR: ${{ needs.scope.outputs.behaviour }}
       WHY: ${{ needs.scope.outputs.why }}
@@ -384,7 +387,7 @@ jobs:
             echo "state=success" >> "$GITHUB_OUTPUT"
           else
             tgz=$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz 2> /dev/null | head -1 || true)
-            if node scripts/cert-review/record.mjs --pr "$N" --head "$HEAD_SHA" --version "$VERSION" --review "$RUNNER_TEMP/cert-review" \
+            if node scripts/cert-review/record.mjs --pr "$N" --head "$HEAD_SHA" --commit "$CANDIDATE" --version "$VERSION" --review "$RUNNER_TEMP/cert-review" \
               --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" --tarball "$tgz" --sha256 "$PACKED" --upstream "$UPSTREAM"; then
               echo "verdict=certified" >> "$GITHUB_OUTPUT"
               echo "state=success" >> "$GITHUB_OUTPUT"
@@ -422,7 +425,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      statuses: read
+      statuses: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -443,7 +446,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           BASE: ${{ github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
-        run: node scripts/cert-review/group.mjs --base "$BASE" --head "$HEAD_SHA" --repo "$GH_REPO"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/cert-review/group.mjs --base "$BASE" --head "$HEAD_SHA" --repo "$GH_REPO" --run "$RUN_URL"
 
   verdict:
     name: cert-review / verdict

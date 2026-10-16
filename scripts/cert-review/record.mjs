@@ -21,6 +21,7 @@ const { values } = parseArgs({
     replay: { type: 'boolean', default: false },
     pr: { type: 'string', default: '' },
     head: { type: 'string', default: '' },
+    commit: { type: 'string', default: '' },
     notes: { type: 'string', default: '' },
   },
 });
@@ -54,8 +55,9 @@ function artifact() {
   else if (expected !== facts.sha256) fail(`the artifact is sha256 ${facts.sha256}, the pack job made ${expected}`);
   checkManifest(tgz, version, fail, facts);
   if (values.pr) {
-    if (facts.gitHead !== values.head) fail(`the tarball's gitHead is ${facts.gitHead}, the PR head is ${values.head}`);
-    facts.commit = values.head;
+    const candidate = values.commit || values.head;
+    if (facts.gitHead !== candidate) fail(`the tarball's gitHead is ${facts.gitHead}, the reviewed commit is ${candidate}`);
+    facts.commit = candidate;
     return true;
   }
   const commit = tagOnMain(repo, version, fail, facts);
@@ -117,7 +119,7 @@ const comment = existsSync(join(values.review, 'comment.md'))
 const checks = [
   `- artifact: sha256 ${facts.sha256 ?? '?'} (the pack job's: ${values.sha256 || '?'}), ${facts.integrity ?? '?'}, re-hashed here`,
   ...(values.pr
-    ? [`- gitHead ${facts.gitHead ?? '?'} = the PR head ${values.head}: what merges is what was reviewed; the release publishes it with provenance, and its verify checks npm's copy`]
+    ? [`- gitHead ${facts.gitHead ?? '?'} = the reviewed commit: the PR head ${values.head} merged onto main${values.commit ? ` as ${values.commit}` : ''}. The release publishes main with provenance, and its verify checks npm's copy`]
     : [
         `- gitHead ${facts.gitHead ?? '?'}, tag v${version} ${facts.tagCommit ?? '?'}, onMain=${facts.onMain ?? '?'} (main...tag ${facts.compare ?? '?'})`,
         `- npm before publish: ${facts.npm ?? 'not checked'}${values.replay ? ' (a replay of a published version: its npm bytes predate the packed gitHead)' : ''}`,
