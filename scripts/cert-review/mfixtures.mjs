@@ -190,11 +190,12 @@ function render(c, r, norm) {
   return norm(`${r.stdout}${tail(r.stderr)}\n[rc=${r.status}]`);
 }
 
-async function runDirs(pkgName, pkgDir) {
+async function runDirs(pkgName, pkgDir, pick = null) {
   const results = {};
   const dirs = readdirSync(fx)
     .filter((d) => !d.includes('.'))
     .filter((d) => !values.only || values.only.split(',').includes(d))
+    .filter((d) => !pick || pick.has(d))
     .sort();
   for (const dir of dirs) {
     const mode = modeOf(dir);
@@ -203,7 +204,7 @@ async function runDirs(pkgName, pkgDir) {
       continue;
     }
     if (mode === 'row') continue;
-    const cases = await casesFor(dir, mode);
+    const cases = (await casesFor(dir, mode)).filter((c) => !pick || pick.get(dir).has(c.name));
     if (!cases.length) continue;
     const started = Date.now();
     const k = await boot(pkgDir);
@@ -232,7 +233,7 @@ async function runDirs(pkgName, pkgDir) {
 async function runRows(pkgName, pkgDir) {
   const results = {};
   for (const row of ROWS) {
-    if (values.only && !values.only.split(',').includes(row.name)) continue;
+    if (values.only && !values.only.split(',').includes(row.name) && !values.only.split(',').some((d) => ROW_DIRS.includes(d))) continue;
     const k = await boot(pkgDir);
     for (const [to, from] of Object.entries(row.files)) await k.writeFile(to, readFileSync(join(fx, from)));
     for (const step of row.steps) {
@@ -257,16 +258,45 @@ const all = {};
 for (const name of values.pkg.split(',')) {
   const res = { ...(await runDirs(name, pkgs[name])), ...(await runRows(name, pkgs[name])) };
   all[name] = res;
-  writeFileSync(join(out, `${name}.json`), `${JSON.stringify(res, null, 1)}\n`);
+  writeFileSync(join(out, `${name}${values.only ? '-only' : ''}.json`), `${JSON.stringify(res, null, 1)}\n`);
 }
 
+const RETRIES = 2;
 if (all.new && all.prev) {
+  const suspects = Object.keys(all.new).filter((key) => {
+    const a = all.new[key]?.status;
+    const b = all.prev[key]?.status;
+    return (a === 'diff' && b === 'same') || (a === 'same' && b === 'diff');
+  });
+  const pick = new Map();
+  for (const key of suspects) {
+    const i = key.indexOf('/');
+    const dir = key.slice(0, i);
+    if (!pick.has(dir)) pick.set(dir, new Set());
+    pick.get(dir).add(key.slice(i + 1));
+  }
+  for (let attempt = 1; attempt <= RETRIES && pick.size; attempt++) {
+    hostCache.clear();
+    hostDirs.clear();
+    for (const name of ['new', 'prev']) {
+      const res = await runDirs(name, pkgs[name], pick);
+      for (const [key, r] of Object.entries(res)) {
+        if (!all[name][key]) continue;
+        all[name][key].retries = [...(all[name][key].retries ?? []), r.status];
+      }
+    }
+  }
+  if (suspects.length) console.log(`mfixtures ${kernel.id}: re-ran ${suspects.length} case(s) that changed verdict, ${RETRIES} more time(s) on both releases`);
+}
+
+if (all.new && all.prev && !values.only) {
   const keys = [...new Set([...Object.keys(all.new), ...Object.keys(all.prev)])].sort();
   const rows = keys.map((key) => {
     const a = all.new[key];
     const b = all.prev[key];
     let cls;
     if (a?.status === 'ran' || b?.status === 'ran') cls = a?.jsh === b?.jsh ? 'unchanged' : 'changed';
+    else if (a?.status !== b?.status && [a, b].some((x) => (x?.retries ?? []).some((r) => r !== x.status))) cls = 'flaky';
     else if (a?.status === 'same' && b?.status === 'diff') cls = 'fixed';
     else if (a?.status === 'diff' && b?.status === 'same') cls = 'regression';
     else if (a?.status === 'diff' && b?.status === 'diff') cls = a.jsh === b.jsh ? 'diff-unchanged' : 'diff-changed';
@@ -281,6 +311,7 @@ if (all.new && all.prev) {
     regression: pick('regression'),
     fixed: pick('fixed'),
     diffChanged: pick('diff-changed'),
+    flaky: pick('flaky'),
     rowChanged: pick('changed'),
     rows,
   };
