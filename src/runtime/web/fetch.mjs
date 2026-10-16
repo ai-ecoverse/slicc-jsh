@@ -35,17 +35,25 @@ function trackBody(response, track) {
         return wrapped;
       }
       let reader;
-      wrapped = new ReadableStream({
-        async pull(controller) {
-          reader ??= original.getReader();
-          const { value, done } = await track(reader.read());
-          if (done) controller.close();
-          else controller.enqueue(value);
+      // No read-ahead (highWaterMark 0): a chunk leaves the body only for a
+      // read that asks for it. With the default 1, a chunk that came before
+      // an abort waited in this stream's queue, and the read after
+      // ac.abort() got it, where Node's errored body has nothing left and
+      // the read rejects with the AbortError (#241).
+      wrapped = new ReadableStream(
+        {
+          async pull(controller) {
+            reader ??= original.getReader();
+            const { value, done } = await track(reader.read());
+            if (done) controller.close();
+            else controller.enqueue(value);
+          },
+          cancel(reason) {
+            return (reader ?? original).cancel(reason);
+          },
         },
-        cancel(reason) {
-          return (reader ?? original).cancel(reason);
-        },
-      });
+        { highWaterMark: 0 }
+      );
       return wrapped;
     },
   });
