@@ -6,14 +6,9 @@
 import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 import { connectError, createFetchClient, isLoopbackHost } from './http-fetch.mjs';
+import { noTls as notSupported } from './tls.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
-
-function notSupported(what) {
-  const err = new Error(`slicc-jsh: '${what}' is not supported yet (no TLS on ctx.net)`);
-  err.code = 'ERR_NOT_SUPPORTED';
-  return err;
-}
 
 function rejectTlsOptions(options) {
   for (const name of TLS_CLIENT_OPTS) {

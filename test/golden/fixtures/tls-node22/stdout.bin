@@ -1,0 +1,84 @@
+keys ["CLIENT_RENEG_LIMIT","CLIENT_RENEG_WINDOW","DEFAULT_CIPHERS","DEFAULT_ECDH_CURVE","DEFAULT_MIN_VERSION","DEFAULT_MAX_VERSION","getCiphers","rootCertificates","getCACertificates","setDefaultCACertificates","convertALPNProtocols","checkServerIdentity","createSecureContext","SecureContext","TLSSocket","Server","createServer","connect","createSecurePair"]
+same [true,true,true,true,true,true,true,"TLSv1.2"]
+esm keys ["CLIENT_RENEG_LIMIT","CLIENT_RENEG_WINDOW","DEFAULT_CIPHERS","DEFAULT_ECDH_CURVE","DEFAULT_MAX_VERSION","DEFAULT_MIN_VERSION","SecureContext","Server","TLSSocket","checkServerIdentity","connect","convertALPNProtocols","createSecureContext","createSecurePair","createServer","default","getCACertificates","getCiphers","rootCertificates","setDefaultCACertificates"]
+builtin [true,true,true]
+functions ["getCiphers:/0","getCACertificates:getCACertificates/0","setDefaultCACertificates:setDefaultCACertificates/1","convertALPNProtocols:convertALPNProtocols/2","checkServerIdentity:checkServerIdentity/2","createSecureContext:createSecureContext/1","SecureContext:SecureContext/4","TLSSocket:TLSSocket/2","Server:Server/2","createServer:createServer/2","connect:connect/0","createSecurePair:deprecated/0"]
+settings [3,600,"TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384:ECDHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA256:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!SRP:!CAMELLIA","auto","TLSv1.2","TLSv1.3"]
+getCiphers [["aes128-gcm-sha256","aes128-sha","aes128-sha256","aes256-gcm-sha384","aes256-sha","aes256-sha256","dhe-psk-aes128-cbc-sha","dhe-psk-aes128-cbc-sha256","dhe-psk-aes128-gcm-sha256","dhe-psk-aes256-cbc-sha","dhe-psk-aes256-cbc-sha384","dhe-psk-aes256-gcm-sha384","dhe-psk-chacha20-poly1305","dhe-rsa-aes128-gcm-sha256","dhe-rsa-aes128-sha","dhe-rsa-aes128-sha256","dhe-rsa-aes256-gcm-sha384","dhe-rsa-aes256-sha","dhe-rsa-aes256-sha256","dhe-rsa-chacha20-poly1305","ecdhe-ecdsa-aes128-gcm-sha256","ecdhe-ecdsa-aes128-sha","ecdhe-ecdsa-aes128-sha256","ecdhe-ecdsa-aes256-gcm-sha384","ecdhe-ecdsa-aes256-sha","ecdhe-ecdsa-aes256-sha384","ecdhe-ecdsa-chacha20-poly1305","ecdhe-psk-aes128-cbc-sha","ecdhe-psk-aes128-cbc-sha256","ecdhe-psk-aes256-cbc-sha","ecdhe-psk-aes256-cbc-sha384","ecdhe-psk-chacha20-poly1305","ecdhe-rsa-aes128-gcm-sha256","ecdhe-rsa-aes128-sha","ecdhe-rsa-aes128-sha256","ecdhe-rsa-aes256-gcm-sha384","ecdhe-rsa-aes256-sha","ecdhe-rsa-aes256-sha384","ecdhe-rsa-chacha20-poly1305","psk-aes128-cbc-sha","psk-aes128-cbc-sha256","psk-aes128-gcm-sha256","psk-aes256-cbc-sha","psk-aes256-cbc-sha384","psk-aes256-gcm-sha384","psk-chacha20-poly1305","rsa-psk-aes128-cbc-sha","rsa-psk-aes128-cbc-sha256","rsa-psk-aes128-gcm-sha256","rsa-psk-aes256-cbc-sha","rsa-psk-aes256-cbc-sha384","rsa-psk-aes256-gcm-sha384","rsa-psk-chacha20-poly1305","srp-aes-128-cbc-sha","srp-aes-256-cbc-sha","srp-rsa-aes-128-cbc-sha","srp-rsa-aes-256-cbc-sha","tls_aes_128_ccm_8_sha256","tls_aes_128_ccm_sha256","tls_aes_128_gcm_sha256","tls_aes_256_gcm_sha384","tls_chacha20_poly1305_sha256"],true,false]
+rootCertificates ["function",null,true,false,true,true,true,true]
+getCACertificates [true,true,true]
+getCACertificates bad throws TypeError ERR_INVALID_ARG_VALUE The argument 'type' is invalid. Received 'nope'
+getCACertificates 1 throws TypeError ERR_INVALID_ARG_TYPE The "type" argument must be of type string. Received type number (1)
+setDefaultCACertificates str throws TypeError ERR_INVALID_ARG_TYPE The "certs" argument must be an instance of Array. Received type string ('x')
+setDefaultCACertificates [1] throws TypeError ERR_INVALID_ARG_TYPE The "certs[1]" argument must be of type string or an instance of ArrayBufferView. Received type number (1)
+checkServerIdentity "a.com" {"subjectaltname":"DNS:a.com"} "ok"
+checkServerIdentity "A.COM." {"subjectaltname":"DNS:a.com"} "ok"
+checkServerIdentity "a.com" {"subjectaltname":"DNS:A.com."} "ok"
+checkServerIdentity "b.com" {"subjectaltname":"DNS:a.com, DNS:c.com"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: b.com. is not in the cert's altnames: DNS:a.com, DNS:c.com",["code","reason","host","cert"],"Host: b.com. is not in the cert's altnames: DNS:a.com, DNS:c.com","b.com",true,true]
+checkServerIdentity "www.a.com" {"subjectaltname":"DNS:*.a.com"} "ok"
+checkServerIdentity "a.com" {"subjectaltname":"DNS:*.a.com"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: a.com. is not in the cert's altnames: DNS:*.a.com",["code","reason","host","cert"],"Host: a.com. is not in the cert's altnames: DNS:*.a.com","a.com",true,true]
+checkServerIdentity "x.y.a.com" {"subjectaltname":"DNS:*.a.com"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: x.y.a.com. is not in the cert's altnames: DNS:*.a.com",["code","reason","host","cert"],"Host: x.y.a.com. is not in the cert's altnames: DNS:*.a.com","x.y.a.com",true,true]
+checkServerIdentity "foo.com" {"subjectaltname":"DNS:*.com"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: foo.com. is not in the cert's altnames: DNS:*.com",["code","reason","host","cert"],"Host: foo.com. is not in the cert's altnames: DNS:*.com","foo.com",true,true]
+checkServerIdentity "wwwbar.a.com" {"subjectaltname":"DNS:www*.a.com"} "ok"
+checkServerIdentity "bazwww.a.com" {"subjectaltname":"DNS:*www.a.com"} "ok"
+checkServerIdentity "ab.a.com" {"subjectaltname":"DNS:a*b*.a.com"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: ab.a.com. is not in the cert's altnames: DNS:a*b*.a.com",["code","reason","host","cert"],"Host: ab.a.com. is not in the cert's altnames: DNS:a*b*.a.com","ab.a.com",true,true]
+checkServerIdentity "xn--bcher-kva.example" {"subjectaltname":"DNS:xn--*.example"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: xn--bcher-kva.example. is not in the cert's altnames: DNS:xn--*.example",["code","reason","host","cert"],"Host: xn--bcher-kva.example. is not in the cert's altnames: DNS:xn--*.example","xn--bcher-kva.example",true,true]
+checkServerIdentity "xn--bcher-kva.example" {"subjectaltname":"DNS:xn--bcher-kva.example"} "ok"
+checkServerIdentity "a..com" {"subjectaltname":"DNS:a..com"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: a..com. is not in the cert's altnames: DNS:a..com",["code","reason","host","cert"],"Host: a..com. is not in the cert's altnames: DNS:a..com","a..com",true,true]
+checkServerIdentity "bücher.example" {"subjectaltname":"DNS:bücher.example"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: bücher.example. is not in the cert's altnames: DNS:bücher.example",["code","reason","host","cert"],"Host: bücher.example. is not in the cert's altnames: DNS:bücher.example","bücher.example",true,true]
+checkServerIdentity "a.com" {"subject":{"CN":"a.com"}} "ok"
+checkServerIdentity "b.com" {"subject":{"CN":"a.com"}} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: b.com. is not cert's CN: a.com",["code","reason","host","cert"],"Host: b.com. is not cert's CN: a.com","b.com",true,true]
+checkServerIdentity "b.com" {"subject":{"CN":["a.com","b.com"]}} "ok"
+checkServerIdentity "c.com" {"subject":{"CN":["a.com","b.com"]}} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: c.com. is not cert's CN: a.com,b.com",["code","reason","host","cert"],"Host: c.com. is not cert's CN: a.com,b.com","c.com",true,true]
+checkServerIdentity "a.com" {"subject":{"CN":"a.com"},"subjectaltname":"DNS:b.com"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Host: a.com. is not in the cert's altnames: DNS:b.com",["code","reason","host","cert"],"Host: a.com. is not in the cert's altnames: DNS:b.com","a.com",true,true]
+checkServerIdentity "a.com" {"subject":{"CN":"a.com"},"subjectaltname":"URI:http://a.com/"} "ok"
+checkServerIdentity "a.com" {} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Cert does not contain a DNS name",["code","reason","host","cert"],"Cert does not contain a DNS name","a.com",true,true]
+checkServerIdentity "a.com" {"subject":{}} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: Cert does not contain a DNS name",["code","reason","host","cert"],"Cert does not contain a DNS name","a.com",true,true]
+checkServerIdentity "127.0.0.1" {"subjectaltname":"IP Address:127.0.0.1"} "ok"
+checkServerIdentity "127.0.0.1" {"subjectaltname":"DNS:127.0.0.1"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: IP: 127.0.0.1 is not in the cert's list: ",["code","reason","host","cert"],"IP: 127.0.0.1 is not in the cert's list: ","127.0.0.1",true,true]
+checkServerIdentity "127.0.0.2" {"subjectaltname":"IP Address:127.0.0.1, IP Address:10.0.0.1"} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: IP: 127.0.0.2 is not in the cert's list: 127.0.0.1, 10.0.0.1",["code","reason","host","cert"],"IP: 127.0.0.2 is not in the cert's list: 127.0.0.1, 10.0.0.1","127.0.0.2",true,true]
+checkServerIdentity "127.0.0.1" {"subject":{"CN":"127.0.0.1"}} ["Error","ERR_TLS_CERT_ALTNAME_INVALID","Hostname/IP does not match certificate's altnames: IP: 127.0.0.1 is not in the cert's list: ",["code","reason","host","cert"],"IP: 127.0.0.1 is not in the cert's list: ","127.0.0.1",true,true]
+checkServerIdentity "::1" {"subjectaltname":"IP Address:0:0:0:0:0:0:0:1"} "ok"
+checkServerIdentity "2001:db8::1" {"subjectaltname":"IP Address:2001:0DB8:0000:0000:0000:0000:0000:0001"} "ok"
+checkServerIdentity "2001:db8:0:0:1:0:0:1" {"subjectaltname":"IP Address:2001:db8::1:0:0:1"} "ok"
+checkServerIdentity "::ffff:1.2.3.4" {"subjectaltname":"IP Address:0:0:0:0:0:ffff:102:304"} "ok"
+checkServerIdentity "fe80::1%eth0" {"subjectaltname":"IP Address:fe80::1"} "ok"
+checkServerIdentity "::2" {"subjectaltname":"IP Address:::2, IP Address:010.0.0.1, IP Address:1:2:3:4:5:6:7:8, IP Address:1:0:0:2:0:0:0:3, IP Address:::1.2.3.4, IP Address:bogus"} "ok"
+checkServerIdentity "a.com" {"subjectaltname":"DNS:\"a.com\""} "ok"
+checkServerIdentity "a.com" {"subjectaltname":"DNS:\"a\\u002ecom\", DNS:b.com"} "ok"
+checkServerIdentity "a,b.com" {"subjectaltname":"DNS:\"a,b.com\""} "ok"
+checkServerIdentity "a.com" {"subjectaltname":"DNS:\"a.com"} ["throws","SyntaxError","ERR_TLS_CERT_ALTNAME_FORMAT","Invalid subject alternative name string"]
+checkServerIdentity 123 {"subjectaltname":"DNS:123"} "ok"
+alpn array [true,[2,104,50,8,104,116,116,112,47,49,46,49,2,195,169]]
+alpn u8 [true,[2,104,50]]
+alpn view [true,[2,104,50]]
+alpn string "unset"
+alpn too long throws RangeError ERR_OUT_OF_RANGE The byte length of the protocol at index 1 exceeds the maximum length. It must be <= 255. Received 256
+createSecureContext [true,true,"object","object"]
+ctx minVersion throws TypeError ERR_TLS_INVALID_PROTOCOL_VERSION "TLSv1.4" is not a valid minimum TLS protocol version
+ctx maxVersion throws TypeError ERR_TLS_INVALID_PROTOCOL_VERSION 3 is not a valid maximum TLS protocol version
+ctx conflict throws TypeError ERR_TLS_PROTOCOL_VERSION_CONFLICT TLS protocol version "TLSv1.2" conflicts with secureProtocol "TLSv1_2_method"
+ctx secureOptions throws RangeError ERR_OUT_OF_RANGE The value of "secureOptions" is out of range. It must be an integer. Received 1.5
+ctx ciphers type throws TypeError ERR_INVALID_ARG_TYPE The "options.ciphers" property must be of type string. Received type number (123)
+ctx ciphers empty throws TypeError ERR_INVALID_ARG_VALUE The property 'options.ciphers' is invalid. Received [ '', '' ]
+ctx ecdhCurve throws TypeError ERR_INVALID_ARG_TYPE The "options.ecdhCurve" property must be of type string. Received type number (1)
+ctx sigalgs throws TypeError ERR_INVALID_ARG_VALUE The property 'options.sigalgs' is invalid. Received ''
+ctx ticketKeys throws TypeError ERR_INVALID_ARG_VALUE The property 'options.ticketKeys' must be exactly 48 bytes. Received 47
+ctx sessionTimeout throws RangeError ERR_OUT_OF_RANGE The value of "options.sessionTimeout" is out of range. It must be >= 0 && <= 2147483647. Received -1
+ctx ca type throws TypeError ERR_INVALID_ARG_TYPE The "options.ca" property must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (1)
+ctx cert type throws TypeError ERR_INVALID_ARG_TYPE The "options.cert" property must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object
+ctx crl type throws TypeError ERR_INVALID_ARG_TYPE The "options.crl" property must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (5)
+ctx clientCertEngine throws TypeError ERR_INVALID_ARG_TYPE The "options.clientCertEngine" property must be of type string or one of null or undefined. Received type number (5)
+ctx engine throws TypeError ERR_INVALID_ARG_VALUE The property 'options.privateKeyEngine' is invalid. Received undefined
+ctx options throws TypeError ERR_INVALID_ARG_TYPE The "options" argument must be of type object. Received type number (5)
+classes [true,true,true,true,true,true]
+TLSSocket [true,true,true,true,true,false,null,true,null,null,[2,104,50],"exportKeyingMaterial 0","RangeError","ERR_OUT_OF_RANGE","The value of \"length\" is out of range. It must be >= 1 && <= 4294967295. Received 0","exportKeyingMaterial label","TypeError","ERR_INVALID_ARG_TYPE","The \"label\" argument must be of type string. Received type number (1)","exportKeyingMaterial","Error","ERR_TLS_INVALID_STATE","TLS socket connection must be securely established","setServername","TypeError","ERR_INVALID_ARG_TYPE","The \"name\" argument must be of type string. Received type number (1)","setMaxSendFragment","TypeError","ERR_INVALID_ARG_TYPE","The \"size\" argument must be of type number. Received type string ('x')","renegotiate","TypeError","ERR_INVALID_ARG_TYPE","The \"options\" argument must be of type object. Received null"]
+TLSSocket enableTrace throws TypeError ERR_INVALID_ARG_TYPE The "options.enableTrace" property must be of type boolean. Received type number (1)
+Server [true,true,true,true,true,true,true,false,[2,104,50],1,48,true,false]
+Server options throws TypeError ERR_INVALID_ARG_TYPE The "options" argument must be of type object. Received type number (5)
+Server ALPN both throws TypeError ERR_TLS_ALPN_CALLBACK_WITH_PROTOCOLS The ALPNCallback and ALPNProtocols TLS options are mutually exclusive
+Server handshakeTimeout throws TypeError ERR_INVALID_ARG_TYPE The "options.handshakeTimeout" property must be of type number. Received type string ('x')
+Server SNICallback throws TypeError ERR_INVALID_ARG_TYPE The "options.SNICallback" property must be of type function. Received type number (1)
+Server addContext throws Error ERR_TLS_REQUIRED_SERVER_NAME "servername" is required parameter for Server.addContext
+connect checkServerIdentity throws TypeError ERR_INVALID_ARG_TYPE The "options.checkServerIdentity" property must be of type function. Received type number (1)
+connect minDHSize throws RangeError ERR_OUT_OF_RANGE The value of "options.minDHSize" is out of range. It must be >= 1. Received 0

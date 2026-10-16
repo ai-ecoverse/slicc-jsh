@@ -1,0 +1,5 @@
+{
+  "description": "require('tls') and import 'node:tls' load with Node 22.22.0's exports (ws requires tls at load): checkServerIdentity's matches and ERR_TLS_CERT_ALTNAME_INVALID / ERR_TLS_CERT_ALTNAME_FORMAT, canonical IPs, convertALPNProtocols, DEFAULT_* settings, getCiphers(), rootCertificates' frozen getter, createSecureContext's option checks, TLSSocket extends net.Socket and Server extends net.Server (subclassable, Server callable without new), their argument errors",
+  "argv": ["script.mjs"],
+  "shim": true
+}
