@@ -213,10 +213,18 @@ lockf -k /tmp/slicc-heavy.lock scripts/mem-guard.sh npm run test:browser
 
 ## Release
 
-[semantic-release](https://semantic-release.gitbook.io/) releases on every push to `main` (`.github/workflows/release.yml`, using slicc-shared-web's `node-release.yml`). It runs `npm run lint` and `npm test`, then takes the version from the conventional commits since the last `v*` tag:
+[semantic-release](https://semantic-release.gitbook.io/) releases on every push to `main` (`.github/workflows/release.yml`). It runs `npm run lint` and `npm test`, then takes the version from the conventional commits since the last `v*` tag:
 
 - `feat:` gives a minor release (0.x stays 0.x until a breaking change);
 - `fix:` or `perf:` gives a patch release;
 - other types (`docs:`, `chore:`, `ci:`, `test:`, …) release nothing.
 
-It publishes to npm `latest` with trusted publishing (OIDC) and provenance, and creates a GitHub release. `version` in `package.json` stays `0.0.0`; semantic-release sets it when it publishes. `prepack` builds and then runs `scripts/strip-own-scripts.mjs`, which removes `prepare` and `prepack` from `package.json` in CI (or with `SLICC_JSH_STRIP_SCRIPTS=1`) before npm packs, so the published package has neither. A local `npm pack` keeps them. npm has to trust `release.yml` once: `npm run trust` (fledgling) sets that up, `npm run trust:dry` shows what it would do.
+**Certified = latest.** npm only ever gets bytes that this repository's cert-review certified:
+
+1. **tag:** semantic-release pushes the `v*` tag and drafts the GitHub release; it doesn't publish (`npmPublish: false`).
+2. **pack:** `scripts/cert-review/pack.mjs` packs the tarball from the tag (`npm ci`, `npm version`, `npm pkg set gitHead=<tag commit>`, `npm pack`).
+3. **cert-review** (`.github/workflows/cert-review.yml`, reusable) reviews that artifact: the suites on four kernels on the tag's tests and, as the NEGATIVE, on the previous release's dist, the m-fixtures against host Node 22.22.0 under users `enforce`, and Claude's review from `test/cert-review/review.txt`. Its record writes `certified @ai-ecoverse/slicc-jsh@<v> sha256=<…> (ci: …; known: …)` or a `cert-ci: FAIL` line into the release's cert-review section and a `cert-review` commit status.
+4. **publish** (hosted, the only job with `id-token: write`): only when the record is certified and its sha256 is the pack job's. `scripts/cert-review/gate.mjs` checks that again, in code, before `npm publish <tarball> --provenance --tag latest`.
+5. **verify:** `scripts/cert-review/published.mjs` re-downloads the registry copy and checks it against the certified sha256: integrity, SLSA provenance (`release.yml` on `refs/heads/main`, commit = gitHead = tag), npm signatures, that the tag is on main, and that `latest` is this version. Then the GitHub release becomes the latest release, and the release line is written.
+
+A FAIL leaves the version tagged but unpublished. Its draft release becomes a visible prerelease with the verdict, and npm `latest` stays on the last certified version. The next release is reviewed against the last certified one. `version` in `package.json` stays `0.0.0`; the pack job sets it. `prepack` builds and then runs `scripts/strip-own-scripts.mjs`, which removes `prepare` and `prepack` from `package.json` in CI (or with `SLICC_JSH_STRIP_SCRIPTS=1`) before npm packs, so the published package has neither. A local `npm pack` keeps them. npm has to trust `release.yml` once: `npm run trust` (fledgling) sets that up, `npm run trust:dry` shows what it would do.
