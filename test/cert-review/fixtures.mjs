@@ -5,6 +5,20 @@ export const SKIP = {
   m37: 'tty keys only (see m17t)',
 };
 
+export const SKIP_CASES = {
+  'm2g/wsecho.js': 'talks to the public wss://echo.websocket.org, so the remote end and the runner network are in the loop (#241); the committed websocket-loopback integration tests cover WebSocket',
+  'm2h/wsecho.js': 'the same public echo server as m2g/wsecho.js (#241)',
+  'm36/probe/orphan-output': "an orphan's late echo races its parent's death, by timing; Node gives no order either (#253)",
+};
+
+export const NORMALIZE = [
+  [/^m1[12]\//, [[/\b(\d+(\.\d+)?|PORT) ?ms\b/g, 'N ms']]],
+  [/^m38\/chprobe/, [[/\d+\.\d+ms/g, 'Nms']]],
+  [/^m45\//, [[/report\.\d{8}\.\d{6}\./g, 'report.DATE.']]],
+  [/^m5\//, [[/\b([xm]-)[A-Za-z0-9]{6}\b/g, '$1XXXXXX']]],
+  [/^m30\//, [[/stopped ~ \S+ ms/g, 'stopped ~ N ms']]],
+];
+
 export const ROW_DIRS = ['m46', 'm47', 'm49', 'm51', 'm54'];
 
 export const ARGV = {

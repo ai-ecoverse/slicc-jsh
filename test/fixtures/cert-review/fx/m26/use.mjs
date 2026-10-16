@@ -1,4 +1,4 @@
-const t = async (name, f) => { try { console.log(name, JSON.stringify(await f())); } catch (e) { console.log(name, 'FAIL', e.code, String(e.message).split('\n')[0].slice(0, 160)); } };
+const t = async (name, f) => { try { console.log(name, JSON.stringify(await f())); } catch (e) { console.log(name, 'FAIL', e.code, String(e.message).split('\n')[0].split(process.cwd()).join('.').slice(0, 160)); } };
 await t('chalk', async () => { const { default: c, Chalk } = await import('chalk'); return [typeof c.red, new Chalk({ level: 1 }).red('x')]; });
 await t('strip-ansi', async () => (await import('strip-ansi')).default('\u001b[31mred\u001b[39m'));
 await t('nanoid', async () => (await import('nanoid')).nanoid(10).length);
