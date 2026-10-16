@@ -258,10 +258,11 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - A loopback redirect to another origin drops `authorization`, `proxy-authorization`, `cookie` and `host`.
 - `host.slicc.internal` (and `10.0.2.2`) reach the real machine's loopback, through the kernel's proxy.
 
-**Why not the kernel's loopback `fetch`.** The kernel's own loopback `ctx.fetch` (added in [slicc-kernel#510](https://github.com/ai-ecoverse/slicc-kernel/issues/510)) still differs from Node's undici on 1.110.1, so jsh keeps its own:
+**Why not the kernel's loopback `fetch`.** The kernel's own loopback `ctx.fetch` (added in [slicc-kernel#510](https://github.com/ai-ecoverse/slicc-kernel/issues/510)) still differs from Node's undici in two ways, so jsh keeps its own:
 - the request on the wire has none of undici's default headers (`accept`, `accept-language`, `sec-fetch-mode`, `user-agent`, `accept-encoding`); the kernel declined adding them ([slicc-kernel#599](https://github.com/ai-ecoverse/slicc-kernel/issues/599));
-- it is sent with `connection: close`, where undici keeps the connection alive;
-- an abort no longer reaches a body being read once a garbage collection has taken the request ([slicc-kernel#888](https://github.com/ai-ecoverse/slicc-kernel/issues/888)).
+- it is sent with `connection: close`, where undici keeps the connection alive.
+
+A third difference is fixed from slicc-kernel 1.110.5: before that, an abort no longer reached a body being read once a garbage collection had taken the request ([slicc-kernel#888](https://github.com/ai-ecoverse/slicc-kernel/issues/888)).
 
 **A refused `WebSocket` connect** (slicc-kernel 1.59.1 and later on the Node entry): jsh emits an `error` event and no `close`, and `readyState` stays `CONNECTING`, as Node 22's undici does. The kernel's `cause.code` is passed through on `event.error.cause` (`ECONNREFUSED`, `EAI_NONAME`, `EHOSTUNREACH`/`ENETUNREACH`, `ETIMEDOUT`, `EPROTO`). Node's own `ErrorEvent.error` has no `.code` or `.cause`, so jsh doesn't add one to the event.
 
