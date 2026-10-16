@@ -223,6 +223,38 @@ jobs:
           path: ${{ runner.temp }}/ai-ecoverse-slicc-jsh-*.tgz
           if-no-files-found: error
 
+  probe-golden:
+    # PROBE (#241, not for merge): node-options-node22's shim time on the old kernels.
+    needs: runner
+    strategy:
+      fail-fast: false
+      matrix:
+        kernel: [kernel-cert-floor, kernel-cert-186, slicc-kernel]
+        jobs: ['', '3', '1']
+    runs-on: ${{ needs.runner.outputs.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22.22.0'
+      - run: echo "NODE22=$(command -v node)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci && npm run build
+      - name: probe
+        env:
+          GOLDEN_JOBS: ${{ matrix.jobs }}
+          GOLDEN_TIMES: '1'
+        run: |
+          nproc; grep -c processor /proc/cpuinfo || true; free -m || true
+          if [ "${{ matrix.kernel }}" != slicc-kernel ]; then rm -rf node_modules/@ai-ecoverse/slicc-kernel && cp -R node_modules/${{ matrix.kernel }} node_modules/@ai-ecoverse/slicc-kernel; fi
+          node -p "require('./node_modules/@ai-ecoverse/slicc-kernel/package.json').version" 2>/dev/null || grep '"version"' node_modules/@ai-ecoverse/slicc-kernel/package.json
+          start=$(date +%s); npm run test:golden > golden.log 2>&1 || true; echo "golden took $(( $(date +%s) - start ))s"
+          grep -E "^TIME" golden.log | sort -t' ' -k4 -n -r | head -12
+          grep -E "node-options|mismatch|timeout" golden.log | head
+
   install:
     # install.sh from this checkout, against the published package, in a
     # throwaway HOME: (a) with Node 22 (install an older version, a

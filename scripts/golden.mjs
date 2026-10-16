@@ -158,6 +158,7 @@ function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
 }
 
 async function runShim(argv, { files = [], env = {}, stdin, timeoutMs = 30_000 } = {}) {
+  globalThis.__shimT0 = Date.now();
   const kernel = await createNodeKernel();
   const base = '/node_modules/@ai-ecoverse/slicc-jsh';
   try {
@@ -167,6 +168,7 @@ async function runShim(argv, { files = [], env = {}, stdin, timeoutMs = 30_000 }
     for (const { path, data } of files) {
       await kernel.writeFile(path, data);
     }
+    globalThis.__bootMs = Date.now() - (globalThis.__shimT0 ?? Date.now());
     const work = kernel.run(['node', ...argv], { cwd: '/os', env: { ...env }, ...(stdin !== undefined ? { stdin } : {}) });
     const result = await Promise.race([
       work,
@@ -284,7 +286,9 @@ async function fixture(name) {
         data: readFileSync(join(dir, f.from)),
       })),
     ];
-    const shim = await runShim(shimArgv, { files, env: meta.env ?? {}, stdin: meta.stdin });
+    const t0 = Date.now();
+    const shim = await runShim(shimArgv, { files, env: meta.env ?? {}, stdin: meta.stdin }).catch((e) => { if (process.env.GOLDEN_TIMES) out.log(`TIME ${name} shim FAILED after ${Date.now() - t0} ms`); throw e; });
+    if (process.env.GOLDEN_TIMES) out.log(`TIME ${name} shim ${Date.now() - t0} ms (boot ${globalThis.__bootMs} ms)`);
     compare(out, name, 'shim', shim, expected);
   }
 
