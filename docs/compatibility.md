@@ -14,6 +14,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - [`fs`](#fs)
 - [`child_process`](#child_process)
 - [`net`, `http` and `https`](#net-http-and-https)
+- [`tls`](#tls)
 - [`fetch` and `WebSocket`](#fetch-and-websocket)
 - [`crypto`](#crypto)
 - [`zlib`](#zlib)
@@ -248,7 +249,28 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - `rejectUnauthorized: false` is accepted but ignored. TLS verification stays on.
 - Redirects: requests use `redirect: 'manual'`, so a redirect shows as `statusCode` and `Location`, as in Node. On the browser entry the transport may refuse that with `ENOTSUP`; jsh then falls back to `'follow'`, so plain requests work but a redirect is followed instead of surfaced. The Node entry's transport supports manual redirects. Embedders with `traits.redirectHops` ([slicc-kernel#315](https://github.com/ai-ecoverse/slicc-kernel/issues/315)) can surface redirects in the browser.
 
-**Not available:** `tls` and `https.createServer` throw `ERR_NOT_SUPPORTED`. Because **http-proxy-agent** and **https-proxy-agent** import `tls` for CONNECT tunnels, they can't run.
+**Not available:** `https.createServer` throws `ERR_NOT_SUPPORTED`, as does anything in `tls` that needs a handshake (below).
+
+## `tls`
+
+`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports, so a package that requires `tls` at load runs as long as it doesn't make a TLS connection. **ws** is one: its `ws://` server over an `http` server's `'upgrade'`, and its client, run as in Node. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too, but loading is all: https-proxy-agent's tunnel needs `tls.connect`, and http-proxy-agent fails at request time even over a plain `http://` proxy, because jsh's `ClientRequest` has no `_implicitHeader()` ([#323](https://github.com/ai-ecoverse/slicc-jsh/issues/323)).
+
+The kernel's sockets (`ctx.net`) have no TLS, so whatever needs a handshake throws `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (no TLS on ctx.net)`, as `https.createServer` does) when it's called, not when the module loads:
+- `tls.connect`, after Node's checks of `checkServerIdentity` and `minDHSize`.
+- `listen()` on a `tls.Server`.
+- `new tls.TLSSocket(socket)` over a socket, and `connect()` on a `TLSSocket`.
+- `createSecureContext` (and so `createServer`) with key material: `ca`, `cert`, `key`, `pfx`, `crl`, `dhparam`, a private-key engine or a client-certificate engine. Each one's type is checked first, as Node checks it.
+- `createSecurePair`, which is deprecated (DEP0064).
+
+What doesn't need a handshake is Node's:
+- `checkServerIdentity`: Node's matching (wildcards, the CN fallback, quoted altnames, IP addresses compared in canonical form), returning `ERR_TLS_CERT_ALTNAME_INVALID` with `reason`, `host` and `cert`, or throwing `ERR_TLS_CERT_ALTNAME_FORMAT`.
+- `convertALPNProtocols`, `getCiphers()` (Node 22.22.0's list, from its OpenSSL), `DEFAULT_CIPHERS`, `DEFAULT_ECDH_CURVE`, `DEFAULT_MIN_VERSION`, `DEFAULT_MAX_VERSION` (both follow `--tls-min-v1.x`, `--tls-max-v1.x` and `--tls-cipher-list`), `CLIENT_RENEG_LIMIT` and `CLIENT_RENEG_WINDOW`.
+- `createSecureContext` and `SecureContext` without key material, with Node's option checks and errors (`ERR_TLS_INVALID_PROTOCOL_VERSION`, `ERR_TLS_PROTOCOL_VERSION_CONFLICT`, …).
+- `TLSSocket` extends `net.Socket`, and `Server` extends `net.Server` (callable without `new`, as in Node), so `instanceof` checks and subclasses work. `new tls.TLSSocket()` without a socket has `encrypted: true` and `authorized: false`, and its session getters answer as Node's do before a handshake (`getPeerCertificate()` is `null`, `exportKeyingMaterial` is `ERR_TLS_INVALID_STATE`). A `tls.Server` keeps its options, contexts (`addContext`) and ticket keys.
+
+**`rootCertificates` is an empty frozen array**, and so are `getCACertificates('bundled')`, `'system'` and `'extra'`. jsh makes no TLS connection of its own (an `https` request goes through `fetch`, which uses the platform's trust store), so Node's 146 bundled certificates (about 220 KB) would be trust anchors nothing in jsh uses. `setDefaultCACertificates` checks its arguments as Node does and keeps the list as given, which `getCACertificates()` returns.
+
+The golden `tls-node22` checks the export list and these behaviours against Node 22.22.0.
 
 ## `fetch` and `WebSocket`
 
@@ -373,7 +395,7 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `cluster`, `tls`, `http2`, `dns`, `dns/promises`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `cluster`, `http2`, `dns`, `dns/promises`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
 
 **`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, `BroadcastChannel`, `MessageChannel`, `MessagePort` and `receiveMessageOnPort`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).
