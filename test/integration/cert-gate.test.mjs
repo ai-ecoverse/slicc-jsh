@@ -120,6 +120,15 @@ describe('cert-review record: the line comes from the artifact, not the reviewer
     const r = record('held-bench', ['--tarball', good.tgz, '--sha256', good.sha256, '--upstream', 'bench failure']);
     assert.equal(r.code, 1, r.out);
     assert.match(r.rec.line, /held: a bench job ended failure, so the evidence is incomplete/);
+    assert.equal(r.rec.certified, false);
+  });
+
+  it('calls a skipped bench job INCOMPLETE, never certified', () => {
+    const r = record('held-skipped', ['--tarball', good.tgz, '--sha256', good.sha256, '--upstream', 'bench skipped']);
+    assert.equal(r.code, 1, r.out);
+    assert.equal(r.rec.certified, false);
+    assert.equal(r.rec.sha256, null);
+    assert.match(r.rec.line, /a bench job ended skipped, so the evidence is incomplete/);
   });
 
   it('holds a certified verdict from a review job that did not succeed', () => {
