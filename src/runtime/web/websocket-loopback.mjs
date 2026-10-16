@@ -210,10 +210,13 @@ function connected(socket, href, protocol, rest) {
           else {
             // Echo it, and let the socket go only once the echo is out: end()
             // flushes and half-closes, where destroy() would drop it (5.5.1).
+            // The close comes when the server then closes the connection
+            // (`gone`, on the socket's 'close'), as undici's does (7.1.1: the
+            // server closes TCP first), not when our end() is done.
             closing = true;
             const done = () => finish(code, reason, true);
             send(OP.close, code === 1005 ? new Uint8Array(0) : payload.subarray(0, 2));
-            socket.end(done);
+            socket.end();
             closeTimer = setTimeout(done, CLOSE_WAIT_MS);
             closeTimer.unref?.();
           }
