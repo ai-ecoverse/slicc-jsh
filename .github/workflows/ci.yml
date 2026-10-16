@@ -28,8 +28,8 @@ concurrency:
 jobs:
   # Picks the runner for the Linux jobs (slicc-kernel's decider, kernel
   # ai-ecoverse/slicc-kernel#572): same-repo PR code and a merge group of
-  # same-repo PRs go to the bench pool (cloud-run-bench, the only pool this
-  # repo is listed on), fork code to ubuntu-latest. It checks out nothing and
+  # same-repo PRs go to the pool vars.CERT_RUNNER names (cloud-run-job: one
+  # fresh Cloud Run Jobs execution per job), fork code to ubuntu-latest. It checks out nothing and
   # runs no PR code. vars.CI_RUNNER overrides it (rollback: ubuntu-latest),
   # this job's own runner included, so a pool outage can't block the
   # rollback; vars.CERT_RUNNER names the pool. A fork's PR runs this job on
@@ -47,7 +47,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
           FORCED: ${{ vars.CI_RUNNER }}
-          POOL: ${{ vars.CERT_RUNNER || 'cloud-run-bench' }}
+          POOL: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
         with:
           script: |
             const hosted = 'ubuntu-latest';
@@ -80,7 +80,7 @@ jobs:
   ci:
     needs: runner
     runs-on: ${{ needs.runner.outputs.runner }}
-    # The bench pool runs the serial steps about 1.7x slower than hosted
+    # The old bench pool ran the serial steps about 1.7x slower than hosted
     # (Golden 299 s vs 175 s, cert 188 s vs 86 s on the first pool run).
     timeout-minutes: 25
     steps:
@@ -157,7 +157,7 @@ jobs:
           fi
       - name: Golden (host Node 22)
         timeout-minutes: 8
-        # On the bench pool (9 CPUs, shared with other jobs) six fixtures at
+        # On the old bench pool (9 CPUs, shared with other jobs) six fixtures at
         # once, each a host Node and a kernel with its workers, starved them: node-options-node22's ~50 children
         # outlasted the 30 s shim limit, and the fixtures that compare timers
         # with I/O flipped (#241). Three at once there; hosted runners keep
@@ -267,7 +267,7 @@ jobs:
         run: npm run build
       - name: Chrome for Testing (config.chrome, with slicc-cdp)
         # Chrome's system libraries need root: hosted runners have sudo, and
-        # the bench pool's image ships them (no root there).
+        # the pool's image ships them (no root there).
         run: |
           if [ "$(id -u)" = 0 ] || sudo -n true 2>/dev/null; then
             npm run browser -- --with-deps
