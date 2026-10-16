@@ -35,9 +35,9 @@ export const ROWS = [
     files: { '/opt/m47/chmod.js': 'm47/chmod.js' },
     reference: 'host-m47-*.txt',
     steps: [
-      { label: 'setup', cmd: 'chmod -R a+rX /opt/m47; mkdir -p /root/m47 /tmp/rootd; echo r > /tmp/rootf; ls -ln /tmp/rootf; id; node --version' },
-      { label: 'cone setup', user: 'cone', cwd: D, cmd: 'mkdir -p ~/m47; echo c > ~/m47/cf; ls -ln ~/m47/cf; pwd; echo $HOME' },
-      { label: 'cone2 setup', user: 'cone2', cwd: '/home/cone2', cmd: 'mkdir -p ~/m47; echo c2 > ~/m47/c2f; chmod 755 ~ ~/m47; ls -ln ~/m47/c2f' },
+      { label: 'setup', cmd: 'chmod -R a+rX /opt/m47; mkdir -p /root/m47 /tmp/rootd; echo r > /tmp/rootf; stat -c "%A %u:%g %s %n" /tmp/rootf; id; node --version' },
+      { label: 'cone setup', user: 'cone', cwd: D, cmd: 'mkdir -p ~/m47; echo c > ~/m47/cf; stat -c "%A %u:%g %s %n" ~/m47/cf; pwd; echo $HOME' },
+      { label: 'cone2 setup', user: 'cone2', cwd: '/home/cone2', cmd: 'mkdir -p ~/m47; echo c2 > ~/m47/c2f; chmod 755 ~ ~/m47; stat -c "%A %u:%g %s %n" ~/m47/c2f' },
       ...['owner', 'errors', 'spawn', 'mkdir'].flatMap((md) => [
         { label: `root ${md}`, cmd: `node /opt/m47/chmod.js ${md} /root/m47; echo "rc=$?"` },
         { label: `cone ${md}`, user: 'cone', cmd: `node /opt/m47/chmod.js ${md} ${D}/m47; echo "rc=$?"` },
@@ -75,9 +75,9 @@ export const ROWS = [
       { label: 'setup', cmd: 'chmod -R a+rX /opt/m51; mkdir -p /root/m51; node --version' },
       { label: 'cone local', user: 'cone', cwd: D, cmd: `mkdir -p ~/m51; node /opt/m51/rm.js local ${D}/m51` },
       { label: 'root local', cmd: 'node /opt/m51/rm.js local /root/m51' },
-      { label: 'cone2 tree', user: 'cone2', cmd: 'rm -rf /tmp/c2t; mkdir -p /tmp/c2t/a/b; echo 1 > /tmp/c2t/f; echo 2 > /tmp/c2t/a/b/g; chmod -R a+rX /tmp/c2t; ls -lnd /tmp /tmp/c2t' },
+      { label: 'cone2 tree', user: 'cone2', cmd: 'rm -rf /tmp/c2t; mkdir -p /tmp/c2t/a/b; echo 1 > /tmp/c2t/f; echo 2 > /tmp/c2t/a/b/g; chmod -R a+rX /tmp/c2t; stat -c "%A %u:%g %s %n" /tmp /tmp/c2t' },
       { label: 'cone other: cone2 tree in /tmp', user: 'cone', cmd: 'node /opt/m51/rm.js other /tmp /tmp/c2t' },
-      { label: 'root tree', cmd: 'rm -rf /srv/rt; mkdir -p /srv/rt/a/b; echo 1 > /srv/rt/f; echo 2 > /srv/rt/a/b/g; chmod -R a+rX /srv/rt; ls -lnd /srv /srv/rt' },
+      { label: 'root tree', cmd: 'rm -rf /srv/rt; mkdir -p /srv/rt/a/b; echo 1 > /srv/rt/f; echo 2 > /srv/rt/a/b/g; chmod -R a+rX /srv/rt; stat -c "%A %u:%g %s %n" /srv /srv/rt' },
       { label: 'cone other: root tree', user: 'cone', cmd: 'node /opt/m51/rm.js other /srv /srv/rt' },
       {
         label: 'cone rm /etc recursive force',
@@ -143,11 +143,11 @@ export const ROWS = [
     files: { '/opt/m46/cred.js': 'm46/cred.js' },
     steps: [
       { label: 'setup', cmd: 'chmod -R a+rX /opt/m46; id; tail -3 /etc/passwd; tail -3 /etc/group; node --version' },
-      ...['root-drop', 'root-euid', 'unknown'].map((s) => ({ label: `root ${s}`, cmd: `node /opt/m46/cred.js ${s}; echo "rc=$?"; ls -ln /tmp/cred-${s} 2>/dev/null | tail -n +2` })),
+      ...['root-drop', 'root-euid', 'unknown'].map((s) => ({ label: `root ${s}`, cmd: `node /opt/m46/cred.js ${s}; echo "rc=$?"; stat -c "%A %u:%g %s %n" /tmp/cred-${s}/* 2>/dev/null` })),
       { label: 'cone cone', user: 'cone', cmd: 'node /opt/m46/cred.js cone; echo "rc=$?"' },
       {
         label: 'root drop then spawn sh writes',
-        cmd: `node -e "process.setgid('cone'); process.setuid('cone'); require('child_process').execSync('touch /tmp/kidfile; id -u; id -g', { stdio: 'inherit' })"; ls -ln /tmp/kidfile`,
+        cmd: `node -e "process.setgid('cone'); process.setuid('cone'); require('child_process').execSync('touch /tmp/kidfile; id -u; id -g', { stdio: 'inherit' })"; stat -c "%A %u:%g %s %n" /tmp/kidfile`,
       },
       { label: 'process ids as cone', user: 'cone', cmd: `node -p "[process.getuid(), process.geteuid(), process.getgid(), process.getgroups().join(' ')].join(' ')"` },
     ],
