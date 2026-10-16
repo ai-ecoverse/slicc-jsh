@@ -79,7 +79,8 @@ if (!SEMVER.test(version ?? '') || !values.review || !values.out) {
   console.error('record: --version x.y.z, --review and --out are required');
   process.exit(2);
 }
-if (values.upstream && values.upstream !== 'success') {
+const held = Boolean(values.upstream && values.upstream !== 'success');
+if (held) {
   problems.push(`held: ${values.upstream.startsWith('bench ') ? `a bench job ended ${values.upstream.slice(6)}, so the evidence is incomplete` : `the review job ended ${values.upstream}`}`);
 }
 try {
@@ -98,7 +99,8 @@ if (!problems.length && review?.verdict === 'certified') {
     ...(review?.verdict === 'certified' ? ['the reviewer certified it'] : []),
     ...problems,
   ];
-  line = `cert-ci: FAIL ${NAME}@${version}: ${why.join('; ')} (${ci})`;
+  const incomplete = held && review?.verdict !== 'fail' && problems.length === 1;
+  line = `cert-ci: ${incomplete ? 'INCOMPLETE' : 'FAIL'} ${NAME}@${version}: ${why.join('; ')} (${ci})`;
 }
 const certified = line.startsWith('certified ');
 const comment = existsSync(join(values.review, 'comment.md'))
