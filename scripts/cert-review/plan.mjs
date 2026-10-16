@@ -44,7 +44,9 @@ function resolvePrev() {
   }
   const tag = JSON.parse(execFileSync('npm', ['view', NAME, 'dist-tags', '--json'], { encoding: 'utf8' })).certified;
   if (tag && earlier.includes(tag)) return { prev: tag, from: `npm's certified dist-tag (no earlier release body carries a cert-review line)` };
-  if (tag) return { prev: null, from: `npm's certified dist-tag is ${tag}, not before v${version}, and no earlier release body carries a cert-review line: dispatch with prev` };
+  const published = JSON.parse(execFileSync('npm', ['view', NAME, 'versions', '--json'], { encoding: 'utf8' }));
+  const onNpm = [...earlier].reverse().find((v) => published.includes(v));
+  if (onNpm) return { prev: onNpm, from: `the newest earlier version on npm (npm latest is certified; no earlier release body carries a cert-review line)` };
   return { prev: null, from: 'no certified earlier release' };
 }
 

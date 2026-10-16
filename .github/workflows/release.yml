@@ -1,8 +1,10 @@
-# Releases with semantic-release on every push to main, like the sibling
-# repos: a `feat` gives a minor, a `fix`/`perf` a patch (0.x stays 0.x until a
-# breaking change), published to npm with trusted publishing (OIDC) and
-# provenance, plus a GitHub release. npm trusts this workflow by name
-# (`fledgling` in package.json; `npm run trust` sets it up).
+# Certified = latest. Every push to main: semantic-release tags the version and
+# drafts the GitHub release (no npm publish); the exact tarball is packed from
+# the tag; cert-review certifies that artifact; only a certified artifact whose
+# sha256 matches is published, from this workflow (npm trusts release.yml by
+# name, `fledgling` in package.json), with OIDC and provenance on a hosted
+# runner; then the registry copy is verified against the certified sha256, the
+# release is promoted and the release line is written.
 name: Release
 
 on:
@@ -11,49 +13,210 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
+  contents: read
+
+env:
+  # renovate: datasource=node-version depName=node versioning=node
+  NODE_VERSION: '24.22.0'
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
-    # Publish only from main, also when dispatched by hand from another branch.
+  tag:
+    name: release / tag
     if: github.ref == 'refs/heads/main'
-    uses: ai-ecoverse/slicc-shared-web/.github/workflows/node-release.yml@v1.20.0
-    with:
-      # renovate: datasource=node-version depName=node versioning=node
-      node-version: '24.22.0'
-      test: npm test
-    secrets: inherit
-
-  # The release line for the cert lane: when the release job published (a v*
-  # tag on this commit), the tarball re-fetched from the registry, its
-  # gitHead, sha256, sha512 integrity and npm provenance commit checked
-  # against the released commit, plus whether main contains it (onMain),
-  # written into the GitHub release's body.
-  release-line:
-    needs: release
-    if: needs.release.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     permissions:
       contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
-          # renovate: datasource=node-version depName=node versioning=node
-          node-version: '24.22.0'
-      - name: Release line
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - name: semantic-release tags and drafts the release notes; npm publishing is off
+        run: npx semantic-release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: The tag on this commit
+        id: tag
+        run: |
+          git fetch --tags --force
+          version=$(git tag --points-at HEAD 'v*' | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release tag: ${version:+v$version}${version:-none}"
+
+  pack:
+    name: release / pack
+    needs: tag
+    if: needs.tag.outputs.version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.tag.outputs.version }}
+    outputs:
+      sha256: ${{ steps.pack.outputs.sha256 }}
+      file: ${{ steps.pack.outputs.file }}
+      artifact: slicc-jsh-tarball-${{ needs.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Pack v${{ needs.tag.outputs.version }} from its tag
+        id: pack
+        run: node scripts/cert-review/pack.mjs --version "$VERSION" --out "$RUNNER_TEMP/pack"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: slicc-jsh-tarball-${{ needs.tag.outputs.version }}
+          path: |
+            ${{ runner.temp }}/pack/*.tgz
+            ${{ runner.temp }}/pack/*.tgz.sha256
+            ${{ runner.temp }}/pack/pack.json
+          if-no-files-found: error
+
+  cert:
+    name: cert-review
+    needs: [tag, pack]
+    permissions:
+      actions: read
+      contents: write
+      issues: write
+      pull-requests: read
+      statuses: write
+    uses: ./.github/workflows/cert-review.yml
+    with:
+      version: ${{ needs.tag.outputs.version }}
+      tarball: ${{ needs.pack.outputs.artifact }}
+      sha256: ${{ needs.pack.outputs.sha256 }}
+    secrets: inherit
+
+  publish:
+    name: release / publish
+    needs: [tag, pack, cert]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      needs.cert.outputs.verdict == 'certified' &&
+      needs.cert.outputs.sha256 == needs.pack.outputs.sha256
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      sha256: ${{ needs.cert.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ${{ needs.pack.outputs.artifact }}
+          path: ${{ runner.temp }}/pack
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: cert-review-record-${{ needs.tag.outputs.version }}
+          path: ${{ runner.temp }}/record
+      - name: Publish the certified bytes to latest, with provenance
+        env:
+          TGZ: ${{ runner.temp }}/pack/${{ needs.pack.outputs.file }}
+          SHA256: ${{ needs.pack.outputs.sha256 }}
+        run: node scripts/cert-review/publish.mjs --tarball "$TGZ" --record "$RUNNER_TEMP/record/record.json" --sha256 "$SHA256"
+
+  unpublished:
+    name: release / not published
+    needs: [tag, pack, cert, publish]
+    if: >-
+      always() && github.ref == 'refs/heads/main' && needs.tag.outputs.version != '' && (
+        needs.publish.result == 'failure' || !(
+          needs.cert.outputs.verdict == 'certified' &&
+          needs.cert.outputs.sha256 == needs.pack.outputs.sha256
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.tag.outputs.version }}
+      LINE: ${{ needs.cert.outputs.line }}
+      PACK: ${{ needs.pack.result }}
+      CERT: ${{ needs.cert.result }}
+      PUBLISH: ${{ needs.publish.result }}
+    steps:
+      - name: v${{ needs.tag.outputs.version }} stays tagged and unpublished
+        run: |
+          line="${LINE:-cert-ci: FAIL @ai-ecoverse/slicc-jsh@$VERSION: no cert-review line (pack $PACK, cert-review $CERT)}"
+          [ "$PUBLISH" != failure ] || line="the publish job failed after: $line"
+          { echo '```'; echo "not published: $line"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            gh release edit "v$VERSION" --draft=false --prerelease --latest=false > /dev/null
+            echo "v$VERSION is a prerelease with the cert-review section in its notes"
+          fi
+          echo "::error title=v$VERSION not published::$line"
+          exit 1
+
+  verify:
+    name: release / verify on npm
+    needs: [tag, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: npm integrity, SLSA provenance, gitHead and latest against the certified sha256
+        env:
+          SHA256: ${{ needs.publish.outputs.sha256 }}
+        run: |
+          line=$(node scripts/cert-review/published.mjs --version "$VERSION" --sha256 "$SHA256") && ok=1 || ok=0
+          { echo '```'; echo "$line"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "$line"
+          [ "$ok" = 1 ] || { echo "::error title=v$VERSION on npm::$line"; exit 1; }
+      - name: The GitHub release becomes the latest release
+        run: gh release edit "v$VERSION" --draft=false --prerelease=false --latest > /dev/null
+      - name: The release line (the published tarball, re-fetched from the registry)
         run: |
           git fetch --tags --force origin
-          node scripts/release-line.mjs
+          node scripts/release-line.mjs "$VERSION"
+      - name: Published but not verified, so the release is a visible prerelease
+        if: failure()
+        run: |
+          if gh release view "v$VERSION" > /dev/null 2>&1; then
+            gh release edit "v$VERSION" --draft=false --prerelease --latest=false > /dev/null
+            echo "v$VERSION is a prerelease: it is on npm, but the post-publish checks failed"
+          fi
