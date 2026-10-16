@@ -5,10 +5,9 @@ s.on('data', (c) => {
   events.push(`data ${Buffer.isBuffer(c)} ${c.toString()}`);
   s.pause();
   events.push(`paused ${s.isPaused()} ${s.readableFlowing}`);
-  setTimeout(() => {
-    events.push('resume');
-    s.resume();
-  }, 20);
+  // Paused with nothing buffered, the stream still ends (Node emits 'end'
+  // once the length is 0, flowing or not). A resume() from a timer raced
+  // the read of the EOF, in Node as in jsh: under load it came first (#241).
 });
 s.on('end', () => events.push('end'));
 s.on('close', () => {
