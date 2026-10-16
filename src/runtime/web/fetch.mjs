@@ -234,6 +234,9 @@ export function createFetch(ctx, { handles, getHttp } = {}) {
     }
     // A server of this kernel: its own sockets (the platform's fetch would
     // go to the host's loopback, or nowhere in a browser).
+    // Not the kernel's own loopback ctx.fetch: on 1.103.4 it still differs
+    // from undici (bad ports, error causes, the request head;
+    // ai-ecoverse/slicc-kernel#822).
     let request;
     let target = null;
     try {

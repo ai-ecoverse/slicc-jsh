@@ -228,6 +228,8 @@ export function createWebSocket(ctx, { handles, trackPromise, getNet } = {}) {
       // A loopback URL is a server of this kernel (as fetch has it): RFC 6455
       // over the kernel's sockets. Anything else, ctx.websocket: the
       // platform's network, through the kernel's transport.
+      // (Not the kernel's loopback ctx.websocket: on 1.103.4 its close event
+      // comes before the server has the echo, ai-ecoverse/slicc-kernel#822.)
       const route = getNet ? loopbackRoute(url) : null;
       const open = (async () => {
         try {
