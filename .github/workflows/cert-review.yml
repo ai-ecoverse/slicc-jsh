@@ -42,6 +42,8 @@ permissions:
 env:
   # renovate: datasource=node-version depName=node versioning=node
   NODE_VERSION: '24.22.0'
+  # renovate: datasource=npm depName=@anthropic-ai/claude-code
+  CLAUDE_CODE_VERSION: '2.1.292'
 
 jobs:
   plan:
@@ -285,34 +287,30 @@ jobs:
           node scripts/cert-review/digest.mjs --work "$WORK" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: The review instructions
-        id: prompt
         env:
           TOOLS: ${{ github.sha }}
+        run: node scripts/cert-review/prompt.mjs > "$RUNNER_TEMP/review-prompt.txt"
+
+      - name: Claude Code (pinned, installed before any secret is in the job's steps)
         run: |
-          {
-            echo 'text<<CERT_REVIEW_PROMPT_EOF'
-            node scripts/cert-review/prompt.mjs
-            echo 'CERT_REVIEW_PROMPT_EOF'
-          } >> "$GITHUB_OUTPUT"
+          npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+          claude --version
 
       - name: Review
         id: review
-        uses: anthropics/claude-code-action@a26b07d8c778b0c43f64618e5fd29fd0f8af72e8
         env:
+          CLAUDE_CODE_USE_BEDROCK: '1'
           AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           AWS_REGION: ${{ vars.CERT_AWS_REGION || 'us-west-2' }}
           GH_TOKEN: ${{ github.token }}
-        with:
-          use_bedrock: 'true'
-          github_token: ${{ github.token }}
-          allowed_bots: 'github-merge-queue'
-          show_full_output: ${{ github.event_name == 'workflow_dispatch' }}
-          claude_args: |
-            --model ${{ vars.CERT_BEDROCK_MODEL || 'global.anthropic.claude-opus-5-5' }}
-            --allowedTools "Bash,Read,Write,Edit,Glob,Grep"
-            --permission-mode bypassPermissions
-            --max-turns 300
-          prompt: ${{ steps.prompt.outputs.text }}
+          MODEL: ${{ vars.CERT_BEDROCK_MODEL || 'global.anthropic.claude-opus-5-5' }}
+        run: |
+          set -o pipefail
+          claude -p --model "$MODEL" --allowedTools "Bash,Read,Write,Edit,Glob,Grep" \
+            --dangerously-skip-permissions --max-turns 300 --output-format stream-json --verbose \
+            < "$RUNNER_TEMP/review-prompt.txt" > "$RUNNER_TEMP/claude-execution-output.json"
+          tail -1 "$RUNNER_TEMP/claude-execution-output.json" | jq -r '"review: \(.subtype // "?") in \(.num_turns // "?") turns, \((.duration_ms // 0) / 60000 | floor) min"'
+          test -s "$RUNNER_TEMP/cert-review/verdict.json"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
@@ -325,11 +323,9 @@ jobs:
 
       - name: Evidence
         if: always()
-        env:
-          EXECUTION: ${{ steps.review.outputs.execution_file }}
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          cp "${EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}" "$RUNNER_TEMP/evidence/claude-turns.json" 2> /dev/null || true
+          cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/evidence/claude-turns.json" 2> /dev/null || true
           cp -r "$RUNNER_TEMP/cert-review" "$WORK/plan" "$RUNNER_TEMP/evidence/" 2> /dev/null || true
           cp "$WORK/stage.json" "$WORK/digest.md" "$RUNNER_TEMP/evidence/" 2> /dev/null || true
 

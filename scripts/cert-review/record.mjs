@@ -99,7 +99,7 @@ if (!problems.length && review?.verdict === 'certified') {
     ...(review?.verdict === 'certified' ? ['the reviewer certified it'] : []),
     ...problems,
   ];
-  const incomplete = held && review?.verdict !== 'fail' && problems.length === 1;
+  const incomplete = held && review?.verdict !== 'fail' && problems.every((p) => p.startsWith('held:') || p.startsWith('no readable verdict.json'));
   line = `cert-ci: ${incomplete ? 'INCOMPLETE' : 'FAIL'} ${NAME}@${version}: ${why.join('; ')} (${ci})`;
 }
 const certified = line.startsWith('certified ');

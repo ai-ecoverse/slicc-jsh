@@ -131,6 +131,18 @@ describe('cert-review record: the line comes from the artifact, not the reviewer
     assert.match(r.rec.line, /a bench job ended skipped, so the evidence is incomplete/);
   });
 
+  it('a review job that failed and left no verdict is INCOMPLETE when nothing else is wrong', () => {
+    const out = join(work, 'rec-noverdict');
+    const empty = join(work, 'noverdict-review');
+    mkdirSync(empty, { recursive: true });
+    const r = tool('record.mjs', ['--version', VERSION, '--review', empty, '--out', out, '--dry-run', '--tarball', good.tgz, '--sha256', good.sha256, '--upstream', 'failure']);
+    const rec = JSON.parse(readFileSync(join(out, 'record.json'), 'utf8'));
+    assert.equal(r.code, 1, r.out);
+    assert.equal(rec.certified, false);
+    assert.match(rec.line, /held: the review job ended failure/);
+    assert.match(rec.line, /no readable verdict\.json/);
+  });
+
   it('holds a certified verdict from a review job that did not succeed', () => {
     const r = record('held-review', ['--tarball', good.tgz, '--sha256', good.sha256, '--upstream', 'failure']);
     assert.equal(r.code, 1, r.out);
