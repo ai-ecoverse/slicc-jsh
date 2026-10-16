@@ -2,39 +2,6 @@ name: cert-review
 
 on:
   workflow_call:
-    inputs:
-      version:
-        description: 'The tagged, unpublished version to certify, x.y.z (tag v<version>)'
-        required: true
-        type: string
-      tarball:
-        description: 'The name of the artifact in this run that holds the packed tarball'
-        required: true
-        type: string
-      sha256:
-        description: "The pack job's sha256 of the tarball"
-        required: true
-        type: string
-    outputs:
-      verdict:
-        description: 'certified or fail, from the record'
-        value: ${{ jobs.record.outputs.verdict }}
-      sha256:
-        description: 'The sha256 record computed from the artifact, empty unless certified'
-        value: ${{ jobs.record.outputs.sha256 }}
-      line:
-        description: 'The verdict line'
-        value: ${{ jobs.record.outputs.line }}
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'The tagged version to replay, x.y.z (tag v<version>), packed again from its tag; a replay records only (no status, no release notes, the publish gate as a dry run)'
-        required: true
-        type: string
-      prev:
-        description: 'The certified version the delta is read from, x.y.z (empty: the newest earlier release body with a cert-review line)'
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -42,106 +9,134 @@ permissions:
 env:
   # renovate: datasource=node-version depName=node versioning=node
   NODE_VERSION: '24.22.0'
+  # renovate: datasource=npm depName=@anthropic-ai/claude-code
+  CLAUDE_CODE_VERSION: '2.1.292'
 
 jobs:
+  scope:
+    name: cert-review / scope
+    if: github.event_name == 'pull_request'
+    runs-on: ${{ github.event.pull_request.head.repo.full_name == github.repository && (vars.CERT_RUNNER || 'cloud-run-bench') || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      behaviour: ${{ steps.shipped.outputs.behaviour }}
+      why: ${{ steps.shipped.outputs.why }}
+      fork: ${{ steps.refs.outputs.fork }}
+      head: ${{ steps.refs.outputs.head }}
+      base: ${{ steps.refs.outputs.base }}
+      version: ${{ steps.refs.outputs.version }}
+      prev: ${{ steps.refs.outputs.prev }}
+      head_sha256: ${{ steps.pack.outputs.head_sha256 }}
+      base_sha256: ${{ steps.pack.outputs.base_sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: The pull request's head commit (the tools stay main's, at the base)
+        env:
+          N: ${{ github.event.pull_request.number }}
+        run: git fetch -q origin "+refs/pull/$N/head:refs/remotes/pr/head"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: The head, its merge base with main, and whether the pull request is a fork's
+        id: refs
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          N: ${{ github.event.pull_request.number }}
+          FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          set -euo pipefail
+          git fetch -q origin "$BASE_REF"
+          base=$(git merge-base FETCH_HEAD "$HEAD_SHA")
+          {
+            echo "head=$HEAD_SHA"
+            echo "base=$base"
+            echo "fork=$FORK"
+            echo "version=0.0.0-pr.$N"
+            echo "prev=0.0.0-base.$N"
+          } | tee -a "$GITHUB_OUTPUT"
+      - name: Shipped behaviour (a conservative path filter; package.json or the lock alone only when the build differs)
+        id: shipped
+        env:
+          BASE: ${{ steps.refs.outputs.base }}
+          HEAD_SHA: ${{ steps.refs.outputs.head }}
+        run: node scripts/cert-review/shipped.mjs --base "$BASE" --head "$HEAD_SHA" --work "$RUNNER_TEMP/shipped"
+      - name: Pack the head and the base, as the release packs
+        id: pack
+        if: steps.shipped.outputs.behaviour == 'true' && steps.refs.outputs.fork != 'true'
+        env:
+          BASE: ${{ steps.refs.outputs.base }}
+          HEAD_SHA: ${{ steps.refs.outputs.head }}
+          VERSION: ${{ steps.refs.outputs.version }}
+          PREV: ${{ steps.refs.outputs.prev }}
+        run: |
+          set -euo pipefail
+          node scripts/cert-review/pack.mjs --version "$VERSION" --ref "$HEAD_SHA" --out "$RUNNER_TEMP/pack/head"
+          node scripts/cert-review/pack.mjs --version "$PREV" --ref "$BASE" --out "$RUNNER_TEMP/pack/base"
+          echo "head_sha256=$(jq -r .sha256 "$RUNNER_TEMP/pack/head/pack.json")" >> "$GITHUB_OUTPUT"
+          echo "base_sha256=$(jq -r .sha256 "$RUNNER_TEMP/pack/base/pack.json")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: steps.pack.outcome == 'success'
+        with:
+          name: cert-pack-${{ github.event.pull_request.number }}
+          path: |
+            ${{ runner.temp }}/pack/head/*.tgz
+            ${{ runner.temp }}/pack/head/pack.json
+            ${{ runner.temp }}/pack/base/*.tgz
+            ${{ runner.temp }}/pack/base/pack.json
+            ${{ runner.temp }}/shipped/shipped.json
+          if-no-files-found: error
+
   plan:
     name: cert-review / plan
+    needs: scope
+    if: needs.scope.outputs.behaviour == 'true' && needs.scope.outputs.fork != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
-    outputs:
-      go: ${{ steps.plan.outputs.go }}
-      version: ${{ steps.plan.outputs.version }}
-      prev: ${{ steps.plan.outputs.prev }}
-      commit: ${{ steps.plan.outputs.commit }}
-      mode: ${{ steps.plan.outputs.mode }}
-      artifact: ${{ steps.plan.outputs.artifact }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
-          fetch-tags: true
           persist-credentials: false
-
+      - name: The pull request's head commit (the tools stay main's, at the base)
+        env:
+          N: ${{ github.event.pull_request.number }}
+        run: git fetch -q origin "+refs/pull/$N/head:refs/remotes/pr/head"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
-
-      - name: The version, the certified version before it, and the delta
-        id: plan
+      - name: The delta and the plan
         env:
-          IN_TARBALL: ${{ inputs.tarball }}
-          IN_VERSION: ${{ inputs.version }}
-          IN_PREV: ${{ inputs.prev }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          N: ${{ github.event.pull_request.number }}
+          VERSION: ${{ needs.scope.outputs.version }}
+          PREV: ${{ needs.scope.outputs.prev }}
+          HEAD_SHA: ${{ needs.scope.outputs.head }}
+          BASE: ${{ needs.scope.outputs.base }}
         run: |
-          set -euo pipefail
-          semver='^[0-9]+\.[0-9]+\.[0-9]+$'
-          version=$IN_VERSION prev=$IN_PREV
-          [[ "$version" =~ $semver ]] || { echo "::error::version '$version' is not x.y.z"; exit 1; }
-          [ -z "$prev" ] || [[ "$prev" =~ $semver ]] || { echo "::error::prev '$prev' is not x.y.z"; exit 1; }
-          if [ -n "$IN_TARBALL" ]; then mode=release artifact=$IN_TARBALL; else mode=dispatch artifact="slicc-jsh-tarball-$version-replay"; fi
-          git rev-parse -q --verify "refs/tags/v$version^{commit}" > /dev/null || { echo "::error::no tag v$version"; exit 1; }
-          node scripts/cert-review/plan.mjs --version "$version" ${prev:+--prev "$prev"} --out "$RUNNER_TEMP/plan"
+          node scripts/cert-review/plan.mjs --pr "$N" --version "$VERSION" --prev "$PREV" --head "$HEAD_SHA" --base "$BASE" --out "$RUNNER_TEMP/plan"
           cat "$RUNNER_TEMP/plan/plan.md" >> "$GITHUB_STEP_SUMMARY"
-          {
-            echo "go=true"
-            echo "version=$version"
-            echo "prev=$(jq -r .prev "$RUNNER_TEMP/plan/plan.json")"
-            echo "commit=$(jq -r .commit "$RUNNER_TEMP/plan/plan.json")"
-            echo "mode=$mode"
-            echo "artifact=$artifact"
-          } | tee -a "$GITHUB_OUTPUT"
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: cert-review-plan-${{ steps.plan.outputs.version }}
+          name: cert-review-plan-${{ github.event.pull_request.number }}
           path: ${{ runner.temp }}/plan/
-          if-no-files-found: ignore
-
-  pack:
-    name: cert-review / pack (replay)
-    needs: plan
-    if: needs.plan.outputs.go == 'true' && needs.plan.outputs.mode == 'dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    outputs:
-      sha256: ${{ steps.pack.outputs.sha256 }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-          fetch-tags: true
-          persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Pack v${{ needs.plan.outputs.version }} from its tag, as the release does
-        id: pack
-        env:
-          VERSION: ${{ needs.plan.outputs.version }}
-        run: node scripts/cert-review/pack.mjs --version "$VERSION" --out "$RUNNER_TEMP/pack"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: ${{ needs.plan.outputs.artifact }}
-          path: |
-            ${{ runner.temp }}/pack/*.tgz
-            ${{ runner.temp }}/pack/*.tgz.sha256
-            ${{ runner.temp }}/pack/pack.json
           if-no-files-found: error
 
   bench:
     name: cert-review / ${{ matrix.part }} (kernel ${{ matrix.kernel }})
-    needs: [plan, pack]
-    if: always() && needs.plan.outputs.go == 'true' && needs.pack.result != 'failure' && needs.pack.result != 'cancelled'
-
+    needs: [scope, plan]
+    if: always() && needs.scope.outputs.behaviour == 'true' && needs.scope.outputs.fork != 'true' && needs.plan.result == 'success'
     runs-on: ${{ vars.CERT_RUNNER || 'cloud-run-bench' }}
     timeout-minutes: 120
     permissions:
@@ -155,16 +150,20 @@ jobs:
           - kernel: dev
             part: browser
     env:
-      VERSION: ${{ needs.plan.outputs.version }}
-      PREV: ${{ needs.plan.outputs.prev }}
+      VERSION: ${{ needs.scope.outputs.version }}
+      PREV: ${{ needs.scope.outputs.prev }}
+      HEAD_SHA: ${{ needs.scope.outputs.head }}
+      BASE: ${{ needs.scope.outputs.base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
-          fetch-tags: true
           persist-credentials: false
-
+      - name: The pull request's head commit (the tools stay main's, at the base)
+        env:
+          N: ${{ github.event.pull_request.number }}
+        run: git fetch -q origin "+refs/pull/$N/head:refs/remotes/pr/head"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22.22.0'
@@ -176,30 +175,26 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          name: ${{ needs.plan.outputs.artifact }}
-          path: ${{ runner.temp }}/tarball
-
-      - name: Stage the artifact, v${{ env.PREV }}'s dist and kernel ${{ matrix.kernel }}
+          name: cert-pack-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/pack
+      - name: Stage the head's tarball, the base's dist and kernel ${{ matrix.kernel }}
         run: |
-          git diff --name-only "v$PREV" "v$VERSION" > "$RUNNER_TEMP/touched.txt"
-          node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --work "$WORK" --kernels "${{ matrix.kernel }}" --tarball "$(ls "$RUNNER_TEMP"/tarball/*.tgz)"
-
+          git diff --name-only "$BASE" "$HEAD_SHA" > "$RUNNER_TEMP/touched.txt"
+          node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --ref "$HEAD_SHA" --prev-ref "$BASE" --work "$WORK" --kernels "${{ matrix.kernel }}" \
+            --tarball "$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz)" --prev-tarball "$(ls "$RUNNER_TEMP"/pack/pack/base/*.tgz)"
       - name: Suites on one tree (golden, jsh parity, integration, cert, node-parallel)
         if: startsWith(matrix.part, 'suites-')
         env:
           TREE: ${{ matrix.part == 'suites-tag' && 'tag' || 'neg' }}
         run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --tree "$TREE"
-
       - name: m-fixtures and rows against host Node 22.22.0 (one shard)
         if: startsWith(matrix.part, 'fixtures-')
         env:
           SHARD: ${{ matrix.part == 'fixtures-1' && '1/2' || '2/2' }}
         run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/mfixtures.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --shard "$SHARD"
-
-      - name: Chrome for Testing (the tag's config.chrome)
+      - name: Chrome for Testing (the head's config.chrome)
         if: matrix.part == 'browser'
         working-directory: ${{ env.WORK }}/tag
         run: |
@@ -208,14 +203,13 @@ jobs:
           else
             npm run browser
           fi
-      - name: Browser suite on tag
+      - name: Browser suite on the head
         if: matrix.part == 'browser'
         run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: cert-bench-${{ env.VERSION }}-${{ matrix.part }}-${{ matrix.kernel }}
+          name: cert-bench-${{ github.event.pull_request.number }}-${{ matrix.part }}-${{ matrix.kernel }}
           path: |
             ${{ env.WORK }}/suites/
             ${{ env.WORK }}/fixtures/
@@ -224,30 +218,32 @@ jobs:
 
   review:
     name: cert-review / review
-    needs: [plan, pack, bench]
-    if: always() && needs.plan.outputs.go == 'true' && needs.bench.result != 'cancelled' && needs.bench.result != 'skipped'
+    needs: [scope, plan, bench]
+    if: always() && needs.scope.outputs.behaviour == 'true' && needs.scope.outputs.fork != 'true' && needs.plan.result == 'success' && needs.bench.result != 'cancelled' && needs.bench.result != 'skipped'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    concurrency:
-      group: cert-review-${{ needs.plan.outputs.version }}
-      cancel-in-progress: false
+    timeout-minutes: 90
     permissions:
       actions: read
       contents: read
       issues: write
     env:
-      VERSION: ${{ needs.plan.outputs.version }}
-      PREV: ${{ needs.plan.outputs.prev }}
+      VERSION: ${{ needs.scope.outputs.version }}
+      PREV: ${{ needs.scope.outputs.prev }}
+      HEAD_SHA: ${{ needs.scope.outputs.head }}
+      BASE: ${{ needs.scope.outputs.base }}
+      N: ${{ github.event.pull_request.number }}
       GH_REPO: ${{ github.repository }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
-          fetch-tags: true
           persist-credentials: false
-
+      - name: The pull request's head commit (the tools stay main's, at the base)
+        env:
+          N: ${{ github.event.pull_request.number }}
+        run: git fetch -q origin "+refs/pull/$N/head:refs/remotes/pr/head"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22.22.0'
@@ -263,105 +259,91 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          pattern: cert-bench-${{ env.VERSION }}-*
+          pattern: cert-bench-${{ github.event.pull_request.number }}-*
           path: ${{ runner.temp }}/cert
           merge-multiple: true
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          name: cert-review-plan-${{ env.VERSION }}
+          name: cert-review-plan-${{ github.event.pull_request.number }}
           path: ${{ runner.temp }}/cert/plan
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          name: ${{ needs.plan.outputs.artifact }}
-          path: ${{ runner.temp }}/tarball
-
-      - name: Stage the trees, every kernel and the rebuild (no secrets in this step)
+          name: cert-pack-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/pack
+      - name: Stage the trees and every kernel (no secrets in this step)
         run: |
-          node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --work "$WORK" --rebuild --tarball "$(ls "$RUNNER_TEMP"/tarball/*.tgz)"
+          node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --ref "$HEAD_SHA" --prev-ref "$BASE" --work "$WORK" \
+            --tarball "$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz)" --prev-tarball "$(ls "$RUNNER_TEMP"/pack/pack/base/*.tgz)"
           for k in $(jq -r '.kernels[].id' "$WORK/stage.json"); do node scripts/cert-review/suites.mjs --work "$WORK" --kernel "$k" --merge; done
           node scripts/cert-review/digest.mjs --work "$WORK" | tee -a "$GITHUB_STEP_SUMMARY"
-
       - name: The review instructions
-        id: prompt
         env:
-          TOOLS: ${{ github.sha }}
+          TOOLS: ${{ github.event.pull_request.base.sha }}
+          SUBJECT: pull request #${{ github.event.pull_request.number }} (head ${{ needs.scope.outputs.head }})
+          BASE: main at ${{ needs.scope.outputs.base }}
+        run: node scripts/cert-review/prompt.mjs > "$RUNNER_TEMP/review-prompt.txt"
+      - name: Claude Code (pinned, installed before any secret is in the job's steps)
         run: |
-          {
-            echo 'text<<CERT_REVIEW_PROMPT_EOF'
-            node scripts/cert-review/prompt.mjs
-            echo 'CERT_REVIEW_PROMPT_EOF'
-          } >> "$GITHUB_OUTPUT"
-
+          npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+          claude --version
       - name: Review
-        id: review
-        uses: anthropics/claude-code-action@a26b07d8c778b0c43f64618e5fd29fd0f8af72e8
         env:
+          CLAUDE_CODE_USE_BEDROCK: '1'
           AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           AWS_REGION: ${{ vars.CERT_AWS_REGION || 'us-west-2' }}
           GH_TOKEN: ${{ github.token }}
-        with:
-          use_bedrock: 'true'
-          github_token: ${{ github.token }}
-          allowed_bots: 'github-merge-queue'
-          show_full_output: ${{ github.event_name == 'workflow_dispatch' }}
-          claude_args: |
-            --model ${{ vars.CERT_BEDROCK_MODEL || 'global.anthropic.claude-opus-5-5' }}
-            --allowedTools "Bash,Read,Write,Edit,Glob,Grep"
-            --permission-mode bypassPermissions
-            --max-turns 300
-          prompt: ${{ steps.prompt.outputs.text }}
-
+          MODEL: ${{ vars.CERT_BEDROCK_MODEL || 'global.anthropic.claude-opus-5-5' }}
+        run: |
+          set -o pipefail
+          claude -p --model "$MODEL" --allowedTools "Bash,Read,Write,Edit,Glob,Grep" \
+            --dangerously-skip-permissions --max-turns 300 --output-format stream-json --verbose \
+            < "$RUNNER_TEMP/review-prompt.txt" > "$RUNNER_TEMP/claude-execution-output.json"
+          tail -1 "$RUNNER_TEMP/claude-execution-output.json" | jq -r '"review: \(.subtype // "?") in \(.num_turns // "?") turns, \((.duration_ms // 0) / 60000 | floor) min"'
+          test -s "$RUNNER_TEMP/cert-review/verdict.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: cert-review-verdict-${{ env.VERSION }}
+          name: cert-review-verdict-${{ github.event.pull_request.number }}
           path: |
             ${{ runner.temp }}/cert-review/verdict.json
             ${{ runner.temp }}/cert-review/comment.md
           if-no-files-found: ignore
-
       - name: Evidence
         if: always()
-        env:
-          EXECUTION: ${{ steps.review.outputs.execution_file }}
         run: |
           mkdir -p "$RUNNER_TEMP/evidence"
-          cp "${EXECUTION:-$RUNNER_TEMP/claude-execution-output.json}" "$RUNNER_TEMP/evidence/claude-turns.json" 2> /dev/null || true
+          cp "$RUNNER_TEMP/claude-execution-output.json" "$RUNNER_TEMP/evidence/claude-turns.json" 2> /dev/null || true
           cp -r "$RUNNER_TEMP/cert-review" "$WORK/plan" "$RUNNER_TEMP/evidence/" 2> /dev/null || true
           cp "$WORK/stage.json" "$WORK/digest.md" "$RUNNER_TEMP/evidence/" 2> /dev/null || true
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: cert-review-evidence-${{ env.VERSION }}
+          name: cert-review-evidence-${{ github.event.pull_request.number }}
           path: ${{ runner.temp }}/evidence/
           if-no-files-found: ignore
 
   record:
     name: cert-review / record
-    needs: [plan, pack, bench, review]
-    if: always() && needs.plan.outputs.go == 'true' && needs.review.result != 'cancelled'
+    needs: [scope, plan, bench, review]
+    if: always() && needs.scope.result == 'success' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    concurrency:
-      group: cert-review-record-${{ needs.plan.outputs.version }}
-      cancel-in-progress: false
+    timeout-minutes: 15
     permissions:
       actions: read
-      contents: write
+      contents: read
+      pull-requests: write
       statuses: write
     outputs:
       verdict: ${{ steps.record.outputs.verdict }}
-      sha256: ${{ steps.record.outputs.sha256 }}
-      line: ${{ steps.record.outputs.line }}
     env:
-      VERSION: ${{ needs.plan.outputs.version }}
-      MODE: ${{ needs.plan.outputs.mode }}
-      PLAN_COMMIT: ${{ needs.plan.outputs.commit }}
-      PACKED: ${{ needs.plan.outputs.mode == 'release' && inputs.sha256 || needs.pack.outputs.sha256 }}
+      N: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ needs.scope.outputs.head }}
+      VERSION: ${{ needs.scope.outputs.version }}
+      BEHAVIOUR: ${{ needs.scope.outputs.behaviour }}
+      WHY: ${{ needs.scope.outputs.why }}
+      PACKED: ${{ needs.scope.outputs.head_sha256 }}
       UPSTREAM: ${{ needs.bench.result == 'success' && needs.review.result || format('bench {0}', needs.bench.result) }}
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
@@ -369,71 +351,132 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           sparse-checkout: scripts
           persist-credentials: false
-
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: needs.scope.outputs.behaviour == 'true'
         continue-on-error: true
         with:
-          name: cert-review-verdict-${{ needs.plan.outputs.version }}
+          name: cert-review-verdict-${{ github.event.pull_request.number }}
           path: ${{ runner.temp }}/cert-review
-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: needs.scope.outputs.behaviour == 'true'
         continue-on-error: true
         with:
-          name: ${{ needs.plan.outputs.artifact }}
-          path: ${{ runner.temp }}/tarball
-
-      - name: The line, from the artifact and the verdict (this job's tools, from ${{ github.sha }})
+          name: cert-pack-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/pack
+      - name: The line (this job's tools, main's at the pull request's base)
         id: record
         run: |
-          mkdir -p "$RUNNER_TEMP/cert-review" "$RUNNER_TEMP/tarball"
-          tgz=$(ls "$RUNNER_TEMP"/tarball/*.tgz 2> /dev/null | head -1 || true)
-          replay=''
-          [ "$MODE" = release ] || replay=--replay
-          if node scripts/cert-review/record.mjs --version "$VERSION" --review "$RUNNER_TEMP/cert-review" \
-            --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" --tarball "$tgz" --sha256 "$PACKED" \
-            --upstream "$UPSTREAM" $replay; then
-            echo "conclusion=success" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/cert-review" "$RUNNER_TEMP/record"
+          if [ "$BEHAVIOUR" != true ]; then
+            line="$WHY"
+            printf '%s\n' "$line" > "$RUNNER_TEMP/record/line.txt"
+            printf '**Cert review: not needed.** %s\n\n```\n%s\n```\n' "$WHY" "$line" > "$RUNNER_TEMP/record/section.md"
+            echo "verdict=not-behaviour" >> "$GITHUB_OUTPUT"
+            echo "state=success" >> "$GITHUB_OUTPUT"
           else
-            echo "conclusion=failure" >> "$GITHUB_OUTPUT"
+            tgz=$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz 2> /dev/null | head -1 || true)
+            if node scripts/cert-review/record.mjs --pr "$N" --head "$HEAD_SHA" --version "$VERSION" --review "$RUNNER_TEMP/cert-review" \
+              --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" --tarball "$tgz" --sha256 "$PACKED" --upstream "$UPSTREAM"; then
+              echo "verdict=certified" >> "$GITHUB_OUTPUT"
+              echo "state=success" >> "$GITHUB_OUTPUT"
+            else
+              echo "verdict=fail" >> "$GITHUB_OUTPUT"
+              echo "state=failure" >> "$GITHUB_OUTPUT"
+            fi
           fi
-          commit=$(jq -r '.commit // empty' "$RUNNER_TEMP/record/record.json")
-          echo "commit=${commit:-$PLAN_COMMIT}" >> "$GITHUB_OUTPUT"
-          jq -r '"verdict=\(if .certified then "certified" else "fail" end)", "sha256=\(.sha256 // "")", "line=\(.line | split("\n")[0])"' \
-            "$RUNNER_TEMP/record/record.json" >> "$GITHUB_OUTPUT"
           { echo '```'; cat "$RUNNER_TEMP/record/line.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        id: artifact
         with:
-          name: cert-review-record-${{ needs.plan.outputs.version }}
-          path: |
-            ${{ runner.temp }}/record/record.json
-            ${{ runner.temp }}/record/line.txt
-            ${{ runner.temp }}/record/section.md
+          name: cert-review-record-${{ github.event.pull_request.number }}
+          path: ${{ runner.temp }}/record/
           if-no-files-found: error
-
-      - name: The cert-review status on the release commit
-        if: needs.plan.outputs.mode == 'release'
+      - name: The cert-review status on the head, and the sticky comment on the pull request
         env:
-          CONCLUSION: ${{ steps.record.outputs.conclusion }}
-          COMMIT: ${{ steps.record.outputs.commit }}
-          ARTIFACT: ${{ steps.artifact.outputs.artifact-id }}
+          STATE: ${{ steps.record.outputs.state }}
         run: |
           line=$(head -1 "$RUNNER_TEMP/record/line.txt")
-          gh api "repos/$GH_REPO/statuses/$COMMIT" \
-            -f state="$CONCLUSION" -f context=cert-review -f target_url="$RUN_URL/artifacts/$ARTIFACT" \
-            -f description="$(printf '%s' "$line" | cut -c1-140)" \
-            --jq '"status \(.id) \(.state) on \(.url)"'
+          gh api "repos/$GH_REPO/statuses/$HEAD_SHA" -f state="$STATE" -f context=cert-review -f target_url="$RUN_URL" \
+            -f description="$(printf '%s' "$line" | cut -c1-140)" --jq '"status \(.state) on \(.sha)"'
+          body=$(printf '<!-- cert-review -->\n%s\n' "$(cat "$RUNNER_TEMP/record/section.md")")
+          id=$(gh api "repos/$GH_REPO/issues/$N/comments" --paginate --jq '.[] | select(.body | startswith("<!-- cert-review -->")) | .id' | tail -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" -f body="$body" --jq .html_url
+          else
+            gh api "repos/$GH_REPO/issues/$N/comments" -f body="$body" --jq .html_url
+          fi
 
-      - name: The record's verdict is this job's result
-        if: steps.record.outputs.conclusion != 'success'
+  merge-group:
+    name: cert-review / merge group
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.merge_group.base_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: The group's commits (the tools stay main's, at the group's base)
+        env:
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        run: git fetch -q origin "+$HEAD_REF:refs/remotes/group/head"
+      - name: Every pull request in the group has a successful cert-review on the head that entered the queue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: node scripts/cert-review/group.mjs --base "$BASE" --head "$HEAD_SHA" --repo "$GH_REPO"
+
+  verdict:
+    name: cert-review / verdict
+    needs: [scope, record, merge-group]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: The required check
+        env:
+          EVENT: ${{ github.event_name }}
+          FORK: ${{ needs.scope.outputs.fork }}
+          BEHAVIOUR: ${{ needs.scope.outputs.behaviour }}
+          WHY: ${{ needs.scope.outputs.why }}
+          VERDICT: ${{ needs.record.outputs.verdict }}
+          SCOPE: ${{ needs.scope.result }}
+          GROUP: ${{ needs.merge-group.result }}
         run: |
-          echo "::error title=v$VERSION not certified::$(head -1 "$RUNNER_TEMP/record/line.txt")"
-          exit 1
+          if [ "$EVENT" != pull_request ] && [ "$EVENT" != merge_group ]; then
+            echo "cert-review runs on pull requests and merge groups ($EVENT)"
+            exit 0
+          fi
+          if [ "$EVENT" = merge_group ]; then
+            [ "$GROUP" = success ] || { echo "::error::a pull request in the group has no successful cert-review on the head that entered the queue"; exit 1; }
+            echo "every pull request in the group is certified or not behaviour"
+            exit 0
+          fi
+          [ "$SCOPE" = success ] || { echo "::error::cert-review could not decide the scope ($SCOPE)"; exit 1; }
+          if [ "$FORK" = true ] && [ "$BEHAVIOUR" = true ]; then
+            echo "::error title=fork: no cert review::a fork's pull request that changes shipped behaviour gets no review (no secrets); push the branch to this repository"
+            exit 1
+          fi
+          if [ "$BEHAVIOUR" != true ]; then
+            echo "$WHY"
+            exit 0
+          fi
+          [ "$VERDICT" = certified ] || { echo "::error::cert-review: $VERDICT (see the record and the pull request comment)"; exit 1; }
+          echo "certified"

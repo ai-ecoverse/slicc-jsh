@@ -9,6 +9,8 @@ const vars = {
   WORK: process.env.WORK,
   OUT: process.env.OUT,
   TOOLS: process.env.TOOLS,
+  SUBJECT: process.env.SUBJECT,
+  BASE: process.env.BASE,
   ENGINES: readJson(join(root, 'package.json')).engines['slicc-kernel'].replace(/^>=/, ''),
 };
 for (const [k, v] of Object.entries(vars)) if (!v) throw new Error(`prompt: $${k} is not set`);

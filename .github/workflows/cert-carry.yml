@@ -1,0 +1,35 @@
+# After a merge to main, each merged pull request's cert-review status (from
+# its head, the commit cert-review certified) is copied onto its merge commit,
+# so main's history, and every release tag on it, carries a cert line.
+name: cert-carry
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  carry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24.22.0'
+      - name: Copy each merged pull request's cert-review onto its merge commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: node scripts/cert-review/carry.mjs --from "$BEFORE" --to "$AFTER"

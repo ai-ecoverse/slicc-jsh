@@ -13,13 +13,19 @@ const { values } = parseArgs({
     kernels: { type: 'string', default: 'all' },
     rebuild: { type: 'boolean', default: false },
     tarball: { type: 'string', default: '' },
+    'prev-tarball': { type: 'string', default: '' },
+    ref: { type: 'string', default: '' },
+    'prev-ref': { type: 'string', default: '' },
   },
 });
 const { version, prev } = values;
-if (!SEMVER.test(version ?? '') || !SEMVER.test(prev ?? '')) {
-  console.error('stage: --version and --prev must be x.y.z');
+const VERSION_LIKE = /^\d+\.\d+\.\d+(-[\w.]+)?$/;
+if (!VERSION_LIKE.test(version ?? '') || !VERSION_LIKE.test(prev ?? '')) {
+  console.error('stage: --version and --prev must be versions (x.y.z or x.y.z-label)');
   process.exit(2);
 }
+const ref = values.ref || `v${version}`;
+const prevRef = values['prev-ref'] || `v${prev}`;
 const work = resolve(values.work);
 mkdirSync(work, { recursive: true });
 
@@ -102,18 +108,23 @@ if (values.tarball) {
   cpSync(resolve(values.tarball), pubTgz);
 } else pubTgz = packFrom(`${NAME}@${version}`, join(work, 'pub'));
 const pubDir = untar(pubTgz, join(work, 'pub/x'));
-const prevTgz = packFrom(`${NAME}@${prev}`, join(work, 'prevpub'));
+let prevTgz;
+if (values['prev-tarball']) {
+  mkdirSync(join(work, 'prevpub'), { recursive: true });
+  prevTgz = join(work, 'prevpub', `base-${prev}.tgz`);
+  cpSync(resolve(values['prev-tarball']), prevTgz);
+} else prevTgz = packFrom(`${NAME}@${prev}`, join(work, 'prevpub'));
 const prevDir = untar(prevTgz, join(work, 'prevpub/x'));
 
 const tag = join(work, 'tag');
-const tagCommit = archive(tag, `v${version}`);
-const prevCommit = sh('git', ['rev-parse', `v${prev}^{commit}`], { cwd: root }).trim();
+const tagCommit = archive(tag, ref);
+const prevCommit = sh('git', ['rev-parse', `${prevRef}^{commit}`], { cwd: root }).trim();
 sh('npm', ['ci', ...npmFlags], { cwd: tag });
 
 let rebuilt = null;
 if (values.rebuild) {
   const tgz = join(work, `rebuilt-${version}.tgz`);
-  renameSync(packTree(tag, version, tagCommit, join(work, 'rebuilt-tmp'), `v${version}`), tgz);
+  renameSync(packTree(tag, version, tagCommit, join(work, 'rebuilt-tmp'), ref), tgz);
   const dir = untar(tgz, join(work, 'rebuilt/x'));
   rebuilt = {
     tarball: tgz,
@@ -158,7 +169,8 @@ const stage = {
   prev,
   tools: sh('git', ['rev-parse', 'HEAD'], { cwd: root, quiet: true }).trim(),
   node: process.version,
-  subject: { ref: `v${version}`, commit: tagCommit },
+  subject: { ref, commit: tagCommit },
+  prevRef,
   prevCommit,
   source: values.tarball ? 'artifact' : 'npm',
   published: { tarball: pubTgz, sha256: sha('sha256', pubTgz), integrity: sri(pubTgz), dir: pubDir },

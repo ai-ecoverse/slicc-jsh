@@ -282,3 +282,17 @@ jobs:
           name: browser-artifacts
           path: artifacts/
           if-no-files-found: ignore
+
+  cert:
+    # cert-review (.github/workflows/cert-review.yml): the LLM review of a
+    # same-repo pull request that changes shipped behaviour, and in a merge
+    # group the code-only check that every pull request in it was certified.
+    name: cert
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      pull-requests: write
+      statuses: write
+    uses: ./.github/workflows/cert-review.yml
+    secrets: inherit

@@ -219,7 +219,14 @@ lockf -k /tmp/slicc-heavy.lock scripts/mem-guard.sh npm run test:browser
 - `fix:` or `perf:` gives a patch release;
 - other types (`docs:`, `chore:`, `ci:`, `test:`, …) release nothing.
 
-**Certify in the PR, release simply.** cert-review (`.github/workflows/cert-review.yml`) certifies the change in the pull request, so only certified changes merge, and every push to main releases what landed:
+**Certify in the PR, release simply.** cert-review (`.github/workflows/cert-review.yml`, called by `ci.yml` as the `cert` job) certifies the change in the pull request, so only certified changes merge:
+
+- **scope:** `scripts/cert-review/shipped.mjs` decides whether the pull request changes shipped behaviour. It's a conservative path filter: `src/`, the build and notice scripts, LICENSE, NOTICE, README, `install.sh`, `.releaserc.json` and `release.yml`. A `package.json` or lockfile change counts only if the shipped manifest fields change or `dist/` builds differently. So devDependency bumps (kernels, wasm-*, the cert-kernel aliases) are recorded as "not behaviour", and CI's suites still test them.
+- **review** (same-repo pull requests that change behaviour): the head and the base (its merge base with main) are packed as the release packs. The suites and the m-fixtures run on the bench pool, on the head's tests with the head's dist and with the base's dist (the NEGATIVE), on four kernels under users `enforce`. Claude reviews the evidence from `test/cert-review/review.txt`. `scripts/cert-review/record.mjs` (main's copy, at the base) writes the line, a `cert-review` status on the head and a sticky comment on the pull request. A fork's pull request that changes shipped behaviour fails: it gets no review.
+- **merge group:** no second review. `scripts/cert-review/group.mjs` checks that every pull request in the group has a successful `cert-review` status on the head that entered the queue, while ci's suites run on the tree that lands.
+- **after the merge:** `cert-carry.yml` copies each pull request's `cert-review` status onto its merge commit, and the release's verify job lists every pull request in the release, with its line, in the GitHub release.
+
+Every push to main releases what landed:
 
 1. **tag** (bench pool): semantic-release computes the version, tags the commit and writes the GitHub release. `npmPublish` is off: publishing is the next job's.
 2. **publish** (hosted, the only job with `id-token: write`): `npm publish --provenance` of exactly the tagged commit, with trusted publishing.
