@@ -186,6 +186,31 @@ jobs:
           path: ${{ runner.temp }}/ai-ecoverse-slicc-jsh-*.tgz
           if-no-files-found: error
 
+  probe:
+    # PROBE (#250, not for merge): who sends the host SIGINT.
+    needs: runner
+    runs-on: ${{ needs.runner.outputs.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci && npm run build
+      - name: probe
+        run: |
+          uname -a; id; ps -o pid,pgid,sid,tty,comm -p $$ $PPID || true
+          command -v setsid strace || true
+          PROBE_OUT=$RUNNER_TEMP/probe setsid --wait bash scripts/probe/sigint.sh 4 || echo "probe rc=$?"
+          ls -la $RUNNER_TEMP/probe
+          grep -h -B1 -A0 "SIGINT\|kill(0\|kill(-" $RUNNER_TEMP/probe/strace.* 2>/dev/null | grep -v "kill([0-9]*, 0)" | head -50 || true
+          grep -c . $RUNNER_TEMP/probe/kill-hook.log || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: probe
+          path: ${{ runner.temp }}/probe
+
   install:
     # install.sh from this checkout, against the published package, in a
     # throwaway HOME: (a) with Node 22 (install an older version, a
