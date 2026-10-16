@@ -165,10 +165,28 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
   const setImmediate = (fn, ...args) => timers.setImmediate(fn, ...args);
   const track = (p) => (handles ? trackPromise(handles, p) : p);
   // A job's callback runs from the loop, so its throw is an uncaught exception.
+  //
+  // Node runs these jobs on the thread pool and calls back in the order
+  // they finish; one that is done before the next is submitted (a short
+  // pbkdf2, then a script's synchronous work, then an hkdf) always calls back
+  // first. Here the work runs on the one thread, and an async job's result
+  // only arrives after the script, so the callbacks come in the order the
+  // jobs were submitted: each waits for the one before it.
+  let lastJob = Promise.resolve();
   const settle = (promise, callback, map = (x) => x) => {
-    track(promise).then(
-      (value) => setImmediate(() => callback(null, map(value))),
-      (err) => setImmediate(() => callback(err))
+    const outcome = track(promise).then(
+      (value) => () => callback(null, map(value)),
+      (err) => () => callback(err)
+    );
+    const turn = lastJob.then(() => outcome);
+    lastJob = turn.then(
+      (call) =>
+        new Promise((resolve) =>
+          setImmediate(() => {
+            resolve();
+            call();
+          })
+        )
     );
   };
 
@@ -849,14 +867,13 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
   function hkdf(digest, key, salt, info, length, callback) {
     const params = hkdfValidate(digest, key, salt, info, length);
     validateFunction(callback, 'callback');
-    let result;
+    let job;
     try {
-      result = hkdfRun(params);
+      job = Promise.resolve(hkdfRun(params));
     } catch (err) {
-      setImmediate(() => callback(err));
-      return;
+      job = Promise.reject(err);
     }
-    setImmediate(() => callback(null, result));
+    settle(job, callback);
   }
 
   // --- scrypt.js ---

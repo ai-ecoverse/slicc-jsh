@@ -1,0 +1,13 @@
+{
+  "description": "pbkdf2 / hkdf / scrypt callbacks in the order the jobs finish, as Node 22's thread pool: each done before the next is submitted (#279)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
