@@ -214,11 +214,15 @@ async function runDirs(pkgName, pkgDir, pick = null) {
     const cases = (await casesFor(dir, mode)).filter((c) => !pick || pick.get(dir).has(c.name));
     if (!cases.length) continue;
     const started = Date.now();
-    const k = await boot(pkgDir);
     const user = values.user;
     const kdir = user === 'root' ? `/os/${dir}` : `/home/${user}/${dir}`;
-    for (const f of walk(join(fx, dir))) await k.writeFile(`${kdir}/${relative(join(fx, dir), f).replaceAll('\\', '/')}`, readFileSync(f));
-    if (user !== 'root') await krun(k, ['bash', '-c', `chown -R ${user}:${user} ${kdir}`], { cwd: '/' }, 120_000);
+    const fresh = async () => {
+      const kk = await boot(pkgDir);
+      for (const f of walk(join(fx, dir))) await kk.writeFile(`${kdir}/${relative(join(fx, dir), f).replaceAll('\\', '/')}`, readFileSync(f));
+      if (user !== 'root') await krun(kk, ['bash', '-c', `chown -R ${user}:${user} ${kdir}`], { cwd: '/' }, 120_000);
+      return kk;
+    };
+    let k = await fresh();
     const norm = normaliser(hostDir(dir, 'node'), kdir, hostDir(dir, pkgName));
     for (const c of cases) {
       const opts = { cwd: `${kdir}${c.cwd ? `/${c.cwd}` : ''}`, ...(user !== 'root' ? { user } : {}), ...(c.stdin !== undefined ? { stdin: c.stdin } : {}) };
@@ -228,6 +232,12 @@ async function runDirs(pkgName, pkgDir, pick = null) {
       const b = render(c, h, norm);
       const same = a === b && r.status !== 'TIMEOUT';
       results[`${dir}/${c.name}`] = { status: same ? 'same' : 'diff', jsh: a.slice(0, 4000), node: same ? undefined : b.slice(0, 4000) };
+      if (r.status === 'TIMEOUT' || String(r.status).startsWith('ERROR')) {
+        try {
+          await k.terminate();
+        } catch {}
+        k = await fresh();
+      }
     }
     try {
       await k.terminate();

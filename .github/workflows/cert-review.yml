@@ -367,3 +367,9 @@ jobs:
             -f state="$CONCLUSION" -f context=cert-review -f target_url="$RUN_URL/artifacts/$ARTIFACT" \
             -f description="$(printf '%s' "$line" | cut -c1-140)" \
             --jq '"status \(.id) \(.state) on \(.url)"'
+
+      - name: The record's verdict is this job's result
+        if: steps.record.outputs.conclusion != 'success'
+        run: |
+          echo "::error title=v$VERSION not certified::$(head -1 "$RUNNER_TEMP/record/line.txt")"
+          exit 1
