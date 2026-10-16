@@ -126,11 +126,11 @@ export function guarded(cmd, args, { cwd, env, log, timeoutMs, caps = CAPS }) {
   });
 }
 
-export function archive(dir, ref) {
+export function archive(dir, ref, repo = root) {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  execFileSync('sh', ['-c', 'git -C "$1" archive --format=tar "$2" | tar -x -C "$3"', 'archive', root, ref, dir], { stdio: 'inherit' });
-  return sh('git', ['rev-parse', `${ref}^{commit}`], { cwd: root, quiet: true }).trim();
+  execFileSync('sh', ['-c', 'git -C "$1" archive --format=tar "$2" | tar -x -C "$3"', 'archive', repo, ref, dir], { stdio: 'inherit' });
+  return sh('git', ['rev-parse', `${ref}^{commit}`], { cwd: repo, quiet: true }).trim();
 }
 
 export function packTree(dir, version, commit, dest, ref) {
