@@ -1,5 +1,5 @@
 {
-  "description": "NODE_OPTIONS: Node's word splitting (spaces, quotes, escapes), its options first and out of execArgv, CLI precedence, -r/--import lists, the allowed list and Node's errors (not allowed, requires an argument, unterminated string, invalid escape)",
+  "description": "NODE_OPTIONS: Node's word splitting (spaces, quotes, escapes), its options first and out of execArgv, CLI precedence, -r/--import lists, the allowed list, a boolean's last form winning (Node's errors are in node-options-errors-node22)",
   "argv": [
     "script.js"
   ],

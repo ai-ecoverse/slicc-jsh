@@ -1,6 +1,9 @@
 // NODE_OPTIONS as Node 22.22.0 reads it: its words (spaces, "…" with
 // backslash escapes), its options before the command line's and not in
 // execArgv, only the options it allows, Node's errors. Each run is a child.
+// (Node's errors, and values that look like options, are in
+// node-options-errors-node22: each half's ~25 children start in under
+// 30 s on the old kernels' cert lanes, where each takes about 0.4 s, #241.)
 const { spawnSync } = require('child_process');
 const run = (nodeOptions, args) => {
   const env = { ...process.env, NODE_OPTIONS: nodeOptions };
@@ -29,31 +32,6 @@ run("'--no-deprecation'", ['show.js']);
 run('   ', ['show.js']);
 run('--input-type=module', ['-e', 'console.log(typeof require)']);
 run('--max-http-header-size=100 --dns-result-order=ipv4first', ['show.js']);
-run('--eval 1', ['show.js']);
-run('-e 1', ['show.js']);
-run('--bogus', ['show.js']);
-run('--bogus', ['--version']);
-run('--', ['show.js']);
-run('--expose-internals', ['show.js']);
-run('"--no-deprecation', ['show.js']);
-run('"a\\', ['show.js']);
-run('--require', ['show.js']);
-run('--require=', ['show.js']);
-run('-r', ['show.js']);
-run('--title', ['show.js']);
-run('--input-type=bad', ['show.js']);
-run('--stack-trace-limit=abc', ['show.js']);
-run('--bogus', ['--bad-cli-option', 'show.js']);
-// A value that looks like an option isn't one (NODE_OPTIONS and the command line).
-run('--require --no-warnings', ['show.js']);
-run('', ['--require', '--no-warnings', 'show.js']);
-run('--title --x', ['show.js']);
-run('', ['--import', '--x', 'show.js']);
-run('', ['-e', '-1']);
-// A short option takes no `=`.
-run('-C=foo', ['show.js']);
-run('-r=./r1.js', ['show.js']);
-run('', ['-r=./r1.js', 'show.js']);
 // A boolean's last form wins, its negation included.
 run('--enable-source-maps --no-enable-source-maps', ['-p', 'process.sourceMapsEnabled']);
 run('--no-enable-source-maps', ['--enable-source-maps', '-p', 'process.sourceMapsEnabled']);
