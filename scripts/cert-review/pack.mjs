@@ -4,14 +4,14 @@ import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { SEMVER, archive, npmFlags, packTree, sh, sha, sri } from './lib.mjs';
 
-const { values } = parseArgs({ options: { version: { type: 'string' }, out: { type: 'string' } } });
+const { values } = parseArgs({ options: { version: { type: 'string' }, out: { type: 'string' }, ref: { type: 'string', default: '' } } });
 const { version } = values;
-if (!SEMVER.test(version ?? '') || !values.out) {
-  console.error('pack: --version x.y.z and --out <dir> are required');
+if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version ?? '') || !values.out) {
+  console.error('pack: --version and --out <dir> are required');
   process.exit(2);
 }
 const out = resolve(values.out);
-const ref = `v${version}`;
+const ref = values.ref || `v${version}`;
 const tree = join(out, 'tree');
 const commit = archive(tree, ref);
 sh('npm', ['ci', ...npmFlags], { cwd: tree });

@@ -19,6 +19,9 @@ const { values } = parseArgs({
     repo: { type: 'string', default: 'ai-ecoverse/slicc-jsh' },
     'dry-run': { type: 'boolean', default: false },
     replay: { type: 'boolean', default: false },
+    pr: { type: 'string', default: '' },
+    head: { type: 'string', default: '' },
+    commit: { type: 'string', default: '' },
     notes: { type: 'string', default: '' },
   },
 });
@@ -51,6 +54,12 @@ function artifact() {
   if (!/^[0-9a-f]{64}$/.test(expected)) fail(`the pack job's sha256 is "${one(expected)}"`);
   else if (expected !== facts.sha256) fail(`the artifact is sha256 ${facts.sha256}, the pack job made ${expected}`);
   checkManifest(tgz, version, fail, facts);
+  if (values.pr) {
+    const candidate = values.commit || values.head;
+    if (facts.gitHead !== candidate) fail(`the tarball's gitHead is ${facts.gitHead}, the reviewed commit is ${candidate}`);
+    facts.commit = candidate;
+    return true;
+  }
   const commit = tagOnMain(repo, version, fail, facts);
   if (facts.gitHead !== commit) fail(`the tarball's gitHead is ${facts.gitHead}, tag v${version} is ${commit}`);
   facts.commit = commit;
@@ -75,7 +84,7 @@ function readVerdict() {
   }
 }
 
-if (!SEMVER.test(version ?? '') || !values.review || !values.out) {
+if (!(values.pr ? /^0\.0\.0-pr\.\d+$/ : SEMVER).test(version ?? '') || !values.review || !values.out) {
   console.error('record: --version x.y.z, --review and --out are required');
   process.exit(2);
 }
@@ -92,7 +101,8 @@ const review = readVerdict();
 const ci = values.run ? `ci: ${values.run}` : 'ci: local';
 let line;
 if (!problems.length && review?.verdict === 'certified') {
-  line = `certified ${NAME}@${version} sha256=${facts.sha256} (${ci}; known: ${review.known.length ? review.known.join(', ') : 'none'}; not covered: ${NOT_COVERED.join(', ')})`;
+  const subject = values.pr ? `${NAME} PR #${values.pr} head ${values.head}` : `${NAME}@${version}`;
+  line = `certified ${subject} sha256=${facts.sha256} (${ci}; known: ${review.known.length ? review.known.join(', ') : 'none'}; not covered: ${NOT_COVERED.join(', ')})`;
 } else {
   const why = [
     ...(review?.verdict === 'fail' ? [`the reviewer: ${review.reason || 'no reason given'}`] : []),
@@ -100,7 +110,7 @@ if (!problems.length && review?.verdict === 'certified') {
     ...problems,
   ];
   const incomplete = held && review?.verdict !== 'fail' && problems.length === 1;
-  line = `cert-ci: ${incomplete ? 'INCOMPLETE' : 'FAIL'} ${NAME}@${version}: ${why.join('; ')} (${ci})`;
+  line = `cert-ci: ${incomplete ? 'INCOMPLETE' : 'FAIL'} ${values.pr ? `${NAME} PR #${values.pr} head ${values.head}` : `${NAME}@${version}`}: ${why.join('; ')} (${ci})`;
 }
 const certified = line.startsWith('certified ');
 const comment = existsSync(join(values.review, 'comment.md'))
@@ -108,8 +118,12 @@ const comment = existsSync(join(values.review, 'comment.md'))
   : '**Cert review:** the reviewer wrote no comment.';
 const checks = [
   `- artifact: sha256 ${facts.sha256 ?? '?'} (the pack job's: ${values.sha256 || '?'}), ${facts.integrity ?? '?'}, re-hashed here`,
-  `- gitHead ${facts.gitHead ?? '?'}, tag v${version} ${facts.tagCommit ?? '?'}, onMain=${facts.onMain ?? '?'} (main...tag ${facts.compare ?? '?'})`,
-  `- npm before publish: ${facts.npm ?? 'not checked'}${values.replay ? ' (a replay of a published version: its npm bytes predate the packed gitHead)' : ''}. Only these bytes are published (to latest, with provenance), and they are checked on npm afterwards.`,
+  ...(values.pr
+    ? [`- gitHead ${facts.gitHead ?? '?'} = the reviewed commit: the PR head ${values.head} merged onto main${values.commit ? ` as ${values.commit}` : ''}. The release publishes main with provenance, and its verify checks npm's copy`]
+    : [
+        `- gitHead ${facts.gitHead ?? '?'}, tag v${version} ${facts.tagCommit ?? '?'}, onMain=${facts.onMain ?? '?'} (main...tag ${facts.compare ?? '?'})`,
+        `- npm before publish: ${facts.npm ?? 'not checked'}${values.replay ? ' (a replay of a published version: its npm bytes predate the packed gitHead)' : ''}`,
+      ]),
 ].join('\n');
 const trouble = problems.length ? `\n\n**Problems:**\n${problems.map((p) => `- ${p}`).join('\n')}` : '';
 const section = `${comment}\n\n**Checked by record, in code:**\n${checks}\n\n\`\`\`\n${line}\n\`\`\`${trouble}`;
@@ -127,7 +141,7 @@ for (const p of problems) console.error(`problem: ${p}`);
 if (values.notes) {
   const body = existsSync(values.notes) ? readFileSync(values.notes, 'utf8') : '';
   writeFileSync(values.notes, replaceSection(body, 'cert-review', section));
-} else if (!values['dry-run'] && !values.replay) {
+} else if (!values['dry-run'] && !values.replay && !values.pr) {
   let body = null;
   try {
     body = run('gh', ['release', 'view', `v${version}`, '-R', repo, '--json', 'body', '--jq', '.body']);

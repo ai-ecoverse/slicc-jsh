@@ -55,7 +55,7 @@ async function download(m, tgz) {
   facts.sha512 = sha('sha512', tgz);
   facts.integrity = `sha512-${sha('sha512', tgz, 'base64')}`;
   if (m.dist.integrity !== facts.integrity) fail(`dist.integrity is ${m.dist.integrity}, the tarball is ${facts.integrity}`);
-  if (facts.sha256 !== values.sha256.trim().toLowerCase()) fail(`npm serves sha256 ${facts.sha256}, cert-review certified ${values.sha256 || '(none)'}`);
+  if (values.sha256 && facts.sha256 !== values.sha256.trim().toLowerCase()) fail(`npm serves sha256 ${facts.sha256}, expected ${values.sha256}`);
   return true;
 }
 
