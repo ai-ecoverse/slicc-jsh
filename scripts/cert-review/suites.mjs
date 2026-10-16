@@ -13,13 +13,15 @@ const { values } = parseArgs({
     touched: { type: 'string', default: '' },
     only: { type: 'string', default: '' },
     neg: { type: 'string', default: 'all' },
+    tree: { type: 'string', default: 'both' },
+    merge: { type: 'boolean', default: false },
   },
 });
 const work = resolve(values.work);
 const stage = readJson(join(work, 'stage.json'));
 const kernel = stage.kernels.find((k) => k.id === values.kernel || k.names.includes(values.kernel));
 if (!kernel) throw new Error(`no staged kernel ${values.kernel}`);
-if (kernel.id !== values.kernel) {
+if (kernel.id !== values.kernel && values.only !== 'browser' && !values.merge) {
   console.log(`suites: kernel ${values.kernel} is ${kernel.version}, the same as ${kernel.id}: nothing to run`);
   process.exit(0);
 }
@@ -174,27 +176,76 @@ function touches(s, unit) {
   return touched.some((f) => f.startsWith(`${s.prefix}${unit}`) && (f.length === `${s.prefix}${unit}`.length || f[`${s.prefix}${unit}`.length] === '/' || s.tests));
 }
 
+function summarize(runs, name) {
+  const matrix = {};
+  for (const r of runs) {
+    for (const [unit, status] of Object.entries(r.results)) {
+      const key = `${r.suite} :: ${unit}`;
+      matrix[key] ??= { suite: r.suite, unit, tag: null, neg: null };
+      matrix[key][r.tree] = status;
+    }
+  }
+  const classify = ({ tag, neg }) => {
+    if (tag === 'fail' && neg === 'pass') return 'regression';
+    if (tag === 'pass' && neg === 'fail') return 'fixed';
+    if (tag === 'fail' && neg === 'fail') return 'both-fail';
+    if (tag === 'fail' && neg === null) return 'fail-new-only';
+    if (tag === 'fail' && neg === 'skip') return 'fail-neg-skipped';
+    if (tag === 'pass' && neg === 'pass') return 'both-pass';
+    if (tag === null && neg === 'fail') return 'neg-only';
+    return tag ?? 'none';
+  };
+  const rows = Object.entries(matrix).map(([key, v]) => ({ key, ...v, class: classify(v) }));
+  const pick = (...c) => rows.filter((r) => c.includes(r.class)).map((r) => r.key);
+  const summary = {
+    kernel: { id: kernel.id, names: kernel.names, version: kernel.version, users: 'enforce' },
+    touched,
+    runs: runs.map(({ results, ...r }) => ({ ...r, counts: Object.values(results).reduce((a, st) => ({ ...a, [st]: (a[st] ?? 0) + 1 }), {}) })),
+    regression: pick('regression'),
+    fixed: pick('fixed'),
+    bothFail: pick('both-fail'),
+    failNewOnly: pick('fail-new-only', 'fail-neg-skipped'),
+    rows,
+  };
+  writeFileSync(join(out, name), `${JSON.stringify(summary, null, 2)}\n`);
+  console.log(
+    `suites ${kernel.id} (${kernel.version}) ${name}: regression ${summary.regression.length}, fixed ${summary.fixed.length}, both-fail ${summary.bothFail.length}, fail-new-only ${summary.failNewOnly.length}`
+  );
+}
+
+if (values.merge) {
+  const runs = ['tag', 'neg'].flatMap((t) => (existsSync(join(out, `runs-${t}.json`)) ? readJson(join(out, `runs-${t}.json`)) : []));
+  if (runs.length) summarize(runs, 'suites.json');
+  if (existsSync(join(out, 'runs-browser.json'))) summarize(readJson(join(out, 'runs-browser.json')), 'browser.json');
+  process.exit(0);
+}
+
 useKernel(stage.trees.tag);
 useKernel(stage.trees.neg);
 const only = values.only ? values.only.split(',') : Object.keys(SUITES).filter((n) => n !== 'browser');
+const trees = values.tree === 'both' ? ['tag', 'neg'] : [values.tree];
 const runs = [];
 for (const name of only) {
   const s = SUITES[name];
-  const tag = await runSuite(name, 'tag', null);
-  runs.push(tag);
-  if (tag.missing) continue;
-  const notPass = new Set(
-    Object.entries(tag.results)
-      .filter(([, v]) => v === 'fail')
-      .map(([k]) => k)
-  );
-  let negUnits;
-  if (s.whole) {
-    negUnits = notPass.size || touches(s) ? null : [];
-  } else {
-    const all = s.fixtures(stage.trees.tag);
-    negUnits = all.filter((u) => touches(s, u) || [...notPass].some((k) => k === u || k.startsWith(`${u} › `)));
-    if (values.neg === 'all' || touches(s, '\u0000')) negUnits = null;
+  let tag = null;
+  if (trees.includes('tag')) {
+    tag = await runSuite(name, 'tag', null);
+    runs.push(tag);
+    if (tag.missing) continue;
+  }
+  if (!trees.includes('neg')) continue;
+  let negUnits = null;
+  if (tag && values.neg !== 'all') {
+    const notPass = new Set(
+      Object.entries(tag.results)
+        .filter(([, v]) => v === 'fail')
+        .map(([k]) => k)
+    );
+    if (s.whole) negUnits = notPass.size || touches(s) ? null : [];
+    else {
+      negUnits = s.fixtures(stage.trees.tag).filter((u) => touches(s, u) || [...notPass].some((k) => k === u || k.startsWith(`${u} › `)));
+      if (touches(s, '\u0000')) negUnits = null;
+    }
   }
   if (negUnits && negUnits.length === 0) {
     runs.push({ suite: name, tree: 'neg', skipped: 'the delta touched none of its files and every one passed on tag', results: {} });
@@ -203,36 +254,6 @@ for (const name of only) {
   runs.push(await runSuite(name, 'neg', negUnits));
 }
 
-const matrix = {};
-for (const r of runs) {
-  for (const [unit, status] of Object.entries(r.results)) {
-    const key = `${r.suite} :: ${unit}`;
-    matrix[key] ??= { tag: null, neg: null };
-    matrix[key][r.tree] = status;
-  }
-}
-const classify = ({ tag, neg }) => {
-  if (tag === 'fail' && neg === 'pass') return 'regression';
-  if (tag === 'pass' && neg === 'fail') return 'fixed';
-  if (tag === 'fail' && neg === 'fail') return 'both-fail';
-  if (tag === 'fail' && neg === null) return 'fail-new-only';
-  if (tag === 'fail' && neg === 'skip') return 'fail-neg-skipped';
-  if (tag === 'pass' && neg === 'pass') return 'both-pass';
-  if (tag === null && neg === 'fail') return 'neg-only';
-  return tag ?? 'none';
-};
-const rows = Object.entries(matrix).map(([key, v]) => ({ key, ...v, class: classify(v) }));
-const summary = {
-  kernel: { id: kernel.id, names: kernel.names, version: kernel.version, users: 'enforce' },
-  touched,
-  runs: runs.map(({ results, ...r }) => ({ ...r, counts: Object.values(results).reduce((a, s) => ({ ...a, [s]: (a[s] ?? 0) + 1 }), {}) })),
-  regression: rows.filter((r) => r.class === 'regression').map((r) => r.key),
-  fixed: rows.filter((r) => r.class === 'fixed').map((r) => r.key),
-  bothFail: rows.filter((r) => r.class === 'both-fail').map((r) => r.key),
-  failNewOnly: rows.filter((r) => r.class === 'fail-new-only' || r.class === 'fail-neg-skipped').map((r) => r.key),
-  rows,
-};
-writeFileSync(join(out, values.only === 'browser' ? 'browser.json' : 'suites.json'), `${JSON.stringify(summary, null, 2)}\n`);
-console.log(
-  `suites ${kernel.id} (${kernel.version}): regression ${summary.regression.length}, fixed ${summary.fixed.length}, both-fail ${summary.bothFail.length}, fail-new-only ${summary.failNewOnly.length}`
-);
+const label = values.only === 'browser' ? 'browser' : null;
+if (trees.length === 2) summarize(runs, label ? 'browser.json' : 'suites.json');
+else writeFileSync(join(out, `runs-${label ?? trees[0]}.json`), `${JSON.stringify(runs)}\n`);

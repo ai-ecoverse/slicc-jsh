@@ -112,7 +112,7 @@ jobs:
       fail-fast: false
       matrix:
         kernel: [new, dev, '186', floor]
-        part: [suites, fixtures]
+        part: [suites-tag, suites-neg, fixtures-1, fixtures-2]
         include:
           - kernel: dev
             part: browser
@@ -144,13 +144,17 @@ jobs:
           git diff --name-only "v$PREV" "v$VERSION" > "$RUNNER_TEMP/touched.txt"
           node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --work "$WORK" --kernels "${{ matrix.kernel }}"
 
-      - name: Suites on tag and neg (golden, jsh parity, integration, cert, node-parallel)
-        if: matrix.part == 'suites'
-        run: node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt"
+      - name: Suites on one tree (golden, jsh parity, integration, cert, node-parallel)
+        if: startsWith(matrix.part, 'suites-')
+        env:
+          TREE: ${{ matrix.part == 'suites-tag' && 'tag' || 'neg' }}
+        run: node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --tree "$TREE"
 
-      - name: m-fixtures and rows against host Node 22.22.0
-        if: matrix.part == 'fixtures'
-        run: node scripts/cert-review/mfixtures.mjs --work "$WORK" --kernel "${{ matrix.kernel }}"
+      - name: m-fixtures and rows against host Node 22.22.0 (one shard)
+        if: startsWith(matrix.part, 'fixtures-')
+        env:
+          SHARD: ${{ matrix.part == 'fixtures-1' && '1/2' || '2/2' }}
+        run: node scripts/cert-review/mfixtures.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --shard "$SHARD"
 
       - name: Chrome for Testing (the tag's config.chrome)
         if: matrix.part == 'browser'
@@ -163,7 +167,7 @@ jobs:
           fi
       - name: Browser suite on tag
         if: matrix.part == 'browser'
-        run: node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser
+        run: node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
@@ -230,6 +234,7 @@ jobs:
       - name: Stage the trees, every kernel and the rebuild (no secrets in this step)
         run: |
           node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --work "$WORK" --rebuild
+          for k in $(jq -r '.kernels[].id' "$WORK/stage.json"); do node scripts/cert-review/suites.mjs --work "$WORK" --kernel "$k" --merge; done
           node scripts/cert-review/digest.mjs --work "$WORK" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: The review instructions

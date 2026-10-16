@@ -96,14 +96,14 @@ export const ROWS = [
     name: 'devrm',
     files: {},
     steps: [
-      { label: 'before', cmd: 'ls -la /etc /dev | md5sum; ls -A /etc | tr "\\n" " "; echo; ls -A /dev | tr "\\n" " "' },
+      { label: 'before', cmd: 'stat -c "%n %a %u:%g %F" /etc/* /dev/* | md5sum; ls -A /etc | tr "\\n" " "; echo; ls -A /dev | tr "\\n" " "' },
       {
         label: 'cone rm /dev',
         user: 'cone',
         cmd: `node -e "try { require('fs').rmSync('/dev', { recursive: true }); console.log('returned ok') } catch (e) { console.log(e.code, e.syscall, e.path) } try { require('fs').rmSync('/dev/null'); console.log('null ok') } catch (e) { console.log('null', e.code, e.syscall) } require('fs').promises.rm('/dev', { recursive: true }).then(() => console.log('promises ok'), (e) => console.log('promises', e.code, e.syscall))"`,
       },
       { label: 'cone rm /etc', user: 'cone', cmd: `node -e "try { require('fs').rmSync('/etc', { recursive: true, force: true }) } catch (e) { console.log(e.code, e.syscall, e.path) }"` },
-      { label: 'after', cmd: 'ls -la /etc /dev | md5sum; ls -A /etc | tr "\\n" " "; echo; ls -A /dev | tr "\\n" " "' },
+      { label: 'after', cmd: 'stat -c "%n %a %u:%g %F" /etc/* /dev/* | md5sum; ls -A /etc | tr "\\n" " "; echo; ls -A /dev | tr "\\n" " "' },
     ],
   },
   {

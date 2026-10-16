@@ -15,6 +15,7 @@ const { values } = parseArgs({
     only: { type: 'string', default: '' },
     user: { type: 'string', default: 'cone' },
     timeout: { type: 'string', default: '20000' },
+    shard: { type: 'string', default: '1/1' },
   },
 });
 const work = resolve(values.work);
@@ -28,6 +29,11 @@ if (kernel.id !== values.kernel) {
 const NODE22 = process.env.NODE22;
 if (!NODE22) throw new Error('mfixtures: $NODE22 must name host Node 22.22.0');
 const CASE_MS = Number(values.timeout);
+const [shardIx, shardOf] = (() => {
+  const [i, n] = values.shard.split('/').map(Number);
+  return [i - 1, n];
+})();
+const suffix = shardOf > 1 ? `-${shardIx + 1}` : '';
 const out = join(work, 'fixtures', kernel.id);
 mkdirSync(out, { recursive: true });
 const base = stage.trees.base;
@@ -196,7 +202,8 @@ async function runDirs(pkgName, pkgDir, pick = null) {
     .filter((d) => !d.includes('.'))
     .filter((d) => !values.only || values.only.split(',').includes(d))
     .filter((d) => !pick || pick.has(d))
-    .sort();
+    .sort()
+    .filter((d, i) => pick || values.only || i % shardOf === shardIx);
   for (const dir of dirs) {
     const mode = modeOf(dir);
     if (mode === 'skip') {
@@ -232,6 +239,7 @@ async function runDirs(pkgName, pkgDir, pick = null) {
 
 async function runRows(pkgName, pkgDir) {
   const results = {};
+  if (shardIx !== shardOf - 1 && !values.only) return results;
   for (const row of ROWS) {
     if (values.only && !values.only.split(',').includes(row.name) && !values.only.split(',').some((d) => ROW_DIRS.includes(d))) continue;
     const k = await boot(pkgDir);
@@ -258,7 +266,7 @@ const all = {};
 for (const name of values.pkg.split(',')) {
   const res = { ...(await runDirs(name, pkgs[name])), ...(await runRows(name, pkgs[name])) };
   all[name] = res;
-  writeFileSync(join(out, `${name}${values.only ? '-only' : ''}.json`), `${JSON.stringify(res, null, 1)}\n`);
+  writeFileSync(join(out, `${name}${values.only ? '-only' : suffix}.json`), `${JSON.stringify(res, null, 1)}\n`);
 }
 
 const RETRIES = 2;
@@ -286,7 +294,7 @@ if (all.new && all.prev) {
       }
     }
   }
-  if (suspects.length) console.log(`mfixtures ${kernel.id}: re-ran ${suspects.length} case(s) that changed verdict, ${RETRIES} more time(s) on both releases`);
+  if (suspects.length) console.log(`mfixtures ${kernel.id}: re-ran ${suspects.length} case(s) that changed verdict ${RETRIES} more time(s) on both releases (a diagnostic: the class stays the first run's)`);
 }
 
 if (all.new && all.prev && !values.only) {
@@ -296,13 +304,13 @@ if (all.new && all.prev && !values.only) {
     const b = all.prev[key];
     let cls;
     if (a?.status === 'ran' || b?.status === 'ran') cls = a?.jsh === b?.jsh ? 'unchanged' : 'changed';
-    else if (a?.status !== b?.status && [a, b].some((x) => (x?.retries ?? []).some((r) => r !== x.status))) cls = 'flaky';
     else if (a?.status === 'same' && b?.status === 'diff') cls = 'fixed';
     else if (a?.status === 'diff' && b?.status === 'same') cls = 'regression';
     else if (a?.status === 'diff' && b?.status === 'diff') cls = a.jsh === b.jsh ? 'diff-unchanged' : 'diff-changed';
     else if (a?.status === 'same' && b?.status === 'same') cls = 'same';
     else cls = a?.status ?? 'missing';
-    return { key, class: cls };
+    const flipped = [a, b].some((x) => (x?.retries ?? []).some((r) => r !== x.status));
+    return { key, class: cls, ...(flipped ? { flipped: { new: [a.status, ...(a.retries ?? [])], prev: [b.status, ...(b.retries ?? [])] } } : {}) };
   });
   const pick = (c) => rows.filter((r) => r.class === c).map((r) => r.key);
   const summary = {
@@ -311,11 +319,11 @@ if (all.new && all.prev && !values.only) {
     regression: pick('regression'),
     fixed: pick('fixed'),
     diffChanged: pick('diff-changed'),
-    flaky: pick('flaky'),
+    flipped: rows.filter((r) => r.flipped).map((r) => r.key),
     rowChanged: pick('changed'),
     rows,
   };
-  writeFileSync(join(out, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
+  writeFileSync(join(out, `summary${suffix}.json`), `${JSON.stringify(summary, null, 2)}\n`);
   console.log(`mfixtures ${kernel.id}: ${JSON.stringify(summary.counts)}`);
 }
 process.exit(0);
