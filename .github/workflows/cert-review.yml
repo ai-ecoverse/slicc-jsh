@@ -295,7 +295,7 @@ jobs:
 
   record:
     name: cert-review / record
-    needs: [plan, review]
+    needs: [plan, bench, review]
     if: always() && needs.plan.outputs.go == 'true' && needs.review.result != 'cancelled'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -310,6 +310,7 @@ jobs:
       VERSION: ${{ needs.plan.outputs.version }}
       DRY_RUN: ${{ needs.plan.outputs.dry_run }}
       PLAN_COMMIT: ${{ needs.plan.outputs.commit }}
+      UPSTREAM: ${{ needs.bench.result == 'success' && needs.review.result || format('bench {0}', needs.bench.result) }}
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -337,7 +338,7 @@ jobs:
           dry=''
           [ "$DRY_RUN" = true ] && dry=--dry-run
           if node scripts/cert-review/record.mjs --version "$VERSION" --review "$RUNNER_TEMP/cert-review" \
-            --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" $dry; then
+            --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" --upstream "$UPSTREAM" $dry; then
             echo "conclusion=success" >> "$GITHUB_OUTPUT"
           else
             echo "conclusion=failure" >> "$GITHUB_OUTPUT"

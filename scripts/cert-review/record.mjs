@@ -17,6 +17,7 @@ const { values } = parseArgs({
     repo: { type: 'string', default: 'ai-ecoverse/slicc-jsh' },
     'dry-run': { type: 'boolean', default: false },
     notes: { type: 'string', default: '' },
+    upstream: { type: 'string', default: '' },
   },
 });
 
@@ -185,6 +186,9 @@ function readVerdict() {
 if (!SEMVER.test(version ?? '')) {
   console.error('record: --version must be x.y.z');
   process.exit(2);
+}
+if (values.upstream && values.upstream !== 'success') {
+  problems.push(`held: ${values.upstream.startsWith('bench') ? `a bench job ended ${values.upstream.slice(6)}, so the evidence is incomplete` : `the review job ended ${values.upstream}`}`);
 }
 try {
   await supplyChain();
