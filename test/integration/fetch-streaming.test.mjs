@@ -37,6 +37,40 @@ describe('loopback fetch streams (kernel)', () => {
     assert.match(r.stdout, /server: redirect body closed\n/);
   });
 
+  it('an abort still reaches the body after a garbage collection (the Request is held, as Node holds it)', async () => {
+    // The body listened on the Request's signal, which follows the
+    // program's through a WeakRef to the Request's own controller (undici).
+    // Nothing held the Request once the response came, so after a GC the
+    // abort no longer reached the body: the read after it got the next event
+    // (the golden http-streaming-node22 flaked so on CI). The garbage here
+    // forces the GC: before the fix, 'read resolved' every time.
+    const source = [
+      "const http = require('http');",
+      'const srv = http.createServer((req, res) => {',
+      "  res.writeHead(200, { 'content-type': 'text/event-stream' }); res.flushHeaders();",
+      '  let n = 0; const t = setInterval(() => res.write(`data: ${++n}\\n\\n`), 20);',
+      "  res.on('close', () => { clearInterval(t); console.log('server: went away'); });",
+      '});',
+      "srv.listen(0, '127.0.0.1', async () => {",
+      '  const ac = new AbortController();',
+      '  const r = await fetch(`http://127.0.0.1:${srv.address().port}/`, { signal: ac.signal });',
+      '  const reader = r.body.pipeThrough(new TextDecoderStream()).getReader();',
+      '  await reader.read();',
+      // About 240 MB held, then let go: a full collection, not only a scavenge.
+      '  let junk = []; for (let i = 0; i < 300; i++) junk.push(new Array(100000).fill(i)); junk = null;',
+      '  for (let i = 0; i < 300; i++) new Array(100000).fill(i);',
+      '  ac.abort();',
+      "  try { const v = await reader.read(); console.log('read resolved', JSON.stringify(v)); } catch (e) { console.log('read after abort', e.name); }",
+      // Before the fix nothing ended the stream: close it from the server.
+      '  srv.close(); srv.closeAllConnections();',
+      '});',
+    ].join('\n');
+    await jsh.kernel.writeFile('/os/abort-gc.js', source);
+    const r = await jsh.run(['node', 'abort-gc.js'], { cwd: '/os' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'read after abort AbortError\nserver: went away\n');
+  });
+
   it('reads 3 events of a never-ending SSE stream, aborts, and the server sees the client go', async () => {
     const source = [
       "const http = require('http');",

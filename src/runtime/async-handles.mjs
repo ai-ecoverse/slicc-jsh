@@ -98,7 +98,9 @@ export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, w
     // process.exit() from a timer must unwind even while a server is listening.
     if (shouldStop?.()) return;
     if (handles.refCount > 0) {
-      await handles.waitForProgress();
+      // A tick queued since the checkpoint (its wake found no waiter) runs
+      // now; otherwise a new tick wakes the wait (createNextTick's onQueue).
+      if (nextTick.depth === 0) await handles.waitForProgress();
       if (shouldStop?.()) return;
       // I/O continuations often run as microtasks during the await above and
       // queue nextTicks; drain those before waiting again.

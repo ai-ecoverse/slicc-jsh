@@ -163,11 +163,11 @@ async function loopbackFetch(getHttp, request, target, initHeaders) {
       addr = next;
       continue;
     }
-    return { response: toResponse(res, { method, signal }, url, redirected) };
+    return { response: toResponse(res, { method, signal, request }, url, redirected) };
   }
 }
 
-function toResponse(res, { method, signal }, url, redirected) {
+function toResponse(res, { method, signal, request }, url, redirected) {
   const headers = new Headers();
   for (let i = 0; i < res.rawHeaders.length; i += 2) headers.append(res.rawHeaders[i], res.rawHeaders[i + 1]);
   let stream = null;
@@ -181,7 +181,13 @@ function toResponse(res, { method, signal }, url, redirected) {
     stream = new ReadableStream({
       start(controller) {
         // An abort while the body is read ends it with the signal's reason.
+        // `signal` is the Request's, which follows the program's through a
+        // WeakRef to the Request's own controller (undici): once the Request
+        // is collected, the program's abort no longer reaches it. Node's
+        // fetch holds its request until the body is done; so does this.
+        const held = request;
         onAbort = () => {
+          void held;
           if (settled) return;
           done();
           res.destroy();
@@ -234,6 +240,9 @@ export function createFetch(ctx, { handles, getHttp } = {}) {
     }
     // A server of this kernel: its own sockets (the platform's fetch would
     // go to the host's loopback, or nowhere in a browser).
+    // Not the kernel's own loopback ctx.fetch: on 1.103.4 it still differs
+    // from undici (bad ports, error causes, the request head;
+    // ai-ecoverse/slicc-kernel#822).
     let request;
     let target = null;
     try {

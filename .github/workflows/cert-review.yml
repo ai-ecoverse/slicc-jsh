@@ -1,24 +1,40 @@
 name: cert-review
 
 on:
-  workflow_run:
-    workflows: [Release]
-    types: [completed]
+  workflow_call:
+    inputs:
+      version:
+        description: 'The tagged, unpublished version to certify, x.y.z (tag v<version>)'
+        required: true
+        type: string
+      tarball:
+        description: 'The name of the artifact in this run that holds the packed tarball'
+        required: true
+        type: string
+      sha256:
+        description: "The pack job's sha256 of the tarball"
+        required: true
+        type: string
+    outputs:
+      verdict:
+        description: 'certified or fail, from the record'
+        value: ${{ jobs.record.outputs.verdict }}
+      sha256:
+        description: 'The sha256 record computed from the artifact, empty unless certified'
+        value: ${{ jobs.record.outputs.sha256 }}
+      line:
+        description: 'The verdict line'
+        value: ${{ jobs.record.outputs.line }}
   workflow_dispatch:
     inputs:
       version:
-        description: 'The released version to certify, x.y.z (tag v<version>)'
+        description: 'The tagged version to replay, x.y.z (tag v<version>), packed again from its tag; a replay records only (no status, no release notes, the publish gate as a dry run)'
         required: true
         type: string
       prev:
-        description: 'The certified version the delta is read from, x.y.z (empty: the newest earlier release body with a cert-review line, else the certified dist-tag)'
+        description: 'The certified version the delta is read from, x.y.z (empty: the newest earlier release body with a cert-review line)'
         required: false
         type: string
-      dry_run:
-        description: 'Write the record artifact only: no commit status, no release notes'
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -30,13 +46,6 @@ env:
 jobs:
   plan:
     name: cert-review / plan
-    if: >-
-      github.event_name == 'workflow_dispatch' || (
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        github.event.workflow_run.event == 'push' &&
-        github.event.workflow_run.head_repository.full_name == github.repository
-      )
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -47,7 +56,8 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       prev: ${{ steps.plan.outputs.prev }}
       commit: ${{ steps.plan.outputs.commit }}
-      dry_run: ${{ steps.plan.outputs.dry_run }}
+      mode: ${{ steps.plan.outputs.mode }}
+      artifact: ${{ steps.plan.outputs.artifact }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -63,26 +73,18 @@ jobs:
       - name: The version, the certified version before it, and the delta
         id: plan
         env:
-          EVENT: ${{ github.event_name }}
-          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          IN_TARBALL: ${{ inputs.tarball }}
           IN_VERSION: ${{ inputs.version }}
           IN_PREV: ${{ inputs.prev }}
-          IN_DRY_RUN: ${{ inputs.dry_run }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          skip() { echo "::notice::$1"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; }
           semver='^[0-9]+\.[0-9]+\.[0-9]+$'
-          dry_run=false prev=''
-          if [ "$EVENT" = workflow_run ]; then
-            version=$(git tag --points-at "$RUN_SHA" 'v*' | sed 's/^v//' | grep -E "$semver" | sort -V | tail -1 || true)
-            [ -n "$version" ] || skip "Release on $RUN_SHA tagged no version: nothing was published"
-          else
-            version=$IN_VERSION prev=$IN_PREV dry_run=$IN_DRY_RUN
-            [[ "$version" =~ $semver ]] || { echo "::error::version '$version' is not x.y.z"; exit 1; }
-            [ -z "$prev" ] || [[ "$prev" =~ $semver ]] || { echo "::error::prev '$prev' is not x.y.z"; exit 1; }
-          fi
+          version=$IN_VERSION prev=$IN_PREV
+          [[ "$version" =~ $semver ]] || { echo "::error::version '$version' is not x.y.z"; exit 1; }
+          [ -z "$prev" ] || [[ "$prev" =~ $semver ]] || { echo "::error::prev '$prev' is not x.y.z"; exit 1; }
+          if [ -n "$IN_TARBALL" ]; then mode=release artifact=$IN_TARBALL; else mode=dispatch artifact="slicc-jsh-tarball-$version-replay"; fi
           git rev-parse -q --verify "refs/tags/v$version^{commit}" > /dev/null || { echo "::error::no tag v$version"; exit 1; }
           node scripts/cert-review/plan.mjs --version "$version" ${prev:+--prev "$prev"} --out "$RUNNER_TEMP/plan"
           cat "$RUNNER_TEMP/plan/plan.md" >> "$GITHUB_STEP_SUMMARY"
@@ -91,7 +93,8 @@ jobs:
             echo "version=$version"
             echo "prev=$(jq -r .prev "$RUNNER_TEMP/plan/plan.json")"
             echo "commit=$(jq -r .commit "$RUNNER_TEMP/plan/plan.json")"
-            echo "dry_run=$dry_run"
+            echo "mode=$mode"
+            echo "artifact=$artifact"
           } | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -100,10 +103,45 @@ jobs:
           path: ${{ runner.temp }}/plan/
           if-no-files-found: ignore
 
+  pack:
+    name: cert-review / pack (replay)
+    needs: plan
+    if: needs.plan.outputs.go == 'true' && needs.plan.outputs.mode == 'dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Pack v${{ needs.plan.outputs.version }} from its tag, as the release does
+        id: pack
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: node scripts/cert-review/pack.mjs --version "$VERSION" --out "$RUNNER_TEMP/pack"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ needs.plan.outputs.artifact }}
+          path: |
+            ${{ runner.temp }}/pack/*.tgz
+            ${{ runner.temp }}/pack/*.tgz.sha256
+            ${{ runner.temp }}/pack/pack.json
+          if-no-files-found: error
+
   bench:
     name: cert-review / ${{ matrix.part }} (kernel ${{ matrix.kernel }})
-    needs: plan
-    if: needs.plan.outputs.go == 'true'
+    needs: [plan, pack]
+    if: always() && needs.plan.outputs.go == 'true' && needs.pack.result != 'failure' && needs.pack.result != 'cancelled'
+
     runs-on: ${{ vars.CERT_RUNNER || 'cloud-run-bench' }}
     timeout-minutes: 120
     permissions:
@@ -139,22 +177,27 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Stage v${{ env.VERSION }}, v${{ env.PREV }}'s dist and kernel ${{ matrix.kernel }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ${{ needs.plan.outputs.artifact }}
+          path: ${{ runner.temp }}/tarball
+
+      - name: Stage the artifact, v${{ env.PREV }}'s dist and kernel ${{ matrix.kernel }}
         run: |
           git diff --name-only "v$PREV" "v$VERSION" > "$RUNNER_TEMP/touched.txt"
-          node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --work "$WORK" --kernels "${{ matrix.kernel }}"
+          node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --work "$WORK" --kernels "${{ matrix.kernel }}" --tarball "$(ls "$RUNNER_TEMP"/tarball/*.tgz)"
 
       - name: Suites on one tree (golden, jsh parity, integration, cert, node-parallel)
         if: startsWith(matrix.part, 'suites-')
         env:
           TREE: ${{ matrix.part == 'suites-tag' && 'tag' || 'neg' }}
-        run: node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --tree "$TREE"
+        run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --tree "$TREE"
 
       - name: m-fixtures and rows against host Node 22.22.0 (one shard)
         if: startsWith(matrix.part, 'fixtures-')
         env:
           SHARD: ${{ matrix.part == 'fixtures-1' && '1/2' || '2/2' }}
-        run: node scripts/cert-review/mfixtures.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --shard "$SHARD"
+        run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/mfixtures.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --shard "$SHARD"
 
       - name: Chrome for Testing (the tag's config.chrome)
         if: matrix.part == 'browser'
@@ -167,7 +210,7 @@ jobs:
           fi
       - name: Browser suite on tag
         if: matrix.part == 'browser'
-        run: node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag
+        run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
@@ -181,8 +224,8 @@ jobs:
 
   review:
     name: cert-review / review
-    needs: [plan, bench]
-    if: always() && needs.plan.outputs.go == 'true' && needs.bench.result != 'cancelled'
+    needs: [plan, pack, bench]
+    if: always() && needs.plan.outputs.go == 'true' && needs.bench.result != 'cancelled' && needs.bench.result != 'skipped'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     concurrency:
@@ -230,10 +273,14 @@ jobs:
         with:
           name: cert-review-plan-${{ env.VERSION }}
           path: ${{ runner.temp }}/cert/plan
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ${{ needs.plan.outputs.artifact }}
+          path: ${{ runner.temp }}/tarball
 
       - name: Stage the trees, every kernel and the rebuild (no secrets in this step)
         run: |
-          node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --work "$WORK" --rebuild
+          node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --work "$WORK" --rebuild --tarball "$(ls "$RUNNER_TEMP"/tarball/*.tgz)"
           for k in $(jq -r '.kernels[].id' "$WORK/stage.json"); do node scripts/cert-review/suites.mjs --work "$WORK" --kernel "$k" --merge; done
           node scripts/cert-review/digest.mjs --work "$WORK" | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -258,6 +305,7 @@ jobs:
         with:
           use_bedrock: 'true'
           github_token: ${{ github.token }}
+          allowed_bots: 'github-merge-queue'
           show_full_output: ${{ github.event_name == 'workflow_dispatch' }}
           claude_args: |
             --model ${{ vars.CERT_BEDROCK_MODEL || 'global.anthropic.claude-opus-5-5' }}
@@ -294,7 +342,7 @@ jobs:
 
   record:
     name: cert-review / record
-    needs: [plan, review]
+    needs: [plan, pack, bench, review]
     if: always() && needs.plan.outputs.go == 'true' && needs.review.result != 'cancelled'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -305,10 +353,16 @@ jobs:
       actions: read
       contents: write
       statuses: write
+    outputs:
+      verdict: ${{ steps.record.outputs.verdict }}
+      sha256: ${{ steps.record.outputs.sha256 }}
+      line: ${{ steps.record.outputs.line }}
     env:
       VERSION: ${{ needs.plan.outputs.version }}
-      DRY_RUN: ${{ needs.plan.outputs.dry_run }}
+      MODE: ${{ needs.plan.outputs.mode }}
       PLAN_COMMIT: ${{ needs.plan.outputs.commit }}
+      PACKED: ${{ needs.plan.outputs.mode == 'release' && inputs.sha256 || needs.pack.outputs.sha256 }}
+      UPSTREAM: ${{ needs.bench.result == 'success' && needs.review.result || format('bench {0}', needs.bench.result) }}
       GH_REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -326,29 +380,39 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         continue-on-error: true
         with:
-          name: cert-review-verdict-${{ env.VERSION }}
+          name: cert-review-verdict-${{ needs.plan.outputs.version }}
           path: ${{ runner.temp }}/cert-review
 
-      - name: The line, from the registry and the verdict (this job's tools, from ${{ github.sha }})
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        continue-on-error: true
+        with:
+          name: ${{ needs.plan.outputs.artifact }}
+          path: ${{ runner.temp }}/tarball
+
+      - name: The line, from the artifact and the verdict (this job's tools, from ${{ github.sha }})
         id: record
         run: |
-          mkdir -p "$RUNNER_TEMP/cert-review"
-          dry=''
-          [ "$DRY_RUN" = true ] && dry=--dry-run
+          mkdir -p "$RUNNER_TEMP/cert-review" "$RUNNER_TEMP/tarball"
+          tgz=$(ls "$RUNNER_TEMP"/tarball/*.tgz 2> /dev/null | head -1 || true)
+          replay=''
+          [ "$MODE" = release ] || replay=--replay
           if node scripts/cert-review/record.mjs --version "$VERSION" --review "$RUNNER_TEMP/cert-review" \
-            --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" $dry; then
+            --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" --tarball "$tgz" --sha256 "$PACKED" \
+            --upstream "$UPSTREAM" $replay; then
             echo "conclusion=success" >> "$GITHUB_OUTPUT"
           else
             echo "conclusion=failure" >> "$GITHUB_OUTPUT"
           fi
           commit=$(jq -r '.commit // empty' "$RUNNER_TEMP/record/record.json")
           echo "commit=${commit:-$PLAN_COMMIT}" >> "$GITHUB_OUTPUT"
+          jq -r '"verdict=\(if .certified then "certified" else "fail" end)", "sha256=\(.sha256 // "")", "line=\(.line | split("\n")[0])"' \
+            "$RUNNER_TEMP/record/record.json" >> "$GITHUB_OUTPUT"
           { echo '```'; cat "$RUNNER_TEMP/record/line.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         id: artifact
         with:
-          name: cert-review-record-${{ env.VERSION }}
+          name: cert-review-record-${{ needs.plan.outputs.version }}
           path: |
             ${{ runner.temp }}/record/record.json
             ${{ runner.temp }}/record/line.txt
@@ -356,7 +420,7 @@ jobs:
           if-no-files-found: error
 
       - name: The cert-review status on the release commit
-        if: needs.plan.outputs.dry_run != 'true'
+        if: needs.plan.outputs.mode == 'release'
         env:
           CONCLUSION: ${{ steps.record.outputs.conclusion }}
           COMMIT: ${{ steps.record.outputs.commit }}
@@ -373,3 +437,35 @@ jobs:
         run: |
           echo "::error title=v$VERSION not certified::$(head -1 "$RUNNER_TEMP/record/line.txt")"
           exit 1
+
+  gate:
+    name: cert-review / publish gate (dry run)
+    needs: [plan, pack, record]
+    if: always() && needs.plan.outputs.mode == 'dispatch' && needs.pack.result == 'success' && needs.record.result != 'skipped' && needs.record.result != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: ${{ needs.plan.outputs.artifact }}
+          path: ${{ runner.temp }}/tarball
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: cert-review-record-${{ needs.plan.outputs.version }}
+          path: ${{ runner.temp }}/record
+      - name: The publish job's gate and npm publish, as a dry run
+        env:
+          PACKED: ${{ needs.pack.outputs.sha256 }}
+        run: |
+          tgz=$(ls "$RUNNER_TEMP"/tarball/*.tgz)
+          node scripts/cert-review/publish.mjs --dry-run --tarball "$tgz" --record "$RUNNER_TEMP/record/record.json" --sha256 "$PACKED"

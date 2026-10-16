@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { KERNEL, NAME, SEMVER, npmFlags, packFrom, readJson, relFiles, root, sh, sha, sri, untar } from './lib.mjs';
+import { KERNEL, NAME, SEMVER, archive, npmFlags, packFrom, packTree, readJson, relFiles, root, sh, sha, sri, untar } from './lib.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -12,6 +12,7 @@ const { values } = parseArgs({
     work: { type: 'string' },
     kernels: { type: 'string', default: 'all' },
     rebuild: { type: 'boolean', default: false },
+    tarball: { type: 'string', default: '' },
   },
 });
 const { version, prev } = values;
@@ -27,12 +28,6 @@ export * from './node-kernel.js';
 export const createNodeKernel = (options = {}) => create({ users: 'enforce', ...options });
 `;
 
-function archive(dir, ref) {
-  rmSync(dir, { recursive: true, force: true });
-  mkdirSync(dir, { recursive: true });
-  execFileSync('sh', ['-c', 'git -C "$1" archive --format=tar "$2" | tar -x -C "$3"', 'archive', root, ref, dir], { stdio: 'inherit' });
-  return sh('git', ['rev-parse', `${ref}^{commit}`], { cwd: root, quiet: true }).trim();
-}
 
 function kernelPins(tagTree) {
   const pkg = readJson(join(root, 'package.json'));
@@ -100,7 +95,12 @@ function packageDiff(a, b) {
   return all.filter((f) => !fa.includes(f) || !fb.includes(f) || sha('sha256', join(a, f)) !== sha('sha256', join(b, f)));
 }
 
-const pubTgz = packFrom(`${NAME}@${version}`, join(work, 'pub'));
+let pubTgz;
+if (values.tarball) {
+  mkdirSync(join(work, 'pub'), { recursive: true });
+  pubTgz = join(work, 'pub', `artifact-${version}.tgz`);
+  cpSync(resolve(values.tarball), pubTgz);
+} else pubTgz = packFrom(`${NAME}@${version}`, join(work, 'pub'));
 const pubDir = untar(pubTgz, join(work, 'pub/x'));
 const prevTgz = packFrom(`${NAME}@${prev}`, join(work, 'prevpub'));
 const prevDir = untar(prevTgz, join(work, 'prevpub/x'));
@@ -112,14 +112,8 @@ sh('npm', ['ci', ...npmFlags], { cwd: tag });
 
 let rebuilt = null;
 if (values.rebuild) {
-  sh('npm', ['version', version, '--no-git-tag-version', '--allow-same-version'], { cwd: tag });
-  const before = new Set(readdirSync(tag));
-  sh('npm', ['pack', '--silent'], { cwd: tag, env: { ...process.env, SLICC_JSH_STRIP_SCRIPTS: '1' } });
-  const made = readdirSync(tag).filter((f) => f.endsWith('.tgz') && !before.has(f));
-  if (made.length !== 1) throw new Error(`npm pack in ${tag} made ${made.length} tarballs`);
   const tgz = join(work, `rebuilt-${version}.tgz`);
-  renameSync(join(tag, made[0]), tgz);
-  for (const f of ['package.json', 'package-lock.json']) writeFileSync(join(tag, f), sh('git', ['show', `v${version}:${f}`], { cwd: root, quiet: true }));
+  renameSync(packTree(tag, version, tagCommit, join(work, 'rebuilt-tmp'), `v${version}`), tgz);
   const dir = untar(tgz, join(work, 'rebuilt/x'));
   rebuilt = {
     tarball: tgz,
@@ -129,7 +123,7 @@ if (values.rebuild) {
     dir,
   };
 }
-sh('npm', ['version', version, '--no-git-tag-version', '--allow-same-version'], { cwd: tag });
+if (!values.rebuild) sh('npm', ['version', version, '--no-git-tag-version', '--allow-same-version'], { cwd: tag });
 rmSync(join(tag, 'dist'), { recursive: true, force: true });
 cpSync(join(pubDir, 'dist'), join(tag, 'dist'), { recursive: true });
 
@@ -166,6 +160,7 @@ const stage = {
   node: process.version,
   subject: { ref: `v${version}`, commit: tagCommit },
   prevCommit,
+  source: values.tarball ? 'artifact' : 'npm',
   published: { tarball: pubTgz, sha256: sha('sha256', pubTgz), integrity: sri(pubTgz), dir: pubDir },
   previous: { tarball: prevTgz, sha256: sha('sha256', prevTgz), integrity: sri(prevTgz), dir: prevDir },
   rebuilt,

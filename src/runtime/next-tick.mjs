@@ -5,8 +5,14 @@
  * nextTicks that were queued from inside a microtask (micro, then tick). Auto-
  * scheduling ticks as microtasks inverts that. Drain only via flushSync from the
  * event loop (after script / after a microtask checkpoint / after timers).
+ *
+ * `onQueue` is called when a tick lands on an empty queue: the event loop
+ * may be waiting for a handle, and the code that queued the tick (a promise
+ * continuation of ctx I/O the loop doesn't track, such as a socket's
+ * writer.close()) won't wake it. Node runs a callback's ticks before the next
+ * event; without the wake they waited for the next unrelated one.
  */
-export function createNextTick() {
+export function createNextTick(onQueue) {
   const queue = [];
   let stopped = false;
   // Ticks run so far (the drain loop's measure of progress).
@@ -28,6 +34,7 @@ export function createNextTick() {
         throw err;
       }
       if (stopped) return;
+      if (queue.length === 0) onQueue?.();
       // The domain the tick was queued in (lib/domain.js), entered while it
       // runs; a throw leaves it entered for the uncaught-exception path (its
       // error handler exits it), as Node's skipped after-hook does.

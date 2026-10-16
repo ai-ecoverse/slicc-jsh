@@ -246,9 +246,16 @@ An existing file keeps its mode. `copyFile` gives the copy the source's mode, wh
 
 `globalThis.fetch` and `globalThis.WebSocket` run on the kernel's `ctx.fetch` and `ctx.websocket`. A request in flight keeps the program alive, and so does reading its body. `new WebSocket` checks its URL and protocols as Node 22's does: `http:` and `https:` become `ws:` and `wss:`, another scheme, a fragment, a duplicate or a non-token protocol is a `SyntaxError` `DOMException`, and `.url` is the parsed URL.
 
-**Loopback.** As with Node on a machine, a loopback URL reaches a server of *this* kernel. The loopback names are `127.0.0.0/8`, `::1`, `0.0.0.0`, `localhost`, `*.localhost` and `<port>.kernel.localhost`. jsh does the HTTP, and for `ws:` the WebSocket handshake and framing, over the kernel's sockets, because `ctx.fetch` and `ctx.websocket` only reach the transport ([slicc-kernel#510](https://github.com/ai-ecoverse/slicc-kernel/issues/510)). That's how `new WebSocket(process.env.SLICC_CDP_URL)` reaches the kernel's CDP facade on 127.0.0.1:9222. The loopback WebSocket holds the server to RFC 6455 as undici does.
+**Loopback.** As with Node on a machine, a loopback URL reaches a server of *this* kernel. The loopback names are `127.0.0.0/8`, `::1`, `0.0.0.0`, `localhost`, `*.localhost` and `<port>.kernel.localhost`. jsh does the HTTP, and for `ws:` the WebSocket handshake and framing, over the kernel's sockets, on every kernel. That's how `new WebSocket(process.env.SLICC_CDP_URL)` reaches the kernel's CDP facade on 127.0.0.1:9222. The loopback WebSocket holds the server to RFC 6455 as undici does.
 - A loopback redirect to another origin drops `authorization`, `proxy-authorization`, `cookie` and `host`.
 - `host.slicc.internal` (and `10.0.2.2`) reach the real machine's loopback, through the kernel's proxy.
+
+**Why not the kernel's loopback.** The kernel's own loopback `ctx.fetch` and `ctx.websocket` (added in [slicc-kernel#510](https://github.com/ai-ecoverse/slicc-kernel/issues/510)) still differ from Node's undici on 1.103.4, so jsh doesn't use them there yet ([slicc-kernel#822](https://github.com/ai-ecoverse/slicc-kernel/issues/822)):
+- `fetch`:
+  - a bad port on the loopback, and a redirect to one, is `ECONNREFUSED`, not `bad port`;
+  - the causes of `redirect: 'error'` and of a body cut short aren't undici's (`EREDIRECT`, `EIO`);
+  - the request on the wire has no default headers, its headers are sorted and it is sent with `Connection: close`.
+- `WebSocket`: `close` fires when the server's Close frame arrives, before the server has the client's echo. Node waits for the TCP close.
 
 **A refused `WebSocket` connect** (slicc-kernel 1.59.1 and later on the Node entry): jsh emits an `error` event and no `close`, and `readyState` stays `CONNECTING`, as Node 22's undici does. The kernel's `cause.code` is passed through on `event.error.cause` (`ECONNREFUSED`, `EAI_NONAME`, `EHOSTUNREACH`/`ENETUNREACH`, `ETIMEDOUT`, `EPROTO`). Node's own `ErrorEvent.error` has no `.code` or `.cause`, so jsh doesn't add one to the event.
 

@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -83,7 +83,7 @@ function treeOf(rootPid, table) {
 export function guarded(cmd, args, { cwd, env, log, timeoutMs, caps = CAPS }) {
   return new Promise((resolvePromise) => {
     const fd = openSync(log, 'w');
-    const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', fd, fd] });
+    const child = spawn(cmd, args, { cwd, env, stdio: ['ignore', fd, fd], detached: true });
     let breach = null;
     let peakKb = 0;
     const kill = () => {
@@ -124,4 +124,29 @@ export function guarded(cmd, args, { cwd, env, log, timeoutMs, caps = CAPS }) {
       resolvePromise({ exit: breach ? 137 : (code ?? `signal ${signal}`), breach, peakKb });
     });
   });
+}
+
+export function archive(dir, ref) {
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(dir, { recursive: true });
+  execFileSync('sh', ['-c', 'git -C "$1" archive --format=tar "$2" | tar -x -C "$3"', 'archive', root, ref, dir], { stdio: 'inherit' });
+  return sh('git', ['rev-parse', `${ref}^{commit}`], { cwd: root, quiet: true }).trim();
+}
+
+export function packTree(dir, version, commit, dest, ref) {
+  const setVersion = () => sh('npm', ['version', version, '--no-git-tag-version', '--allow-same-version'], { cwd: dir });
+  setVersion();
+  sh('npm', ['pkg', 'set', `gitHead=${commit}`], { cwd: dir });
+  mkdirSync(dest, { recursive: true });
+  const before = new Set(readdirSync(dest));
+  sh('npm', ['pack', '--silent', '--pack-destination', dest], { cwd: dir, env: { ...process.env, SLICC_JSH_STRIP_SCRIPTS: '1' } });
+  const made = readdirSync(dest).filter((f) => f.endsWith('.tgz') && !before.has(f));
+  if (made.length !== 1) throw new Error(`npm pack in ${dir} made ${made.length} tarballs`);
+  for (const f of ['package.json', 'package-lock.json']) writeFileSync(join(dir, f), sh('git', ['show', `${ref}:${f}`], { cwd: root, quiet: true }));
+  setVersion();
+  return join(dest, made[0]);
+}
+
+export function manifestOf(tgz) {
+  return JSON.parse(execFileSync('tar', ['-xzf', tgz, '-O', 'package/package.json'], { encoding: 'utf8' }));
 }

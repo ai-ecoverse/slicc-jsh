@@ -16,6 +16,7 @@ const { values } = parseArgs({
     user: { type: 'string', default: 'cone' },
     timeout: { type: 'string', default: '20000' },
     shard: { type: 'string', default: '1/1' },
+    case: { type: 'string', default: '' },
   },
 });
 const work = resolve(values.work);
@@ -170,7 +171,7 @@ function hostRun(dir, c, pkgName) {
   const cwd = join(hostDir(dir, c.hostJsh || c.shell ? pkgName : 'node'), c.cwd ?? '');
   let r;
   if (c.shell) {
-    r = spawnSync('/bin/bash', ['-c', c.shell], {
+    r = isolated('/bin/bash', ['-c', c.shell], {
       cwd,
       encoding: 'utf8',
       timeout: 60_000,
@@ -178,9 +179,9 @@ function hostRun(dir, c, pkgName) {
       env: { HOME: process.env.HOME, LANG: 'C.UTF-8', PATH: `${hostJsh(pkgName)}:/usr/bin:/bin` },
     });
   } else if (c.hostJsh) {
-    r = spawnSync(join(hostJsh(pkgName), 'jsh'), c.hostJsh, { cwd, encoding: 'utf8', timeout: 60_000, env: { HOME: process.env.HOME, PATH: `${hostJsh(pkgName)}:/usr/bin:/bin` } });
+    r = isolated(join(hostJsh(pkgName), 'jsh'), c.hostJsh, { cwd, encoding: 'utf8', timeout: 60_000, env: { HOME: process.env.HOME, PATH: `${hostJsh(pkgName)}:/usr/bin:/bin` } });
   } else {
-    r = spawnSync(c.host[0], c.host.slice(1), { cwd, encoding: 'utf8', timeout: 60_000, env: { HOME: process.env.HOME, PATH: `${dirnameOf(NODE22)}:/usr/bin:/bin` } });
+    r = isolated(c.host[0], c.host.slice(1), { cwd, encoding: 'utf8', timeout: 60_000, env: { HOME: process.env.HOME, PATH: `${dirnameOf(NODE22)}:/usr/bin:/bin` } });
   }
   const res = { status: r.status ?? r.signal, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
   hostCache.set(key, res);
@@ -188,6 +189,8 @@ function hostRun(dir, c, pkgName) {
 }
 
 const dirnameOf = (p) => p.replace(/\/[^/]+$/, '');
+const SETSID = spawnSync('setsid', ['--version'], { encoding: 'utf8' }).status === 0;
+const isolated = (cmd, args, opts) => (SETSID ? spawnSync('setsid', ['--wait', cmd, ...args], opts) : spawnSync(cmd, args, opts));
 
 function render(c, r, norm) {
   if (c.statusOnly) return `rc=${r.status === 0 ? 0 : 'nonzero'}`;
@@ -272,6 +275,24 @@ process.on('unhandledRejection', (e) => {
 });
 
 const pkgs = { new: stage.published.dir, prev: stage.previous.dir };
+if (values.case) {
+  const pick = new Map();
+  for (const key of values.case.split(',')) {
+    const i = key.indexOf('/');
+    if (!pick.has(key.slice(0, i))) pick.set(key.slice(0, i), new Set());
+    pick.get(key.slice(0, i)).add(key.slice(i + 1));
+  }
+  const res = {};
+  for (const name of values.pkg.split(',')) {
+    for (const [key, r] of Object.entries(await runDirs(name, pkgs[name], pick))) res[`${name} ${key}`] = r;
+  }
+  mkdirSync(join(out, 'reruns'), { recursive: true });
+  const file = join(out, 'reruns', `${Date.now()}.json`);
+  writeFileSync(file, `${JSON.stringify(res, null, 1)}\n`);
+  for (const [key, r] of Object.entries(res)) console.log(`${r.status.toUpperCase()} ${key}${r.status === 'diff' ? `\n--- jsh\n${r.jsh}\n--- node\n${r.node}` : ''}`);
+  console.log(`mfixtures: wrote ${file}`);
+  process.exit(0);
+}
 const all = {};
 for (const name of values.pkg.split(',')) {
   const res = { ...(await runDirs(name, pkgs[name])), ...(await runRows(name, pkgs[name])) };

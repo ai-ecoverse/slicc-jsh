@@ -48,6 +48,9 @@ function parseListenArgs(args) {
   return { port, host, backlog, callback };
 }
 
+/** A server-side socket's server (Node's socket._server), told when the socket goes. */
+const kServer = Symbol('slicc-jsh.net.server');
+
 function isIP(input) {
   if (typeof input !== 'string') return 0;
   if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(input)) {
@@ -390,6 +393,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
 
     _destroy(err, callback) {
       this.destroyed = true;
+      // Node's Socket._destroy: the server's count drops now, before this
+      // socket's 'close' (so a closing server's 'close' comes first).
+      const server = this[kServer];
+      if (server) {
+        this[kServer] = undefined;
+        server[kServer]?.();
+      }
       if (this.#idleTimer) clearTimeout(this.#idleTimer);
       this.#idleTimer = null;
       const halfClosedCleanly = this.#finishConnStarted;
@@ -432,6 +442,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
     #handle;
     #closed = false;
     #acceptAbort;
+    #connections = 0;
+    #listenerClosed = false;
     listening = false;
     maxConnections = Infinity;
 
@@ -519,6 +531,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           // pending accept is not a handle of its own.
           const conn = await listener.accept({ signal: this.#acceptAbort.signal });
           const socket = new Socket({ allowHalfOpen: Boolean(this.#options.allowHalfOpen) });
+          this.#connections++;
+          socket[kServer] = this;
           socket._attach(conn);
           this.emit('connection', socket);
           handles.notify();
@@ -552,15 +566,29 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       }
       const listener = this.#listener;
       this.#listener = undefined;
-      // Until 'close' is emitted the closing keeps the loop alive (Node's
+      // The kernel's close keeps the loop alive until it is done (Node's
       // handle does, until its close callback).
-      const closing = Promise.resolve(listener?.close?.())
-        .catch(() => {})
-        .finally(() => {
-          this.emit('close');
-        });
-      trackPromise(handles, closing).catch(() => {});
+      trackPromise(handles, Promise.resolve(listener?.close?.()).catch(() => {})).catch(() => {});
+      // Node: 'close' on a later tick once every connection has ended
+      // (_emitCloseIfDrained), not while one is still open; it doesn't wait
+      // for the kernel's close (its fd closes inside close()). The kernel
+      // takes a process's requests in order, so a listen() on the same port
+      // from the 'close' callback comes after this close.
+      this.#listenerClosed = true;
+      this.#emitCloseIfDrained();
       return this;
+    }
+
+    /** One of this server's connections went (its socket's _destroy). */
+    [kServer]() {
+      this.#connections--;
+      this.#emitCloseIfDrained();
+    }
+
+    #emitCloseIfDrained() {
+      if (!this.#listenerClosed || this.#connections > 0) return;
+      this.#listenerClosed = false;
+      nextTick(() => this.emit('close'));
     }
 
     ref() {
@@ -573,7 +601,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
     }
 
     getConnections(cb) {
-      cb(null, 0);
+      // Node's: the count, on a later tick.
+      if (typeof cb === 'function') nextTick(cb, null, this.#connections);
       return this;
     }
   }
