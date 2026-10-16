@@ -1,0 +1,7 @@
+# Documentation only: changes to cert-review itself need the lane
+# coordinator's cert-review-approved label (cert-self-guard), not a
+# code-owner review.
+/.github/workflows/cert*.yml @trieloff
+/scripts/cert-review/ @trieloff
+/test/cert-review/ @trieloff
+/test/fixtures/cert-review/ @trieloff
