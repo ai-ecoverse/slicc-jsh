@@ -11,7 +11,9 @@
  * - a context (`createContext`, `runInContext`, `runInNewContext`) is the
  *   object in front of the program's globals: names the script declares or
  *   assigns go on it, other names read through to the ECMAScript globals.
- *   It is not a separate realm (its `Object` is the program's);
+ *   Its `this` and `globalThis` are its global (a proxy of the object, as
+ *   V8's global proxy is). It is not a separate realm (its `Object` is the
+ *   program's, and a sloppy function's `this` is the program's global);
  * - a SyntaxError is V8's (its message, and for the REPL the arrow under
  *   the token, which `decorateErrorStack` adds to the stack);
  * - an `import()` in a script goes to its `importModuleDynamically` (Node's:
@@ -309,7 +311,7 @@ export function createVm({
         if (key === Symbol.unscopables) return undefined;
         if (state.hidden.has(key)) return state.hidden.get(key);
         if (key in target) return target[key];
-        if (key === 'globalThis') return sandbox;
+        if (key === 'globalThis') return state.global;
         if (typeof key === 'string' && esGlobals.has(key)) return globalThis[key];
         return undefined;
       },
@@ -322,6 +324,24 @@ export function createVm({
           state.bareVars.delete(key);
           state.hidden.delete(key);
         }
+        target[key] = value;
+        return true;
+      },
+    });
+    // The context's global object, as V8's global proxy is: not the
+    // sandbox itself, but its properties (reads, writes, keys) are the
+    // sandbox's, and the ECMAScript builtins show through where the
+    // sandbox has none (Node's `vm.runInContext('this', ctx).Atomics`).
+    // They are the program's own builtins: one realm here.
+    state.global = new Proxy(sandbox, {
+      has: (target, key) => key in target || (typeof key === 'string' && esGlobals.has(key)),
+      get: (target, key, receiver) => {
+        if (key in target) return Reflect.get(target, key, receiver === state.global ? target : receiver);
+        if (key === 'globalThis') return state.global;
+        if (typeof key === 'string' && esGlobals.has(key)) return globalThis[key];
+        return undefined;
+      },
+      set: (target, key, value) => {
         target[key] = value;
         return true;
       },
@@ -373,7 +393,7 @@ export function createVm({
     try {
       // Top-level `this` is the context's global, as globalThis is.
       return runnerFor(compiled.suffix).call(
-        sandbox,
+        state.global,
         state.scope,
         `${compiled.lines}${compiled.body}${compiled.sourceURL}`,
         [...compiled.functions],

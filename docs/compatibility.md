@@ -349,7 +349,7 @@ The builtins are globals there, as in Node. An error thrown later, from a timer 
 Scripts run in the program's own realm, which is the only one a process has here.
 
 - `runInThisContext` keeps a script's top-level declarations for the next script, as V8 does. To do that, top-level `let`/`const`/`class` become `var`, so a `const` isn't read-only and a name can be declared twice.
-- A context (`createContext`, `runInContext`, `runInNewContext`) is the object in front of the ECMAScript globals: the names a script declares or assigns go on it. It isn't a separate realm, so its `Object` is the program's.
+- A context (`createContext`, `runInContext`, `runInNewContext`) is the object in front of the ECMAScript globals: the names a script declares or assigns go on it. Its top-level `this` and `globalThis` are the context's global, as in Node. That global isn't the object you passed: it reads and writes that object's properties, and the ECMAScript builtins show through it. The context isn't a separate realm, though, so its `Object` is the program's, and a sloppy function called without a receiver gets the program's global as `this`, not the context's.
 - A SyntaxError is V8's, with the arrow under the token. `displayErrors` puts the arrow at the throw site, and a script's frames are named by its `filename`.
 - `import()` goes to `importModuleDynamically`, and `vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER` uses the program's loader. Without one, `import()` fails with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`. A callback function needs `--experimental-vm-modules`, as in Node.
 - `compileFunction` is there. Cached data is accepted and never used.

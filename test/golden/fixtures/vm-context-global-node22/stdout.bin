@@ -1,0 +1,7 @@
+this is the sandbox false globalThis is this true
+builtins on it Atomics:object SharedArrayBuffer:function Array:function Object:function JSON:object console:object setTimeout:undefined process:undefined
+'Atomics' in it true 'a' in it true keys ["a"]
+a through it 1 2
+writes land on the sandbox 5 6 7 ["a","x","y","z"]
+a write through it from outside 8 8
+runInNewContext this object true
