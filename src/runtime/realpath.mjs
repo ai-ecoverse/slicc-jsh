@@ -9,8 +9,19 @@ import { createPath } from './path.mjs';
 
 export const MAX_LINKS = 40;
 
-export function realpathWith(fs, path, p, fail) {
-  let resolved = path.resolve(String(p));
+/**
+ * `cache` (a Map), when given, is Node's realpathCache (lib/fs.js
+ * realpathSync with internalFS.realpathCacheKey): a path prefix that is no
+ * link maps to itself, a link to what it resolved to, and the whole path to
+ * its result. The module loaders keep one for the process, as Node's do
+ * (it is never cleared), so a module's real path costs one lstat per new
+ * directory, not one per component on every resolution.
+ */
+export function realpathWith(fs, path, p, fail, cache) {
+  const original = path.resolve(String(p));
+  const cached = cache?.get(original);
+  if (cached !== undefined) return cached;
+  let resolved = original;
   const knownHard = new Set();
   let hops = 0;
   let current = '/';
@@ -30,20 +41,26 @@ export function realpathWith(fs, path, p, fail) {
     const previous = current;
     const base = current === '/' ? `/${part}` : `${current}/${part}`;
     current = base;
-    if (knownHard.has(base)) continue;
-    const st = call(() => fs.lstat(base), 'lstat', base);
-    if (!st.isSymbolicLink) {
-      knownHard.add(base);
-      continue;
+    if (knownHard.has(base) || cache?.get(base) === base) continue;
+    let link = cache?.get(base);
+    if (link === undefined) {
+      const st = call(() => fs.lstat(base), 'lstat', base);
+      if (!st.isSymbolicLink) {
+        knownHard.add(base);
+        cache?.set(base, base);
+        continue;
+      }
+      if (++hops > MAX_LINKS) throw fail('ELOOP', 'stat', base);
+      // Node stats the link first, so a dangling or looping one fails here.
+      call(() => fs.stat(base), 'stat', base);
+      link = path.resolve(previous, call(() => fs.readlink(base), 'readlink', base));
+      cache?.set(base, link);
     }
-    if (++hops > MAX_LINKS) throw fail('ELOOP', 'stat', base);
-    // Node stats the link first, so a dangling or looping one fails here.
-    call(() => fs.stat(base), 'stat', base);
-    const target = call(() => fs.readlink(base), 'readlink', base);
-    resolved = path.resolve(previous, target, resolved.slice(pos));
+    resolved = path.resolve(link, resolved.slice(pos));
     current = '/';
     pos = 1;
   }
+  cache?.set(original, resolved);
   return resolved;
 }
 

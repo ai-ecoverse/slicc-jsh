@@ -34,19 +34,22 @@ export function createResolver({
   // .pnpm/dep@1/node_modules/dep), so its own requires resolve from where
   // it really lives; --preserve-symlinks / NODE_PRESERVE_SYMLINKS keep the
   // link path.
+  // Node's loaders keep a realpath cache for the process (never cleared).
+  const realpathCache = new Map();
+  const parentDirs = new Map();
   const real = (filename) => {
     if (preserveSymlinks || typeof fs.lstat !== 'function' || typeof fs.readlink !== 'function') {
       return filename;
     }
     try {
-      return realpathWith(fs, path, filename, (code) => Object.assign(new Error(code), { code }));
+      return realpathWith(fs, path, filename, (code) => Object.assign(new Error(code), { code }), realpathCache);
     } catch {
       return filename;
     }
   };
+  // One stat, as Node's internalModuleStat (a missing path throws).
   const tryStat = (p) => {
     try {
-      if (!fs.exists(p)) return null;
       return fs.stat(p);
     } catch {
       return null;
@@ -291,10 +294,16 @@ export function createResolver({
       return { type: 'builtin', id: request };
     }
 
-    const fromDir =
-      parentFilename.endsWith('/') || tryStat(parentFilename)?.isDirectory
-        ? parentFilename
-        : path.dirname(parentFilename);
+    // Whether the parent is a directory (createRequire of one), once per
+    // parent: an ES module with 600 imports stat()ed itself 600 times.
+    let fromDir = parentDirs.get(parentFilename);
+    if (fromDir === undefined) {
+      fromDir =
+        parentFilename.endsWith('/') || tryStat(parentFilename)?.isDirectory
+          ? parentFilename
+          : path.dirname(parentFilename);
+      parentDirs.set(parentFilename, fromDir);
+    }
 
     if (request.startsWith('#')) {
       const hit = packageImportsResolve(request, parentFilename);
