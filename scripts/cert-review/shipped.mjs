@@ -4,10 +4,11 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { archive, npmFlags, readJson, relFiles, root, sh, sha } from './lib.mjs';
 
-const { values } = parseArgs({ options: { base: { type: 'string' }, head: { type: 'string' }, work: { type: 'string' } } });
+const { values } = parseArgs({ options: { base: { type: 'string' }, head: { type: 'string' }, work: { type: 'string' }, dir: { type: 'string', default: '' } } });
 const work = resolve(values.work);
 mkdirSync(work, { recursive: true });
-const git = (...a) => sh('git', a, { cwd: root, quiet: true }).trim();
+const repo = values.dir ? resolve(values.dir) : root;
+const git = (...a) => sh('git', a, { cwd: repo, quiet: true }).trim();
 
 const ALWAYS = [
   /^src\//,
@@ -19,7 +20,7 @@ const ALWAYS = [
   /^test\/cert-review\//,
 ];
 const MANIFEST = /^package(-lock)?\.json$/;
-const SHIPPED_FIELDS = ['name', 'type', 'bin', 'main', 'exports', 'files', 'engines', 'slicc', 'dependencies', 'optionalDependencies', 'peerDependencies', 'bundleDependencies', 'bundledDependencies', 'publishConfig'];
+const UNSHIPPED_FIELDS = new Set(['devDependencies', 'version', 'gitHead']);
 
 const files = git('diff', '--name-only', values.base, values.head).split('\n').filter(Boolean);
 const direct = files.filter((f) => ALWAYS.some((re) => re.test(f)));
@@ -43,13 +44,13 @@ function distOf(ref, dir, devDependenciesFrom) {
 }
 
 if (!behaviour && manifest.length) {
-  const shipped = (ref) => {
-    const p = JSON.parse(git('show', `${ref}:package.json`));
-    return JSON.stringify(SHIPPED_FIELDS.map((k) => [k, p[k] ?? null]));
-  };
-  if (shipped(values.base) !== shipped(values.head)) {
+  const manifestAt = (ref) => JSON.parse(git('show', `${ref}:package.json`));
+  const pa = manifestAt(values.base);
+  const pb = manifestAt(values.head);
+  const changed = [...new Set([...Object.keys(pa), ...Object.keys(pb)])].filter((k) => !UNSHIPPED_FIELDS.has(k) && JSON.stringify(pa[k] ?? null) !== JSON.stringify(pb[k] ?? null)).sort();
+  if (changed.length) {
     behaviour = true;
-    why = "package.json's shipped fields changed (dependencies, bin, exports, files, engines, slicc, publishConfig)";
+    why = `package.json changed beyond devDependencies, version and gitHead: ${changed.join(', ')}`;
   } else {
     const a = distOf(values.base, join(work, 'base'));
     const b = distOf(values.head, join(work, 'head'), values.base);
