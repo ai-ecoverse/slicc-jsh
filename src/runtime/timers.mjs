@@ -4,6 +4,8 @@
  * or Immediate._onImmediate so uncaught stacks match Node.
  */
 
+import { currentFrame, runInFrame } from './async-context.mjs';
+
 function Timeout() {}
 function Immediate() {}
 
@@ -32,13 +34,14 @@ export function createTimers(
   const currentDomain = () => globalThis.process?.domain ?? undefined;
   const domainActive = () => globalThis.process?.domain ?? undefined;
 
-  const runMethod = (handle, method, args, domain) => {
+  const runMethod = (handle, method, args, domain, frame = null) => {
     // The domain the timer was made in (lib/domain.js), entered around its
     // callback as Node's async hooks do: a throw is that domain's error
     // (its handler leaves it); a return leaves it here.
     domain?.enter();
     try {
-      handle[method](...args);
+      // The async context (AsyncLocalStorage's stores) it was made in.
+      runInFrame(frame, handle[method], handle, args);
       domain?.exit();
     } catch (err) {
       if (onCallbackError) onCallbackError(err);
@@ -96,6 +99,7 @@ export function createTimers(
     handle._onTimeout = fn;
     attachRefApi(handle, state);
     const domain = currentDomain();
+    const frame = currentFrame();
 
     const retry = () => {
       state.retry = null;
@@ -118,7 +122,7 @@ export function createTimers(
         // As Node reschedules an interval: from when its callback starts.
         state.due = Date.now() + state.delay;
       }
-      runMethod(handle, '_onTimeout', args, domain);
+      runMethod(handle, '_onTimeout', args, domain, frame);
     };
     // Node's delay: a number from 1 up (anything else is 1).
     state.delay = delay >= 1 && delay <= 2147483647 ? Number(delay) : 1;
@@ -142,6 +146,7 @@ export function createTimers(
     handle._onImmediate = fn;
     attachRefApi(handle, state);
     const domain = currentDomain();
+    const frame = currentFrame();
 
     const fire = () => {
       if (stopped) return;
@@ -154,7 +159,7 @@ export function createTimers(
       handles.delete(state);
       if (held) inImmediate++;
       try {
-        runMethod(handle, '_onImmediate', args, domain);
+        runMethod(handle, '_onImmediate', args, domain, frame);
       } finally {
         if (held) inImmediate--;
       }

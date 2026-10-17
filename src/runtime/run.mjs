@@ -1,3 +1,4 @@
+import { mainBegin, mainEnd } from './async-context.mjs';
 import { initSourceMaps } from './source-maps.mjs';
 import { installProcessMembers } from './process-members.mjs';
 import { installCredentials } from './process-credentials.mjs';
@@ -765,7 +766,13 @@ export async function runNode(ctx, options = {}) {
       // --import ended startup: no entry.
     } else if (typeof options.main === 'function') {
       try {
-        const result = options.main(rt);
+        mainBegin();
+        let result;
+        try {
+          result = options.main(rt);
+        } finally {
+          mainEnd();
+        }
         if (result != null && typeof result.then === 'function') {
           // The tracking promise settles like `result`; its rejection is
           // handled below through `await result`.
@@ -836,12 +843,23 @@ export async function runNode(ctx, options = {}) {
       try {
         if (asEsm) {
           uncaughtFromEsm = true;
-          const result = esm.runEsmEval(source, `${process.cwd().replace(/\/$/, '')}/[eval1]`);
+          mainBegin();
+          let result;
+          try {
+            result = esm.runEsmEval(source, `${process.cwd().replace(/\/$/, '')}/[eval1]`);
+          } finally {
+            mainEnd();
+          }
           uncaughtFromEsm = false;
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
         } else {
           // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
-          cjs.runMain('[stdin]', source, { setMain: false });
+          mainBegin();
+          try {
+            cjs.runMain('[stdin]', source, { setMain: false });
+          } finally {
+            mainEnd();
+          }
         }
         flushTicks();
       } catch (err) {
@@ -870,10 +888,16 @@ export async function runNode(ctx, options = {}) {
         if (asEsm) {
           // Node: ES module input is the module <cwd>/[eval1].
           uncaughtFromEsm = true;
-          const result = esm.runEsmEval(
-            parsed.print ? `console.log(${parsed.code}\n)` : parsed.code,
-            `${process.cwd().replace(/\/$/, '')}/[eval1]`
-          );
+          mainBegin();
+          let result;
+          try {
+            result = esm.runEsmEval(
+              parsed.print ? `console.log(${parsed.code}\n)` : parsed.code,
+              `${process.cwd().replace(/\/$/, '')}/[eval1]`
+            );
+          } finally {
+            mainEnd();
+          }
           uncaughtFromEsm = false;
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
           flushTicks();
@@ -915,7 +939,13 @@ export async function runNode(ctx, options = {}) {
             }
             throw err;
           }
-          const result = fn(...values);
+          mainBegin();
+          let result;
+          try {
+            result = fn(...values);
+          } finally {
+            mainEnd();
+          }
           // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
           if (result != null && typeof result.then === 'function') {
             trackPromise(handles, result);
@@ -971,10 +1001,21 @@ export async function runNode(ctx, options = {}) {
         const useEsm = esm.isEsmFilename(mainPath, source);
         uncaughtFromEsm = useEsm;
         if (useEsm) {
-          const result = esm.runMain(mainPath, source);
+          mainBegin();
+          let result;
+          try {
+            result = esm.runMain(mainPath, source);
+          } finally {
+            mainEnd();
+          }
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
         } else {
-          cjs.runMain(mainPath, source);
+          mainBegin();
+          try {
+            cjs.runMain(mainPath, source);
+          } finally {
+            mainEnd();
+          }
         }
         uncaughtFromEsm = false;
         flushTicks();
