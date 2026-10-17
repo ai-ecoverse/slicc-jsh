@@ -54,7 +54,7 @@ const packed = (temp) => {
   execFileSync('tar', ['-czf', join(temp, 'ai-ecoverse-slicc-jsh-1.2.3.tgz'), '-C', join(temp, 'tree'), 'package']);
 };
 const SUM = 'b'.repeat(64);
-const GATES = [
+const GATES0 = [
   { file: 'ci.yml', job: 'ci', step: 'NOTICE covers', calls: /node -e/, says: [['packagesFromMetafiles', 'NOTICE ok: 12 packages']] },
   { file: 'ci.yml', job: 'ci', step: 'Lint', calls: /npm run lint/, says: [['run lint', 'lint ok']] },
   { file: 'ci.yml', job: 'ci', step: 'Golden', calls: /npm run test:golden/, says: [['test:golden', 'golden check: 161 fixture(s)']] },
@@ -164,6 +164,19 @@ const GATES = [
     partial: [['versions --json', '["1.2.2","1.2.3"]']],
   },
 ];
+
+
+const evidenceSays = [['--input-type=module', 'evidence: 1 artifact(s) by id: 101']];
+const EVIDENCE_GATES = [
+  ['bench', 'The pack artifact, by the id'],
+  ['review', 'The bench artifacts, exactly those'],
+  ['review', 'The plan artifact, by the id'],
+  ['review', 'The pack artifact, by the id'],
+  ['record', 'The verdict artifact, by the id'],
+  ['record', 'The pack artifact, by the id'],
+].map(([job, step]) => ({ file: 'cert-review.yml', job, step, calls: /node --input-type=module -e "\$EVIDENCE_CHECK"/, says: evidenceSays }));
+
+const GATES = [...GATES0, ...EVIDENCE_GATES];
 
 const NOT_GATES = [
   [/npm run build/, 'the build: every gated step after it uses its output'],
@@ -356,7 +369,7 @@ const realReleaseLine = () => {
   ];
   return said('release-line.mjs', real('scripts/release-line.mjs', ['1.2.3'], { stub: ['git', 'gh'], rules, imports }));
 };
-const runStep = (script, { says = [], env = {}, writes, output, setup } = {}) => {
+const runStep = (script, { says = [], env = {}, writes, output, setup, stubs = true } = {}) => {
   const dir = join(scratch, `run-${++runs}`);
   const temp = join(dir, 'temp');
   for (const d of ['pack/pack/head', 'pack/pack/base', 'pack/head', 'pack/base', 'record', 'cert-review', 'work']) mkdirSync(join(temp, d), { recursive: true });
@@ -378,7 +391,7 @@ const runStep = (script, { says = [], env = {}, writes, output, setup } = {}) =>
     cwd: dir,
     encoding: 'utf8',
     env: {
-      PATH: `${bin}:${process.env.PATH}`,
+      PATH: stubs ? `${bin}:${process.env.PATH}` : `${dirname(process.execPath)}:${process.env.PATH}`,
       HOME: dir,
       RUNNER_TEMP: temp,
       GITHUB_OUTPUT: outputs,
@@ -405,6 +418,14 @@ const runStep = (script, { says = [], env = {}, writes, output, setup } = {}) =>
       RUN_URL: 'run',
       GH_REPO: 'o/r',
       SEMANTIC_RELEASE: 'success',
+      EVIDENCE: 'success',
+      PACK: '',
+      PLAN: '',
+      VERDICT_ARTIFACT: '',
+      BENCH: '{}',
+      STRICT: 'true',
+      LEGS: '',
+      EVIDENCE_CHECK: 'unused: node is stubbed',
       ...env,
     },
   });
@@ -425,7 +446,7 @@ describe("a gate's silence is never a pass: the wiring", () => {
   }
 
   it('every script, suite or check a workflow step runs is a gate here or named as not one', () => {
-    const calls = /(?<![\w.-])(?:node (?:scripts|test)\/\S+|node -e|npm run [\w:-]+|sh test\/\S+)/g;
+    const calls = /(?<![\w.-])(?:node (?:scripts|test)\/\S+|node -e|node --input-type=module -e|npm run [\w:-]+|sh test\/\S+)/g;
     for (const file of WORKFLOWS) {
       for (const line of text[file].split('\n')) {
         for (const [call] of line.matchAll(calls)) {
@@ -516,4 +537,159 @@ describe("a gate's silence is never a pass: cert-review's required check", () =>
       assert.equal(r.code, code, r.out);
     });
   }
+});
+
+const EVIDENCE_CHECK = (() => {
+  const lines = text['cert-review.yml'].split('\n');
+  const at = lines.indexOf('  EVIDENCE_CHECK: |');
+  assert.ok(at >= 0, 'cert-review.yml: no EVIDENCE_CHECK');
+  const body = [];
+  for (const l of lines.slice(at + 1)) {
+    if (l.trim() && !l.startsWith('    ')) break;
+    body.push(l.slice(4));
+  }
+  return `${body.join('\n')}\n`;
+})();
+
+const LEGS = [...['new', 'dev', '186', 'floor'].flatMap((k) => ['suites-tag', 'suites-neg', 'fixtures-1', 'fixtures-2'].map((p) => `${p}-${k}`)), 'browser-dev'];
+const STARTED = '2026-10-17T12:00:00Z';
+const BEFORE = '2026-10-17T11:00:00Z';
+const AFTER = '2026-10-17T12:30:00Z';
+const digestOf = (id) => createHash('sha256').update(String(id)).digest('hex');
+const benchRun = () => {
+  const outputs = {};
+  const artifacts = [];
+  LEGS.forEach((leg, i) => {
+    const id = 1000 + i;
+    outputs[leg] = `${id} ${digestOf(id)}`;
+    artifacts.push({ id, name: `cert-bench-7-${leg}`, digest: `sha256:${digestOf(id)}`, created_at: AFTER });
+  });
+  return { outputs, artifacts };
+};
+
+let mocks = 0;
+const evidenceStep = (job, step, { artifacts, env = {} }) => {
+  const dir = join(scratch, `evidence-${++mocks}`);
+  mkdirSync(dir);
+  writeFileSync(join(dir, 'run.json'), JSON.stringify({ run_started_at: STARTED }));
+  writeFileSync(join(dir, 'artifacts.json'), JSON.stringify({ total_count: artifacts.length, artifacts }));
+  const mock = join(dir, 'fetch.mjs');
+  writeFileSync(
+    mock,
+    `import { readFileSync } from 'node:fs';
+globalThis.fetch = async (url) => {
+  const u = new URL(String(url));
+  if (!u.pathname.startsWith('/repos/o/r/actions/runs/42')) return new Response('', { status: 404 });
+  const file = u.pathname.endsWith('/artifacts') ? (u.searchParams.get('page') === '1' ? 'artifacts.json' : null) : 'run.json';
+  return new Response(file ? readFileSync(${JSON.stringify(dir)} + '/' + file) : '{"artifacts":[]}');
+};
+`
+  );
+  return runStep(runOf('cert-review.yml', job, step), {
+    stubs: false,
+    env: { EVIDENCE_CHECK, NODE_OPTIONS: `--import ${pathToFileURL(mock).href}`, GITHUB_API_URL: 'https://api.example', GITHUB_REPOSITORY: 'o/r', GITHUB_RUN_ID: '42', GH_TOKEN: 't', ...env },
+  });
+};
+
+describe('cert-review evidence: a consumer reads only the artifacts its producer jobs reported, by id and digest', () => {
+  const review = (artifacts, outputs, strict = 'true') => evidenceStep('review', 'The bench artifacts, exactly those', { artifacts, env: { BENCH: JSON.stringify(outputs), STRICT: strict, LEGS: LEGS.join(' ') } });
+  const idsOf = (r) => /^ids=(.*)$/m.exec(r.outputs)?.[1];
+
+  it('the bench artifacts the bench jobs reported: the review downloads exactly those ids', () => {
+    const { outputs, artifacts } = benchRun();
+    const r = review(artifacts, outputs);
+    assert.equal(r.code, 0, r.out);
+    assert.equal(idsOf(r), artifacts.map((a) => a.id).join(','), r.out);
+    assert.match(r.out, /^evidence: 17 artifact\(s\) by id: /m);
+  });
+
+  it('a planted extra artifact matching the bench pattern fails the review', () => {
+    const { outputs, artifacts } = benchRun();
+    const r = review([...artifacts, { id: 9999, name: 'cert-bench-7-suites-tag-evil', digest: `sha256:${digestOf(9999)}`, created_at: AFTER }], outputs);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /cert-bench-7-suites-tag-evil \(id 9999\): no job of this run reported it/);
+    assert.equal(idsOf(r), undefined);
+  });
+
+  it("an artifact whose digest is not the one its job reported fails the review", () => {
+    const { outputs, artifacts } = benchRun();
+    artifacts[3].digest = `sha256:${'0'.repeat(64)}`;
+    const r = review(artifacts, outputs);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /cert-bench-7-fixtures-2-new: its job uploaded digest [0-9a-f]{64}, the run's id 1003 has 0{64}/);
+  });
+
+  it('a second artifact under a leg’s name in this attempt (a re-upload after the job’s) fails the review', () => {
+    const { outputs, artifacts } = benchRun();
+    const r = review([...artifacts, { id: 5000, name: 'cert-bench-7-suites-tag-new', digest: `sha256:${digestOf(5000)}`, created_at: AFTER }], outputs);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /cert-bench-7-suites-tag-new: the run has id 5000, which its job did not upload/);
+  });
+
+  it("an earlier attempt's artifact under a leg's name is ignored (a re-run of failed jobs)", () => {
+    const { outputs, artifacts } = benchRun();
+    const r = review([{ id: 500, name: 'cert-bench-7-suites-tag-new', digest: `sha256:${digestOf(500)}`, created_at: BEFORE }, ...artifacts], outputs);
+    assert.equal(r.code, 0, r.out);
+    assert.doesNotMatch(idsOf(r), /\b500\b/);
+  });
+
+  it('a leg that uploaded nothing, with an artifact under its name, fails the review', () => {
+    const { outputs, artifacts } = benchRun();
+    outputs['browser-dev'] = 'none none';
+    const r = review(artifacts, outputs);
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /cert-bench-7-browser-dev: the run has id 1016, which its job did not upload/);
+  });
+
+  it('after a successful bench, a leg with no report fails the review; after a failed bench, its artifact is left out', () => {
+    const { outputs, artifacts } = benchRun();
+    delete outputs['suites-neg-floor'];
+    const strict = review(artifacts, outputs);
+    assert.equal(strict.code, 1, strict.out);
+    assert.match(strict.out, /cert-bench-7-suites-neg-floor: its job reported no artifact/);
+    const loose = review(artifacts, outputs, 'false');
+    assert.equal(loose.code, 0, loose.out);
+    assert.doesNotMatch(idsOf(loose), /\b1013\b/);
+    assert.match(loose.out, /^evidence: 16 artifact\(s\) by id: /m);
+  });
+
+  it('the record: a planted second verdict artifact or a digest mismatch fails its evidence step, and the record then fails the pull request', () => {
+    const verdict = { id: 77, name: 'cert-review-verdict-7', digest: `sha256:${digestOf(77)}`, created_at: AFTER };
+    const step = (artifacts, reported) => evidenceStep('record', 'The verdict artifact, by the id', { artifacts, env: { VERDICT_ARTIFACT: reported } });
+    const ok = step([verdict], `77 ${digestOf(77)}`);
+    assert.equal(ok.code, 0, ok.out);
+    assert.equal(idsOf(ok), '77');
+    const planted = step([verdict, { ...verdict, id: 78, digest: `sha256:${digestOf(78)}` }], `77 ${digestOf(77)}`);
+    assert.equal(planted.code, 1, planted.out);
+    assert.match(planted.out, /cert-review-verdict-7: the run has id 78, which its job did not upload/);
+    const forged = step([{ ...verdict, digest: `sha256:${digestOf(1)}` }], `77 ${digestOf(77)}`);
+    assert.equal(forged.code, 1, forged.out);
+    const r = runStep(runOf('cert-review.yml', 'record', 'The line'), { env: { BEHAVIOUR: 'true', EVIDENCE: 'failure' } });
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.outputs, /^verdict=fail$/m);
+    assert.match(r.outputs, /^state=failure$/m);
+    assert.doesNotMatch(r.out, /record\.mjs/);
+  });
+
+  it('the producers report what they uploaded: the upload ids and digests are job outputs, one per bench leg', () => {
+    const y = text['cert-review.yml'];
+    assert.match(y, /pack_artifact: \$\{\{ steps\.pack-artifact\.outputs\.artifact-id && format\('\{0\} \{1\}', steps\.pack-artifact\.outputs\.artifact-id, steps\.pack-artifact\.outputs\.artifact-digest\) \|\| '' \}\}/);
+    assert.match(y, /plan_artifact: \$\{\{ steps\.plan-artifact\.outputs\.artifact-id/);
+    assert.match(y, /verdict_artifact: \$\{\{ steps\.verdict-artifact\.outputs\.artifact-id/);
+    for (const leg of LEGS) assert.match(y, new RegExp(`\\n      ${leg}: \\$\\{\\{ steps\\.leg\\.outputs\\.${leg} \\}\\}\\n`), leg);
+    assert.match(runOf('cert-review.yml', 'bench', "The evidence artifact's id and digest"), /echo "\$KEY=\$\{ID:-none\} \$\{DIGEST:-none\}"/);
+    assert.match(y, /LEGS: (\S+ ){16}\S+\n/);
+    assert.equal(/LEGS: (.*)\n/.exec(y)[1], LEGS.join(' '));
+  });
+
+  it('no consumer downloads by name or pattern: every download-artifact is by the ids an evidence step checked', () => {
+    const y = text['cert-review.yml'];
+    const downloads = y.split('- uses: actions/download-artifact@').slice(1).map((d) => d.split('\n      - ')[0]);
+    assert.equal(downloads.length, 6);
+    for (const d of downloads) {
+      assert.doesNotMatch(d, /\n\s+(name|pattern):/, d);
+      assert.match(d, /artifact-ids: \$\{\{ steps\.[\w-]+-evidence\.outputs\.ids \}\}/, d);
+      assert.match(d, /if: .*steps\.[\w-]+-evidence\.outputs\.ids != ''/, d);
+    }
+  });
 });

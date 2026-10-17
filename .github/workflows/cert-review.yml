@@ -11,6 +11,57 @@ env:
   NODE_VERSION: '24.22.0'
   # renovate: datasource=npm depName=@anthropic-ai/claude-code
   CLAUDE_CODE_VERSION: '2.1.296'
+  EVIDENCE_CHECK: |
+    import { appendFileSync } from 'node:fs';
+    const expect = JSON.parse(process.env.EVIDENCE_EXPECT || '{}');
+    const prefix = process.env.EVIDENCE_PREFIX || '';
+    const family = process.env.EVIDENCE_FAMILY || '';
+    const strict = process.env.EVIDENCE_STRICT === 'true';
+    const keys = (process.env.EVIDENCE_KEYS || '').split(' ').filter(Boolean);
+    const hex = (d) => String(d || '').replace(/^sha256:/, '').toLowerCase();
+    const base = `${process.env.GITHUB_API_URL || 'https://api.github.com'}/repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+    const get = async (url) => {
+      const res = await fetch(url, { headers: { accept: 'application/vnd.github+json', authorization: `Bearer ${process.env.GH_TOKEN}` } });
+      if (!res.ok) throw new Error(`${url}: ${res.status} ${res.statusText}`);
+      return res.json();
+    };
+    const started = Date.parse((await get(base)).run_started_at);
+    const listed = [];
+    for (let page = 1; ; page++) {
+      const body = await get(`${base}/artifacts?per_page=100&page=${page}`);
+      listed.push(...body.artifacts);
+      if (body.artifacts.length < 100) break;
+    }
+    const current = (a) => !(Date.parse(a.created_at) < started);
+    const problems = [];
+    const ids = [];
+    const names = new Set();
+    for (const key of keys.length ? keys : Object.keys(expect)) {
+      const value = expect[key] ?? '';
+      const name = `${prefix}${key}`;
+      names.add(name);
+      const same = listed.filter((a) => a.name === name);
+      if (!value) {
+        if (strict) problems.push(`${name}: its job reported no artifact`);
+        continue;
+      }
+      const [id, digest] = value.split(' ');
+      const others = same.filter((a) => String(a.id) !== id && current(a));
+      if (others.length) problems.push(`${name}: the run has ${others.map((a) => `id ${a.id}`).join(', ')}, which its job did not upload`);
+      if (id === 'none') continue;
+      const mine = same.find((a) => String(a.id) === id);
+      if (!mine) problems.push(`${name}: its job uploaded id ${id}, which the run does not have`);
+      else if (!hex(digest) || hex(mine.digest) !== hex(digest)) problems.push(`${name}: its job uploaded digest ${hex(digest) || 'none'}, the run's id ${id} has ${hex(mine.digest) || 'none'}`);
+      else ids.push(id);
+    }
+    if (family) for (const a of listed) if (a.name.startsWith(family) && !names.has(a.name)) problems.push(`${a.name} (id ${a.id}): no job of this run reported it`);
+    if (problems.length) {
+      for (const p of problems) console.log(`::error title=evidence::${p}`);
+      console.log(`evidence: FAIL: ${problems.length} problem(s)`);
+      process.exit(1);
+    }
+    if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ids=${ids.join(',')}\n`);
+    console.log(`evidence: ${ids.length} artifact(s) by id: ${ids.join(', ') || 'none'}`);
 
 jobs:
   guard:
@@ -69,6 +120,7 @@ jobs:
       ready: ${{ steps.refs.outputs.ready }}
       head_sha256: ${{ steps.pack.outputs.head_sha256 }}
       base_sha256: ${{ steps.pack.outputs.base_sha256 }}
+      pack_artifact: ${{ steps.pack-artifact.outputs.artifact-id && format('{0} {1}', steps.pack-artifact.outputs.artifact-id, steps.pack-artifact.outputs.artifact-digest) || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -129,6 +181,7 @@ jobs:
           echo "head_sha256=$(jq -r .sha256 "$RUNNER_TEMP/pack/head/pack.json")" >> "$GITHUB_OUTPUT"
           echo "base_sha256=$(jq -r .sha256 "$RUNNER_TEMP/pack/base/pack.json")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: pack-artifact
         if: steps.pack.outcome == 'success'
         with:
           name: cert-pack-${{ github.event.pull_request.number }}
@@ -149,6 +202,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    outputs:
+      plan_artifact: ${{ steps.plan-artifact.outputs.artifact-id && format('{0} {1}', steps.plan-artifact.outputs.artifact-id, steps.plan-artifact.outputs.artifact-digest) || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -177,6 +232,7 @@ jobs:
           grep -Eq '^plan: .* [0-9]+ commit\(s\), [0-9]+ PR\(s\), [0-9]+ file\(s\)$' "$RUNNER_TEMP/plan.out" || { echo "::error title=plan: no verdict::plan.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
           cat "$RUNNER_TEMP/plan/plan.md" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: plan-artifact
         with:
           name: cert-review-plan-${{ github.event.pull_request.number }}
           path: ${{ runner.temp }}/plan/
@@ -189,7 +245,26 @@ jobs:
     runs-on: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 120
     permissions:
+      actions: read
       contents: read
+    outputs:
+      suites-tag-new: ${{ steps.leg.outputs.suites-tag-new }}
+      suites-neg-new: ${{ steps.leg.outputs.suites-neg-new }}
+      fixtures-1-new: ${{ steps.leg.outputs.fixtures-1-new }}
+      fixtures-2-new: ${{ steps.leg.outputs.fixtures-2-new }}
+      suites-tag-dev: ${{ steps.leg.outputs.suites-tag-dev }}
+      suites-neg-dev: ${{ steps.leg.outputs.suites-neg-dev }}
+      fixtures-1-dev: ${{ steps.leg.outputs.fixtures-1-dev }}
+      fixtures-2-dev: ${{ steps.leg.outputs.fixtures-2-dev }}
+      suites-tag-186: ${{ steps.leg.outputs.suites-tag-186 }}
+      suites-neg-186: ${{ steps.leg.outputs.suites-neg-186 }}
+      fixtures-1-186: ${{ steps.leg.outputs.fixtures-1-186 }}
+      fixtures-2-186: ${{ steps.leg.outputs.fixtures-2-186 }}
+      suites-tag-floor: ${{ steps.leg.outputs.suites-tag-floor }}
+      suites-neg-floor: ${{ steps.leg.outputs.suites-neg-floor }}
+      fixtures-1-floor: ${{ steps.leg.outputs.fixtures-1-floor }}
+      fixtures-2-floor: ${{ steps.leg.outputs.fixtures-2-floor }}
+      browser-dev: ${{ steps.leg.outputs.browser-dev }}
     strategy:
       fail-fast: false
       matrix:
@@ -224,10 +299,23 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: The pack artifact, by the id and digest the scope job reported
+        id: pack-evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.pull_request.number }}
+          PACK: ${{ needs.scope.outputs.pack_artifact }}
+        run: |
+          set -euo pipefail
+          EVIDENCE_EXPECT="$(jq -nc --arg k "cert-pack-$N" --arg v "$PACK" '{($k): $v}')" EVIDENCE_PREFIX="" EVIDENCE_FAMILY="" EVIDENCE_STRICT=true \
+            node --input-type=module -e "$EVIDENCE_CHECK" 2>&1 | tee "$RUNNER_TEMP/evidence-pack.out"
+          grep -Eq '^evidence: [0-9]+ artifact\(s\) by id: ' "$RUNNER_TEMP/evidence-pack.out" || { echo "::error title=evidence: no verdict::the evidence check exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: steps.pack-evidence.outputs.ids != ''
         with:
-          name: cert-pack-${{ github.event.pull_request.number }}
+          artifact-ids: ${{ steps.pack-evidence.outputs.ids }}
           path: ${{ runner.temp }}/pack
+          merge-multiple: true
       - name: Stage the head's tarball, the base's dist and kernel ${{ matrix.kernel }}
         run: |
           set -euo pipefail
@@ -271,6 +359,7 @@ jobs:
             || jq -se 'any(.[]; length > 0)' "$WORK"/suites/*/runs-browser.json > /dev/null 2>&1 \
             || { echo "::error title=browser suite: no verdict::suites.mjs exited 0 without its verdict line or its runs-browser.json: a gate's silence is not a pass"; exit 1; }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: bench-artifact
         if: always()
         with:
           name: cert-bench-${{ github.event.pull_request.number }}-${{ matrix.part }}-${{ matrix.kernel }}
@@ -279,6 +368,14 @@ jobs:
             ${{ env.WORK }}/fixtures/
             ${{ env.WORK }}/tag/artifacts/
           if-no-files-found: ignore
+      - name: The evidence artifact's id and digest, for the review (it downloads only what the bench jobs report)
+        id: leg
+        if: always()
+        env:
+          KEY: ${{ matrix.part }}-${{ matrix.kernel }}
+          ID: ${{ steps.bench-artifact.outputs.artifact-id }}
+          DIGEST: ${{ steps.bench-artifact.outputs.artifact-digest }}
+        run: echo "$KEY=${ID:-none} ${DIGEST:-none}" | tee -a "$GITHUB_OUTPUT"
 
   review:
     name: cert-review / review
@@ -290,6 +387,8 @@ jobs:
       actions: read
       contents: read
       issues: write
+    outputs:
+      verdict_artifact: ${{ steps.verdict-artifact.outputs.artifact-id && format('{0} {1}', steps.verdict-artifact.outputs.artifact-id, steps.verdict-artifact.outputs.artifact-digest) || '' }}
     env:
       VERSION: ${{ needs.scope.outputs.version }}
       PREV: ${{ needs.scope.outputs.prev }}
@@ -323,19 +422,59 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: The bench artifacts, exactly those the bench jobs reported, by id and digest
+        id: bench-evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.pull_request.number }}
+          BENCH: ${{ toJSON(needs.bench.outputs) }}
+          STRICT: ${{ needs.bench.result == 'success' }}
+          LEGS: suites-tag-new suites-neg-new fixtures-1-new fixtures-2-new suites-tag-dev suites-neg-dev fixtures-1-dev fixtures-2-dev suites-tag-186 suites-neg-186 fixtures-1-186 fixtures-2-186 suites-tag-floor suites-neg-floor fixtures-1-floor fixtures-2-floor browser-dev
+        run: |
+          set -euo pipefail
+          EVIDENCE_EXPECT="$BENCH" EVIDENCE_KEYS="$LEGS" EVIDENCE_PREFIX="cert-bench-$N-" EVIDENCE_FAMILY="cert-bench-$N-" EVIDENCE_STRICT="$STRICT" \
+            node --input-type=module -e "$EVIDENCE_CHECK" 2>&1 | tee "$RUNNER_TEMP/evidence-bench.out"
+          grep -Eq '^evidence: [0-9]+ artifact\(s\) by id: ' "$RUNNER_TEMP/evidence-bench.out" || { echo "::error title=evidence: no verdict::the evidence check exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: steps.bench-evidence.outputs.ids != ''
         with:
-          pattern: cert-bench-${{ github.event.pull_request.number }}-*
+          artifact-ids: ${{ steps.bench-evidence.outputs.ids }}
           path: ${{ runner.temp }}/cert
           merge-multiple: true
+      - name: The plan artifact, by the id and digest the plan job reported
+        id: plan-evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.pull_request.number }}
+          PLAN: ${{ needs.plan.outputs.plan_artifact }}
+        run: |
+          set -euo pipefail
+          EVIDENCE_EXPECT="$(jq -nc --arg k "cert-review-plan-$N" --arg v "$PLAN" '{($k): $v}')" EVIDENCE_PREFIX="" EVIDENCE_FAMILY="" EVIDENCE_STRICT=true \
+            node --input-type=module -e "$EVIDENCE_CHECK" 2>&1 | tee "$RUNNER_TEMP/evidence-plan.out"
+          grep -Eq '^evidence: [0-9]+ artifact\(s\) by id: ' "$RUNNER_TEMP/evidence-plan.out" || { echo "::error title=evidence: no verdict::the evidence check exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: steps.plan-evidence.outputs.ids != ''
         with:
-          name: cert-review-plan-${{ github.event.pull_request.number }}
+          artifact-ids: ${{ steps.plan-evidence.outputs.ids }}
           path: ${{ runner.temp }}/cert/plan
+          merge-multiple: true
+      - name: The pack artifact, by the id and digest the scope job reported
+        id: pack-evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          N: ${{ github.event.pull_request.number }}
+          PACK: ${{ needs.scope.outputs.pack_artifact }}
+        run: |
+          set -euo pipefail
+          EVIDENCE_EXPECT="$(jq -nc --arg k "cert-pack-$N" --arg v "$PACK" '{($k): $v}')" EVIDENCE_PREFIX="" EVIDENCE_FAMILY="" EVIDENCE_STRICT=true \
+            node --input-type=module -e "$EVIDENCE_CHECK" 2>&1 | tee "$RUNNER_TEMP/evidence-pack.out"
+          grep -Eq '^evidence: [0-9]+ artifact\(s\) by id: ' "$RUNNER_TEMP/evidence-pack.out" || { echo "::error title=evidence: no verdict::the evidence check exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: steps.pack-evidence.outputs.ids != ''
         with:
-          name: cert-pack-${{ github.event.pull_request.number }}
+          artifact-ids: ${{ steps.pack-evidence.outputs.ids }}
           path: ${{ runner.temp }}/pack
+          merge-multiple: true
       - name: Stage the trees and every kernel (no secrets in this step)
         run: |
           set -euo pipefail
@@ -374,6 +513,7 @@ jobs:
           tail -1 "$RUNNER_TEMP/claude-execution-output.json" | jq -r '"review: \(.subtype // "?") in \(.num_turns // "?") turns, \((.duration_ms // 0) / 60000 | floor) min"'
           test -s "$RUNNER_TEMP/cert-review/verdict.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        id: verdict-artifact
         if: always()
         with:
           name: cert-review-verdict-${{ github.event.pull_request.number }}
@@ -429,20 +569,48 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      - name: The verdict artifact, by the id and digest the review job reported
+        id: verdict-evidence
         if: needs.scope.outputs.behaviour == 'true'
         continue-on-error: true
+        env:
+          N: ${{ github.event.pull_request.number }}
+          VERDICT_ARTIFACT: ${{ needs.review.outputs.verdict_artifact }}
+        run: |
+          set -euo pipefail
+          EVIDENCE_EXPECT="$(jq -nc --arg k "cert-review-verdict-$N" --arg v "$VERDICT_ARTIFACT" '{($k): $v}')" EVIDENCE_PREFIX="" EVIDENCE_FAMILY="" EVIDENCE_STRICT=false \
+            node --input-type=module -e "$EVIDENCE_CHECK" 2>&1 | tee "$RUNNER_TEMP/evidence-verdict.out"
+          grep -Eq '^evidence: [0-9]+ artifact\(s\) by id: ' "$RUNNER_TEMP/evidence-verdict.out" || { echo "::error title=evidence: no verdict::the evidence check exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: needs.scope.outputs.behaviour == 'true' && steps.verdict-evidence.outputs.ids != ''
+        continue-on-error: true
         with:
-          name: cert-review-verdict-${{ github.event.pull_request.number }}
+          artifact-ids: ${{ steps.verdict-evidence.outputs.ids }}
           path: ${{ runner.temp }}/cert-review
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+          merge-multiple: true
+      - name: The pack artifact, by the id and digest the scope job reported
+        id: pack-evidence
         if: needs.scope.outputs.behaviour == 'true'
         continue-on-error: true
+        env:
+          N: ${{ github.event.pull_request.number }}
+          PACK: ${{ needs.scope.outputs.pack_artifact }}
+        run: |
+          set -euo pipefail
+          EVIDENCE_EXPECT="$(jq -nc --arg k "cert-pack-$N" --arg v "$PACK" '{($k): $v}')" EVIDENCE_PREFIX="" EVIDENCE_FAMILY="" EVIDENCE_STRICT=false \
+            node --input-type=module -e "$EVIDENCE_CHECK" 2>&1 | tee "$RUNNER_TEMP/evidence-pack.out"
+          grep -Eq '^evidence: [0-9]+ artifact\(s\) by id: ' "$RUNNER_TEMP/evidence-pack.out" || { echo "::error title=evidence: no verdict::the evidence check exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: needs.scope.outputs.behaviour == 'true' && steps.pack-evidence.outputs.ids != ''
+        continue-on-error: true
         with:
-          name: cert-pack-${{ github.event.pull_request.number }}
+          artifact-ids: ${{ steps.pack-evidence.outputs.ids }}
           path: ${{ runner.temp }}/pack
+          merge-multiple: true
       - name: The line (this job's tools, main's at the pull request's base)
         id: record
+        env:
+          EVIDENCE: ${{ steps.verdict-evidence.outcome == 'success' && steps.pack-evidence.outcome == 'success' && 'success' || 'failure' }}
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/cert-review" "$RUNNER_TEMP/record"
@@ -459,6 +627,13 @@ jobs:
             printf '**Cert review: not needed.** %s\n\n```\n%s\n```\n' "$WHY" "$line" > "$RUNNER_TEMP/record/section.md"
             echo "verdict=not-behaviour" >> "$GITHUB_OUTPUT"
             echo "state=success" >> "$GITHUB_OUTPUT"
+          elif [ "$EVIDENCE" != success ]; then
+            echo "::error title=record: evidence::the verdict or pack artifact is not the one its job uploaded (the evidence steps above)"
+            line="cert-ci: FAIL @ai-ecoverse/slicc-jsh PR #$N head $HEAD_SHA: the run's verdict or pack artifact is not the one its job uploaded ($RUN_URL)"
+            printf '%s\n' "$line" > "$RUNNER_TEMP/record/line.txt"
+            printf '**Cert review: evidence mismatch.** The verdict or pack artifact is not the one its job uploaded.\n\n```\n%s\n```\n' "$line" > "$RUNNER_TEMP/record/section.md"
+            echo "verdict=fail" >> "$GITHUB_OUTPUT"
+            echo "state=failure" >> "$GITHUB_OUTPUT"
           else
             tgz=$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz 2> /dev/null | head -1 || true)
             rc=0
