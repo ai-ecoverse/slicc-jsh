@@ -303,7 +303,7 @@ The golden `http2-node22` checks these against Node 22.22.0.
 - **On slicc-kernel 1.113.0 and later**, jsh asks the kernel's resolver (`ctx.net.resolve`). It answers from `/etc/hosts`, then the kernel's own names, then the uplink, the same answers WASI programs get. A name it doesn't know is `getaddrinfo ENOTFOUND <name>`, and one it can't answer for now is `getaddrinfo EAI_AGAIN`.
 - **On older kernels**, jsh answers the kernel's names as its hosts file has them:
   - `localhost`, `localhost.localdomain`, `ip6-localhost` and `*.localhost` are `127.0.0.1` and `::1`, IPv4 first (`order: 'ipv6first'` swaps them);
-  - the kernel's own hostname (`slicc`) is `127.0.1.1`;
+  - the kernel's own hostname (`slicc`) is `127.0.1.1` and `::1`;
   - `host.slicc.internal` is `10.0.2.2`.
 
   Any other name is `getaddrinfo ENOTFOUND <name>` (`code` `ENOTFOUND`, `errno` -3008, `syscall` `getaddrinfo`, `hostname`), as in a Node with no resolver.

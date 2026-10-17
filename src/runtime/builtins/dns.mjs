@@ -159,7 +159,11 @@ export function createDns({ ctx, process, handles, hostname = 'slicc' }) {
     const key = name.toLowerCase().replace(/\.$/, '');
     let v4;
     let v6;
-    if (own.includes(key)) v4 = HOSTNAME_ADDRESS;
+    // As the kernel's resolver: its own names are loopback names, ::1 too.
+    if (own.includes(key)) {
+      v4 = HOSTNAME_ADDRESS;
+      v6 = '::1';
+    }
     else if (LOOPBACK_NAMES.has(key) || key.endsWith('.localhost')) {
       v4 = '127.0.0.1';
       v6 = '::1';

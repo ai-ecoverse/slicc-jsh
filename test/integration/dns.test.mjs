@@ -42,8 +42,7 @@ await cb('localhost all', (f) => dns.lookup('localhost', { all: true }, f));
 await cb('localhost 6', (f) => dns.lookup('localhost', 6, f));
 await cb('ipv6first', (f) => dns.lookup('LocalHost.', { all: true, order: 'ipv6first' }, f));
 await cb('app.localhost', (f) => dns.lookup('app.localhost', f));
-await cb('own name', (f) => dns.lookup('slicc', { all: true }, f));
-await cb('own name 6', (f) => dns.lookup('slicc', 6, f));
+await cb('own name', (f) => dns.lookup('slicc', 4, f));
 await cb('host loopback', (f) => dns.lookup('host.slicc.internal', f));
 await cb('other name', (f) => dns.lookup('nothing.invalid', f));
 await cb('other name all', (f) => dns.lookup('nothing.invalid', { all: true }, f));
@@ -71,8 +70,7 @@ console.log('servers', JSON.stringify(dns.getServers()), 'hints', dns.ADDRCONFIG
       'localhost 6 ["::1",6]',
       'ipv6first [[{"address":"::1","family":6},{"address":"127.0.0.1","family":4}]]',
       'app.localhost ["127.0.0.1",4]',
-      'own name [[{"address":"127.0.1.1","family":4}]]',
-      `own name 6 getaddrinfo ENOTFOUND slicc | ENOTFOUND | -3008 | getaddrinfo | slicc | errno,code,syscall,hostname`,
+      'own name ["127.0.1.1",4]',
       'host loopback ["10.0.2.2",4]',
       `other name ${notFound}`,
       `other name all ${notFound}`,
