@@ -132,6 +132,73 @@ function trackPlatformAsync(handles) {
     wrap(globalThis.GPUDevice?.prototype, ['createComputePipelineAsync', 'createRenderPipelineAsync', 'popErrorScope']);
     wrap(globalThis.GPUShaderModule?.prototype, ['getCompilationInfo']);
   }
+  // CompressionStream / DecompressionStream: the platform's (de)compression
+  // runs off the program's thread (Node's zlib on the threadpool), and
+  // nothing the program holds keeps the loop alive while it does: a pipe
+  // through it could end as an unsettled top-level await (#353, more likely
+  // with big inputs or a loaded machine). Node counts that work as an active
+  // handle. So each write to, and the close of, the stream's writable side
+  // is a tracked request until the platform has taken it, and by then its
+  // output is queued on the readable side, which stays the platform's.
+  const kInspect = Symbol.for('nodejs.util.inspect.custom');
+  const tracked = (Platform, Class) => {
+    const inner = new WeakMap();
+    Object.defineProperties(Class.prototype, {
+      readable: { get() { return inner.get(this)?.readable; }, configurable: true, enumerable: true },
+      writable: { get() { return inner.get(this)?.writable; }, configurable: true, enumerable: true },
+      [Symbol.toStringTag]: { value: Class.name, configurable: true },
+      [kInspect]: {
+        value(depth, options, inspect) {
+          if (depth < 0) return this;
+          const opts = { ...options, depth: options.depth == null ? null : options.depth - 1 };
+          return `${Class.name} ${inspect({ readable: this.readable, writable: this.writable }, opts)}`;
+        },
+        configurable: true,
+      },
+    });
+    return (self, format) => {
+      const platform = new Platform(format);
+      const writer = platform.writable.getWriter();
+      inner.set(self, {
+        readable: platform.readable,
+        writable: new globalThis.WritableStream({
+          write: (chunk) => trackPromise(handles, writer.write(chunk)),
+          close: () => trackPromise(handles, writer.close()),
+          abort: (reason) => writer.abort(reason),
+        }),
+      });
+    };
+  };
+  const install = (name, Class, Platform, desc) => {
+    try {
+      Object.defineProperty(globalThis, name, { ...desc, value: Class });
+      undo.push(() => Object.defineProperty(globalThis, name, desc));
+    } catch {
+      /* read-only: leave it */
+    }
+  };
+  const cDesc = Object.getOwnPropertyDescriptor(globalThis, 'CompressionStream');
+  const dDesc = Object.getOwnPropertyDescriptor(globalThis, 'DecompressionStream');
+  if (typeof globalThis.WritableStream === 'function' && typeof cDesc?.value === 'function') {
+    let init;
+    class CompressionStream {
+      constructor(format) {
+        init(this, format);
+      }
+    }
+    init = tracked(cDesc.value, CompressionStream);
+    install('CompressionStream', CompressionStream, cDesc.value, cDesc);
+  }
+  if (typeof globalThis.WritableStream === 'function' && typeof dDesc?.value === 'function') {
+    let init;
+    class DecompressionStream {
+      constructor(format) {
+        init(this, format);
+      }
+    }
+    init = tracked(dDesc.value, DecompressionStream);
+    install('DecompressionStream', DecompressionStream, dDesc.value, dDesc);
+  }
   return () => {
     for (const fn of undo.reverse()) fn();
   };
