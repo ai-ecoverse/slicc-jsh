@@ -4,12 +4,13 @@
  * that requires dns at load (pg, mongodb, ioredis, redis, undici, got,
  * nodemailer, fastify, …) loads, and dns.lookup answers.
  *
- * lookup is getaddrinfo over the kernel's names: IP literals, `localhost`
- * and `*.localhost`, the kernel's own hostname and `host.slicc.internal`
- * answer as the kernel's hosts file does. Any other name needs the kernel's
- * resolver: with `ctx.net.resolve` (ai-ecoverse/slicc-kernel#913) jsh asks
- * it, and without it the answer is Node's `getaddrinfo ENOTFOUND <name>`, as
- * in a Node with no resolver. resolve4/resolve6 use `ctx.net.resolve` too;
+ * lookup is getaddrinfo through the kernel's resolver, `ctx.net.resolve`
+ * (slicc-kernel 1.113.0, ai-ecoverse/slicc-kernel#913): its hosts file
+ * (/etc/hosts), its own names, then the uplink. On an older kernel jsh
+ * answers IP literals, `localhost` and `*.localhost`, the kernel's own
+ * hostname and `host.slicc.internal` as the kernel's hosts file does, and
+ * any other name is Node's `getaddrinfo ENOTFOUND <name>`, as in a Node with
+ * no resolver. resolve4/resolve6 use `ctx.net.resolve` too;
  * the other record types need a DNS transport jsh doesn't have, so they fail
  * as c-ares does with no nameserver that answers (`queryMx ECONNREFUSED`).
  */
@@ -186,10 +187,13 @@ export function createDns({ ctx, process, handles, hostname = 'slicc' }) {
 
   /** getaddrinfo: the kernel's names, then its resolver if ctx has one. Rejects with a uv errno. */
   async function getaddrinfo(name, family, order) {
-    let addresses = hostsEntry(name, family);
-    if (addresses === undefined && resolver) {
+    let addresses;
+    // The kernel's resolver answers its hosts file (/etc/hosts too), its own
+    // names and the uplink; without one, jsh answers the kernel's own names.
+    if (!resolver) addresses = hostsEntry(name, family);
+    else {
       try {
-        addresses = await resolver(name, family ? { family } : {});
+        addresses = await resolver(name, { family });
       } catch (err) {
         const code = err?.code ?? err?.cause?.code;
         throw code === 'EAI_AGAIN' ? UV_EAI_AGAIN : UV_EAI_NONAME;

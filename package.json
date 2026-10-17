@@ -73,9 +73,9 @@
     "chrome": "156.0.8078.4"
   },
   "devDependencies": {
-    "@ai-ecoverse/slicc-cdp": "1.27.1",
-    "@ai-ecoverse/slicc-kernel": "1.111.0",
-    "@ai-ecoverse/slicc-shared-web": "1.23.0",
+    "@ai-ecoverse/slicc-cdp": "1.27.2",
+    "@ai-ecoverse/slicc-kernel": "1.113.0",
+    "@ai-ecoverse/slicc-shared-web": "1.23.1",
     "@ai-ecoverse/wasi-pnpm": "12.9.1-9",
     "@ai-ecoverse/wasm-bash": "5.3.0-19",
     "@ai-ecoverse/wasm-coreutils": "9.12.0-9",
@@ -92,6 +92,7 @@
     "esbuild": "0.28.2",
     "got": "16.1.0",
     "ioredis": "6.0.0",
+    "http-proxy-agent": "9.1.0",
     "kernel-cert-186": "npm:@ai-ecoverse/slicc-kernel@1.86.0",
     "kernel-cert-floor": "npm:@ai-ecoverse/slicc-kernel@1.72.0",
     "kernel-cert-new": "npm:@ai-ecoverse/slicc-kernel@1.110.1",
