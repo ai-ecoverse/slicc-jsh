@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const WORKFLOWS = ['ci.yml', 'cert-review.yml', 'release.yml'];
@@ -138,30 +139,28 @@ const GATES = [
     step: 'The line',
     calls: /scripts\/cert-review\/record\.mjs/,
     env: { BEHAVIOUR: 'true' },
-    says: [['record.mjs', `certified @ai-ecoverse/slicc-jsh PR #7 head ${SHA} sha256=${SUM} (ci: run; known: none; not covered: bios)`]],
-    writes: 'record/line.txt',
+    says: (temp) => realRecord(temp),
     failsAs: 'verdict=fail',
     passesAs: 'verdict=certified',
   },
-  { file: 'cert-review.yml', job: 'merge-group', step: 'Every pull request in the group', calls: /scripts\/cert-review\/group\.mjs/, says: [['group.mjs', 'group status: success: #7 certified at aaaaaaaaaaaa']] },
-  { file: 'release.yml', job: 'tag', step: 'The tag job fails', calls: /scripts\/release-outcome\.mjs/, says: [['release-outcome.mjs', 'semantic-release tagged v1.2.3']] },
+  { file: 'cert-review.yml', job: 'merge-group', step: 'Every pull request in the group', calls: /scripts\/cert-review\/group\.mjs/, says: () => realGroup() },
+  { file: 'release.yml', job: 'tag', step: 'The tag job fails', calls: /scripts\/release-outcome\.mjs/, variant: 'nothing to release', says: () => realOutcome([]) },
+  { file: 'release.yml', job: 'tag', step: 'The tag job fails', calls: /scripts\/release-outcome\.mjs/, variant: 'one tag', says: () => realOutcome(['v1.2.3']) },
+  { file: 'release.yml', job: 'tag', step: 'The tag job fails', calls: /scripts\/release-outcome\.mjs/, variant: 'two tags', says: () => realOutcome(['v1.2.3', 'v1.3.0']) },
   {
     file: 'release.yml',
     job: 'verify',
     step: 'npm integrity',
     calls: /scripts\/cert-review\/published\.mjs/,
-    says: [['published.mjs', `verified @ai-ecoverse/slicc-jsh@1.2.3 sha256=${SUM} on npm (latest): sha512-x, provenance release.yml`]],
+    says: () => realPublished(),
   },
-  { file: 'release.yml', job: 'verify', step: 'The release line', calls: /scripts\/release-line\.mjs/, says: [['release-line.mjs', 'wrote the line into the v1.2.3 release']] },
+  { file: 'release.yml', job: 'verify', step: 'The release line', calls: /scripts\/release-line\.mjs/, says: () => realReleaseLine() },
   {
     file: 'release.yml',
     job: 'verify',
     step: 'The cert-review section',
     calls: /scripts\/cert-review\/carry\.mjs/,
-    says: [
-      ['versions --json', '["1.2.2","1.2.3"]'],
-      ['carry.mjs', 'wrote the cert-review section of v1.2.3 (2 pull request(s))'],
-    ],
+    says: () => [['versions --json', '["1.2.2","1.2.3"]'], ...realCarry()],
     partial: [['versions --json', '["1.2.2","1.2.3"]']],
   },
 ];
@@ -184,7 +183,8 @@ out=
 if [ -n "$STUB_RULES" ]; then
   while IFS='\t' read -r pat line; do
     case "$args" in *"$pat"*) out="$out$line
-" ;; esac
+"
+      [ -n "$STUB_FIRST" ] && break ;; esac
   done < "$STUB_RULES"
 fi
 printf '%s' "$out"
@@ -198,6 +198,162 @@ for (const tool of ['node', 'npm', 'npx', 'gh', 'git', 'sh', 'setsid', 'claude']
 }
 
 let runs = 0;
+let reals = 0;
+const real = (script, args, { cwd = root, stub = [], rules = [], env = {}, imports } = {}) => {
+  const dir = join(scratch, `real-${++reals}`);
+  mkdirSync(join(dir, 'bin'), { recursive: true });
+  for (const tool of stub) {
+    writeFileSync(join(dir, 'bin', tool), STUB);
+    chmodSync(join(dir, 'bin', tool), 0o755);
+  }
+  writeFileSync(join(dir, 'rules.tsv'), rules.map(([pat, line]) => `${pat}\t${line}\n`).join(''));
+  const e = { ...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, STUB_RULES: join(dir, 'rules.tsv'), STUB_FIRST: '1', STUB_OUTPUT: '', STUB_WRITE: '', GH_TOKEN: '', GITHUB_TOKEN: '', ...env };
+  for (const k of ['NODE_TEST_CONTEXT', 'GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY', 'GITHUB_REPOSITORY']) delete e[k];
+  const r = spawnSync(process.execPath, [...(imports ? ['--import', imports] : []), join(root, script), ...args], { cwd, encoding: 'utf8', env: e, timeout: 60_000 });
+  assert.equal(r.status, 0, `${script} ${args.join(' ')}: exit ${r.status}\n${r.stdout}${r.stderr}`);
+  return r.stdout;
+};
+const said = (pattern, stdout) =>
+  stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => [pattern, line]);
+
+const gitIn = (dir, ...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: dir, encoding: 'utf8' }).trim();
+let repos = 0;
+const scratchRepo = () => {
+  const dir = join(scratch, `repo-${++repos}`);
+  mkdirSync(dir);
+  gitIn(dir, 'init', '-q', '-b', 'main');
+  gitIn(dir, 'commit', '-q', '--allow-empty', '-m', 'one');
+  gitIn(dir, 'tag', 'v1.2.2');
+  const base = gitIn(dir, 'rev-parse', 'HEAD');
+  gitIn(dir, 'checkout', '-q', '-b', 'change');
+  gitIn(dir, 'commit', '-q', '--allow-empty', '-m', 'fix: a change');
+  const head = gitIn(dir, 'rev-parse', 'HEAD');
+  gitIn(dir, 'checkout', '-q', 'main');
+  gitIn(dir, 'merge', '-q', '--no-ff', '-m', 'Merge pull request #7 from o/change', 'change');
+  gitIn(dir, 'tag', 'v1.2.3');
+  return { dir, base, head, merge: gitIn(dir, 'rev-parse', 'HEAD') };
+};
+
+const realOutcome = (tags) => {
+  const dir = join(scratch, `outcome-${++repos}`);
+  mkdirSync(dir);
+  gitIn(dir, 'init', '-q');
+  gitIn(dir, 'commit', '-q', '--allow-empty', '-m', 'one');
+  for (const t of tags) gitIn(dir, 'tag', t);
+  return said('release-outcome.mjs', real('scripts/release-outcome.mjs', [], { cwd: dir, env: { SEMANTIC_RELEASE: 'success' } }));
+};
+
+const certifiedAt = (head) => `certified @ai-ecoverse/slicc-jsh PR #7 head ${head} sha256=${SUM} (ci: run; known: none; not covered: bios real setup (manual))`;
+
+const realGroup = () => {
+  const r = scratchRepo();
+  const statuses = join(scratch, `statuses-${repos}.json`);
+  writeFileSync(statuses, JSON.stringify({ [r.head]: { state: 'success', description: certifiedAt(r.head) } }));
+  return said('group.mjs', real('scripts/cert-review/group.mjs', ['--base', r.base, '--head', r.merge, '--dir', r.dir, '--statuses', statuses, '--dry-run']));
+};
+
+const realCarry = () => {
+  const r = scratchRepo();
+  const status = JSON.stringify([{ context: 'cert-review', state: 'success', description: certifiedAt(r.head), target_url: 'run' }]);
+  const rules = [
+    ['statuses', status],
+    ['pulls/7', '{"title":"fix: a change"}'],
+    ['release view', 'the notes'],
+    ['release edit', ''],
+  ];
+  return said('carry.mjs', real('scripts/cert-review/carry.mjs', ['--from', 'v1.2.2', '--to', 'v1.2.3', '--release', 'v1.2.3', '--dir', r.dir, '--repo', 'o/r'], { stub: ['gh'], rules }));
+};
+
+const realRecord = (temp) => {
+  const src = join(temp, 'record-src');
+  mkdirSync(join(src, 'package/dist'), { recursive: true });
+  writeFileSync(join(src, 'package/package.json'), JSON.stringify({ name: '@ai-ecoverse/slicc-jsh', version: '0.0.0-pr.7', gitHead: SHA }));
+  writeFileSync(join(src, 'package/dist/node.mjs'), 'export {};\n');
+  const tgz = join(temp, 'record-src.tgz');
+  execFileSync('tar', ['-czf', tgz, '-C', src, 'package/package.json', 'package/dist/node.mjs']);
+  const sum = createHash('sha256').update(readFileSync(tgz)).digest('hex');
+  writeFileSync(join(temp, 'cert-review/verdict.json'), '{"verdict":"certified","known":[]}');
+  const args = ['--pr', '7', '--head', SHA, '--commit', SHA, '--version', '0.0.0-pr.7', '--review', join(temp, 'cert-review'), '--out', join(temp, 'record'), '--run', 'run', '--repo', 'o/r', '--tarball', tgz, '--sha256', sum, '--upstream', 'success'];
+  return said('record.mjs', real('scripts/cert-review/record.mjs', args));
+};
+
+const registry = (() => {
+  let made;
+  return () => {
+    if (made) return made;
+    const dir = join(scratch, 'registry');
+    mkdirSync(join(dir, 'src/package/dist'), { recursive: true });
+    writeFileSync(join(dir, 'src/package/package.json'), JSON.stringify({ name: '@ai-ecoverse/slicc-jsh', version: '1.2.3', gitHead: SHA }));
+    writeFileSync(join(dir, 'src/package/dist/node.mjs'), 'export {};\n');
+    execFileSync('tar', ['-czf', join(dir, 'pkg.tgz'), '-C', join(dir, 'src'), 'package/package.json', 'package/dist/node.mjs']);
+    const bytes = readFileSync(join(dir, 'pkg.tgz'));
+    const sha512 = createHash('sha512').update(bytes).digest('hex');
+    const integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
+    const statement = {
+      subject: [{ name: 'pkg:npm/%40ai-ecoverse/slicc-jsh@1.2.3', digest: { sha512 } }],
+      predicate: {
+        buildDefinition: {
+          externalParameters: { workflow: { repository: 'https://github.com/ai-ecoverse/slicc-jsh', path: '.github/workflows/release.yml', ref: 'refs/heads/main' } },
+          resolvedDependencies: [{ uri: 'git+https://github.com/ai-ecoverse/slicc-jsh@refs/heads/main', digest: { gitCommit: SHA } }],
+        },
+      },
+    };
+    const attestations = { attestations: [{ predicateType: 'https://slsa.dev/provenance/v1', bundle: { dsseEnvelope: { payload: Buffer.from(JSON.stringify(statement)).toString('base64') } } }] };
+    const meta = {
+      name: '@ai-ecoverse/slicc-jsh',
+      version: '1.2.3',
+      gitHead: SHA,
+      dist: {
+        tarball: 'https://registry.npmjs.org/@ai-ecoverse/slicc-jsh/-/slicc-jsh-1.2.3.tgz',
+        integrity,
+        attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@ai-ecoverse%2fslicc-jsh@1.2.3' },
+      },
+    };
+    writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta));
+    writeFileSync(join(dir, 'attestations.json'), JSON.stringify(attestations));
+    const mock = join(dir, 'fetch.mjs');
+    writeFileSync(
+      mock,
+      `import { readFileSync } from 'node:fs';
+const dir = ${JSON.stringify(dir)};
+globalThis.fetch = async (url) => {
+  const u = String(url);
+  const file = u.includes('/attestations/') ? 'attestations.json' : u.endsWith('.tgz') ? 'pkg.tgz' : 'meta.json';
+  return new Response(readFileSync(\`\${dir}/\${file}\`));
+};
+`
+    );
+    made = { meta, imports: pathToFileURL(mock).href };
+    return made;
+  };
+})();
+
+const realPublished = () => {
+  const { meta, imports } = registry();
+  const rules = [
+    ['dist-tags.latest', '1.2.3'],
+    ['audit signatures', 'audited 1 package in 0s; 1 package has a verified registry signature; 1 package has a verified attestation'],
+    ['install', ''],
+    ['--json', JSON.stringify(meta)],
+    ['git/ref/tags/v1.2.3', `{"object":{"type":"commit","sha":"${SHA}"}}`],
+    ['compare/main...', '{"status":"identical"}'],
+  ];
+  return said('published.mjs', real('scripts/cert-review/published.mjs', ['--version', '1.2.3', '--wait', '0'], { stub: ['npm', 'gh'], rules, imports }));
+};
+
+const realReleaseLine = () => {
+  const { imports } = registry();
+  const rules = [
+    ['rev-list', SHA],
+    ['compare/main...', 'identical'],
+    ['release view', 'the notes'],
+    ['release edit', ''],
+  ];
+  return said('release-line.mjs', real('scripts/release-line.mjs', ['1.2.3'], { stub: ['git', 'gh'], rules, imports }));
+};
 const runStep = (script, { says = [], env = {}, writes, output, setup } = {}) => {
   const dir = join(scratch, `run-${++runs}`);
   const temp = join(dir, 'temp');
@@ -208,8 +364,9 @@ const runStep = (script, { says = [], env = {}, writes, output, setup } = {}) =>
   }
   writeFileSync(join(temp, 'work/stage.json'), '{"kernels":[{"id":"new"}]}');
   setup?.(temp);
+  const said = typeof says === 'function' ? says(temp) : says;
   const rules = join(dir, 'rules.tsv');
-  writeFileSync(rules, says.map(([pat, line]) => `${pat}\t${line}\n`).join(''));
+  writeFileSync(rules, said.map(([pat, line]) => `${pat}\t${line}\n`).join(''));
   const outputs = join(dir, 'output');
   writeFileSync(outputs, '');
   const file = join(dir, 'step.sh');
@@ -282,7 +439,7 @@ describe("a gate's silence is never a pass: the wiring", () => {
 describe("a gate's silence is never a pass: the steps, with the gate exiting 0", () => {
   for (const g of GATES) {
     it(`${label(g)}: silent, it fails the step`, () => {
-      const r = runStep(runOf(g.file, g.job, g.step), { env: g.env, writes: g.writes, setup: g.silentSetup ?? (g.says.length ? g.setup : undefined) });
+      const r = runStep(runOf(g.file, g.job, g.step), { env: g.env, writes: g.writes, setup: g.silentSetup ?? (g.says.length !== 0 ? g.setup : undefined) });
       assert.match(r.out, /: no verdict::/, r.out);
       if (g.failsAs) assert.match(r.outputs, new RegExp(`^${g.failsAs}$`, 'm'), r.out);
       else assert.notEqual(r.code, 0, r.out);

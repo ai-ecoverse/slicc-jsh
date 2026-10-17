@@ -79,7 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/release-outcome.mjs 2>&1 | tee "$RUNNER_TEMP/outcome.out"
-          grep -Eq '^semantic-release (tagged v[0-9]+\.[0-9]+\.[0-9]+|: nothing to release$)' "$RUNNER_TEMP/outcome.out" || { echo "::error title=release outcome: no verdict::release-outcome.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
+          grep -Eq '^semantic-release( tagged v[0-9]+\.[0-9]+\.[0-9]+(, v[0-9]+\.[0-9]+\.[0-9]+)*|: nothing to release)$' "$RUNNER_TEMP/outcome.out" || { echo "::error title=release outcome: no verdict::release-outcome.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
 
   publish:
     name: release / publish
