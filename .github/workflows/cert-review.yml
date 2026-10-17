@@ -242,7 +242,9 @@ jobs:
         run: |
           set -euo pipefail
           $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --tree "$TREE" 2>&1 | tee "$RUNNER_TEMP/suites.out"
-          grep -Eq "^(suites ${{ matrix.kernel }} $TREE: [1-9][0-9]* run\\(s\\) in runs-$TREE\\.json|suites: kernel ${{ matrix.kernel }} is .*: nothing to run)$" "$RUNNER_TEMP/suites.out" || { echo "::error title=suites: no verdict::suites.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
+          grep -Eq "^(suites ${{ matrix.kernel }} $TREE: [1-9][0-9]* run\\(s\\) in runs-$TREE\\.json|suites: kernel ${{ matrix.kernel }} is .*: nothing to run)$" "$RUNNER_TEMP/suites.out" \
+            || jq -e 'length > 0' "$WORK/suites/${{ matrix.kernel }}/runs-$TREE.json" > /dev/null 2>&1 \
+            || { echo "::error title=suites: no verdict::suites.mjs exited 0 without its verdict line or its runs-$TREE.json: a gate's silence is not a pass"; exit 1; }
       - name: m-fixtures and rows against host Node 22.22.0 (one shard)
         if: startsWith(matrix.part, 'fixtures-')
         env:
@@ -265,7 +267,9 @@ jobs:
         run: |
           set -euo pipefail
           $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag 2>&1 | tee "$RUNNER_TEMP/suites.out"
-          grep -Eq "^suites [^ ]+ browser: [1-9][0-9]* run\\(s\\) in runs-browser\\.json$" "$RUNNER_TEMP/suites.out" || { echo "::error title=browser suite: no verdict::suites.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
+          grep -Eq "^suites [^ ]+ browser: [1-9][0-9]* run\\(s\\) in runs-browser\\.json$" "$RUNNER_TEMP/suites.out" \
+            || jq -se 'any(.[]; length > 0)' "$WORK"/suites/*/runs-browser.json > /dev/null 2>&1 \
+            || { echo "::error title=browser suite: no verdict::suites.mjs exited 0 without its verdict line or its runs-browser.json: a gate's silence is not a pass"; exit 1; }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:

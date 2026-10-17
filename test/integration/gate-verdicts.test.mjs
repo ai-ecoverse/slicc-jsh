@@ -40,6 +40,10 @@ const runOf = (file, job, name) => {
 };
 
 const SHA = 'a'.repeat(40);
+const runsFile = (name, json) => (temp) => {
+  mkdirSync(dirname(join(temp, 'work/suites', name)), { recursive: true });
+  writeFileSync(join(temp, 'work/suites', name), json);
+};
 const packed = (temp) => {
   const pkg = join(temp, 'tree/package');
   for (const f of ['dist/node.mjs', 'dist/jsh.mjs', 'dist/host/jsh.mjs', 'dist/host/main.mjs', 'NOTICE', 'package.json']) {
@@ -95,8 +99,28 @@ const GATES = [
     variant: 'an alias of another kernel',
     says: [['suites.mjs', 'suites: kernel new is 1.119.2, the same as dev: nothing to run']],
   },
+  {
+    file: 'cert-review.yml',
+    job: 'bench',
+    step: 'Suites on one tree',
+    calls: /scripts\/cert-review\/suites\.mjs/,
+    variant: "main's suites.mjs before its verdict line: its runs file",
+    says: [],
+    setup: runsFile('new/runs-tag.json', '[{"suite":"golden"}]'),
+    silentSetup: runsFile('new/runs-tag.json', '[]'),
+  },
   { file: 'cert-review.yml', job: 'bench', step: 'm-fixtures and rows', calls: /scripts\/cert-review\/mfixtures\.mjs/, says: [['mfixtures.mjs', 'mfixtures new: {"same":469}']] },
   { file: 'cert-review.yml', job: 'bench', step: 'Browser suite on the head', calls: /scripts\/cert-review\/suites\.mjs/, says: [['suites.mjs', 'suites dev browser: 1 run(s) in runs-browser.json']] },
+  {
+    file: 'cert-review.yml',
+    job: 'bench',
+    step: 'Browser suite on the head',
+    calls: /scripts\/cert-review\/suites\.mjs/,
+    variant: "main's suites.mjs before its verdict line: its runs file",
+    says: [],
+    setup: runsFile('new/runs-browser.json', '[{"suite":"browser"}]'),
+    silentSetup: runsFile('new/runs-browser.json', '[]'),
+  },
   {
     file: 'cert-review.yml',
     job: 'review',
@@ -258,7 +282,7 @@ describe("a gate's silence is never a pass: the wiring", () => {
 describe("a gate's silence is never a pass: the steps, with the gate exiting 0", () => {
   for (const g of GATES) {
     it(`${label(g)}: silent, it fails the step`, () => {
-      const r = runStep(runOf(g.file, g.job, g.step), { env: g.env, writes: g.writes, setup: g.setup });
+      const r = runStep(runOf(g.file, g.job, g.step), { env: g.env, writes: g.writes, setup: g.silentSetup ?? (g.says.length ? g.setup : undefined) });
       assert.match(r.out, /: no verdict::/, r.out);
       if (g.failsAs) assert.match(r.outputs, new RegExp(`^${g.failsAs}$`, 'm'), r.out);
       else assert.notEqual(r.code, 0, r.out);
