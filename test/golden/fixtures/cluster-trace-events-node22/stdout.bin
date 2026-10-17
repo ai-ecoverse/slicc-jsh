@@ -1,0 +1,27 @@
+cluster keys ["_events","_eventsCount","_maxListeners","isWorker","isMaster","isPrimary","Worker","workers","settings","SCHED_NONE","SCHED_RR","schedulingPolicy","setupPrimary","setupMaster","fork","disconnect"]
+cluster same [true,true,true,true,true]
+cluster esm keys ["SCHED_NONE","SCHED_RR","Worker","_events","_eventsCount","_maxListeners","default","disconnect","fork","isMaster","isPrimary","isWorker","schedulingPolicy","settings","setupMaster","setupPrimary","workers"]
+builtin [[true,true],[true,true]]
+cluster values [true,true,false,2,1,2,{},{},true]
+cluster functions ["setupPrimary:/1","fork:/1","disconnect:/1","Worker:Worker/1"]
+Worker [true,3,"online",null,["_events","_eventsCount","_maxListeners","exitedAfterDisconnect","state","id"],true,0,"none","none",["constructor","kill","send","isDead","isConnected","disconnect","destroy"],true]
+settings sync [["args","exec","execArgv","silent","foo"],["--prof","--logfile=v8-%p.log"]]
+setup event [ 'args', 'exec', 'execArgv', 'silent', 'foo' ] false 1 [] [ '--prof', '--logfile=v8-%p.log' ] true
+setup again true 1
+disconnected
+trace keys ["createTracing","getEnabledCategories"]
+trace same [true,true,true,true,["createTracing","default","getEnabledCategories"]]
+trace functions ["createTracing:createTracing/1","getEnabledCategories:getEnabledCategories/0"]
+none enabled undefined
+tracing ["Tracing { enabled: false, categories: 'node.perf,v8' }","{ t: Tracing { enabled: false, categories: 'node.perf,v8' } }","Tracing {}",false,"node.perf,v8","Tracing",["constructor","enable","disable","enabled","categories"]]
+a enabled ["node.perf,v8",true,"Tracing { enabled: true, categories: 'node.perf,v8' }"]
+both enabled "a,node,node.perf,v8"
+a disabled ["a,node,v8",false]
+none again undefined
+createTracing number throws TypeError ERR_INVALID_ARG_TYPE The "options" argument must be of type object. Received type number (5)
+createTracing no categories throws TypeError ERR_INVALID_ARG_TYPE The "options.categories" property must be an instance of Array. Received undefined
+createTracing string throws TypeError ERR_INVALID_ARG_TYPE The "options.categories" property must be an instance of Array. Received type string ('x')
+createTracing empty throws TypeError ERR_TRACE_EVENTS_CATEGORY_REQUIRED At least one category is required
+createTracing element throws TypeError ERR_INVALID_ARG_TYPE The "options.categories[1]" property must be of type string. Received type number (1)
+many "c0,c1,c10,c2,c3,c4,c5,c6,c7,c8,c9"
+warning Possible trace_events memory leak detected. There are more than 10 enabled Tracing objects.

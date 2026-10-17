@@ -303,7 +303,7 @@ The golden `http2-node22` checks these against Node 22.22.0.
 - **On slicc-kernel 1.113.0 and later**, jsh asks the kernel's resolver (`ctx.net.resolve`). It answers from `/etc/hosts`, then the kernel's own names, then the uplink, the same answers WASI programs get. A name it doesn't know is `getaddrinfo ENOTFOUND <name>`, and one it can't answer for now is `getaddrinfo EAI_AGAIN`.
 - **On older kernels**, jsh answers the kernel's names as its hosts file has them:
   - `localhost`, `localhost.localdomain`, `ip6-localhost` and `*.localhost` are `127.0.0.1` and `::1`, IPv4 first (`order: 'ipv6first'` swaps them);
-  - the kernel's own hostname (`slicc`) is `127.0.1.1`;
+  - the kernel's own hostname (`slicc`) is `127.0.1.1` and `::1`;
   - `host.slicc.internal` is `10.0.2.2`.
 
   Any other name is `getaddrinfo ENOTFOUND <name>` (`code` `ENOTFOUND`, `errno` -3008, `syscall` `getaddrinfo`, `hostname`), as in a Node with no resolver.
@@ -449,8 +449,12 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `cluster`, `dgram`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `dgram`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
+
+**`cluster`** is Node 22.22.0's primary: `isPrimary`, `workers` (none), `settings`, `setupPrimary`/`setupMaster` with its `'setup'` event, `schedulingPolicy`, `disconnect`, and the `Worker` class. That's enough for prom-client's `AggregatorRegistry`. A worker would be a `child_process.fork` with an IPC channel, which jsh doesn't have, so `cluster.fork()` throws `ERR_NOT_SUPPORTED` when it's called (golden `cluster-trace-events-node22`).
+
+**`trace_events`** is Node's: `createTracing` and its checks, `Tracing` objects (`enable`, `disable`, `enabled`, `categories`, and their inspect form), and `getEnabledCategories()` as the agent's sorted set (with `--trace-event-categories`). It also gives Node's warning past 10 enabled objects. There's no trace agent, so no trace file is written.
 
 **`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, `BroadcastChannel`, `MessageChannel`, `MessagePort` and `receiveMessageOnPort`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).
 

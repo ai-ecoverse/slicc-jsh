@@ -7,6 +7,8 @@ import { createFetch } from '../web/fetch.mjs';
 import { createHttps } from '../builtins/https.mjs';
 import { createNet } from '../builtins/net.mjs';
 import { createTls } from '../builtins/tls.mjs';
+import { createCluster } from '../builtins/cluster.mjs';
+import { createTraceEvents } from '../builtins/trace-events.mjs';
 import { createHttp2 } from '../builtins/http2.mjs';
 import { createDns } from '../builtins/dns.mjs';
 import { createInspector } from '../builtins/inspector.mjs';
@@ -30,6 +32,7 @@ const BUILTIN_LIST = [
   'async_hooks',
   'buffer',
   'child_process',
+  'cluster',
   'console',
   'constants',
   'crypto',
@@ -67,6 +70,7 @@ const BUILTIN_LIST = [
   'timers',
   'timers/promises',
   'tls',
+  'trace_events',
   'tty',
   'url',
   'util',
@@ -79,8 +83,6 @@ const BUILTIN_LIST = [
 
 const NOT_YET = [
   'dgram',
-  'cluster',
-  'trace_events',
   'wasi',
 ];
 
@@ -233,6 +235,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const getDns = () => (dns ??= createDns({ ctx, process, handles, hostname: process._nodeLib().os.hostname() }));
   let inspector;
   const getInspector = () => (inspector ??= createInspector({ process, promisify: util.promisify }));
+  let cluster;
+  let traceEvents;
   let http2;
   const getHttp2 = () => (http2 ??= createHttp2({ process, Buffer, net: getNet(), tls: getTls(), getStream }));
   let tty;
@@ -375,6 +379,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     http: () => getHttp(),
     https: () => getHttps(),
     tls: getTls,
+    cluster: () => (cluster ??= createCluster({ process })),
+    trace_events: () => (traceEvents ??= createTraceEvents({ process })),
     http2: getHttp2,
     inspector: () => getInspector().inspector,
     'inspector/promises': () => getInspector().promises,
