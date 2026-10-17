@@ -443,7 +443,21 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 **`net`** also has Node's happy-eyeballs defaults (`get`/`setDefaultAutoSelectFamily`, `get`/`setDefaultAutoSelectFamilyAttemptTimeout`, golden `net-autoselect-family-node22`). The kernel's loopback is IPv4 only, so they choose nothing.
 
-**`async_hooks`** has `AsyncResource` (including `bind` and `runInAsyncScope`, under which `executionAsyncId()` is the resource's), `createHook` (its hooks never run), `executionAsyncId`/`triggerAsyncId` and `asyncWrapProviders`. That's enough for `events.EventEmitterAsyncResource`. **`new AsyncLocalStorage()` throws `ERR_NOT_SUPPORTED`**, because the runtime can't carry its store across an `await`.
+**`async_hooks`** has `AsyncResource` (including `bind` and `runInAsyncScope`, under which `executionAsyncId()` is the resource's), `createHook` (its hooks never run), `executionAsyncId`/`triggerAsyncId` and `asyncWrapProviders`. That's enough for `events.EventEmitterAsyncResource`.
+
+**`AsyncLocalStorage`** is Node 22's: `run`, `exit`, `enterWith`, `getStore`, `disable`, and the static `bind` and `snapshot`. Its store goes where jsh can carry it, as in Node:
+- the synchronous call of `run`;
+- `process.nextTick`, `setTimeout`, `setInterval`, `setImmediate` and `queueMicrotask` callbacks;
+- `.then`, `.catch` and `.finally` reactions, in the context they were registered in;
+- `AsyncResource`: `runInAsyncScope`, `bind`, `AsyncLocalStorage.bind` and `snapshot`.
+
+EventEmitter listeners run in the context of the code that emits, as in Node. The golden `async-local-storage-node22` checks these against Node 22.22.0.
+
+**The gap: a native `await` continuation loses the store.** The engine resumes it, and jsh can't attach a context to that. The code after an `await` inside `run()` sees the store that's current outside every run, usually `undefined`. It **never sees another run's store**, so request-scoped code fails visibly (a missing store), never with the wrong identity. Callbacks the runtime's own I/O fires (a socket's `'data'`, an `http` server's `'request'`) behave the same way.
+- Register a `.then()` inside the run, or wrap the callback with `AsyncLocalStorage.bind()`/`snapshot()`, to keep the store.
+- `enterWith` where jsh can't bound it (after a native `await`, or in such an I/O callback) throws `ERR_NOT_SUPPORTED`. Otherwise its store would reach unrelated code; use `run()` there. In the main module, `-e` and the callbacks jsh schedules, `enterWith` works as in Node, and its store reaches what that code schedules.
+- No warning is printed, so output stays Node's.
+- `test/integration/async-local-storage.test.mjs` checks the gap. That includes two runs interleaving across `await`s, where neither ever sees the other's store.
 
 **`domain`** is Node's own `lib/domain.js`. It follows a domain into the ticks, timers and immediates queued inside it, which is where Node's async hooks take it. A throw there is the domain's `'error'`, and so is an emitter's `'error'`. Promise jobs are the gap: the runtime can't see them, so a rejection isn't routed to a domain.
 

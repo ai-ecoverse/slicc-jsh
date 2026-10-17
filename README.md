@@ -147,7 +147,7 @@ This table is the summary. Details, quirks and the libraries behind each module 
 | [`readline`, REPL](docs/compatibility.md#readline-and-the-repl) | `readline`, `readline/promises`, Node's REPL, `repl.start()` | no previews as you type, no `^C` out of a running loop | — |
 | [`util`, `console`, `os`, `path`, `url`](docs/compatibility.md#util-console-os-path-url-querystring-punycode) | Node's own lib files | `os` reports the kernel (loopback only, Linux constants) | — |
 | [`vm`](docs/compatibility.md#vm) | scripts, contexts, `compileFunction`, dynamic `import()` | one realm: a context isn't a separate realm | `vm.Module`, `timeout`, `breakOnSigint`, `measureMemory` |
-| [`async_hooks`, `domain`, `perf_hooks`, `v8`, …](docs/compatibility.md#async_hooks-domain-perf_hooks-v8-and-diagnostics) | `AsyncResource`, `domain`, `diagnostics_channel`, `perf_hooks`, `v8` statistics | `createHook` hooks never run; domains don't follow promises | `AsyncLocalStorage`, `v8.serialize`, heap snapshots |
+| [`async_hooks`, `domain`, `perf_hooks`, `v8`, …](docs/compatibility.md#async_hooks-domain-perf_hooks-v8-and-diagnostics) | `AsyncResource`, `AsyncLocalStorage`, `domain`, `diagnostics_channel`, `perf_hooks`, `v8` statistics | `createHook` hooks never run; domains don't follow promises; an `AsyncLocalStorage` store doesn't survive a native `await` (it's then missing, never another run's) | `v8.serialize`, heap snapshots |
 | [Workers and the rest](docs/compatibility.md#modules-that-are-not-available) | `worker_threads` as the main thread, `BroadcastChannel` within a program (the global from kernel 1.92) | `new Worker` throws `ERR_NOT_SUPPORTED` | `cluster.fork`, `dgram`, `inspector.open` (no inspector), `test`, `sqlite`, `wasi` |
 
 ## Kernel requirements

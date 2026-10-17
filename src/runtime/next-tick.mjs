@@ -12,6 +12,8 @@
  * writer.close()) won't wake it. Node runs a callback's ticks before the next
  * event; without the wake they waited for the next unrelated one.
  */
+import { currentFrame, runInFrame } from './async-context.mjs';
+
 export function createNextTick(onQueue) {
   const queue = [];
   let stopped = false;
@@ -39,11 +41,14 @@ export function createNextTick(onQueue) {
       // runs; a throw leaves it entered for the uncaught-exception path (its
       // error handler exits it), as Node's skipped after-hook does.
       const domain = globalThis.process?.domain ?? undefined;
-      if (!domain) queue.push(() => fn(...args));
+      // The async context (AsyncLocalStorage's stores) it was queued in.
+      const frame = currentFrame();
+      const call = (...a) => runInFrame(frame, fn, undefined, a);
+      if (!domain) queue.push(() => call(...args));
       else {
         queue.push(() => {
           domain.enter();
-          fn(...args);
+          call(...args);
           domain.exit();
         });
       }

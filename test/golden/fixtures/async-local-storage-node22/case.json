@@ -1,0 +1,5 @@
+{
+  "description": "AsyncLocalStorage as Node 22.22.0's where jsh carries the store: synchronous run (nested, the same store, its return value) / exit / enterWith / disable, and the store in process.nextTick, setTimeout, setInterval, setImmediate, queueMicrotask, .then/.catch/.finally reactions (in the context they were registered in), AsyncResource (runInAsyncScope, bind), AsyncLocalStorage.bind and snapshot; EventEmitter listeners run in the emitter's caller's context; the instance's shape",
+  "argv": ["script.js"],
+  "shim": true
+}
