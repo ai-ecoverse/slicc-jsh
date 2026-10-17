@@ -373,6 +373,7 @@ export async function runNode(ctx, options = {}) {
     since: 0,
     overdue: (at) => timers.overdue(at),
     inCheck: () => timers.inCheck(),
+    endTurn: () => timers.startCheck(),
   };
   const ports = createPorts({
     handles,
@@ -396,7 +397,7 @@ export async function runNode(ctx, options = {}) {
   };
 
   const timers = createTimers(handles, {
-    hold: (due) => delivering.active && due > delivering.since,
+    hold: (due) => (delivering.active || timers.checkPending()) && due > delivering.since,
     holdImmediate: () => delivering.active || delivering.pending,
     afterCallback: () => flushTicks(),
     onCallbackError: (err) => {
