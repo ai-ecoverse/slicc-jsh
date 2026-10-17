@@ -1,0 +1,23 @@
+keys ["open","close","url","waitForDebugger","console","Session","Network","NetworkResources"]
+promises keys ["open","close","url","waitForDebugger","console","Session","Network","NetworkResources"]
+same [true,true,true,true,true,true,true,true,true,true]
+esm keys [["Network","NetworkResources","Session","close","console","default","open","url","waitForDebugger"],["Network","NetworkResources","Session","close","console","default","open","url","waitForDebugger"]]
+builtin [true,true,true,true]
+functions ["open:inspectorOpen/3","close:_debugEnd/0","url:url/0","waitForDebugger:inspectorWaitForDebugger/0","Session:Session/0"]
+console [["debug","error","info","log","warn","dir","dirxml","table","trace","group","groupCollapsed","groupEnd","clear","count","countReset","assert","profile","profileEnd","time","timeLog","timeEnd","timeStamp","context"],true,null]
+Network [["requestWillBeSent","responseReceived","loadingFinished","loadingFailed","dataSent","dataReceived"],["requestWillBeSent:requestWillBeSent/1","responseReceived:responseReceived/1","loadingFinished:loadingFinished/1","loadingFailed:loadingFailed/1","dataSent:dataSent/1","dataReceived:dataReceived/1"],null,null]
+Network params throws TypeError ERR_INVALID_ARG_TYPE The "params" argument must be of type object. Received type number (1)
+url undefined
+close undefined
+waitForDebugger throws Error ERR_INSPECTOR_NOT_ACTIVE Inspector is not active
+open port throws RangeError ERR_OUT_OF_RANGE The value of "port" is out of range. It must be >= 0 && <= 65535. Received 70000
+Session [true,true,true,"Session",["constructor","connect","connectToMainThread","post","disconnect"],["constructor","post"],null]
+post throws Error ERR_INSPECTOR_NOT_CONNECTED Session is not connected
+post method throws TypeError ERR_INVALID_ARG_TYPE The "method" argument must be of type string. Received type number (1)
+post params throws TypeError ERR_INVALID_ARG_TYPE The "params" argument must be of type object. Received type number (5)
+post callback throws TypeError ERR_INVALID_ARG_TYPE The "callback" argument must be of type function. Received type number (5)
+connectToMainThread throws Error ERR_INSPECTOR_NOT_WORKER Current thread is not a worker
+promises post rejects Error ERR_INSPECTOR_NOT_CONNECTED Session is not connected
+promises post method rejects TypeError ERR_INVALID_ARG_TYPE The "method" argument must be of type string. Received type number (1)
+NetworkResources [["put"],"put",2,null]
+warning Warning The --experimental-inspector-network-resource option is not enabled. Please enable it to use the putNetworkResource function

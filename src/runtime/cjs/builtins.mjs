@@ -11,6 +11,7 @@ import { createCluster } from '../builtins/cluster.mjs';
 import { createTraceEvents } from '../builtins/trace-events.mjs';
 import { createHttp2 } from '../builtins/http2.mjs';
 import { createDns } from '../builtins/dns.mjs';
+import { createInspector } from '../builtins/inspector.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
@@ -45,6 +46,8 @@ const BUILTIN_LIST = [
   'http',
   'http2',
   'https',
+  'inspector',
+  'inspector/promises',
   'module',
   'net',
   'os',
@@ -80,8 +83,6 @@ const BUILTIN_LIST = [
 
 const NOT_YET = [
   'dgram',
-  'inspector',
-  'inspector/promises',
   'wasi',
 ];
 
@@ -232,6 +233,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const getTls = () => (tls ??= createTls({ process, Buffer, net: getNet() }));
   let dns;
   const getDns = () => (dns ??= createDns({ ctx, process, handles, hostname: process._nodeLib().os.hostname() }));
+  let inspector;
+  const getInspector = () => (inspector ??= createInspector({ process, promisify: util.promisify }));
   let cluster;
   let traceEvents;
   let http2;
@@ -379,6 +382,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     cluster: () => (cluster ??= createCluster({ process })),
     trace_events: () => (traceEvents ??= createTraceEvents({ process })),
     http2: getHttp2,
+    inspector: () => getInspector().inspector,
+    'inspector/promises': () => getInspector().promises,
     dns: () => getDns().dns,
     'dns/promises': () => getDns().promises,
     child_process: () => getChildProcess(),

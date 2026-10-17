@@ -1,0 +1,5 @@
+{
+  "description": "require('inspector') / 'inspector/promises' and their ESM forms load with Node 22.22.0's exports (playwright-core requires the inspector at load), as a Node whose inspector is not active: url() undefined, close() a no-op, waitForDebugger ERR_INSPECTOR_NOT_ACTIVE, an unconnected Session's post ERR_INSPECTOR_NOT_CONNECTED (rejected from inspector/promises), connectToMainThread ERR_INSPECTOR_NOT_WORKER; console, Network and NetworkResources; the argument checks",
+  "argv": ["--no-warnings", "script.mjs"],
+  "shim": true
+}
