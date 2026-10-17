@@ -421,6 +421,14 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 ## `async_hooks`, `domain`, `perf_hooks`, `v8` and diagnostics
 
+**`inspector`** and **`inspector/promises`** load with Node 22.22.0's exports, so playwright-core and @vitest/coverage-v8, which require them at load, get past them. The kernel has no V8 inspector for a program, so jsh behaves as a Node whose inspector isn't active:
+- `url()` is `undefined`, `close()` does nothing, and `waitForDebugger()` is `ERR_INSPECTOR_NOT_ACTIVE`.
+- An unconnected `Session`'s `post` is `ERR_INSPECTOR_NOT_CONNECTED` (a rejection from `inspector/promises`), and `connectToMainThread` is `ERR_INSPECTOR_NOT_WORKER`.
+- `console`, `Network` and `NetworkResources` check their arguments and reach no frontend.
+- What would start an inspector, `open()` and `Session#connect()`, throws `ERR_NOT_SUPPORTED` when it's called. That means a CPU profile or coverage through a `Session` isn't available (golden `inspector-node22`).
+
+**`net`** also has Node's happy-eyeballs defaults (`get`/`setDefaultAutoSelectFamily`, `get`/`setDefaultAutoSelectFamilyAttemptTimeout`, golden `net-autoselect-family-node22`). The kernel's loopback is IPv4 only, so they choose nothing.
+
 **`async_hooks`** has `AsyncResource` (including `bind` and `runInAsyncScope`, under which `executionAsyncId()` is the resource's), `createHook` (its hooks never run), `executionAsyncId`/`triggerAsyncId` and `asyncWrapProviders`. That's enough for `events.EventEmitterAsyncResource`. **`new AsyncLocalStorage()` throws `ERR_NOT_SUPPORTED`**, because the runtime can't carry its store across an `await`.
 
 **`domain`** is Node's own `lib/domain.js`. It follows a domain into the ticks, timers and immediates queued inside it, which is where Node's async hooks take it. A throw there is the domain's `'error'`, and so is an emitter's `'error'`. Promise jobs are the gap: the runtime can't see them, so a rejection isn't routed to a domain.
@@ -437,7 +445,7 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `cluster`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `cluster`, `dgram`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
 
 **`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, `BroadcastChannel`, `MessageChannel`, `MessagePort` and `receiveMessageOnPort`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).

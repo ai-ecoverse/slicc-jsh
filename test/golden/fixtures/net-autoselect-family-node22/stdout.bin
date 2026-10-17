@@ -1,0 +1,12 @@
+getDefaultAutoSelectFamily function 0
+setDefaultAutoSelectFamily function 1
+getDefaultAutoSelectFamilyAttemptTimeout function 0
+setDefaultAutoSelectFamilyAttemptTimeout function 1
+family true
+timeout 250
+set false false
+set 5 10
+set 300 300
+bad family TypeError ERR_INVALID_ARG_TYPE The "value" argument must be of type boolean. Received type number (1)
+bad timeout RangeError ERR_OUT_OF_RANGE The value of "value" is out of range. It must be >= 1 && <= 2147483647. Received 0
+bad timeout type TypeError ERR_INVALID_ARG_TYPE The "value" argument must be of type number. Received type string ('1')

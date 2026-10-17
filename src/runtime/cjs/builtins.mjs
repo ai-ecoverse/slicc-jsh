@@ -9,6 +9,7 @@ import { createNet } from '../builtins/net.mjs';
 import { createTls } from '../builtins/tls.mjs';
 import { createHttp2 } from '../builtins/http2.mjs';
 import { createDns } from '../builtins/dns.mjs';
+import { createInspector } from '../builtins/inspector.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
@@ -42,6 +43,8 @@ const BUILTIN_LIST = [
   'http',
   'http2',
   'https',
+  'inspector',
+  'inspector/promises',
   'module',
   'net',
   'os',
@@ -77,8 +80,6 @@ const BUILTIN_LIST = [
 const NOT_YET = [
   'dgram',
   'cluster',
-  'inspector',
-  'inspector/promises',
   'trace_events',
   'wasi',
 ];
@@ -230,6 +231,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const getTls = () => (tls ??= createTls({ process, Buffer, net: getNet() }));
   let dns;
   const getDns = () => (dns ??= createDns({ ctx, process, handles, hostname: process._nodeLib().os.hostname() }));
+  let inspector;
+  const getInspector = () => (inspector ??= createInspector({ process, promisify: util.promisify }));
   let http2;
   const getHttp2 = () => (http2 ??= createHttp2({ process, Buffer, net: getNet(), tls: getTls(), getStream }));
   let tty;
@@ -373,6 +376,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     https: () => getHttps(),
     tls: getTls,
     http2: getHttp2,
+    inspector: () => getInspector().inspector,
+    'inspector/promises': () => getInspector().promises,
     dns: () => getDns().dns,
     'dns/promises': () => getDns().promises,
     child_process: () => getChildProcess(),
