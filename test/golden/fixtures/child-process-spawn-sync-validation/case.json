@@ -1,0 +1,7 @@
+{
+  "description": "child_process.spawnSync: argument and option validation (file, args, options, cwd, shell, timeout, maxBuffer, killSignal, stdio, input, env, windowsHide, detached, uid, encoding) as Node 22 (split out of child-process-spawn-sync, #353)",
+  "argv": [
+    "main.js"
+  ],
+  "shim": true
+}

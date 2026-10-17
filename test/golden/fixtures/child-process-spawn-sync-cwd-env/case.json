@@ -1,0 +1,7 @@
+{
+  "description": "child_process.spawnSync: cwd relative, URL, missing and a file, env and inheritance, argument stringification, shell: false, ENOENT (Node 22; split out of child-process-spawn-sync, #353)",
+  "argv": [
+    "main.js"
+  ],
+  "shim": true
+}

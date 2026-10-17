@@ -1,0 +1,7 @@
+ETIMEDOUT: [["error","status","signal","output","pid","stdout","stderr"],"ETIMEDOUT","spawnSync node ETIMEDOUT","spawnSync node",null,"SIGTERM"]
+ETIMEDOUT killSignal: ["ETIMEDOUT",null,"SIGKILL"]
+ETIMEDOUT killSignal number: ["ETIMEDOUT",null,"SIGKILL"]
+timeout 0 is none: "late\n"
+ENOBUFS: ["ENOBUFS","spawnSync node ENOBUFS",null,"SIGTERM",true]
+maxBuffer Infinity: 2000000
+maxBuffer default 1MiB: ["ENOBUFS","SIGTERM"]

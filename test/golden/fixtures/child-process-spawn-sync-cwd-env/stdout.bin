@@ -1,0 +1,9 @@
+cwd relative: "CWD/w-ss/sub\n"
+cwd URL: "CWD/w-ss\n"
+cwd missing: [["error","status","signal","output","pid","stdout","stderr"],null,null,null,0,null,"spawnSync node ENOENT","ENOENT",-2,"spawnSync node","node",["-e",""]]
+cwd file: [null,0,"spawnSync node ENOTDIR","ENOTDIR",-20]
+env: "[\"a\",\"2\",false]\n"
+env inherited: "yes\n"
+args stringified: "1,true,null\n"
+shell option: ""
+ENOENT: [["error","status","signal","output","pid","stdout","stderr"],["errno","code","syscall","path","spawnargs"],true,"spawnSync no-such-cmd-ss ENOENT",-2,"ENOENT","spawnSync no-such-cmd-ss","no-such-cmd-ss",["a","b"],null,null,null,0,null,null]
