@@ -1,0 +1,73 @@
+keys ["lookup","lookupService","Resolver","getDefaultResultOrder","setDefaultResultOrder","setServers","ADDRCONFIG","ALL","V4MAPPED","NODATA","FORMERR","SERVFAIL","NOTFOUND","NOTIMP","REFUSED","BADQUERY","BADNAME","BADFAMILY","BADRESP","CONNREFUSED","TIMEOUT","EOF","FILE","NOMEM","DESTRUCTION","BADSTR","BADFLAGS","NONAME","BADHINTS","NOTINITIALIZED","LOADIPHLPAPI","ADDRGETNETWORKPARAMS","CANCELLED","getServers","resolve","resolve4","resolve6","resolveAny","resolveCaa","resolveCname","resolveMx","resolveNaptr","resolveNs","resolvePtr","resolveSoa","resolveSrv","resolveTlsa","resolveTxt","reverse","promises"]
+promises keys ["lookup","lookupService","Resolver","getDefaultResultOrder","setDefaultResultOrder","setServers","NODATA","FORMERR","SERVFAIL","NOTFOUND","NOTIMP","REFUSED","BADQUERY","BADNAME","BADFAMILY","BADRESP","CONNREFUSED","TIMEOUT","EOF","FILE","NOMEM","DESTRUCTION","BADSTR","BADFLAGS","NONAME","BADHINTS","NOTINITIALIZED","LOADIPHLPAPI","ADDRGETNETWORKPARAMS","CANCELLED","getServers","resolve","resolve4","resolve6","resolveAny","resolveCaa","resolveCname","resolveMx","resolveNaptr","resolveNs","resolvePtr","resolveSoa","resolveSrv","resolveTlsa","resolveTxt","reverse"]
+same [true,true,true,true,true,true,true,true,true,true]
+esm keys ["ADDRCONFIG","ADDRGETNETWORKPARAMS","ALL","BADFAMILY","BADFLAGS","BADHINTS","BADNAME","BADQUERY","BADRESP","BADSTR","CANCELLED","CONNREFUSED","DESTRUCTION","EOF","FILE","FORMERR","LOADIPHLPAPI","NODATA","NOMEM","NONAME","NOTFOUND","NOTIMP","NOTINITIALIZED","REFUSED","Resolver","SERVFAIL","TIMEOUT","V4MAPPED","default","getDefaultResultOrder","getServers","lookup","lookupService","promises","resolve","resolve4","resolve6","resolveAny","resolveCaa","resolveCname","resolveMx","resolveNaptr","resolveNs","resolvePtr","resolveSoa","resolveSrv","resolveTlsa","resolveTxt","reverse","setDefaultResultOrder","setServers"]
+esm promises keys ["ADDRGETNETWORKPARAMS","BADFAMILY","BADFLAGS","BADHINTS","BADNAME","BADQUERY","BADRESP","BADSTR","CANCELLED","CONNREFUSED","DESTRUCTION","EOF","FILE","FORMERR","LOADIPHLPAPI","NODATA","NOMEM","NONAME","NOTFOUND","NOTIMP","NOTINITIALIZED","REFUSED","Resolver","SERVFAIL","TIMEOUT","default","getDefaultResultOrder","getServers","lookup","lookupService","resolve","resolve4","resolve6","resolveAny","resolveCaa","resolveCname","resolveMx","resolveNaptr","resolveNs","resolvePtr","resolveSoa","resolveSrv","resolveTlsa","resolveTxt","reverse","setDefaultResultOrder","setServers"]
+builtin [true,true,true,true]
+promises descriptor ["function",null,true,true]
+functions ["lookup:lookup/3","lookupService:lookupService/3","Resolver:Resolver/0","getDefaultResultOrder:getDefaultResultOrder/0","setDefaultResultOrder:setDefaultResultOrder/1","setServers:defaultResolverSetServers/1","getServers:bound getServers/0","resolve:bound resolve/3","resolve4:bound queryA/2","resolve6:bound queryAaaa/2","resolveAny:bound queryAny/2","resolveCaa:bound queryCaa/2","resolveCname:bound queryCname/2","resolveMx:bound queryMx/2","resolveNaptr:bound queryNaptr/2","resolveNs:bound queryNs/2","resolvePtr:bound queryPtr/2","resolveSoa:bound querySoa/2","resolveSrv:bound querySrv/2","resolveTlsa:bound queryTlsa/2","resolveTxt:bound queryTxt/2","reverse:bound getHostByAddr/2"]
+promises functions ["lookup:lookup/2","lookupService:lookupService/2","Resolver:Resolver/0","getDefaultResultOrder:getDefaultResultOrder/0","setDefaultResultOrder:setDefaultResultOrder/1","setServers:defaultResolverSetServers/1","getServers:bound getServers/0","resolve:bound resolve/2","resolve4:bound queryA/2","resolve6:bound queryAaaa/2","resolveAny:bound queryAny/2","resolveCaa:bound queryCaa/2","resolveCname:bound queryCname/2","resolveMx:bound queryMx/2","resolveNaptr:bound queryNaptr/2","resolveNs:bound queryNs/2","resolvePtr:bound queryPtr/2","resolveSoa:bound querySoa/2","resolveSrv:bound querySrv/2","resolveTlsa:bound queryTlsa/2","resolveTxt:bound queryTxt/2","reverse:bound getHostByAddr/2"]
+codes ["NODATA=ENODATA","FORMERR=EFORMERR","SERVFAIL=ESERVFAIL","NOTFOUND=ENOTFOUND","NOTIMP=ENOTIMP","REFUSED=EREFUSED","BADQUERY=EBADQUERY","BADNAME=EBADNAME","BADFAMILY=EBADFAMILY","BADRESP=EBADRESP","CONNREFUSED=ECONNREFUSED","TIMEOUT=ETIMEOUT","EOF=EOF","FILE=EFILE","NOMEM=ENOMEM","DESTRUCTION=EDESTRUCTION","BADSTR=EBADSTR","BADFLAGS=EBADFLAGS","NONAME=ENONAME","BADHINTS=EBADHINTS","NOTINITIALIZED=ENOTINITIALIZED","LOADIPHLPAPI=ELOADIPHLPAPI","ADDRGETNETWORKPARAMS=EADDRGETNETWORKPARAMS","CANCELLED=ECANCELLED"]
+hint types ["number","number","number"]
+Resolver [["constructor","resolveAny","resolve4","resolve6","resolveCaa","resolveCname","resolveMx","resolveNs","resolveTlsa","resolveTxt","resolveSrv","resolvePtr","resolveNaptr","resolveSoa","reverse","resolve"],["constructor","cancel","getServers","setServers","setLocalAddress"],["constructor","resolveAny","resolve4","resolve6","resolveCaa","resolveCname","resolveMx","resolveNs","resolveTlsa","resolveTxt","resolveSrv","resolvePtr","resolveNaptr","resolveSoa","reverse","resolve"],false,true]
+query names ["resolveAny:queryAny/2:queryAny/2","resolve4:queryA/2:queryA/2","resolve6:queryAaaa/2:queryAaaa/2","resolveCaa:queryCaa/2:queryCaa/2","resolveCname:queryCname/2:queryCname/2","resolveMx:queryMx/2:queryMx/2","resolveNs:queryNs/2:queryNs/2","resolveTlsa:queryTlsa/2:queryTlsa/2","resolveTxt:queryTxt/2:queryTxt/2","resolveSrv:querySrv/2:querySrv/2","resolvePtr:queryPtr/2:queryPtr/2","resolveNaptr:queryNaptr/2:queryNaptr/2","resolveSoa:querySoa/2:querySoa/2","reverse:getHostByAddr/2:getHostByAddr/2","resolve:resolve/3:resolve/2"]
+promisify [null,null]
+order ["verbatim","ipv4first","ipv4first","verbatim"]
+order bad throws TypeError ERR_INVALID_ARG_VALUE The argument 'dnsOrder' must be one of: 'verbatim', 'ipv4first', 'ipv6first'. Received 'random' {"code":"ERR_INVALID_ARG_VALUE"}
+lookup v4 ["10.1.2.3",4]
+lookup v6 ["::1",6]
+lookup v6 zone ["fe80::1%eth0",6]
+lookup all [[{"address":"10.1.2.3","family":4}]]
+lookup family 6 v4 ["10.1.2.3",4]
+lookup IPv4 string ["10.1.2.3",4]
+warning DeprecationWarning DEP0118 The provided hostname "" is not a valid hostname, and is supported in the dns module solely for compatibility.
+lookup empty [null,4]
+lookup empty all [[]]
+lookup null 6 [null,6]
+lookup bad family throws TypeError ERR_INVALID_ARG_VALUE The argument 'family' must be one of: 0, 4, 6. Received 5
+lookup bad options throws TypeError ERR_INVALID_ARG_TYPE The "options" argument must be of type object or integer. Received type string ('x')
+lookup bad hints throws TypeError ERR_INVALID_ARG_VALUE The argument 'hints' is invalid. Received 1
+lookup hints type throws TypeError ERR_INVALID_ARG_TYPE The "options.hints" property must be of type number. Received type string ('x')
+lookup all type throws TypeError ERR_INVALID_ARG_TYPE The "options.all" property must be of type boolean. Received type number (1)
+lookup verbatim type throws TypeError ERR_INVALID_ARG_TYPE The "options.verbatim" property must be of type boolean. Received type number (1)
+lookup order throws TypeError ERR_INVALID_ARG_VALUE The property 'options.order' must be one of: 'verbatim', 'ipv4first', 'ipv6first'. Received 'x'
+lookup hostname type throws TypeError ERR_INVALID_ARG_TYPE The "hostname" argument must be of type string. Received type number (5)
+lookup no callback throws TypeError ERR_INVALID_ARG_TYPE The "callback" argument must be of type function. Received undefined {"code":"ERR_INVALID_ARG_TYPE"}
+lookup no callback options throws TypeError ERR_INVALID_ARG_TYPE The "callback" argument must be of type function. Received undefined {"code":"ERR_INVALID_ARG_TYPE"}
+lookup bad options 2 args throws TypeError ERR_INVALID_ARG_TYPE The "callback" argument must be of type function. Received type string ('x') {"code":"ERR_INVALID_ARG_TYPE"}
+lookup returns "object"
+promisified lookup {"address":"10.1.2.3","family":4}
+promisified lookupService args ["hostname","service"]
+p lookup v4 {"address":"10.1.2.3","family":4}
+p lookup all [{"address":"::1","family":6}]
+p lookup empty {"address":null,"family":4}
+p lookup empty all []
+p lookup bad family rejects TypeError ERR_INVALID_ARG_VALUE The property 'options.family' must be one of: 0, 4, 6. Received 'IPv4' {"code":"ERR_INVALID_ARG_VALUE"}
+p lookup bad options rejects TypeError ERR_INVALID_ARG_TYPE The "options" argument must be of type object or integer. Received type string ('x') {"code":"ERR_INVALID_ARG_TYPE"}
+p lookup hostname type rejects TypeError ERR_INVALID_ARG_TYPE The "hostname" argument must be of type string. Received type number (5) {"code":"ERR_INVALID_ARG_TYPE"}
+lookupService args throws TypeError ERR_MISSING_ARGS The "address", "port", and "callback" arguments must be specified {"code":"ERR_MISSING_ARGS"}
+lookupService address throws TypeError ERR_INVALID_ARG_VALUE The argument 'address' is invalid. Received 'x' {"code":"ERR_INVALID_ARG_VALUE"}
+lookupService port throws RangeError ERR_SOCKET_BAD_PORT Port should be >= 0 and < 65536. Received type number (70000). {"code":"ERR_SOCKET_BAD_PORT"}
+lookupService port string throws RangeError ERR_SOCKET_BAD_PORT Port should be >= 0 and < 65536. Received type string (' '). {"code":"ERR_SOCKET_BAD_PORT"}
+lookupService callback throws TypeError ERR_INVALID_ARG_TYPE The "callback" argument must be of type function. Received type number (5) {"code":"ERR_INVALID_ARG_TYPE"}
+p lookupService args rejects TypeError ERR_MISSING_ARGS The "address" and "port" arguments must be specified {"code":"ERR_MISSING_ARGS"}
+p lookupService address rejects TypeError ERR_INVALID_ARG_VALUE The argument 'address' is invalid. Received 'x' {"code":"ERR_INVALID_ARG_VALUE"}
+servers ["8.8.8.8","1.1.1.1:5353","2001:4860:4860::8888","[::1]:5300","2001:db8::1"]
+servers bad throws TypeError ERR_INVALID_IP_ADDRESS Invalid IP address: not an ip {"code":"ERR_INVALID_IP_ADDRESS"}
+servers type throws TypeError ERR_INVALID_ARG_TYPE The "servers" argument must be an instance of Array. Received type string ('8.8.8.8') {"code":"ERR_INVALID_ARG_TYPE"}
+servers element throws TypeError ERR_INVALID_ARG_TYPE The "servers[0]" argument must be of type string. Received type number (1) {"code":"ERR_INVALID_ARG_TYPE"}
+setServers module [["9.9.9.9"],["9.9.9.9"]]
+resolver options throws RangeError ERR_OUT_OF_RANGE The value of "options.timeout" is out of range. It must be >= -1 && <= 2147483647. Received -2 {"code":"ERR_OUT_OF_RANGE"}
+resolver tries throws RangeError ERR_OUT_OF_RANGE The value of "options.tries" is out of range. It must be >= 1 && <= 2147483647. Received 0 {"code":"ERR_OUT_OF_RANGE"}
+resolver maxTimeout throws RangeError ERR_OUT_OF_RANGE The value of "options.maxTimeout" is out of range. It must be >= 0 && <= 4294967295. Received -1 {"code":"ERR_OUT_OF_RANGE"}
+setLocalAddress type throws TypeError ERR_INVALID_ARG_TYPE The "ipv4" argument must be of type string. Received type number (1) {"code":"ERR_INVALID_ARG_TYPE"}
+resolve name type throws TypeError ERR_INVALID_ARG_TYPE The "name" argument must be of type string. Received type number (5) {"code":"ERR_INVALID_ARG_TYPE"}
+resolve callback throws TypeError ERR_INVALID_ARG_TYPE The "callback" argument must be of type function. Received undefined {"code":"ERR_INVALID_ARG_TYPE"}
+resolve rrtype type throws TypeError ERR_INVALID_ARG_TYPE The "rrtype" argument must be of type string. Received type number (5) {"code":"ERR_INVALID_ARG_TYPE"}
+resolve rrtype value throws TypeError ERR_INVALID_ARG_VALUE The argument 'rrtype' is invalid. Received 'BOGUS' {"code":"ERR_INVALID_ARG_VALUE"}
+reverse bad throws Error EINVAL getHostByAddr EINVAL x {"errno":-22,"code":"EINVAL","syscall":"getHostByAddr","hostname":"x"}
+p reverse bad rejects Error EINVAL getHostByAddr EINVAL x {"errno":-22,"code":"EINVAL","syscall":"getHostByAddr","hostname":"x"}
+p resolve rrtype type rejects TypeError ERR_INVALID_ARG_TYPE The "rrtype" argument must be of type string. Received type number (5) {"code":"ERR_INVALID_ARG_TYPE"}
+p resolve rrtype value rejects TypeError ERR_INVALID_ARG_VALUE The argument 'rrtype' is invalid. Received 'BOGUS' {"code":"ERR_INVALID_ARG_VALUE"}
+p resolve name type rejects TypeError ERR_INVALID_ARG_TYPE The "name" argument must be of type string. Received type number (5) {"code":"ERR_INVALID_ARG_TYPE"}
+resolve returns "object"

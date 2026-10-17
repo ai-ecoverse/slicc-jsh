@@ -16,6 +16,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - [`net`, `http` and `https`](#net-http-and-https)
 - [`tls`](#tls)
 - [`http2`](#http2)
+- [`dns`](#dns)
 - [`fetch` and `WebSocket`](#fetch-and-websocket)
 - [`crypto`](#crypto)
 - [`zlib`](#zlib)
@@ -228,6 +229,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 **`http` client.**
 - With a `Content-Length`, request body bytes stream as written. Without one, the body is buffered until `end()` and sent with a computed length. Request bodies aren't sent chunked.
 - `'response'` comes at the head, and the body streams as it arrives: by `Content-Length`, chunked, or until the peer's FIN. `socket.end` half-closes.
+- `http.validateHeaderName`, `http.validateHeaderValue` and `http.setMaxIdleHTTPParsers` are Node's (golden `http-validate-headers-node22`).
 - A `ClientRequest` has its `Host` header from the start, set after the given headers and before the agent's `addRequest` sees the request. It's absent with `setHost: false`. The request line is the request's `method` and `path` as they are when it's sent. `_header` and `_implicitHeader()` are Node's. That lets **http-proxy-agent** rewrite the path to the absolute URL and send through a plain `http://` proxy.
 - `http.Agent` follows Node's `_http_agent.js` request path (`addRequest` → `createSocket` → `createConnection`), so **agent-base** subclasses work for plain `http`. `getName`, `destroy`, `keepSocketAlive`, `reuseSocket`, `removeSocket`, and `sockets`/`freeSockets`/`requests` are present.
 - `http.globalAgent` keeps sockets alive, as in Node 22 (`keepAlive: true`, `scheduling: 'lifo'`, `timeout: 5000`). An agent with `keepAlive` reuses a socket once its response is done (`'free'`, then `req.reusedSocket`), queued requests first. As in Node 22, a server's `Keep-Alive: timeout=N`, less `agentKeepAliveTimeoutBuffer` (1 s), caps a free socket's timeout, and a hint that leaves nothing (`timeout=1`) means the socket isn't reused. Free sockets don't keep the program alive, and one the server closes leaves the pool. `agent: false`, or an agent without `keepAlive`, sends `Connection: close`.
@@ -302,6 +304,28 @@ What's Node's:
 - `createServer` (a `net.Server`) and `createSecureServer` (a `tls.Server`, ALPN `h2`), with Node's option checks, `setTimeout` and `updateSettings`.
 
 The golden `http2-node22` checks these against Node 22.22.0.
+
+## `dns`
+
+`require('dns')`, `require('dns/promises')` and their ESM forms load with Node 22.22.0's exports, argument checks and errors. So do the packages that require `dns` at load: **pg**, **mongodb**, **ioredis**, **redis**, **undici**, **nodemailer**, **fastify**, and **got** (which also needs `http2`).
+
+**`lookup`** (callback and promise forms, `all`, `family`, `order`/`verbatim`, `hints`) is getaddrinfo. An IP literal answers at once.
+- **On slicc-kernel 1.113.0 and later**, jsh asks the kernel's resolver (`ctx.net.resolve`). It answers from `/etc/hosts`, then the kernel's own names, then the uplink, the same answers WASI programs get. A name it doesn't know is `getaddrinfo ENOTFOUND <name>`, and one it can't answer for now is `getaddrinfo EAI_AGAIN`.
+- **On older kernels**, jsh answers the kernel's names as its hosts file has them:
+  - `localhost`, `localhost.localdomain`, `ip6-localhost` and `*.localhost` are `127.0.0.1` and `::1`, IPv4 first (`order: 'ipv6first'` swaps them);
+  - the kernel's own hostname (`slicc`) is `127.0.1.1` and `::1`;
+  - `host.slicc.internal` is `10.0.2.2`.
+
+  Any other name is `getaddrinfo ENOTFOUND <name>` (`code` `ENOTFOUND`, `errno` -3008, `syscall` `getaddrinfo`, `hostname`), as in a Node with no resolver.
+- `net.connect`, `http.request` and `fetch` don't go through `dns.lookup`: a name passed to them is resolved by the kernel, as before.
+
+**`lookupService`** names the kernel's own addresses (`127.0.0.1` and `::1` are `localhost`) and the common TCP services from `/etc/services` (`ssh`, `http`, `https`, …). It gives any other address and port back as numbers.
+
+**Queries** (`resolve*`, `Resolver`): on slicc-kernel 1.113.0 and later, `resolve4` and `resolve6` ask the kernel's resolver (`ttl: true` gives a TTL of 0), and a name it doesn't know is `queryA ENOTFOUND <name>`. There's no DNS transport for the other record types, so such a query finds no nameserver and fails as c-ares does then, with `query<Type> ECONNREFUSED <name>` (for example `queryMx` or `querySrv`; `mongodb+srv://` needs SRV records). So does `resolve4`/`resolve6` on older kernels. `reverse` names the kernel's own addresses. `getServers()` is empty until `setServers` (checked as Node does) sets a list. `cancel()` ends the pending queries with `ECANCELLED`.
+
+`ADDRCONFIG`, `ALL` and `V4MAPPED` have Linux's values. `getDefaultResultOrder` follows `--dns-result-order`. `util.promisify(dns.lookup)` and `promisify(dns.lookupService)` resolve to Node's `{ address, family }` and `{ hostname, service }`.
+
+The golden `dns-node22` checks the surface against Node 22.22.0, and `test/integration/dns.test.mjs` checks the kernel's answers.
 
 ## `fetch` and `WebSocket`
 
@@ -427,8 +451,12 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `cluster`, `dns`, `dns/promises`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `dgram`, `inspector`, `inspector/promises`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
+
+**`cluster`** is Node 22.22.0's primary: `isPrimary`, `workers` (none), `settings`, `setupPrimary`/`setupMaster` with its `'setup'` event, `schedulingPolicy`, `disconnect`, and the `Worker` class. That's enough for prom-client's `AggregatorRegistry`. A worker would be a `child_process.fork` with an IPC channel, which jsh doesn't have, so `cluster.fork()` throws `ERR_NOT_SUPPORTED` when it's called (golden `cluster-trace-events-node22`).
+
+**`trace_events`** is Node's: `createTracing` and its checks, `Tracing` objects (`enable`, `disable`, `enabled`, `categories`, and their inspect form), and `getEnabledCategories()` as the agent's sorted set (with `--trace-event-categories`). It also gives Node's warning past 10 enabled objects. There's no trace agent, so no trace file is written.
 
 **`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, `BroadcastChannel`, `MessageChannel`, `MessagePort` and `receiveMessageOnPort`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).
 

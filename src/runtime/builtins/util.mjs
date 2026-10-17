@@ -11,14 +11,21 @@ import { validateBoolean, validateNumber, validateObject, validateString } from 
 
 const INSPECT_CUSTOM = Symbol.for('nodejs.util.inspect.custom');
 const PROMISIFY_CUSTOM = Symbol.for('nodejs.util.promisify.custom');
+/** internal/util customPromisifyArgs: a callback's result names, for promisify (dns.lookup's). */
+export const kCustomPromisifyArgs = Symbol('customPromisifyArgs');
 
 function promisify(fn) {
   if (fn?.[PROMISIFY_CUSTOM]) return fn[PROMISIFY_CUSTOM];
+  const argumentNames = fn?.[kCustomPromisifyArgs];
   return function promisified(...args) {
     return new Promise((resolve, reject) => {
       fn.call(this, ...args, (err, ...results) => {
         if (err) reject(err);
-        else resolve(results.length > 1 ? results : results[0]);
+        else if (argumentNames !== undefined && results.length > 1) {
+          const obj = {};
+          for (let i = 0; i < argumentNames.length; i++) obj[argumentNames[i]] = results[i];
+          resolve(obj);
+        } else resolve(results.length > 1 ? results : results[0]);
       });
     });
   };
