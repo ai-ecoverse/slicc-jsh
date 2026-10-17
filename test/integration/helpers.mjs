@@ -29,7 +29,7 @@ export function packageFiles() {
  * Boot a Node-entry kernel with slicc-jsh installed on the memory root
  * (no OPFS). Returns { kernel, run, close }.
  *
- * @param {{ nodeTransport?: boolean, hostLoopback?: boolean | number[], transport?: object }} [options]
+ * @param {{ nodeTransport?: boolean, hostLoopback?: boolean | number[], transport?: object, uplink?: object, tlsEngine?: boolean }} [options]
  *   `nodeTransport: true` (default) matches the cert harness — WebSockets reach
  *   the host. Pass `false` for the kernel's default loopback transport (refused
  *   connects reject quickly; used to assert error-Event mapping).
@@ -42,13 +42,20 @@ export async function withJsh(options = {}) {
   const transportOptions = options.hostLoopback != null ? { hostLoopback: options.hostLoopback } : {};
   // `transport`: an embedder's own (a RealmTransport), for tests that need to
   // see what the kernel's transport is asked.
+  // `uplink`: a fakeUplink (slicc-kernel/testing) routing hosts as raw TCP.
+  const network = options.transport
+    ? { transport: options.transport }
+    : useNodeTransport
+      ? { transport: nodeTransport(transportOptions) }
+      : undefined;
   const kernel = await createNodeKernel(
-    options.transport
-      ? { network: { transport: options.transport } }
-      : useNodeTransport
-        ? { network: { transport: nodeTransport(transportOptions) } }
-        : {}
+    network || options.uplink ? { network: { ...network, ...(options.uplink ? { uplink: options.uplink } : {}) } } : {}
   );
+  // `tlsEngine`: the kernel's own TLS client (slicc-kernel 1.124.0) needs
+  // @ai-ecoverse/wasm-tls-engine installed, as a command's package is.
+  if (options.tlsEngine) {
+    for (const [path, data] of devPackageFiles('@ai-ecoverse/wasm-tls-engine')) await kernel.writeFile(path, data);
+  }
   const base = '/node_modules/@ai-ecoverse/slicc-jsh';
   for (const [rel, data] of packageFiles()) {
     await kernel.writeFile(`${base}/${rel}`, data);

@@ -1,0 +1,5 @@
+{
+  "description": "a request's own options reach its agent's createConnection (a custom option, its headers), with Node's calculateServerName as options.servername (the Host header's name, never an IP); a chunked response's trailers are res.rawTrailers and res.trailers by its 'end', [] and {} without any",
+  "argv": ["main.js"],
+  "shim": true
+}

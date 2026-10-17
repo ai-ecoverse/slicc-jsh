@@ -7,6 +7,9 @@ import { devPackageFiles, kernelAtLeast, withJsh } from './helpers.mjs';
 // transport, which does the handshake. The kernel here gets a transport of
 // the test's own: what it is asked is what a TLS peer would have been sent.
 const skip = !kernelAtLeast('1.116.0') && 'slicc-kernel before 1.116.0 has no TLS on ctx.net';
+// From 1.124.0 the kernel has a handshake of its own for a host its uplink
+// routes (tls-kernel.test.mjs); without an uplink, as here, it's the transport.
+const kernelTls = kernelAtLeast('1.124.0');
 
 function recordingTransport() {
   const seen = [];
@@ -93,7 +96,9 @@ s.on('error', (e) => console.log('error', e.code, e.message));
     assert.equal(r.status, 0, r.stderr);
     assert.deepEqual(r.stdout.split('\n'), [
       'connect',
-      'secureConnect true null http/1.1 example.test true {}',
+      // Node's servername is the SNI it was given (none here: false); before
+      // 1.124.0 jsh said the transport's name.
+      `secureConnect true null http/1.1 ${kernelTls ? 'false' : 'example.test'} true {}`,
       'status line HTTP/1.1 200 OK true',
       '',
     ]);
@@ -152,7 +157,7 @@ ws.on('error', (e) => console.log('error', e.message));
     assert.deepEqual(seen, ['websocket wss://echo.example.test/sock ["chat"]']);
   });
 
-  it("what the kernel's TLS won't carry fails with ERR_NOT_SUPPORTED: another protocol's port, h2 only, the loopback, an open socket", async () => {
+  it("what the kernel's TLS won't carry fails with ERR_NOT_SUPPORTED: another protocol's port, h2 only, the loopback, an open socket", { skip: kernelTls && 'slicc-kernel 1.124.0 and later: the next case' }, async () => {
     const r = await jsh.run([
       'node',
       '-e',
@@ -176,6 +181,43 @@ const tryConnect = (label, opts) => new Promise((resolve) => {
       "h2 only ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to example.test:443' is not supported yet (the kernel's TLS carries HTTP/1.1 and WebSocket only)",
       "loopback ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to 127.0.0.1:443' is not supported yet (the kernel's TLS goes through its transport, which has no loopback)",
       "socket ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect over a socket' is not supported yet (no TLS on ctx.net)",
+      '',
+    ]);
+  });
+
+  it("without an uplink route, what the transport won't carry fails with ERR_NOT_SUPPORTED: another protocol's port, h2 only, a custom ca, the loopback, TLS over a loopback socket", { skip: !kernelTls && 'slicc-kernel before 1.124.0: the case above' }, async () => {
+    const r = await jsh.run([
+      'node',
+      '-e',
+      `const tls = require('tls');
+const net = require('net');
+const tryConnect = (label, opts) => new Promise((resolve) => {
+  const s = tls.connect(opts, () => { console.log(label, 'connected'); s.destroy(); resolve(); });
+  s.on('error', (e) => { console.log(label, e.code, e.message); resolve(); });
+});
+(async () => {
+  await tryConnect('imaps', { host: 'mail.example.test', port: 993 });
+  await tryConnect('h2 only', { host: 'example.test', port: 443, ALPNProtocols: ['h2'] });
+  await tryConnect('ca', { host: 'example.test', port: 443, ca: '-----BEGIN CERTIFICATE-----\\nMA==\\n-----END CERTIFICATE-----\\n' });
+  await tryConnect('loopback', { host: '127.0.0.1', port: 443 });
+  const server = net.createServer((c) => c.on('data', () => {})).listen(0, '127.0.0.1', async () => {
+    const plain = net.connect(server.address().port, '127.0.0.1', async () => {
+      await tryConnect('loopback socket', { socket: plain, servername: 'example.test' });
+      console.log('plain destroyed', plain.destroyed);
+      server.close();
+    });
+  });
+})();
+`,
+    ]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.deepEqual(r.stdout.split('\n'), [
+      "imaps ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to mail.example.test:993' is not supported yet (the kernel's TLS to a host its uplink doesn't route goes through its transport, which carries HTTP/1.1 and WebSocket only)",
+      "h2 only ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to example.test:443' is not supported yet (the kernel's TLS to a host its uplink doesn't route goes through its transport, which carries HTTP/1.1 and WebSocket only)",
+      "ca ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to example.test:443' is not supported yet (a custom ca needs a host the kernel's uplink routes)",
+      "loopback ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to 127.0.0.1:443' is not supported yet (the kernel's TLS goes through its transport, which has no loopback)",
+      "loopback socket ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect over a socket' is not supported yet (the kernel upgrades only a plain connection its uplink routes)",
+      'plain destroyed true',
       '',
     ]);
   });
