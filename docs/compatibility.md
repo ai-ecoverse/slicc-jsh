@@ -441,8 +441,12 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `cluster`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `dgram`, `inspector`, `inspector/promises`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
+
+**`cluster`** is Node 22.22.0's primary: `isPrimary`, `workers` (none), `settings`, `setupPrimary`/`setupMaster` with its `'setup'` event, `schedulingPolicy`, `disconnect`, and the `Worker` class. That's enough for prom-client's `AggregatorRegistry`. A worker would be a `child_process.fork` with an IPC channel, which jsh doesn't have, so `cluster.fork()` throws `ERR_NOT_SUPPORTED` when it's called (golden `cluster-trace-events-node22`).
+
+**`trace_events`** is Node's: `createTracing` and its checks, `Tracing` objects (`enable`, `disable`, `enabled`, `categories`, and their inspect form), and `getEnabledCategories()` as the agent's sorted set (with `--trace-event-categories`). It also gives Node's warning past 10 enabled objects. There's no trace agent, so no trace file is written.
 
 **`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, `BroadcastChannel`, `MessageChannel`, `MessagePort` and `receiveMessageOnPort`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).
 

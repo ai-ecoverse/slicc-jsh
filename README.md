@@ -148,7 +148,7 @@ This table is the summary. Details, quirks and the libraries behind each module 
 | [`util`, `console`, `os`, `path`, `url`](docs/compatibility.md#util-console-os-path-url-querystring-punycode) | Node's own lib files | `os` reports the kernel (loopback only, Linux constants) | — |
 | [`vm`](docs/compatibility.md#vm) | scripts, contexts, `compileFunction`, dynamic `import()` | one realm: a context isn't a separate realm | `vm.Module`, `timeout`, `breakOnSigint`, `measureMemory` |
 | [`async_hooks`, `domain`, `perf_hooks`, `v8`, …](docs/compatibility.md#async_hooks-domain-perf_hooks-v8-and-diagnostics) | `AsyncResource`, `domain`, `diagnostics_channel`, `perf_hooks`, `v8` statistics | `createHook` hooks never run; domains don't follow promises | `AsyncLocalStorage`, `v8.serialize`, heap snapshots |
-| [Workers and the rest](docs/compatibility.md#modules-that-are-not-available) | `worker_threads` as the main thread, `BroadcastChannel` within a program (the global from kernel 1.92) | `new Worker` throws `ERR_NOT_SUPPORTED` | `cluster`, `dgram`, `inspector`, `trace_events`, `test`, `sqlite`, `wasi` |
+| [Workers and the rest](docs/compatibility.md#modules-that-are-not-available) | `worker_threads` as the main thread, `BroadcastChannel` within a program (the global from kernel 1.92) | `new Worker` throws `ERR_NOT_SUPPORTED` | `cluster.fork`, `dgram`, `inspector`, `test`, `sqlite`, `wasi` |
 
 ## Kernel requirements
 
