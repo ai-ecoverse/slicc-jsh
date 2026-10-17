@@ -7,6 +7,7 @@ import { createFetch } from '../web/fetch.mjs';
 import { createHttps } from '../builtins/https.mjs';
 import { createNet } from '../builtins/net.mjs';
 import { createTls } from '../builtins/tls.mjs';
+import { createHttp2 } from '../builtins/http2.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
@@ -36,6 +37,7 @@ const BUILTIN_LIST = [
   'fs',
   'fs/promises',
   'http',
+  'http2',
   'https',
   'module',
   'net',
@@ -70,7 +72,6 @@ const BUILTIN_LIST = [
 ];
 
 const NOT_YET = [
-  'http2',
   'dgram',
   'dns',
   'dns/promises',
@@ -226,6 +227,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
   let tls;
   const getTls = () => (tls ??= createTls({ process, Buffer, net: getNet() }));
+  let http2;
+  const getHttp2 = () => (http2 ??= createHttp2({ process, Buffer, net: getNet(), tls: getTls(), getStream }));
   let tty;
   let crypto;
   const getCrypto = () => {
@@ -366,6 +369,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     http: () => getHttp(),
     https: () => getHttps(),
     tls: getTls,
+    http2: getHttp2,
     child_process: () => getChildProcess(),
   };
 
