@@ -1,8 +1,8 @@
 {
-  "description": "after a tick's uncaught exception is handled, the rest of the tick queue runs before the promise jobs (Node's processTicksAndRejections goes on with it)",
+  "description": "after a tick's uncaught exception is handled, the rest of the tick queue runs before the promise jobs (Node's processTicksAndRejections goes on with it). Node runs those deferred promise jobs only at its next callback scope, so a timer that is already due by the first loop turn can run first (#353): each timer here is started from the step before it, so the order holds however late the loop starts (nexttick-uncaught-order-loaded starts it 50 ms late on purpose)",
   "argv": [
     "-e",
-    "process.on('uncaughtException', (e, origin) => console.log('uncaught', e.message, origin)); process.nextTick(() => console.log('tick 1')); process.nextTick(() => { throw new Error('from tick 2'); }); process.nextTick(() => console.log('tick 3')); setTimeout(() => console.log('timer still runs'), 100); Promise.resolve().then(() => console.log('microtask')); setTimeout(() => { process.nextTick(() => { throw new Error('in a timer'); }); process.nextTick(() => console.log('tick after')); Promise.resolve().then(() => console.log('job after')); }, 20)"
+    "process.on('uncaughtException', (e, origin) => console.log('uncaught', e.message, origin)); process.nextTick(() => console.log('tick 1')); process.nextTick(() => { throw new Error('from tick 2'); }); process.nextTick(() => console.log('tick 3')); Promise.resolve().then(() => { console.log('microtask'); setTimeout(() => { process.nextTick(() => { throw new Error('in a timer'); }); process.nextTick(() => console.log('tick after')); Promise.resolve().then(() => { console.log('job after'); setTimeout(() => console.log('timer still runs'), 20); }); }, 20); })"
   ],
   "shim": true
 }

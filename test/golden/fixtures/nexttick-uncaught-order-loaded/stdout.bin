@@ -1,0 +1,8 @@
+tick 1
+uncaught from tick 2 uncaughtException
+tick 3
+microtask
+uncaught in a timer uncaughtException
+tick after
+job after
+timer still runs

@@ -1,0 +1,8 @@
+{
+  "description": "nexttick-uncaught-order with the main script busy for 50 ms after it schedules everything, as on a loaded machine (#353): the first loop turn starts late, after any short timer would be due, and the order must not change",
+  "argv": [
+    "-e",
+    "process.on('uncaughtException', (e, origin) => console.log('uncaught', e.message, origin)); process.nextTick(() => console.log('tick 1')); process.nextTick(() => { throw new Error('from tick 2'); }); process.nextTick(() => console.log('tick 3')); Promise.resolve().then(() => { console.log('microtask'); setTimeout(() => { process.nextTick(() => { throw new Error('in a timer'); }); process.nextTick(() => console.log('tick after')); Promise.resolve().then(() => { console.log('job after'); setTimeout(() => console.log('timer still runs'), 20); }); }, 20); }); const t0 = Date.now(); while (Date.now() - t0 < 50);"
+  ],
+  "shim": true
+}
