@@ -56,7 +56,7 @@ describe('release tag job: semantic-release failures are never green', () => {
   it('release.yml wires it: the check reads the step outcome, publish still runs after a failed tag job, failures open an issue', () => {
     const y = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
     assert.match(y, /id: semantic-release\n\s+name: [^\n]*\n\s+run: npx semantic-release\n\s+continue-on-error: true/);
-    assert.match(y, /SEMANTIC_RELEASE: \$\{\{ steps\.semantic-release\.outcome \}\}\n\s+run: node scripts\/release-outcome\.mjs/);
+    assert.match(y, /SEMANTIC_RELEASE: \$\{\{ steps\.semantic-release\.outcome \}\}\n\s+run: \|\n\s+set -euo pipefail\n\s+node scripts\/release-outcome\.mjs 2>&1 \| tee "\$RUNNER_TEMP\/outcome\.out"\n/);
     assert.match(y, /publish:[\s\S]*?if: always\(\) && github\.ref == 'refs\/heads\/main' && needs\.tag\.outputs\.tags != ''/);
     assert.match(y, /refuse to publish: HEAD is \$head, tag v\$version is \$tagged/);
     assert.match(y, /alert:[\s\S]*needs\.tag\.result == 'failure' \|\| needs\.publish\.result == 'failure' \|\| needs\.verify\.result == 'failure'[\s\S]*gh issue create --title "release of/);

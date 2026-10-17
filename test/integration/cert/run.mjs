@@ -326,6 +326,7 @@ try {
 
 writeFileSync(join(certDir, 'last-diff.json'), JSON.stringify(summary, null, 2));
 const totalFailed = summary.reduce((n, s) => n + s.failed, 0);
+console.log(`\ncert: ${summary.length} suite(s), ${summary.reduce((n, s) => n + s.total, 0)} case(s), failed=${totalFailed}`);
 if (totalFailed > 0) {
   for (const suite of summary) {
     const file = join(certDir, `last-diff-${suite.suite.replace(/\.mjs$/, '')}.json`);

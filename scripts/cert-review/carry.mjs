@@ -12,10 +12,11 @@ const { values } = parseArgs({
     repo: { type: 'string', default: process.env.GH_REPO ?? 'ai-ecoverse/slicc-jsh' },
     release: { type: 'string', default: '' },
     'dry-run': { type: 'boolean', default: false },
+    dir: { type: 'string', default: '' },
   },
 });
 const { repo } = values;
-const merges = run('git', ['log', '--merges', '--first-parent', '--reverse', '--format=%H %P%x09%s', `${values.from}..${values.to}`], { cwd: root })
+const merges = run('git', ['log', '--merges', '--first-parent', '--reverse', '--format=%H %P%x09%s', `${values.from}..${values.to}`], { cwd: values.dir || root })
   .trim()
   .split('\n')
   .filter(Boolean)

@@ -216,6 +216,7 @@ function summarize(runs, name) {
 if (values.merge) {
   const runs = ['tag', 'neg'].flatMap((t) => (existsSync(join(out, `runs-${t}.json`)) ? readJson(join(out, `runs-${t}.json`)) : []));
   if (runs.length) summarize(runs, 'suites.json');
+  else console.log(`suites ${kernel.id} (${kernel.version}): no runs to merge (no runs-tag.json or runs-neg.json)`);
   if (existsSync(join(out, 'runs-browser.json'))) summarize(readJson(join(out, 'runs-browser.json')), 'browser.json');
   process.exit(0);
 }
@@ -256,4 +257,7 @@ for (const name of only) {
 
 const label = values.only === 'browser' ? 'browser' : null;
 if (trees.length === 2) summarize(runs, label ? 'browser.json' : 'suites.json');
-else writeFileSync(join(out, `runs-${label ?? trees[0]}.json`), `${JSON.stringify(runs)}\n`);
+else {
+  writeFileSync(join(out, `runs-${label ?? trees[0]}.json`), `${JSON.stringify(runs)}\n`);
+  console.log(`suites ${kernel.id} ${label ?? trees[0]}: ${runs.length} run(s) in runs-${label ?? trees[0]}.json`);
+}
