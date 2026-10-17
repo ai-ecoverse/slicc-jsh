@@ -122,6 +122,27 @@ function headerObj(rawHeaders) {
   return out;
 }
 
+// Node's IncomingMessage._addHeaderLine: fields a repeat drops, and the joins.
+const SINGLE_FIELDS = new Set([
+  'content-type', 'content-length', 'user-agent', 'referer', 'host', 'authorization', 'proxy-authorization',
+  'if-modified-since', 'if-unmodified-since', 'from', 'location', 'max-forwards', 'retry-after', 'etag',
+  'last-modified', 'server', 'age', 'expires',
+]);
+
+/** Node's trailers object (its headers' rules): set-cookie a list, cookie '; ', the rest ', '. */
+function trailerObj(rawTrailers) {
+  const out = {};
+  for (let i = 0; i < rawTrailers.length; i += 2) {
+    const k = String(rawTrailers[i]).toLowerCase();
+    const v = String(rawTrailers[i + 1]);
+    if (k === 'set-cookie') (out[k] ??= []).push(v);
+    else if (out[k] === undefined) out[k] = v;
+    else if (SINGLE_FIELDS.has(k)) continue;
+    else out[k] += k === 'cookie' ? `; ${v}` : `, ${v}`;
+  }
+  return out;
+}
+
 function indexOfBytes(haystack, needle, from = 0) {
   outer: for (let i = from; i <= haystack.length - needle.length; i++) {
     for (let j = 0; j < needle.length; j++) {
@@ -1168,12 +1189,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       // tls.connect takes ca, servername, rejectUnauthorized … from them).
       const { signal: _ignored, ...given } = opts;
       void _ignored;
+      // The method only as given, as in Node.
       const options = {
         ...given,
         host,
         hostname: host,
         port,
-        method: (opts.method ?? 'GET').toUpperCase(),
         path: opts.path ?? '/',
         protocol: opts.protocol,
       };
@@ -1374,7 +1395,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
             if (line.length === 0) {
               // Node's: the trailers are the response's before its 'end'.
               res.rawTrailers = f.rawTrailers ?? [];
-              res.trailers = headerObj(res.rawTrailers);
+              res.trailers = trailerObj(res.rawTrailers);
               finish();
               return;
             }
@@ -1451,7 +1472,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         res.rawHeaders = parsed.rawHeaders;
         res.headers = headers;
         res.rawTrailers = [];
-        res.trailers = Object.create(null);
+        res.trailers = {};
         res.method = undefined;
         res.url = undefined;
         res.complete = false;

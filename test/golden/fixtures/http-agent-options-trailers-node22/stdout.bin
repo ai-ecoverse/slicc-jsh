@@ -1,0 +1,9 @@
+createConnection ["mine","",{"X-H":"one"},null]
+/plain 200 "plain" [] {}
+createConnection [null,"example.test",{"Host":"example.test:8080"},"GET"]
+/named 200 "plain" [] {}
+createConnection [null,"",{"Host":"[::1]:8080"},null]
+/ipv6 200 "plain" [] {}
+createConnection [null,"",null,null]
+/trailers 200 "ab" ["X-Checksum","abc","X-More","1","x-more","2"] {"x-checksum":"abc","x-more":"1, 2"}
+/trailers 200 "ab" ["X-Checksum","abc","X-More","1","x-more","2"] {"x-checksum":"abc","x-more":"1, 2"}
