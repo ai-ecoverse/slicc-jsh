@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageTree, withJsh } from './helpers.mjs';
+import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
@@ -11,9 +11,11 @@ const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', nam
 // got and ioredis require dns at load (got through cacheable-lookup, and
 // http2 too). The golden dns-node22 pins the module's surface against Node;
 // here are the kernel's answers and the real packages in a kernel program.
-// These kernels have no ctx.net.resolve (ai-ecoverse/slicc-kernel#913): a
-// name outside the kernel's own is getaddrinfo ENOTFOUND, and a query finds
-// no nameserver. When #913 ships, the resolver rows change.
+// slicc-kernel 1.113.0 gives JS programs its resolver (ctx.net.resolve,
+// ai-ecoverse/slicc-kernel#913): lookup, resolve4 and resolve6 ask it, so
+// /etc/hosts answers too. Before that, jsh answers the kernel's own names
+// and a query finds no nameserver.
+const resolver = kernelAtLeast('1.113.0');
 describe('dns (kernel)', () => {
   let jsh;
   before(async () => {
@@ -24,7 +26,8 @@ describe('dns (kernel)', () => {
   });
   after(() => jsh?.close());
 
-  it("lookup answers the kernel's names; any other name is getaddrinfo ENOTFOUND, as in a Node with no resolver", async () => {
+  it("lookup answers the kernel's names (and /etc/hosts through its resolver); any other name is getaddrinfo ENOTFOUND", async () => {
+    await jsh.kernel.writeFile('/etc/hosts', '127.0.0.1 localhost\n::1 localhost ip6-localhost\n10.9.8.7 db.example.test\n');
     await jsh.kernel.writeFile(
       '/os/dns-lookup.mjs',
       `import dns from 'node:dns';
@@ -44,6 +47,8 @@ await cb('own name 6', (f) => dns.lookup('slicc', 6, f));
 await cb('host loopback', (f) => dns.lookup('host.slicc.internal', f));
 await cb('other name', (f) => dns.lookup('nothing.invalid', f));
 await cb('other name all', (f) => dns.lookup('nothing.invalid', { all: true }, f));
+await cb('/etc/hosts', (f) => dns.lookup('db.example.test', f));
+await cb('resolve4 /etc/hosts', (f) => dns.resolve4('db.example.test', f));
 console.log('promises', JSON.stringify(await dnsp.lookup('localhost')), JSON.stringify(await promisify(dns.lookup)('localhost', { all: true })));
 await dnsp.lookup('nothing.invalid').catch((e) => console.log('promises other', e.message, e.code, e.errno));
 await cb('lookupService', (f) => dns.lookupService('127.0.0.1', 22, f));
@@ -71,13 +76,17 @@ console.log('servers', JSON.stringify(dns.getServers()), 'hints', dns.ADDRCONFIG
       'host loopback ["10.0.2.2",4]',
       `other name ${notFound}`,
       `other name all ${notFound}`,
+      resolver ? '/etc/hosts ["10.9.8.7",4]' : '/etc/hosts getaddrinfo ENOTFOUND db.example.test | ENOTFOUND | -3008 | getaddrinfo | db.example.test | errno,code,syscall,hostname',
+      resolver
+        ? 'resolve4 /etc/hosts [["10.9.8.7"]]'
+        : 'resolve4 /etc/hosts queryA ECONNREFUSED db.example.test | ECONNREFUSED |  | queryA | db.example.test | errno,code,syscall,hostname',
       'promises {"address":"127.0.0.1","family":4} [{"address":"127.0.0.1","family":4},{"address":"::1","family":6}]',
       'promises other getaddrinfo ENOTFOUND nothing.invalid ENOTFOUND -3008',
       'lookupService ["localhost","ssh"]',
       'lookupService 6 ["localhost","4321"]',
       'lookupService promises {"hostname":"slicc","service":"https"}',
       'reverse [["localhost"]]',
-      'resolve4 queryA ECONNREFUSED nothing.invalid | ECONNREFUSED |  | queryA | nothing.invalid | errno,code,syscall,hostname',
+      `resolve4 queryA ${resolver ? 'ENOTFOUND' : 'ECONNREFUSED'} nothing.invalid | ${resolver ? 'ENOTFOUND' : 'ECONNREFUSED'} |  | queryA | nothing.invalid | errno,code,syscall,hostname`,
       'resolveMx queryMx ECONNREFUSED nothing.invalid | ECONNREFUSED |  | queryMx | nothing.invalid | errno,code,syscall,hostname',
       'promises resolveSrv querySrv ECONNREFUSED _mongodb._tcp.nothing.invalid ECONNREFUSED',
       'servers [] hints 32 16 8',

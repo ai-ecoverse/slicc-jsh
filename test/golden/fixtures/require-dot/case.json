@@ -1,0 +1,5 @@
+{
+  "description": "require('.') and require('..') resolve as paths (mongodb and @redis/client require '.'), and a request ending in '/', '/.' or '/..' names a directory, not the file beside it, as in Node",
+  "argv": ["lib/main.js"],
+  "shim": true
+}

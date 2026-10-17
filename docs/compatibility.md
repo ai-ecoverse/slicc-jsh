@@ -46,7 +46,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 
 ## Modules and ESM
 
-**CommonJS.** `require` resolves as Node does: `node_modules`, `package.json` `"exports"` and `"imports"`, `node:` builtins, JSON. The module wrapper is Node's five-argument form. `process`, `Buffer` and the timers are real globals. Modules resolve through symlinks to their real path, unless `--preserve-symlinks` (or `--preserve-symlinks-main`). `module.createRequire`, `Module._extensions`, `Module.builtinModules` and `isBuiltin` are there.
+**CommonJS.** `require` resolves as Node does: `node_modules`, `package.json` `"exports"` and `"imports"`, `node:` builtins, JSON. `require('.')` and `require('..')` are paths, and a request that ends in `/`, `/.` or `/..` names a directory, never the file beside it (golden `require-dot`). The module wrapper is Node's five-argument form. `process`, `Buffer` and the timers are real globals. Modules resolve through symlinks to their real path, unless `--preserve-symlinks` (or `--preserve-symlinks-main`). `module.createRequire`, `Module._extensions`, `Module.builtinModules` and `isBuiltin` are there.
 
 **ESM.** `.mjs`, `"type": "module"`, static `import`/`export`, dynamic `import()`, `import.meta.url`, `import.meta.resolve`, `import.meta.dirname` and `import.meta.filename`, and JSON with `with { type: 'json' }`. The resolver, its errors and its stack frames are Node 22's. The transform uses acorn, so multi-line imports and exports, strings, comments and `$` identifiers parse correctly. Imports are hoisted, and export getters are registered before evaluation, so cycles work. `-e` and ambiguous `.js` files are detected as Node does; a dynamic `import()` alone stays CommonJS.
 
@@ -230,6 +230,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - With a `Content-Length`, request body bytes stream as written. Without one, the body is buffered until `end()` and sent with a computed length. Request bodies aren't sent chunked.
 - `'response'` comes at the head, and the body streams as it arrives: by `Content-Length`, chunked, or until the peer's FIN. `socket.end` half-closes.
 - `http.validateHeaderName`, `http.validateHeaderValue` and `http.setMaxIdleHTTPParsers` are Node's (golden `http-validate-headers-node22`).
+- A `ClientRequest` has its `Host` header from the start, set after the given headers and before the agent's `addRequest` sees the request. It's absent with `setHost: false`. The request line is the request's `method` and `path` as they are when it's sent. `_header` and `_implicitHeader()` are Node's. That lets **http-proxy-agent** rewrite the path to the absolute URL and send through a plain `http://` proxy.
 - `http.Agent` follows Node's `_http_agent.js` request path (`addRequest` → `createSocket` → `createConnection`), so **agent-base** subclasses work for plain `http`. `getName`, `destroy`, `keepSocketAlive`, `reuseSocket`, `removeSocket`, and `sockets`/`freeSockets`/`requests` are present.
 - `http.globalAgent` keeps sockets alive, as in Node 22 (`keepAlive: true`, `scheduling: 'lifo'`, `timeout: 5000`). An agent with `keepAlive` reuses a socket once its response is done (`'free'`, then `req.reusedSocket`), queued requests first. As in Node 22, a server's `Keep-Alive: timeout=N`, less `agentKeepAliveTimeoutBuffer` (1 s), caps a free socket's timeout, and a hint that leaves nothing (`timeout=1`) means the socket isn't reused. Free sockets don't keep the program alive, and one the server closes leaves the pool. `agent: false`, or an agent without `keepAlive`, sends `Connection: close`.
 - A connection that closes before its response gives `socket hang up` (`ECONNRESET`). A `101` response is `'upgrade'` (response, socket, head), and without a listener the connection closes.
@@ -256,7 +257,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 
 ## `tls`
 
-`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports, so a package that requires `tls` at load runs as long as it doesn't make a TLS connection. **ws** is one: its `ws://` server over an `http` server's `'upgrade'`, and its client, run as in Node. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too, but loading is all: https-proxy-agent's tunnel needs `tls.connect`, and http-proxy-agent fails at request time even over a plain `http://` proxy, because jsh's `ClientRequest` has no `_implicitHeader()` ([#323](https://github.com/ai-ecoverse/slicc-jsh/issues/323)).
+`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports, so a package that requires `tls` at load runs as long as it doesn't make a TLS connection. **ws** is one: its `ws://` server over an `http` server's `'upgrade'`, and its client, run as in Node. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too. http-proxy-agent sends plain `http` requests through an `http://` proxy (see `http`). https-proxy-agent's tunnel needs `tls.connect`, so it throws.
 
 The kernel's sockets (`ctx.net`) have no TLS, so whatever needs a handshake throws `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (no TLS on ctx.net)`, as `https.createServer` does) when it's called, not when the module loads:
 - `tls.connect`, after Node's checks of `checkServerIdentity` and `minDHSize`.
@@ -298,16 +299,19 @@ The golden `http2-node22` checks these against Node 22.22.0.
 
 `require('dns')`, `require('dns/promises')` and their ESM forms load with Node 22.22.0's exports, argument checks and errors. So do the packages that require `dns` at load: **pg**, **mongodb**, **ioredis**, **redis**, **undici**, **nodemailer**, **fastify**, and **got** (which also needs `http2`).
 
-**`lookup`** (callback and promise forms, `all`, `family`, `order`/`verbatim`, `hints`) is getaddrinfo over the kernel's names, as its hosts file has them:
-- An IP literal answers at once.
-- `localhost`, `localhost.localdomain`, `ip6-localhost` and `*.localhost` are `127.0.0.1` and `::1`, IPv4 first (`order: 'ipv6first'` swaps them).
-- The kernel's own hostname (`slicc`) is `127.0.1.1`, and `host.slicc.internal` is `10.0.2.2`.
-- Any other name needs the kernel's resolver, which JS programs don't have yet ([slicc-kernel#913](https://github.com/ai-ecoverse/slicc-kernel/issues/913)). As in a Node with no resolver, it's `getaddrinfo ENOTFOUND <name>` (`code` `ENOTFOUND`, `errno` -3008, `syscall` `getaddrinfo`, `hostname`). On a kernel with `ctx.net.resolve`, jsh asks it instead, and a name it can't answer for now is `getaddrinfo EAI_AGAIN`.
+**`lookup`** (callback and promise forms, `all`, `family`, `order`/`verbatim`, `hints`) is getaddrinfo. An IP literal answers at once.
+- **On slicc-kernel 1.113.0 and later**, jsh asks the kernel's resolver (`ctx.net.resolve`). It answers from `/etc/hosts`, then the kernel's own names, then the uplink, the same answers WASI programs get. A name it doesn't know is `getaddrinfo ENOTFOUND <name>`, and one it can't answer for now is `getaddrinfo EAI_AGAIN`.
+- **On older kernels**, jsh answers the kernel's names as its hosts file has them:
+  - `localhost`, `localhost.localdomain`, `ip6-localhost` and `*.localhost` are `127.0.0.1` and `::1`, IPv4 first (`order: 'ipv6first'` swaps them);
+  - the kernel's own hostname (`slicc`) is `127.0.1.1`;
+  - `host.slicc.internal` is `10.0.2.2`.
+
+  Any other name is `getaddrinfo ENOTFOUND <name>` (`code` `ENOTFOUND`, `errno` -3008, `syscall` `getaddrinfo`, `hostname`), as in a Node with no resolver.
 - `net.connect`, `http.request` and `fetch` don't go through `dns.lookup`: a name passed to them is resolved by the kernel, as before.
 
 **`lookupService`** names the kernel's own addresses (`127.0.0.1` and `::1` are `localhost`) and the common TCP services from `/etc/services` (`ssh`, `http`, `https`, …). It gives any other address and port back as numbers.
 
-**Queries** (`resolve*`, `Resolver`): there's no DNS transport, so a query finds no nameserver and fails as c-ares does then, with `query<Type> ECONNREFUSED <name>` (for example `queryMx` or `querySrv`; `mongodb+srv://` needs SRV records). On a kernel with `ctx.net.resolve`, `resolve4` and `resolve6` use it (`ttl: true` gives a TTL of 0). `reverse` names the kernel's own addresses. `getServers()` is empty until `setServers` (checked as Node does) sets a list. `cancel()` ends the pending queries with `ECANCELLED`.
+**Queries** (`resolve*`, `Resolver`): on slicc-kernel 1.113.0 and later, `resolve4` and `resolve6` ask the kernel's resolver (`ttl: true` gives a TTL of 0), and a name it doesn't know is `queryA ENOTFOUND <name>`. There's no DNS transport for the other record types, so such a query finds no nameserver and fails as c-ares does then, with `query<Type> ECONNREFUSED <name>` (for example `queryMx` or `querySrv`; `mongodb+srv://` needs SRV records). So does `resolve4`/`resolve6` on older kernels. `reverse` names the kernel's own addresses. `getServers()` is empty until `setServers` (checked as Node does) sets a list. `cancel()` ends the pending queries with `ECANCELLED`.
 
 `ADDRCONFIG`, `ALL` and `V4MAPPED` have Linux's values. `getDefaultResultOrder` follows `--dns-result-order`. `util.promisify(dns.lookup)` and `promisify(dns.lookupService)` resolve to Node's `{ address, family }` and `{ hostname, service }`.
 
