@@ -1,0 +1,13 @@
+before inherit
+from child stdout
+inherit: [0,[null,null,null],null,null]
+after inherit
+child via fd 1
+inherit array fds: [null,null,null]
+child via stream objects
+stdio objects: [null,null,null]
+stdout to fd 2: [null,null,{"type":"Buffer","data":[]}]
+stdout to fd 2, past maxBuffer: [null,0,[null,null,{"type":"Buffer","data":[]}]]
+cwd empty: [null,0,"spawnSync node ENOENT","ENOENT"]
+null stdio entries: [null,"n\n",""]
+exit code: 42

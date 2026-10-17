@@ -1,0 +1,7 @@
+{
+  "description": "child_process.spawnSync: ETIMEDOUT with killSignal names and numbers, timeout 0, ENOBUFS, maxBuffer Infinity and the 1 MiB default (Node 22; split out of child-process-spawn-sync, #353)",
+  "argv": [
+    "main.js"
+  ],
+  "shim": true
+}

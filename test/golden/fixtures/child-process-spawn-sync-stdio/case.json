@@ -1,0 +1,7 @@
+{
+  "description": "child_process.spawnSync: inherit, fd arrays, stream objects, stdout to fd 2 and past maxBuffer there, cwd '', null stdio entries, the exit code (Node 22; split out of child-process-spawn-sync, #353)",
+  "argv": [
+    "main.js"
+  ],
+  "shim": true
+}

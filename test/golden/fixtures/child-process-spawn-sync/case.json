@@ -1,5 +1,7 @@
 {
-  "description": "child_process.spawnSync on ctx.sync.run: result shape, encoding, input, stdio, cwd, env, ENOENT/ENOTDIR, ETIMEDOUT, ENOBUFS, validation (Node 22)",
-  "argv": ["main.js"],
+  "description": "child_process.spawnSync on ctx.sync.run: result shape, Buffers and encodings, input (string, Buffer, Uint8Array, hex, stdio object, none = EOF), ignore (Node 22). Split from one fixture of 37 spawns into five (#353): one fixture's sequential spawns, each a fresh program, must stay well inside the 30 s shim limit on a loaded runner",
+  "argv": [
+    "main.js"
+  ],
   "shim": true
 }
