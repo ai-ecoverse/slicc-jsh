@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { withJsh } from './helpers.mjs';
+import { kernelAtLeast, kernelVersion, withJsh, withJshAndSh } from './helpers.mjs';
 
 // readSync on a regular file opened read-only reads the range asked for from a
 // kernel descriptor (#401), not the whole file on every call.
@@ -51,5 +51,80 @@ describe('fs.readSync of a read-only file reads a range (kernel)', () => {
       'fs.closeSync(fd);',
     ]);
     assert.equal(out, '512 64 68\n');
+  });
+
+  it("validates positions as Node does: bigint, -1n, and ERR_OUT_OF_RANGE below -1 (r and r+)", async () => {
+    const out = await run([
+      "const fs = require('fs');",
+      "fs.writeFileSync('p.txt', 'abcdefghij');",
+      "for (const flags of ['r', 'r+']) {",
+      '  const fd = fs.openSync(\'p.txt\', flags); const b = Buffer.alloc(4); const got = [];',
+      "  const at = (n) => b.toString('utf8', 0, n);",
+      '  got.push(at(fs.readSync(fd, b, 0, 2, 3n)), at(fs.readSync(fd, b, 0, 2, -1n)), at(fs.readSync(fd, b, 0, 2, -1)));',
+      "  for (const p of [-2, 2.5, '5']) { try { fs.readSync(fd, b, 0, 2, p); got.push('read'); } catch (e) { got.push(e.code); } }",
+      "  console.log(flags, got.join(' '));",
+      '  fs.closeSync(fd);',
+      '}',
+    ]);
+    assert.equal(out, 'r de ab cd ERR_OUT_OF_RANGE ERR_OUT_OF_RANGE ERR_INVALID_ARG_TYPE\nr+ de ab cd ERR_OUT_OF_RANGE ERR_OUT_OF_RANGE ERR_INVALID_ARG_TYPE\n');
+  });
+
+  it('is one file throughout: fstat after unlink, and a child stdin after unlink and recreate', async () => {
+    const out = await run([
+      "const fs = require('fs'); const cp = require('child_process');",
+      "fs.writeFileSync('u.txt', 'old file\\n');",
+      "const fd = fs.openSync('u.txt', 'r');",
+      "fs.unlinkSync('u.txt');",
+      'let st = fs.fstatSync(fd); console.log(st.size, st.nlink, st.isFile());',
+      "fs.writeFileSync('u.txt', 'a new and longer file\\n');",
+      "fs.promises.open('u.txt', 'r').then(async (fh) => { console.log((await fh.stat()).size); await fh.close();",
+      "  const fd2 = fs.openSync('u.txt', 'r'); fs.unlinkSync('u.txt'); fs.writeFileSync('u.txt', 'replaced\\n');",
+      "  const cat = ['-e', 'process.stdin.pipe(process.stdout)'];",
+      "  const child = cp.spawn('node', cat, { stdio: [fd, 'pipe', 'inherit'] }); fs.closeSync(fd);",
+      "  let got = ''; child.stdout.on('data', (d) => (got += d)); child.on('close', (code) => {",
+      "    console.log(code, JSON.stringify(got));",
+      "    const s = cp.spawnSync('node', cat, { stdio: [fd2, 'pipe', 'inherit'] }); console.log(JSON.stringify(String(s.stdout))); fs.closeSync(fd2);",
+      '  });',
+      '});',
+    ]);
+    assert.equal(out, '9 0 true\n22\n0 "old file\\n"\n"a new and longer file\\n"\n');
+  });
+
+  it("opens a directory 'r' and reads a symlink's target", async () => {
+    const out = await run([
+      "const fs = require('fs');",
+      "fs.mkdirSync('d', { recursive: true }); fs.writeFileSync('t.txt', 'target'); try { fs.unlinkSync('l.txt'); } catch {}",
+      "fs.symlinkSync('t.txt', 'l.txt');",
+      "const dfd = fs.openSync('d', 'r'); try { fs.readSync(dfd, Buffer.alloc(4)); } catch (e) { console.log(e.code); } fs.closeSync(dfd);",
+      "const lfd = fs.openSync('l.txt', 'r'); const b = Buffer.alloc(6); console.log(b.toString('utf8', 0, fs.readSync(lfd, b, 0, 6, 0))); fs.closeSync(lfd);",
+    ]);
+    assert.equal(out, 'EISDIR\ntarget\n');
+  });
+});
+
+// The setup chmods from JS (slicc-kernel 1.86.0+).
+const needs = kernelAtLeast('1.86.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.fs.chmod (1.86.0)` };
+
+describe('fs.openSync of a file it may not read (kernel, users: enforce)', () => {
+  let jsh;
+  before(async () => {
+    jsh = await withJshAndSh();
+    await jsh.kernel.users.add({ name: 'cone' });
+  });
+  after(() => jsh?.close());
+
+  it('is EACCES, not an fd that reads it by path', needs, async () => {
+    await jsh.kernel.writeFile(
+      '/tmp/secret.js',
+      [
+        "const fs = require('fs');",
+        "fs.writeFileSync('secret.txt', 'no'); fs.chmodSync('secret.txt', 0);",
+        "try { fs.openSync('secret.txt', 'r'); console.log('opened'); } catch (e) { console.log(e.code, e.syscall, e.path); }",
+        "fs.unlinkSync('secret.txt');",
+      ].join('\n')
+    );
+    const r = await jsh.run(['node', '/tmp/secret.js'], { user: 'cone', cwd: '/tmp' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'EACCES open secret.txt\n');
   });
 });
