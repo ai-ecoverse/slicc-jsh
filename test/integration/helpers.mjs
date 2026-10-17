@@ -29,7 +29,7 @@ export function packageFiles() {
  * Boot a Node-entry kernel with slicc-jsh installed on the memory root
  * (no OPFS). Returns { kernel, run, close }.
  *
- * @param {{ nodeTransport?: boolean, hostLoopback?: boolean | number[] }} [options]
+ * @param {{ nodeTransport?: boolean, hostLoopback?: boolean | number[], transport?: object }} [options]
  *   `nodeTransport: true` (default) matches the cert harness — WebSockets reach
  *   the host. Pass `false` for the kernel's default loopback transport (refused
  *   connects reject quickly; used to assert error-Event mapping).
@@ -40,8 +40,14 @@ export function packageFiles() {
 export async function withJsh(options = {}) {
   const useNodeTransport = options.nodeTransport !== false;
   const transportOptions = options.hostLoopback != null ? { hostLoopback: options.hostLoopback } : {};
+  // `transport`: an embedder's own (a RealmTransport), for tests that need to
+  // see what the kernel's transport is asked.
   const kernel = await createNodeKernel(
-    useNodeTransport ? { network: { transport: nodeTransport(transportOptions) } } : {}
+    options.transport
+      ? { network: { transport: options.transport } }
+      : useNodeTransport
+        ? { network: { transport: nodeTransport(transportOptions) } }
+        : {}
   );
   const base = '/node_modules/@ai-ecoverse/slicc-jsh';
   for (const [rel, data] of packageFiles()) {

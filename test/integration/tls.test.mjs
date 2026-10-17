@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageFiles, withJsh } from './helpers.mjs';
+import { devPackageFiles, kernelAtLeast, withJsh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -67,6 +67,9 @@ server.listen(0, '127.0.0.1', () => {
     assert.deepEqual(lines.slice(2).sort(), ['client close 1000 done', 'server close 1000 done', 'server closed']);
   });
 
+  // From slicc-kernel 1.116.0 tls.connect has the kernel's TLS
+  // (tls-transport.test.mjs); TLS over an open socket still has none.
+  const transportTls = kernelAtLeast('1.116.0');
   it('a handshake throws ERR_NOT_SUPPORTED when it is called: connect, listen, a TLSSocket over a socket, key material', async () => {
     const r = await jsh.run([
       'node',
@@ -83,8 +86,8 @@ const t = (label, f) => {
   }
 };
 console.log('loaded', typeof tls.connect);
-t('connect', () => tls.connect(443, 'example.com'));
-t('connect options', () => tls.connect({ host: 'example.com', port: 443, servername: 'example.com' }, () => {}));
+t('connect', () => tls.connect({ socket: new net.Socket() }));
+t('connect options', () => tls.connect(443, 'example.com', { socket: new net.Socket(), servername: 'example.com' }, () => {}));
 const server = tls.createServer(() => {});
 t('listen', () => server.listen(0));
 console.log('listening', server.listening);
@@ -102,8 +105,8 @@ t('https.createServer', () => https.createServer());
     const why = '(no TLS on ctx.net)';
     assert.deepEqual(r.stdout.split('\n'), [
       'loaded function',
-      `connect ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect' is not supported yet ${why}`,
-      `connect options ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect' is not supported yet ${why}`,
+      `connect ERR_NOT_SUPPORTED slicc-jsh: '${transportTls ? 'tls.connect over a socket' : 'tls.connect'}' is not supported yet ${why}`,
+      `connect options ERR_NOT_SUPPORTED slicc-jsh: '${transportTls ? 'tls.connect over a socket' : 'tls.connect'}' is not supported yet ${why}`,
       `listen ERR_NOT_SUPPORTED slicc-jsh: 'tls.Server.listen' is not supported yet ${why}`,
       'listening false',
       `TLSSocket over a socket ERR_NOT_SUPPORTED slicc-jsh: 'tls.TLSSocket over a socket' is not supported yet ${why}`,

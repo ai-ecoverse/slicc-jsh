@@ -226,11 +226,11 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
   let https;
   const getHttps = () => {
-    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles, getStream });
+    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles, getStream, getTls: () => getTls() });
     return https;
   };
   let tls;
-  const getTls = () => (tls ??= createTls({ process, Buffer, net: getNet() }));
+  const getTls = () => (tls ??= createTls({ ctx, process, Buffer, net: getNet() }));
   let dns;
   const getDns = () => (dns ??= createDns({ ctx, process, handles, hostname: process._nodeLib().os.hostname() }));
   let inspector;

@@ -247,8 +247,9 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - `https` to the kernel's own loopback (`127.0.0.1`, `localhost`) connects first, so a port nothing listens on is `connect ECONNREFUSED 127.0.0.1:<port>`; the loopback has no TLS, so a listening port is `ERR_NOT_SUPPORTED`.
 - Errors name a loopback name by its address, `127.0.0.1`, as Node's resolver gives it. `res.req` has the request's `method`, `path`, `host` and `protocol`.
 
-**`https` client.** `https.request` and `https.get` take the fetch fallback above every time.
-- `ClientRequest` is an `EventEmitter`, not a stream.
+**`https` client.** `https.request` and `https.get` take the fetch fallback above, except on slicc-kernel 1.116.0 and later for a request with its own agent (an `https.Agent`, a proxy agent's) or its own `createConnection` (ws's `wss://`). Such a request is `http`'s socket client on a `tls.connect` socket (see `tls`), with keep-alive, `rawHeaders` as sent, and `'upgrade'`. It never falls back to `fetch`.
+- `https.Agent` is Node's: `http.Agent` with TLS sockets, `defaultPort` 443, and the TLS options in its socket names.
+- The fetch fallback's `ClientRequest` is an `EventEmitter`, not a stream.
 - `cert`, `key`, `pfx` and `ca` throw `ERR_NOT_SUPPORTED`: no client certificates or custom CAs.
 - `rejectUnauthorized: false` is accepted but ignored. TLS verification stays on.
 - Redirects: requests use `redirect: 'manual'`, so a redirect shows as `statusCode` and `Location`, as in Node. On the browser entry the transport may refuse that with `ENOTSUP`; jsh then falls back to `'follow'`, so plain requests work but a redirect is followed instead of surfaced. The Node entry's transport supports manual redirects. Embedders with `traits.redirectHops` ([slicc-kernel#315](https://github.com/ai-ecoverse/slicc-kernel/issues/315)) can surface redirects in the browser.
@@ -257,10 +258,19 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 
 ## `tls`
 
-`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports, so a package that requires `tls` at load runs as long as it doesn't make a TLS connection. **ws** is one: its `ws://` server over an `http` server's `'upgrade'`, and its client, run as in Node. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too. http-proxy-agent sends plain `http` requests through an `http://` proxy (see `http`). https-proxy-agent's tunnel needs `tls.connect`, so it throws.
+`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports. **ws** runs: its `ws://` server over an `http` server's `'upgrade'`, its client, and (see below) its `wss://` client. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too. http-proxy-agent sends plain `http` requests through an `http://` proxy (see `http`). https-proxy-agent's tunnel needs TLS over an open socket, so it throws.
 
-The kernel's sockets (`ctx.net`) have no TLS, so whatever needs a handshake throws `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (no TLS on ctx.net)`, as `https.createServer` does) when it's called, not when the module loads:
-- `tls.connect`, after Node's checks of `checkServerIdentity` and `minDHSize`.
+**`tls.connect`, on slicc-kernel 1.116.0 and later**, is the kernel's TLS (`ctx.net.connect` with `tls`, [slicc-kernel#923](https://github.com/ai-ecoverse/slicc-kernel/issues/923)). The kernel serves the plain HTTP/1.1, and WebSocket upgrades, through the embedder's transport, which does the real handshake and verifies the peer.
+- `'connect'` and then `'secureConnect'` (the callback) come once the kernel has the session. `authorized` is the transport's (`true`), and so are `alpnProtocol` (`'http/1.1'`) and `servername`.
+- `getPeerCertificate()` is `{}`: the transport keeps the certificates, so `checkServerIdentity` isn't called. `rejectUnauthorized: false` changes nothing, because the transport always verifies.
+- What the kernel won't carry fails with `ERR_NOT_SUPPORTED` on the socket's `'error'`:
+  - another protocol's well-known port (465, 993, 995, 636, 853, 8883, …);
+  - ALPN without `http/1.1`;
+  - the kernel's own loopback, which the transport doesn't reach.
+- So `https` with an agent and ws's `wss://` client work. Raw TLS protocols (pg's `sslmode`, SMTP or IMAP, STARTTLS) don't ([slicc-kernel#922](https://github.com/ai-ecoverse/slicc-kernel/issues/922)).
+
+Otherwise the kernel's sockets have no TLS, so whatever needs a handshake throws `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (no TLS on ctx.net)`, as `https.createServer` does) when it's called, not when the module loads:
+- `tls.connect` on an older kernel, after Node's checks of `checkServerIdentity` and `minDHSize`. On any kernel, `tls.connect` over an open `socket` (TLS jsh would have to do itself) also throws.
 - `listen()` on a `tls.Server`.
 - `new tls.TLSSocket(socket)` over a socket, and `connect()` on a `TLSSocket`.
 - `createSecureContext` (and so `createServer`) with key material: `ca`, `cert`, `key`, `pfx`, `crl`, `dhparam`, a private-key engine or a client-certificate engine. Each one's type is checked first, as Node checks it.
