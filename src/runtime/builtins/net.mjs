@@ -48,6 +48,16 @@ function parseListenArgs(args) {
   return { port, host, backlog, callback };
 }
 
+/**
+ * A connect's TLS request for the kernel (tls.connect's): `{ tls, refused }`,
+ * where `tls` goes to ctx.net.connect and `refused(err)` maps the kernel's
+ * refusal to the error to give. The connection's TLS session lands on
+ * socket[kTlsSession].
+ */
+export const kConnectTls = Symbol('slicc-jsh.net.connectTls');
+export const kTlsSession = Symbol('slicc-jsh.net.tlsSession');
+const kRefused = Symbol('slicc-jsh.net.tlsRefused');
+
 /** A server-side socket's server (Node's socket._server), told when the socket goes. */
 const kServer = Symbol('slicc-jsh.net.server');
 
@@ -227,21 +237,39 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       this.#connecting = true;
       const host = options.host ?? '127.0.0.1';
       const port = Number(options.port);
+      const tlsRequest = options[kConnectTls];
       const p = trackPromise(
         handles,
         ctx.net
-          .connect({ host, port, signal: options.signal })
+          .connect({ host, port, signal: options.signal, ...(tlsRequest ? { tls: tlsRequest.tls } : {}) })
           .then((conn) => {
             if (this.destroyed) {
               void conn.close();
               return;
             }
+            // A kernel that ignored the TLS request gave a plain connection:
+            // nothing may go out on it.
+            if (tlsRequest && !conn.tls) {
+              void conn.close();
+              throw Object.assign(tlsRequest.refused({ code: 'ENOTSUP' }), { [kRefused]: true });
+            }
+            if (tlsRequest) this[kTlsSession] = conn.tls;
             this._attach(conn);
             for (const chunk of this.#pending) void this.#writer.write(chunk);
             this.#pending = [];
           })
           .catch((err) => {
             this.connecting = false;
+            if (err?.[kRefused]) {
+              this.destroy(err);
+              return;
+            }
+            // What the kernel won't carry over TLS (tls.connect's to say).
+            const refusal = tlsRequest?.refused(err);
+            if (refusal) {
+              this.destroy(refusal);
+              return;
+            }
             // Node's shapes: getaddrinfo ENOTFOUND <name> for a name the
             // kernel can't resolve, connect <CODE> <host>:<port> otherwise.
             this.destroy(connectError(err?.code ?? err?.cause?.code ?? 'EIO', host, port, err));

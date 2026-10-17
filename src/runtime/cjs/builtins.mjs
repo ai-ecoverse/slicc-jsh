@@ -222,11 +222,11 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
   let https;
   const getHttps = () => {
-    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles, getStream });
+    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles, getStream, getTls: () => getTls() });
     return https;
   };
   let tls;
-  const getTls = () => (tls ??= createTls({ process, Buffer, net: getNet() }));
+  const getTls = () => (tls ??= createTls({ ctx, process, Buffer, net: getNet() }));
   let http2;
   const getHttp2 = () => (http2 ??= createHttp2({ process, Buffer, net: getNet(), tls: getTls(), getStream }));
   let tty;
