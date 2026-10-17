@@ -32,26 +32,35 @@ console.log('[execSync both to stdout]');
 cp.execSync('printf "1\\n"; printf "2\\n" >&2; printf "3\\n"', { stdio: ['ignore', 1, 1] });
 console.log('[/execSync both to stdout]');
 
-// A grandchild still writing after the timeout kill gets EPIPE: the pipe is
-// shut once the child is gone (no orphaned writer).
+// A grandchild still writing after the child is killed gets EPIPE: the pipe
+// is shut once the child is gone (no orphaned writer). The kill is the
+// maxBuffer one, which the grandchild's own output triggers, so the child is
+// never killed before the grandchild exists, however slowly they start; a
+// timeout kill could come first on a loaded runner (#353).
+const pidFile = 'w-srf-bg.pid';
 fs.rmSync(mark, { force: true });
 const gc = `process.on("SIGPIPE", () => {}); const fs = require("fs"); const t = setInterval(() => { try { fs.writeSync(1, "x\\\\n"); } catch (e) { fs.writeFileSync("${mark}", e.code); process.exit(0); } }, 5); setTimeout(() => { fs.writeFileSync("${mark}", "never"); process.exit(0); }, 6000);`;
-let t0 = Date.now();
-r = cp.spawnSync('/bin/sh', ['-c', `node -e '${gc}' & wait`], { timeout: 1000 });
-console.log('timeout with a writing grandchild', r.error && r.error.code, r.signal, Date.now() - t0 < 4000);
+r = cp.spawnSync('/bin/sh', ['-c', `node -e '${gc}' & wait`], { maxBuffer: 16 });
+console.log('maxBuffer kill with a writing grandchild', r.error && r.error.code, r.signal);
 
-setTimeout(() => {
-  console.log('grandchild', fs.existsSync(mark) && fs.readFileSync(mark, 'utf8'));
+const waitFor = (file, then) => (fs.existsSync(file) ? then() : setTimeout(() => waitFor(file, then), 20));
+waitFor(mark, () => {
+  console.log('grandchild', fs.readFileSync(mark, 'utf8'));
 
   // A background process holding the captured stdout keeps execSync waiting,
-  // as in Node; redirected away, it doesn't.
-  t0 = Date.now();
+  // as in Node; redirected away, it doesn't (it is still running when
+  // execSync returns, however long that took).
+  let t0 = Date.now();
   const held = cp.execSync('node -e "setTimeout(() => {}, 2000)" & echo hi', { encoding: 'utf8' });
   console.log('background holds the pipe', JSON.stringify(held), Date.now() - t0 >= 1800);
-  t0 = Date.now();
-  const free = cp.execSync('node -e "setTimeout(() => {}, 4000)" >/dev/null 2>&1 & echo hi', { encoding: 'utf8' });
-  console.log('background redirected', JSON.stringify(free), Date.now() - t0 < 3000);
+  fs.rmSync(pidFile, { force: true });
+  const free = cp.execSync(`node -e "setTimeout(() => {}, 60000)" >/dev/null 2>&1 & echo $! > ${pidFile}; echo hi`, { encoding: 'utf8' });
+  const pid = Number(fs.readFileSync(pidFile, 'utf8'));
+  let running = false;
+  try { process.kill(pid, 0); running = true; process.kill(pid, 'SIGKILL'); } catch {}
+  console.log('background redirected', JSON.stringify(free), running);
 
   fs.rmSync(out, { force: true });
   fs.rmSync(mark, { force: true });
-}, 2500);
+  fs.rmSync(pidFile, { force: true });
+});

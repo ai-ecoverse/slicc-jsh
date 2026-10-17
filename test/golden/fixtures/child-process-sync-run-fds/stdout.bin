@@ -15,7 +15,7 @@ stdout to fd 2 0 [null,null,"e piped\n"]
 2
 3
 [/execSync both to stdout]
-timeout with a writing grandchild ETIMEDOUT SIGTERM true
+maxBuffer kill with a writing grandchild ENOBUFS SIGTERM
 grandchild EPIPE
 background holds the pipe "hi\n" true
 background redirected "hi\n" true
