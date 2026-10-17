@@ -466,13 +466,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.merge_group.base_sha }}
+          ref: ${{ github.event.merge_group.base_ref }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: The group's commits (the tools stay main's, at the group's base)
+      - name: The group's commits (the tools are main's; base_sha may be the group ahead's speculative merge, so it is only the start of the group's commit range)
         env:
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
           HEAD_REF: ${{ github.event.merge_group.head_ref }}
