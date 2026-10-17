@@ -1,0 +1,13 @@
+"." lib/index.js lib/index.js
+".." index.js index.js
+"./" lib/index.js lib/index.js
+"../" index.js index.js
+"./sub" lib/sub.js, beside lib/sub/ lib/sub.js
+"./sub/" lib/sub/index.js lib/sub/index.js
+"./sub/." lib/sub/index.js lib/sub/index.js
+"./sub/.." lib/index.js lib/index.js
+"../lib" lib.js, beside lib/ lib.js
+"../lib/" lib/index.js lib/index.js
+"..." MODULE_NOT_FOUND Cannot find module '...'
+"./nothing/" MODULE_NOT_FOUND Cannot find module './nothing/'
+lib/sub/index.js + lib/index.js
