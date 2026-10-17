@@ -8,6 +8,7 @@ import { createHttps } from '../builtins/https.mjs';
 import { createNet } from '../builtins/net.mjs';
 import { createTls } from '../builtins/tls.mjs';
 import { createHttp2 } from '../builtins/http2.mjs';
+import { createDns } from '../builtins/dns.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
@@ -32,6 +33,8 @@ const BUILTIN_LIST = [
   'constants',
   'crypto',
   'diagnostics_channel',
+  'dns',
+  'dns/promises',
   'domain',
   'events',
   'fs',
@@ -73,8 +76,6 @@ const BUILTIN_LIST = [
 
 const NOT_YET = [
   'dgram',
-  'dns',
-  'dns/promises',
   'cluster',
   'inspector',
   'inspector/promises',
@@ -227,6 +228,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
   let tls;
   const getTls = () => (tls ??= createTls({ process, Buffer, net: getNet() }));
+  let dns;
+  const getDns = () => (dns ??= createDns({ ctx, process, handles, hostname: process._nodeLib().os.hostname() }));
   let http2;
   const getHttp2 = () => (http2 ??= createHttp2({ process, Buffer, net: getNet(), tls: getTls(), getStream }));
   let tty;
@@ -370,6 +373,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     https: () => getHttps(),
     tls: getTls,
     http2: getHttp2,
+    dns: () => getDns().dns,
+    'dns/promises': () => getDns().promises,
     child_process: () => getChildProcess(),
   };
 

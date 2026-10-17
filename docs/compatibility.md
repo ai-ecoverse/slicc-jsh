@@ -16,6 +16,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - [`net`, `http` and `https`](#net-http-and-https)
 - [`tls`](#tls)
 - [`http2`](#http2)
+- [`dns`](#dns)
 - [`fetch` and `WebSocket`](#fetch-and-websocket)
 - [`crypto`](#crypto)
 - [`zlib`](#zlib)
@@ -228,6 +229,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 **`http` client.**
 - With a `Content-Length`, request body bytes stream as written. Without one, the body is buffered until `end()` and sent with a computed length. Request bodies aren't sent chunked.
 - `'response'` comes at the head, and the body streams as it arrives: by `Content-Length`, chunked, or until the peer's FIN. `socket.end` half-closes.
+- `http.validateHeaderName`, `http.validateHeaderValue` and `http.setMaxIdleHTTPParsers` are Node's (golden `http-validate-headers-node22`).
 - `http.Agent` follows Node's `_http_agent.js` request path (`addRequest` → `createSocket` → `createConnection`), so **agent-base** subclasses work for plain `http`. `getName`, `destroy`, `keepSocketAlive`, `reuseSocket`, `removeSocket`, and `sockets`/`freeSockets`/`requests` are present.
 - `http.globalAgent` keeps sockets alive, as in Node 22 (`keepAlive: true`, `scheduling: 'lifo'`, `timeout: 5000`). An agent with `keepAlive` reuses a socket once its response is done (`'free'`, then `req.reusedSocket`), queued requests first. As in Node 22, a server's `Keep-Alive: timeout=N`, less `agentKeepAliveTimeoutBuffer` (1 s), caps a free socket's timeout, and a hint that leaves nothing (`timeout=1`) means the socket isn't reused. Free sockets don't keep the program alive, and one the server closes leaves the pool. `agent: false`, or an agent without `keepAlive`, sends `Connection: close`.
 - A connection that closes before its response gives `socket hang up` (`ECONNRESET`). A `101` response is `'upgrade'` (response, socket, head), and without a listener the connection closes.
@@ -291,6 +293,25 @@ What's Node's:
 - `createServer` (a `net.Server`) and `createSecureServer` (a `tls.Server`, ALPN `h2`), with Node's option checks, `setTimeout` and `updateSettings`.
 
 The golden `http2-node22` checks these against Node 22.22.0.
+
+## `dns`
+
+`require('dns')`, `require('dns/promises')` and their ESM forms load with Node 22.22.0's exports, argument checks and errors. So do the packages that require `dns` at load: **pg**, **mongodb**, **ioredis**, **redis**, **undici**, **nodemailer**, **fastify**, and **got** (which also needs `http2`).
+
+**`lookup`** (callback and promise forms, `all`, `family`, `order`/`verbatim`, `hints`) is getaddrinfo over the kernel's names, as its hosts file has them:
+- An IP literal answers at once.
+- `localhost`, `localhost.localdomain`, `ip6-localhost` and `*.localhost` are `127.0.0.1` and `::1`, IPv4 first (`order: 'ipv6first'` swaps them).
+- The kernel's own hostname (`slicc`) is `127.0.1.1`, and `host.slicc.internal` is `10.0.2.2`.
+- Any other name needs the kernel's resolver, which JS programs don't have yet ([slicc-kernel#913](https://github.com/ai-ecoverse/slicc-kernel/issues/913)). As in a Node with no resolver, it's `getaddrinfo ENOTFOUND <name>` (`code` `ENOTFOUND`, `errno` -3008, `syscall` `getaddrinfo`, `hostname`). On a kernel with `ctx.net.resolve`, jsh asks it instead, and a name it can't answer for now is `getaddrinfo EAI_AGAIN`.
+- `net.connect`, `http.request` and `fetch` don't go through `dns.lookup`: a name passed to them is resolved by the kernel, as before.
+
+**`lookupService`** names the kernel's own addresses (`127.0.0.1` and `::1` are `localhost`) and the common TCP services from `/etc/services` (`ssh`, `http`, `https`, …). It gives any other address and port back as numbers.
+
+**Queries** (`resolve*`, `Resolver`): there's no DNS transport, so a query finds no nameserver and fails as c-ares does then, with `query<Type> ECONNREFUSED <name>` (for example `queryMx` or `querySrv`; `mongodb+srv://` needs SRV records). On a kernel with `ctx.net.resolve`, `resolve4` and `resolve6` use it (`ttl: true` gives a TTL of 0). `reverse` names the kernel's own addresses. `getServers()` is empty until `setServers` (checked as Node does) sets a list. `cancel()` ends the pending queries with `ECANCELLED`.
+
+`ADDRCONFIG`, `ALL` and `V4MAPPED` have Linux's values. `getDefaultResultOrder` follows `--dns-result-order`. `util.promisify(dns.lookup)` and `promisify(dns.lookupService)` resolve to Node's `{ address, family }` and `{ hostname, service }`.
+
+The golden `dns-node22` checks the surface against Node 22.22.0, and `test/integration/dns.test.mjs` checks the kernel's answers.
 
 ## `fetch` and `WebSocket`
 
@@ -416,7 +437,7 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `cluster`, `dns`, `dns/promises`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `cluster`, `dgram`, `inspector`, `inspector/promises`, `trace_events`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
 
 **`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, `BroadcastChannel`, `MessageChannel`, `MessagePort` and `receiveMessageOnPort`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).
