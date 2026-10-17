@@ -1,12 +1,16 @@
 /**
  * node:https — createServer awaits kernel TLS; client request/get go through
  * the fetch client http shares (http-fetch.mjs): redirect: 'manual' where the
- * transport can, the response body streamed.
+ * transport can, the response body streamed. A request with its own agent
+ * or createConnection (a proxy agent's, ws's wss://) goes over a socket
+ * instead, http's ClientRequest on tls.connect, where the kernel has TLS
+ * (slicc-kernel 1.116.0).
  */
 import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 import { connectError, createFetchClient, isLoopbackHost } from './http-fetch.mjs';
 import { noTls as notSupported } from './tls.mjs';
+import { kernelAtLeast } from '../kernel-version.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
 
@@ -34,7 +38,7 @@ function headersToObject(headers) {
   return out;
 }
 
-export function createHttps({ ctx, Buffer, http, handles, getStream }) {
+export function createHttps({ ctx, Buffer, http, handles, getStream, getTls }) {
   const client = createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODES: http?.STATUS_CODES });
 
   function createServer() {
@@ -221,8 +225,23 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
     return { options: options ?? { protocol: 'https:' }, callback };
   }
 
+  // Over a socket: a request with its own agent or createConnection, on a
+  // kernel whose ctx.net.connect carries TLS. Its default agent is https's.
+  const viaSocket = (options) =>
+    kernelAtLeast(ctx, '1.116.0') &&
+    typeof http?.request === 'function' &&
+    (typeof options?.createConnection === 'function' ||
+      (options?.agent != null && options.agent !== false && options.agent !== globalAgent));
+
   function request(input, options, callback) {
     const norm = normalize(input, options, callback);
+    if (viaSocket(norm.options)) {
+      rejectTlsOptions(norm.options);
+      return http.request(
+        { _defaultAgent: globalAgent, defaultPort: 443, port: 443, ...norm.options, protocol: 'https:' },
+        norm.callback
+      );
+    }
     return new ClientRequest(norm.options, norm.callback);
   }
 
@@ -232,15 +251,58 @@ export function createHttps({ ctx, Buffer, http, handles, getStream }) {
     return req;
   }
 
-  // Reuse http.Agent when present; unit stubs may omit it.
-  const Agent =
-    typeof http?.Agent === 'function'
-      ? http.Agent
-      : class Agent extends EventEmitter {};
+  // Node's https.Agent: http's, with TLS sockets (tls.connect), port 443 and
+  // the TLS options in its socket names. Unit stubs may omit http.Agent.
+  const BaseAgent = typeof http?.Agent === 'function' ? http.Agent : class Agent extends EventEmitter {};
+  class Agent extends BaseAgent {
+    constructor(options) {
+      super({ ...options });
+      this.defaultPort = 443;
+      this.protocol = 'https:';
+    }
+    createConnection(options, callback) {
+      const socket = getTls().connect(options);
+      if (typeof callback === 'function') socket.once('secureConnect', () => callback(null, socket));
+      return socket;
+    }
+    getName(options = {}) {
+      let name = typeof super.getName === 'function' ? super.getName(options) : '';
+      for (const key of ['ca', 'cert', 'clientCertEngine', 'ciphers', 'key', 'pfx']) {
+        name += ':';
+        if (options[key]) name += options[key];
+      }
+      name += ':';
+      if (options.rejectUnauthorized !== undefined) name += options.rejectUnauthorized;
+      name += ':';
+      if (options.servername && options.servername !== options.host) name += options.servername;
+      for (const key of ['minVersion', 'maxVersion', 'secureProtocol', 'crl']) {
+        name += ':';
+        if (options[key]) name += options[key];
+      }
+      name += ':';
+      if (options.honorCipherOrder !== undefined) name += options.honorCipherOrder;
+      for (const key of ['ecdhCurve', 'dhparam']) {
+        name += ':';
+        if (options[key]) name += options[key];
+      }
+      name += ':';
+      if (options.secureOptions !== undefined) name += options.secureOptions;
+      name += ':';
+      if (options.sessionIdContext) name += options.sessionIdContext;
+      name += ':';
+      if (options.sigalgs) name += JSON.stringify(options.sigalgs);
+      for (const key of ['privateKeyIdentifier', 'privateKeyEngine']) {
+        name += ':';
+        if (options[key]) name += options[key];
+      }
+      return name;
+    }
+  }
+  const globalAgent = new Agent({ keepAlive: true, scheduling: 'lifo', timeout: 5000 });
   return {
     ...http,
     Agent,
-    globalAgent: new Agent({ protocol: 'https:' }),
+    globalAgent,
     createServer,
     request,
     get,

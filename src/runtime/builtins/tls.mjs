@@ -24,10 +24,12 @@ import {
   validateUint32,
 } from '../node-errors.mjs';
 import { deprecate } from './util.mjs';
+import { kConnectTls, kTlsSession } from './net.mjs';
+import { kernelAtLeast } from '../kernel-version.mjs';
 
 /** What needs TLS on ctx.net, which the kernel doesn't have (https's message). */
-export function noTls(what) {
-  const err = new Error(`slicc-jsh: '${what}' is not supported yet (no TLS on ctx.net)`);
+export function noTls(what, why = 'no TLS on ctx.net') {
+  const err = new Error(`slicc-jsh: '${what}' is not supported yet (${why})`);
   err.code = 'ERR_NOT_SUPPORTED';
   return err;
 }
@@ -325,7 +327,11 @@ function checkServerIdentity(hostname, cert) {
   return undefined;
 }
 
-export function createTls({ process, Buffer, net }) {
+export function createTls({ ctx, process, Buffer, net }) {
+  // slicc-kernel 1.116.0 (ai-ecoverse/slicc-kernel#923): ctx.net.connect's
+  // `tls` carries HTTP/1.1 and WebSocket over TLS through the embedder's
+  // transport, which does the handshake and verifies the peer.
+  const transportTls = typeof ctx?.net?.connect === 'function' && kernelAtLeast(ctx, '1.116.0');
   const options = () => process?._options ?? process?.execArgv ?? [];
   const hasOption = (flag) => options().includes(flag);
   const optionValue = (name) => {
@@ -600,12 +606,13 @@ export function createTls({ process, Buffer, net }) {
 
     setKeyCert() {}
 
-    // No session: what Node's TLSSocket answers without a handle.
+    // Without a session, what Node's TLSSocket answers without a handle. With
+    // the kernel's transport session the transport holds the certificates.
     getPeerCertificate() {
-      return null;
+      return this._secureEstablished ? {} : null;
     }
     getCertificate() {
-      return null;
+      return this._secureEstablished ? {} : null;
     }
     getPeerX509Certificate() {
       return undefined;
@@ -716,11 +723,28 @@ export function createTls({ process, Buffer, net }) {
   }
 
   // Arguments: [port,] [host,] [options,] [cb]
+  /** ALPNProtocols (Node's wire form or a list) as the names for the kernel. */
+  function alpnNames(protocols) {
+    if (protocols == null) return undefined;
+    if (Array.isArray(protocols)) return protocols.map(String);
+    const out = {};
+    convertALPNProtocols(protocols, out);
+    const bytes = out.ALPNProtocols;
+    if (!bytes) return undefined;
+    const names = [];
+    for (let i = 0; i < bytes.length; ) {
+      const len = bytes[i];
+      names.push(bytes.subarray(i + 1, i + 1 + len).toString('latin1'));
+      i += 1 + len;
+    }
+    return names;
+  }
+
+  // Arguments: [port,] [host,] [options,] [cb]
   function connect(...args) {
     let options = {};
     let cb;
     if (typeof args[args.length - 1] === 'function') cb = args.pop();
-    void cb;
     if (args[0] !== null && typeof args[0] === 'object') options = { ...args[0] };
     else {
       if (args[0] !== undefined) options.port = args[0];
@@ -728,11 +752,62 @@ export function createTls({ process, Buffer, net }) {
       const extra = args[1] !== null && typeof args[1] === 'object' ? args[1] : args[2];
       Object.assign(options, extra);
     }
-    options = { checkServerIdentity, minDHSize: 1024, ...options };
+    options = { rejectUnauthorized: true, checkServerIdentity, minDHSize: 1024, ...options };
     validateFunction(options.checkServerIdentity, 'options.checkServerIdentity');
     validateNumber(options.minDHSize, 'options.minDHSize', 1);
-    throw noTls('tls.connect');
+    if (!transportTls) throw noTls('tls.connect');
+    // TLS over a socket that's already open (STARTTLS, a proxy's tunnel) is
+    // a handshake jsh would have to do itself (slicc-kernel#922).
+    if (options.socket) throw noTls('tls.connect over a socket');
+    if (options.path) throw noTls('tls.connect to a Unix socket');
+    // Node makes the context first: its checks (and its refusal of key material) come first.
+    if (!options.secureContext) createSecureContext(options);
+    const host = options.host ?? 'localhost';
+    const port = Number(options.port ?? 443);
+    const servername = options.servername || (isIP(host) ? undefined : host);
+    const socket = new TLSSocket(undefined, { ALPNProtocols: options.ALPNProtocols, allowHalfOpen: options.allowHalfOpen });
+    socket._tlsOptions.isServer = false;
+    if (cb) socket.once('secureConnect', cb);
+    socket.once('connect', () => {
+      const session = socket[kTlsSession];
+      socket._secureEstablished = true;
+      socket.secureConnecting = false;
+      socket.authorized = session.authorized === true;
+      socket.authorizationError = socket.authorized ? null : 'UNABLE_TO_VERIFY_LEAF_SIGNATURE';
+      socket.alpnProtocol = session.alpnProtocol || false;
+      socket.servername = session.servername || servername || false;
+      process.nextTick(() => {
+        if (!socket.destroyed) socket.emit('secureConnect');
+      });
+    });
+    const refused = (err) => {
+      const code = err?.code ?? err?.cause?.code;
+      if (code === 'EPROTONOSUPPORT') {
+        return noTls(`tls.connect to ${host}:${port}`, "the kernel's TLS carries HTTP/1.1 and WebSocket only");
+      }
+      if (code === 'ENOTSUP') {
+        return noTls(`tls.connect to ${host}:${port}`, "the kernel's TLS goes through its transport, which has no loopback");
+      }
+      return undefined;
+    };
+    Reflect.apply(net.Socket.prototype.connect, socket, [
+      {
+        host,
+        port,
+        signal: options.signal,
+        [kConnectTls]: {
+          tls: {
+            ...(servername ? { servername } : {}),
+            ...(alpnNames(options.ALPNProtocols) ? { alpn: alpnNames(options.ALPNProtocols) } : {}),
+            rejectUnauthorized: options.rejectUnauthorized !== false,
+          },
+          refused,
+        },
+      },
+    ]);
+    return socket;
   }
+
 
   const exports = {
     CLIENT_RENEG_LIMIT: 3,

@@ -1090,7 +1090,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         this.#names[String(k).toLowerCase()] = String(k);
       }
       // Node: keep-alive when the agent keeps sockets (the global agent does).
-      const agent = options.agent === false ? null : (options.agent ?? globalAgent);
+      // With its own createConnection and no agent, a request has no agent
+      // (Node's ClientRequest); https hands in its own default agent.
+      const defaultAgent = options._defaultAgent ?? globalAgent;
+      const agent =
+        options.agent === false
+          ? null
+          : (options.agent ?? (typeof options.createConnection === 'function' ? null : defaultAgent));
       this.agent = agent ?? undefined;
       this.shouldKeepAlive = Boolean(agent?.keepAlive);
       // Node's: Host is set here, after the given headers, so an agent's
@@ -1152,8 +1158,28 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       if (opts.localAddress) options.localAddress = opts.localAddress;
       if (opts.family) options.family = opts.family;
 
-      const agent = opts.agent === false ? undefined : (opts.agent ?? globalAgent);
+      const agent = this.agent;
       if (!agent) {
+        // Node's: the request's own createConnection(options, oncreate), which
+        // may return the socket or hand it to oncreate (ws's tlsConnect).
+        if (typeof opts.createConnection === 'function') {
+          let done = false;
+          const oncreate = (err, socket) => {
+            if (done) return;
+            done = true;
+            if (err) {
+              if (this.listenerCount('error')) this.emit('error', err);
+              if (!this.destroyed) this.destroy();
+              return;
+            }
+            this.#attachSocket(socket);
+          };
+          const { signal: _signal, ...withoutSignal } = { ...opts, ...options };
+          void _signal;
+          const socket = opts.createConnection(withoutSignal, oncreate);
+          if (socket) oncreate(null, socket);
+          return;
+        }
         const connectOpts = { host, port };
         if (options.socketPath) connectOpts.path = options.socketPath;
         this.#attachSocket(net.connect(connectOpts));
@@ -1458,6 +1484,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     #viaFetchOnNoRoute(err) {
       const code = err?.cause?.code ?? err?.code;
       if (this.#fetchMode || this.#headersSent || this.#connected) return false;
+      // An https request on a socket never falls back: fetch here is plain http.
+      if (this.protocol === 'https:') return false;
       if (code !== 'ENOENT' && code !== 'ENETUNREACH' && code !== 'ENOTFOUND') return false;
       const opts = this.#opts;
       const host = opts.hostname ?? opts.host ?? '127.0.0.1';
