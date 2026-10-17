@@ -500,6 +500,20 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
   }
   const isDevicePath = (target) => devicePathOf(target) !== null;
 
+  /**
+   * A kernel descriptor on a regular file opened read-only, so readSync reads
+   * just the range asked for (fd-pread) instead of the whole file each time.
+   * null where the kernel has none to give: the fd then reads by its path.
+   */
+  function openReadOnly(target) {
+    if (typeof ctx.sync?.open !== 'function') return null;
+    try {
+      return ctx.sync.open(target, { read: true });
+    } catch {
+      return null;
+    }
+  }
+
   /** writeFileSync / appendFileSync of a device: open, write, close, as Node's do. */
   function writeThroughDescriptor(p, bytes, flag) {
     const fd = syncApi.openSync(p, flag);
@@ -1073,6 +1087,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         const ent = fdTable.get(p);
         if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
         try {
+          if (ent.file) {
+            const rest = ent.file.read(ent.pos, Math.max(0, ent.file.size() - ent.pos));
+            ent.pos += rest.length;
+            return decodeAs(rest, encoding);
+          }
           const bytes = syncFs.readFile(ent.path);
           const rest = bytes.subarray(Math.min(ent.pos, bytes.length));
           ent.pos += rest.length;
@@ -1419,6 +1438,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         pos,
         readable: fl.readable || fl.raw === 'r',
         writable: fl.writable,
+        file: fl.writable ? null : openReadOnly(target),
       });
       return fd;
     },
@@ -1447,6 +1467,20 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           return n;
         } catch (err) {
           throw nodeFsError(err?.code || 'EIO', 'read', undefined, err);
+        }
+      }
+      if (ent.file) {
+        try {
+          // Node: a null (or -1) position reads at the fd's own, and moves it.
+          const at = filePosition == null || filePosition < 0 ? null : Number(filePosition);
+          const pos = at ?? ent.pos;
+          const chunk = len > 0 ? ent.file.read(pos, len) : new Uint8Array(0);
+          const n = Math.min(len, chunk.length);
+          if (n) buffer.set(chunk.subarray(0, n), bufOffset);
+          if (at == null) ent.pos = pos + n;
+          return n;
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'read', ent.path, err);
         }
       }
       try {
@@ -1521,6 +1555,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       const ent = fdTable.get(fd);
       fdTable.delete(fd);
       ent.closed = true;
+      try {
+        ent.file?.close();
+      } catch {
+        /* closed */
+      }
       // A device a child is still being given (child_process hold()) keeps
       // its kernel descriptor until that is done, as a dup'd fd would.
       if (ent.holds > 0) return;
