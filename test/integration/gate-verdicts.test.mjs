@@ -179,6 +179,7 @@ const bin = join(scratch, 'bin');
 mkdirSync(bin);
 const STUB = `#!/bin/sh
 args="$*"
+case "$args" in *"--notes-file -"*) cat > /dev/null ;; esac
 out=
 if [ -n "$STUB_RULES" ]; then
   while IFS='\t' read -r pat line; do
@@ -246,6 +247,7 @@ const realOutcome = (tags) => {
   return said('release-outcome.mjs', real('scripts/release-outcome.mjs', [], { cwd: dir, env: { SEMANTIC_RELEASE: 'success' } }));
 };
 
+const NOTES = `the notes ${'x'.repeat(96 * 1024)}`;
 const certifiedAt = (head) => `certified @ai-ecoverse/slicc-jsh PR #7 head ${head} sha256=${SUM} (ci: run; known: none; not covered: bios real setup (manual))`;
 
 const realGroup = () => {
@@ -261,7 +263,7 @@ const realCarry = () => {
   const rules = [
     ['statuses', status],
     ['pulls/7', '{"title":"fix: a change"}'],
-    ['release view', 'the notes'],
+    ['release view', NOTES],
     ['release edit', ''],
   ];
   return said('carry.mjs', real('scripts/cert-review/carry.mjs', ['--from', 'v1.2.2', '--to', 'v1.2.3', '--release', 'v1.2.3', '--dir', r.dir, '--repo', 'o/r'], { stub: ['gh'], rules }));
@@ -349,7 +351,7 @@ const realReleaseLine = () => {
   const rules = [
     ['rev-list', SHA],
     ['compare/main...', 'identical'],
-    ['release view', 'the notes'],
+    ['release view', NOTES],
     ['release edit', ''],
   ];
   return said('release-line.mjs', real('scripts/release-line.mjs', ['1.2.3'], { stub: ['git', 'gh'], rules, imports }));
