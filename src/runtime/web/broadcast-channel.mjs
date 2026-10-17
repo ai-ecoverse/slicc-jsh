@@ -19,9 +19,11 @@
  * a turn waits while a timer is already due (`delivering.overdue`, from the
  * timers); once it starts (`delivering.active`, `delivering.since`) the
  * timers hold the program's immediates, and each timeout that becomes due
- * after the start, until the turn is done (`schedule` is the timers' own
- * immediate, which isn't held). Messages posted during a turn make the next
- * one.
+ * after the start, until the turn is done; such a timeout then also waits
+ * for the immediates pending when the turn ended (`delivering.endTurn`:
+ * Node's check phase comes before its next timers phase, however long the
+ * handlers took). `schedule` is the timers' own immediate, which isn't
+ * held. Messages posted during a turn make the next one.
  */
 import { nodeError } from '../node-errors.mjs';
 
@@ -32,7 +34,7 @@ const kPortMark = '\u0000slicc-jsh port';
 export function createPorts({
   handles,
   schedule,
-  delivering = { active: false, pending: false, since: 0, overdue: () => false, inCheck: () => false },
+  delivering = { active: false, pending: false, since: 0, overdue: () => false, inCheck: () => false, endTurn: () => {} },
 }) {
   // A task in line with the program's immediates, never held itself: whether
   // the immediates queued before it run first is `delivering.pending`'s call.
@@ -96,6 +98,7 @@ export function createPorts({
         return;
       }
       delivering.active = false;
+      delivering.endTurn?.();
       if (ready.size > 0) {
         // Posted from a handler: Node's next iteration, after the immediates
         // (pending is false); from elsewhere (a timer, I/O): this poll phase.

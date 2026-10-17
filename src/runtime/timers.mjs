@@ -19,6 +19,11 @@ export function createTimers(
   // holdImmediate(): whether the program's immediates must wait (Node's
   // check phase comes after the poll phase that delivers port messages).
   let inImmediate = 0;
+  // The check phase that follows a message ports' turn (Node runs the
+  // immediates queued by the end of the poll phase before its next timers
+  // phase): the immediates pending when the turn ended. While any of them
+  // is still to run, a timeout that became due during the turn waits.
+  const check = new Set();
   const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
   const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
   const nativeSetInterval = globalThis.setInterval.bind(globalThis);
@@ -157,6 +162,7 @@ export function createTimers(
       state.retry = null;
       byId.delete(state.id);
       handles.delete(state);
+      check.delete(state);
       if (held) inImmediate++;
       try {
         runMethod(handle, '_onImmediate', args, domain, frame);
@@ -179,6 +185,7 @@ export function createTimers(
     if (state) {
       byId.delete(id);
       handles.delete(state);
+      check.delete(state);
       if (state.retry) nativeClearTimeout(state.retry);
     }
     nativeClear(id);
@@ -211,6 +218,13 @@ export function createTimers(
     setImmediateUnheld: (fn) => makeImmediate(fn, [], false),
     /** @internal Whether one of the program's immediates is running (Node's check phase). */
     inCheck: () => inImmediate > 0,
+    /** @internal A message ports' turn ended: its check phase is the immediates pending now. */
+    startCheck() {
+      check.clear();
+      for (const state of byId.values()) if (state.kind === 'Immediate') check.add(state);
+    },
+    /** @internal Whether the check phase after a ports' turn still has immediates to run. */
+    checkPending: () => check.size > 0,
     clearPending() {
       for (const [id, state] of byId) {
         if (state.retry) nativeClearTimeout(state.retry);

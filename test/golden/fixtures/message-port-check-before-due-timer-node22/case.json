@@ -1,0 +1,5 @@
+{
+  "description": "MessageChannel: after a poll phase that delivered port messages, the immediates queued by its end run before a timer that became due during it, however long the handlers took (Node 22's check phase comes before its next timers phase; #353: message-channel-order-node22 lost its immediates to its 60 ms timer on a loaded runner). An immediate queued from an immediate waits for the next iteration, after the timer",
+  "argv": ["script.js"],
+  "shim": true
+}
