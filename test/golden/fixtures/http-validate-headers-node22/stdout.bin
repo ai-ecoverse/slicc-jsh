@@ -1,0 +1,15 @@
+validateHeaderName function validateHeaderName 0
+validateHeaderValue function validateHeaderValue 0
+setMaxIdleHTTPParsers function setMaxIdleHTTPParsers 1
+ok name undefined
+label TypeError ERR_INVALID_HTTP_TOKEN Label must be a valid HTTP token ["a b"]
+bad name TypeError ERR_INVALID_HTTP_TOKEN Header name must be a valid HTTP token ["a b"]
+empty name TypeError ERR_INVALID_HTTP_TOKEN Header name must be a valid HTTP token [""]
+number name TypeError ERR_INVALID_HTTP_TOKEN Header name must be a valid HTTP token ["5"]
+ok value undefined
+undefined value TypeError ERR_HTTP_INVALID_HEADER_VALUE Invalid value "undefined" for header "x"
+bad value TypeError ERR_INVALID_CHAR Invalid character in header content ["x"]
+number value undefined
+max ok undefined
+max zero RangeError ERR_OUT_OF_RANGE The value of "max" is out of range. It must be >= 1 && <= 9007199254740991. Received 0
+max type TypeError ERR_INVALID_ARG_TYPE The "max" argument must be of type number. Received type string ('1')
