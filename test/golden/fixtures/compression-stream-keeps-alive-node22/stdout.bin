@@ -1,0 +1,3 @@
+gzip roundtrip 8388608 true
+CompressionStream [Object] [object CompressionStream] true true
+0 constructor,readable,writable false

@@ -1,0 +1,5 @@
+{
+  "description": "CompressionStream / DecompressionStream: an 8 MiB gzip round trip completes; the platform's work off the program's thread keeps it alive, as Node counts it as an active handle (#353: m38/web.mjs's round trip ended as an unsettled top-level await on a loaded runner; on main's jsh 4 MiB already does). The class's shape (inspect, prototype, global) is Node 22's",
+  "argv": ["script.mjs"],
+  "shim": true
+}
