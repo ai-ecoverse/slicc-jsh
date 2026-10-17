@@ -7,7 +7,10 @@ import { createFetch } from '../web/fetch.mjs';
 import { createHttps } from '../builtins/https.mjs';
 import { createNet } from '../builtins/net.mjs';
 import { createTls } from '../builtins/tls.mjs';
+import { createCluster } from '../builtins/cluster.mjs';
+import { createTraceEvents } from '../builtins/trace-events.mjs';
 import { createHttp2 } from '../builtins/http2.mjs';
+import { createDns } from '../builtins/dns.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
@@ -28,10 +31,13 @@ const BUILTIN_LIST = [
   'async_hooks',
   'buffer',
   'child_process',
+  'cluster',
   'console',
   'constants',
   'crypto',
   'diagnostics_channel',
+  'dns',
+  'dns/promises',
   'domain',
   'events',
   'fs',
@@ -61,6 +67,7 @@ const BUILTIN_LIST = [
   'timers',
   'timers/promises',
   'tls',
+  'trace_events',
   'tty',
   'url',
   'util',
@@ -73,12 +80,8 @@ const BUILTIN_LIST = [
 
 const NOT_YET = [
   'dgram',
-  'dns',
-  'dns/promises',
-  'cluster',
   'inspector',
   'inspector/promises',
-  'trace_events',
   'wasi',
 ];
 
@@ -227,6 +230,10 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
   let tls;
   const getTls = () => (tls ??= createTls({ process, Buffer, net: getNet() }));
+  let dns;
+  const getDns = () => (dns ??= createDns({ ctx, process, handles, hostname: process._nodeLib().os.hostname() }));
+  let cluster;
+  let traceEvents;
   let http2;
   const getHttp2 = () => (http2 ??= createHttp2({ process, Buffer, net: getNet(), tls: getTls(), getStream }));
   let tty;
@@ -369,7 +376,11 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     http: () => getHttp(),
     https: () => getHttps(),
     tls: getTls,
+    cluster: () => (cluster ??= createCluster({ process })),
+    trace_events: () => (traceEvents ??= createTraceEvents({ process })),
     http2: getHttp2,
+    dns: () => getDns().dns,
+    'dns/promises': () => getDns().promises,
     child_process: () => getChildProcess(),
   };
 

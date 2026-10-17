@@ -80,7 +80,7 @@ const IPv6Reg = new RegExp(
     `(?::(?:(?::${v6Seg}){0,5}:${v4Str}|(?::${v6Seg}){1,7}|:))` +
     ')(?:%[0-9a-zA-Z-.:]{1,})?$'
 );
-const isIP = (s) => (IPv4Reg.test(s) ? 4 : IPv6Reg.test(s) ? 6 : 0);
+export const isIP = (s) => (IPv4Reg.test(s) ? 4 : IPv6Reg.test(s) ? 6 : 0);
 
 // --- libuv's inet_pton / inet_ntop: cares_wrap's canonicalizeIP -----------
 function pton4(src, out, at) {

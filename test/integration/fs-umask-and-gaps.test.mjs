@@ -47,14 +47,14 @@ describe('modules and globals jsh leaves out (kernel)', () => {
   });
   after(() => jsh?.close());
 
-  it("require('wasi'), 'inspector' and 'trace_events' are builtins jsh doesn't support: ERR_NOT_SUPPORTED", async () => {
+  it("require('wasi') and 'dgram' are builtins jsh doesn't support: ERR_NOT_SUPPORTED", async () => {
     const r = await jsh.run([
       'node',
       '-e',
-      "const m = require('module'); for (const id of ['wasi', 'node:wasi', 'inspector', 'trace_events', 'node:inspector/promises', 'dns/promises']) { try { require(id); console.log(id, 'loaded'); } catch (e) { console.log(id, m.isBuiltin(id), e.code); } }",
+      "const m = require('module'); for (const id of ['wasi', 'node:wasi', 'dgram', 'node:dgram']) { try { require(id); console.log(id, 'loaded'); } catch (e) { console.log(id, m.isBuiltin(id), e.code); } }",
     ]);
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout, 'wasi true ERR_NOT_SUPPORTED\nnode:wasi true ERR_NOT_SUPPORTED\ninspector true ERR_NOT_SUPPORTED\ntrace_events true ERR_NOT_SUPPORTED\nnode:inspector/promises true ERR_NOT_SUPPORTED\ndns/promises true ERR_NOT_SUPPORTED\n');
+    assert.equal(r.stdout, 'wasi true ERR_NOT_SUPPORTED\nnode:wasi true ERR_NOT_SUPPORTED\ndgram true ERR_NOT_SUPPORTED\nnode:dgram true ERR_NOT_SUPPORTED\n');
   });
 
   it('fs has no lchmod, as Node on Linux; promises.lchmod is ERR_METHOD_NOT_IMPLEMENTED', async () => {

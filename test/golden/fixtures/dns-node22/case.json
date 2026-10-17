@@ -1,0 +1,5 @@
+{
+  "description": "require('dns') / require('dns/promises') and their ESM forms load with Node 22.22.0's exports (pg, mongodb, ioredis, undici, got require dns at load): the promises getter, function names and lengths, error codes, Resolver's prototype chain and query names, promisify.customArgs, result order, lookup of IP literals and an empty hostname (DEP0118 once), lookup's, lookupService's, setServers' and the queries' argument errors, getServers' formatting",
+  "argv": ["--no-warnings", "script.mjs"],
+  "shim": true
+}

@@ -2,7 +2,7 @@
  * node:http over net (ctx.net loopback) + IncomingMessage / ServerResponse.
  */
 import { trackPromise } from '../async-handles.mjs';
-import { ERR_OUT_OF_RANGE, validateInteger } from '../node-errors.mjs';
+import { ERR_OUT_OF_RANGE, nodeError, validateInteger } from '../node-errors.mjs';
 import { EventEmitter } from './events.mjs';
 import { createFetchClient, isLoopbackHost } from './http-fetch.mjs';
 
@@ -1684,6 +1684,36 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     createServer,
     request,
     get,
+    validateHeaderName,
+    validateHeaderValue,
+    setMaxIdleHTTPParsers,
     maxHeaderSize: 16384,
   };
+}
+
+// lib/_http_outgoing.js / _http_common.js: the header checks Node exports (got uses them).
+const tokenRegExp = /^[\^_`a-zA-Z\-0-9!#$%&'*+.|~]+$/;
+const headerCharRegex = /[^\t\x20-\x7e\x80-\xff]/;
+
+// hideStackFrames wrappers in Node: (...args), length 0.
+function validateHeaderName(...args) {
+  const [name, label] = args;
+  if (typeof name !== 'string' || !name || !tokenRegExp.test(name)) {
+    throw nodeError(TypeError, 'ERR_INVALID_HTTP_TOKEN', `${label || 'Header name'} must be a valid HTTP token ["${name}"]`);
+  }
+}
+
+function validateHeaderValue(...args) {
+  const [name, value] = args;
+  if (value === undefined) {
+    throw nodeError(TypeError, 'ERR_HTTP_INVALID_HEADER_VALUE', `Invalid value "${value}" for header "${name}"`);
+  }
+  if (headerCharRegex.test(value)) {
+    throw nodeError(TypeError, 'ERR_INVALID_CHAR', `Invalid character in header content ["${name}"]`);
+  }
+}
+
+/** Node's pool of idle HTTP parsers (1000): jsh keeps none, so the size only has Node's check. */
+function setMaxIdleHTTPParsers(max) {
+  validateInteger(max, 'max', 1);
 }
