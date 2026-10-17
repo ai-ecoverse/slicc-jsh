@@ -208,7 +208,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - Loopback (`127.0.0.0/8`, `localhost`, `*.localhost`, `0.0.0.0`) is always the kernel's own, IPv4 only. A server is reachable from other programs in the kernel and, as `<port>.kernel.localhost`, from the page.
 - Another host is real TCP when the embedder gives the kernel an uplink that routes it (an exit node, or a route table). The name is resolved through the uplink, and the request goes out byte for byte.
 - Without a route (no uplink, or an address outside its routes), the connect fails. `net` reports Node's error: `getaddrinfo ENOTFOUND <name>` for a name nothing resolves, else `connect <CODE> <host>:<port>`. `http.request` then sends the request through `fetch` instead (see the fetch fallback below).
-- `https` always goes through `fetch`.
+- `https` goes through `fetch`, except a request with its own agent (or, on slicc-kernel 1.124.0 and later, a `ca`), which is `http` on a `tls.connect` socket (see the `https` client below).
 
 **`net`.** Servers and sockets, `allowHalfOpen`, `end()` as a half-close. Unix domain sockets (`path`) and `new net.Socket({ fd })` throw `ERR_NOT_SUPPORTED`.
 
@@ -228,14 +228,14 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 
 **`http` client.**
 - With a `Content-Length`, request body bytes stream as written. Without one, the body is buffered until `end()` and sent with a computed length. Request bodies aren't sent chunked.
-- `'response'` comes at the head, and the body streams as it arrives: by `Content-Length`, chunked, or until the peer's FIN. `socket.end` half-closes.
+- `'response'` comes at the head, and the body streams as it arrives: by `Content-Length`, chunked, or until the peer's FIN. `socket.end` half-closes. A chunked body's trailers are `res.rawTrailers` and `res.trailers` by its `'end'`.
 - `http.validateHeaderName`, `http.validateHeaderValue` and `http.setMaxIdleHTTPParsers` are Node's (golden `http-validate-headers-node22`).
 - A `ClientRequest` has its `Host` header from the start, set after the given headers and before the agent's `addRequest` sees the request. It's absent with `setHost: false`. The request line is the request's `method` and `path` as they are when it's sent. `_header` and `_implicitHeader()` are Node's. That lets **http-proxy-agent** rewrite the path to the absolute URL and send through a plain `http://` proxy.
 - `http.Agent` follows Node's `_http_agent.js` request path (`addRequest` → `createSocket` → `createConnection`), so **agent-base** subclasses work for plain `http`. `getName`, `destroy`, `keepSocketAlive`, `reuseSocket`, `removeSocket`, and `sockets`/`freeSockets`/`requests` are present.
 - `http.globalAgent` keeps sockets alive, as in Node 22 (`keepAlive: true`, `scheduling: 'lifo'`, `timeout: 5000`). An agent with `keepAlive` reuses a socket once its response is done (`'free'`, then `req.reusedSocket`), queued requests first. As in Node 22, a server's `Keep-Alive: timeout=N`, less `agentKeepAliveTimeoutBuffer` (1 s), caps a free socket's timeout, and a hint that leaves nothing (`timeout=1`) means the socket isn't reused. Free sockets don't keep the program alive, and one the server closes leaves the pool. `agent: false`, or an agent without `keepAlive`, sends `Connection: close`.
 - A connection that closes before its response gives `socket hang up` (`ECONNRESET`). A `101` response is `'upgrade'` (response, socket, head), and without a listener the connection closes.
 
-**The fetch fallback** (plain `http` without a route, and every `https` request). The request is sent once it has ended, through jsh's `fetch`: the embedder's transport, and `host.slicc.internal` through the kernel's proxy. What a fetch can't carry, it doesn't:
+**The fetch fallback** (plain `http` without a route, and an `https` request without an agent). The request is sent once it has ended, through jsh's `fetch`: the embedder's transport, and `host.slicc.internal` through the kernel's proxy. What a fetch can't carry, it doesn't:
 - **No raw socket.** `res.socket` and `req.socket` are `null`. There is no `'socket'` or `'connect'` event, no Agent pooling or keep-alive, no `upgrade` or `CONNECT`, no 1xx responses or `Expect: 100-continue`, and no trailers.
 - **Normalized headers.** Response header names arrive lowercased in `rawHeaders`, and repeated headers other than `set-cookie` are joined. The headers fetch owns (`Host`, `Connection`, `Content-Length`, `Transfer-Encoding`, `Keep-Alive`, `Expect`, `Upgrade`, `TE`, `Trailer`) are fetch's to set, so a custom `Host` doesn't reach the server.
 - **Buffered upload.** The request body is sent whole, after `end()`.
@@ -247,44 +247,58 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - `https` to the kernel's own loopback (`127.0.0.1`, `localhost`) connects first, so a port nothing listens on is `connect ECONNREFUSED 127.0.0.1:<port>`; the loopback has no TLS, so a listening port is `ERR_NOT_SUPPORTED`.
 - Errors name a loopback name by its address, `127.0.0.1`, as Node's resolver gives it. `res.req` has the request's `method`, `path`, `host` and `protocol`.
 
-**`https` client.** `https.request` and `https.get` take the fetch fallback above, except on slicc-kernel 1.116.0 and later for a request with its own agent (an `https.Agent`, a proxy agent's) or its own `createConnection` (ws's `wss://`). Such a request is `http`'s socket client on a `tls.connect` socket (see `tls`), with keep-alive, `rawHeaders` as sent, and `'upgrade'`. It never falls back to `fetch`.
+**`https` client.** `https.request` and `https.get` take the fetch fallback above, except on slicc-kernel 1.116.0 and later for a request with its own agent (an `https.Agent`, a proxy agent's) or its own `createConnection` (ws's `wss://`), and on 1.124.0 and later for a request with a `ca` (with `https.globalAgent`, or a fresh agent for `agent: false`, as in Node). Such a request is `http`'s socket client on a `tls.connect` socket (see `tls`), with keep-alive, `rawHeaders` as sent, trailers (`rawTrailers`, `trailers`) and `'upgrade'`. It never falls back to `fetch`.
+- The request's own options reach the agent, as in Node (`addRequest` → `createSocket` → `createConnection`), so `ca`, `servername` and `rejectUnauthorized` reach `tls.connect`. The SNI is Node's `calculateServerName`: the `Host` header's name, else `host`, never an IP address.
 - `https.Agent` is Node's: `http.Agent` with TLS sockets, `defaultPort` 443, and the TLS options in its socket names.
 - The fetch fallback's `ClientRequest` is an `EventEmitter`, not a stream.
-- `cert`, `key`, `pfx` and `ca` throw `ERR_NOT_SUPPORTED`: no client certificates or custom CAs.
-- `rejectUnauthorized: false` is accepted but ignored. TLS verification stays on.
+- `cert`, `key` and `pfx` throw `ERR_NOT_SUPPORTED`: no client certificates. Before slicc-kernel 1.124.0 so does `ca`.
+- Without an agent, `rejectUnauthorized: false` is accepted but ignored: fetch verifies. Over a socket, it's `tls.connect`'s (see `tls`).
+- Why a request without an agent stays on `fetch` on 1.124.0: to a host the uplink doesn't route, the socket would be the transport's TLS (A1) as well, with the same headers and no trailers, and a name that doesn't resolve would come back as a `502` response instead of Node's `getaddrinfo ENOTFOUND` error, which `fetch` gives.
 - Redirects: requests use `redirect: 'manual'`, so a redirect shows as `statusCode` and `Location`, as in Node. On the browser entry the transport may refuse that with `ENOTSUP`; jsh then falls back to `'follow'`, so plain requests work but a redirect is followed instead of surfaced. The Node entry's transport supports manual redirects. Embedders with `traits.redirectHops` ([slicc-kernel#315](https://github.com/ai-ecoverse/slicc-kernel/issues/315)) can surface redirects in the browser.
 
 **Not available:** `https.createServer` throws `ERR_NOT_SUPPORTED`, as does anything in `tls` that needs a handshake (below).
 
 ## `tls`
 
-`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports. **ws** runs: its `ws://` server over an `http` server's `'upgrade'`, its client, and (see below) its `wss://` client. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too. http-proxy-agent sends plain `http` requests through an `http://` proxy (see `http`). https-proxy-agent's tunnel needs TLS over an open socket, so it throws.
+`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports. **ws** runs: its `ws://` server over an `http` server's `'upgrade'`, its client, and (see below) its `wss://` client. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too. http-proxy-agent sends plain `http` requests through an `http://` proxy (see `http`). https-proxy-agent's tunnel needs TLS over an open socket, which works on slicc-kernel 1.124.0 and later (below).
 
-**`tls.connect`, on slicc-kernel 1.116.0 and later**, is the kernel's TLS (`ctx.net.connect` with `tls`, [slicc-kernel#923](https://github.com/ai-ecoverse/slicc-kernel/issues/923)). The kernel serves the plain HTTP/1.1, and WebSocket upgrades, through the embedder's transport, which does the real handshake and verifies the peer.
-- `'connect'` and then `'secureConnect'` (the callback) come once the kernel has the session. `authorized` is the transport's (`true`), and so are `alpnProtocol` (`'http/1.1'`) and `servername`.
-- `getPeerCertificate()` is `{}`: the transport keeps the certificates, so `checkServerIdentity` isn't called. `rejectUnauthorized: false` changes nothing, because the transport always verifies.
-- What the kernel won't carry fails with `ERR_NOT_SUPPORTED` on the socket's `'error'`:
-  - another protocol's well-known port (465, 993, 995, 636, 853, 8883, …);
-  - ALPN without `http/1.1`;
-  - the kernel's own loopback, which the transport doesn't reach.
-- So `https` with an agent and ws's `wss://` client work. Raw TLS protocols (pg's `sslmode`, SMTP or IMAP, STARTTLS) don't ([slicc-kernel#922](https://github.com/ai-ecoverse/slicc-kernel/issues/922)).
+The kernel does the TLS, by one of two paths ([slicc-kernel#914](https://github.com/ai-ecoverse/slicc-kernel/issues/914)). jsh has no TLS of its own.
 
-Otherwise the kernel's sockets have no TLS, so whatever needs a handshake throws `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (no TLS on ctx.net)`, as `https.createServer` does) when it's called, not when the module loads:
-- `tls.connect` on an older kernel, after Node's checks of `checkServerIdentity` and `minDHSize`. On any kernel, `tls.connect` over an open `socket` (TLS jsh would have to do itself) also throws.
-- `listen()` on a `tls.Server`.
-- `new tls.TLSSocket(socket)` over a socket, and `connect()` on a `TLSSocket`.
-- `createSecureContext` (and so `createServer`) with key material: `ca`, `cert`, `key`, `pfx`, `crl`, `dhparam`, a private-key engine or a client-certificate engine. Each one's type is checked first, as Node checks it.
+**A2: the kernel's own handshake, on slicc-kernel 1.124.0 and later** ([slicc-kernel#922](https://github.com/ai-ecoverse/slicc-kernel/issues/922)), for a host the kernel's uplink routes as raw TCP. The embedder installs `@ai-ecoverse/wasm-tls-engine` (4.2.0-2 or later). What works, as in Node:
+- **Any port and protocol.** `tls.connect({ host, port })` with any ALPN list: pg, SMTPS, IMAPS, MQTT over TLS, Redis over TLS, HTTP/2's ALPN. jsh asks for the kernel's handshake on any port but 443. On 443 the kernel keeps the transport's path (A1, below) unless the call needs a real handshake: a `ca`, ALPN without `http/1.1`, `rejectUnauthorized: false` or a `checkServerIdentity` of its own. To a host the uplink doesn't route, the call falls back to A1.
+- **STARTTLS and TLS over an open socket.** `tls.connect({ socket })` and `new tls.TLSSocket(socket, { isServer: false })` over a `net.Socket` upgrade its connection in place (`ctx.net.connect({ socket, host, tls })`). pg's `SSLRequest`, nodemailer's `STARTTLS` and https-proxy-agent's `CONNECT` tunnel work. What was written in plain text goes out before the handshake, and the plain socket emits nothing more, then `'close'` just before the TLS socket's, as in Node. A socket that is still connecting is upgraded once it has connected. A bare `TLSSocket` starts its handshake at its first write and emits `'secure'`, not `'secureConnect'`, and doesn't verify (`authorized` stays `false`), as in Node.
+- **A custom `ca`**, in `tls.connect`, `createSecureContext({ ca })` (and `secureContext`), and `https.request`. It replaces the kernel's trust store (Mozilla's roots, which the engine package ships), as in Node.
+- **Verification is Node's.** The kernel verifies the chain and reports what it found; jsh then applies Node's `onConnectSecure` before any application byte is sent or delivered:
+  - the chain's error has Node's code and OpenSSL's message: `SELF_SIGNED_CERT_IN_CHAIN`, `DEPTH_ZERO_SELF_SIGNED_CERT`, `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, `CERT_HAS_EXPIRED`, `CERT_NOT_YET_VALID`, `INVALID_PURPOSE`;
+  - then `checkServerIdentity(servername || host, cert)`, Node's or the caller's, so `ERR_TLS_CERT_ALTNAME_INVALID` has Node's `reason`, `host` and `cert`;
+  - `rejectUnauthorized: false` connects and sets `authorized: false` and `authorizationError` (the code). Otherwise the socket is destroyed with the error, after `'secure'`.
+- **The session.** `getPeerCertificate()` is Node's object, read from the DER chain the kernel hands over (`subject`, `issuer` and `infoAccess` with null prototypes, `subjectaltname`, `ca`, `bits`, `pubkey`, `modulus`/`exponent` or `asn1Curve`/`nistCurve`, `valid_from`, `valid_to`, the three fingerprints, `ext_key_usage`, `serialNumber`, `raw`). `getPeerCertificate(true)` links `issuerCertificate` through the chain the server sent, then the `ca` given, and a self-signed root points to itself. `getProtocol()` is `'TLSv1.3'` or `'TLSv1.2'`, `alpnProtocol` is the agreed protocol or `false`, `servername` is the SNI given (or `false`), and `isSessionReused()` is `false`.
+- **Still different:** `getCipher()`, `getEphemeralKeyInfo()`, `getFinished()`, `getPeerFinished()`, `getSession()`, `getTLSTicket()` and `getSharedSigalgs()` are `null`, because the kernel doesn't report them. `getPeerX509Certificate()` is `undefined` (jsh has no `X509Certificate`). There's no session resumption, no revocation check, and no `minDHSize` check. Without a `servername`, the kernel still sends `host` as the SNI, where Node sends none. A handshake failure other than the certificate's is `ERR_SSL_HANDSHAKE_FAILURE` with the engine's reason, and a server that closes during the handshake is Node's `ECONNRESET` ("Client network socket disconnected before secure TLS connection was established"). Sealed placeholders written into an A2 connection reach the server unsubstituted (the kernel's `substitutes: false`).
+- **Refused with `ERR_NOT_SUPPORTED`:** client certificates (`key`, `cert`, `pfx`), a server-side `TLSSocket` over a socket, TLS over a stream that isn't a `net.Socket`, TLS over a socket the uplink doesn't route (a loopback one), and a `ca` for a host the uplink doesn't route.
+
+**A1: the transport's TLS, on slicc-kernel 1.116.0 and later** ([slicc-kernel#923](https://github.com/ai-ecoverse/slicc-kernel/issues/923)), for every other `tls.connect`. The kernel serves the plain HTTP/1.1, and WebSocket upgrades, through the embedder's transport, which does the real handshake and verifies the peer. Sealed placeholders are substituted, as for `fetch`.
+- `'connect'`, `'secure'` and then `'secureConnect'` (the callback) come once the kernel has the session. `authorized` is the transport's (`true`), and so is `alpnProtocol` (`'http/1.1'`). `servername` is the SNI given, else `false`, as in Node. Before 1.124.0 it's the name the transport reached.
+- `getPeerCertificate()` is `{}`, and `getProtocol()` is `null`: the transport keeps the certificates, so `checkServerIdentity` isn't called. `rejectUnauthorized: false` changes nothing, because the transport always verifies.
+- What the transport won't carry fails with `ERR_NOT_SUPPORTED` on the socket's `'error'`: another protocol's well-known port (465, 993, 995, 636, 853, 8883, …), ALPN without `http/1.1`, and the kernel's own loopback, which the transport doesn't reach.
+- So `https` with an agent and ws's `wss://` client work there.
+
+**On older kernels** whatever needs a handshake throws `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (no TLS on ctx.net)`, as `https.createServer` does) when it's called, not when the module loads:
+- `tls.connect` before 1.116.0, after Node's checks of `checkServerIdentity` and `minDHSize`. Before 1.124.0, `tls.connect` over an open `socket` also throws, and so do `new tls.TLSSocket(socket)` and `createSecureContext({ ca })`.
+
+On any kernel these throw `ERR_NOT_SUPPORTED`:
+- `listen()` on a `tls.Server`, and `connect()` on a `TLSSocket`.
+- `createSecureContext` (and so `createServer`) with key material other than `ca`: `cert`, `key`, `pfx`, `crl`, `dhparam`, a private-key engine or a client-certificate engine. Each one's type is checked first, as Node checks it.
 - `createSecurePair`, which is deprecated (DEP0064).
 
 What doesn't need a handshake is Node's:
 - `checkServerIdentity`: Node's matching (wildcards, the CN fallback, quoted altnames, IP addresses compared in canonical form), returning `ERR_TLS_CERT_ALTNAME_INVALID` with `reason`, `host` and `cert`, or throwing `ERR_TLS_CERT_ALTNAME_FORMAT`.
 - `convertALPNProtocols`, `getCiphers()` (Node 22.22.0's list, from its OpenSSL), `DEFAULT_CIPHERS`, `DEFAULT_ECDH_CURVE`, `DEFAULT_MIN_VERSION`, `DEFAULT_MAX_VERSION` (both follow `--tls-min-v1.x`, `--tls-max-v1.x` and `--tls-cipher-list`), `CLIENT_RENEG_LIMIT` and `CLIENT_RENEG_WINDOW`.
-- `createSecureContext` and `SecureContext` without key material, with Node's option checks and errors (`ERR_TLS_INVALID_PROTOCOL_VERSION`, `ERR_TLS_PROTOCOL_VERSION_CONFLICT`, …).
+- `createSecureContext` and `SecureContext`, with Node's option checks and errors (`ERR_TLS_INVALID_PROTOCOL_VERSION`, `ERR_TLS_PROTOCOL_VERSION_CONFLICT`, …).
 - `TLSSocket` extends `net.Socket`, and `Server` extends `net.Server` (callable without `new`, as in Node), so `instanceof` checks and subclasses work. `new tls.TLSSocket()` without a socket has `encrypted: true` and `authorized: false`, and its session getters answer as Node's do before a handshake (`getPeerCertificate()` is `null`, `exportKeyingMaterial` is `ERR_TLS_INVALID_STATE`). A `tls.Server` keeps its options, contexts (`addContext`) and ticket keys.
 
-**`rootCertificates` is an empty frozen array**, and so are `getCACertificates('bundled')`, `'system'` and `'extra'`. jsh makes no TLS connection of its own (an `https` request goes through `fetch`, which uses the platform's trust store), so Node's 146 bundled certificates (about 220 KB) would be trust anchors nothing in jsh uses. `setDefaultCACertificates` checks its arguments as Node does and keeps the list as given, which `getCACertificates()` returns.
+**`rootCertificates` is an empty frozen array**, and so are `getCACertificates('bundled')`, `'system'` and `'extra'`. The trust store is the kernel's (or the transport's), not jsh's, so Node's 146 bundled certificates (about 220 KB) would be trust anchors nothing in jsh uses. `setDefaultCACertificates` checks its arguments as Node does and keeps the list as given, which `getCACertificates()` returns; it doesn't change what the kernel trusts.
 
-The golden `tls-node22` checks the export list and these behaviours against Node 22.22.0.
+The golden `tls-node22` checks the export list and these behaviours against Node 22.22.0. `test/integration/tls-kernel.test.mjs` runs the same programs on host Node 22.22.0 and in a kernel with a fake uplink to the same TLS servers (a raw echo, failed verifications, STARTTLS, pg, nodemailer, https-proxy-agent, `https` with an agent), and compares their output.
 
 ## `http2`
 

@@ -838,6 +838,20 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     return new Server(options, requestListener);
   }
 
+  /** Node's _http_agent.js calculateServerName. */
+  function calculateServerName(options, req) {
+    let servername = options.host;
+    const hostHeader = req?.getHeader?.('host');
+    if (hostHeader) {
+      if (hostHeader[0] === '[') {
+        const index = hostHeader.indexOf(']');
+        servername = index === -1 ? hostHeader : hostHeader.substring(1, index);
+      } else servername = String(hostHeader).split(':', 1)[0];
+    }
+    if (net.isIP(servername)) servername = '';
+    return servername;
+  }
+
   class Agent extends EventEmitter {
     constructor(options = {}) {
       super();
@@ -949,6 +963,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       }
       options = { ...options, ...this.options };
       if (options.socketPath) options.path = options.socketPath;
+      if (!options.servername && options.servername !== '') options.servername = calculateServerName(options, req);
 
       const name = this.getName(options);
       this.sockets[name] ||= [];
@@ -983,6 +998,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     createSocket(req, options, cb) {
       options = { ...options, ...this.options };
       if (options.socketPath) options.path = options.socketPath;
+      // Node's normalizeServerName: the SNI from the Host header (or host),
+      // never an IP address.
+      if (!options.servername && options.servername !== '') options.servername = calculateServerName(options, req);
       const name = this.getName(options);
       options._agentKey = name;
 
@@ -1146,7 +1164,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       const opts = this.#opts;
       const host = opts.hostname ?? opts.host ?? '127.0.0.1';
       const port = Number(opts.port ?? (opts.protocol === 'https:' ? 443 : 80));
+      // Node's: the request's own options go to the agent (an https agent's
+      // tls.connect takes ca, servername, rejectUnauthorized … from them).
+      const { signal: _ignored, ...given } = opts;
+      void _ignored;
       const options = {
+        ...given,
         host,
         hostname: host,
         port,
@@ -1349,9 +1372,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
             const line = f.buf.subarray(0, i);
             f.buf = f.buf.subarray(i + 2);
             if (line.length === 0) {
+              // Node's: the trailers are the response's before its 'end'.
+              res.rawTrailers = f.rawTrailers ?? [];
+              res.trailers = headerObj(res.rawTrailers);
               finish();
               return;
             }
+            const text = Buffer.from(line).toString('latin1');
+            const colon = text.indexOf(':');
+            if (colon > 0) (f.rawTrailers ??= []).push(text.slice(0, colon).trim(), text.slice(colon + 1).trim());
           }
         }
       };
@@ -1421,6 +1450,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         res.statusMessage = parsed.statusMessage;
         res.rawHeaders = parsed.rawHeaders;
         res.headers = headers;
+        res.rawTrailers = [];
+        res.trailers = Object.create(null);
         res.method = undefined;
         res.url = undefined;
         res.complete = false;

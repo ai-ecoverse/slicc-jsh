@@ -14,9 +14,11 @@ import { kernelAtLeast } from '../kernel-version.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
 
-function rejectTlsOptions(options) {
+// From slicc-kernel 1.124.0 the kernel's own handshake takes a `ca`
+// (ai-ecoverse/slicc-kernel#922): a request with one goes over a TLS socket.
+function rejectTlsOptions(options, kernelTls = false) {
   for (const name of TLS_CLIENT_OPTS) {
-    if (options?.[name] != null) {
+    if (options?.[name] != null && !(kernelTls && name === 'ca')) {
       throw notSupported(`https.request option '${name}'`);
     }
   }
@@ -227,18 +229,24 @@ export function createHttps({ ctx, Buffer, http, handles, getStream, getTls }) {
 
   // Over a socket: a request with its own agent or createConnection, on a
   // kernel whose ctx.net.connect carries TLS. Its default agent is https's.
+  // On slicc-kernel 1.124.0 and later, also a request with a `ca`, which
+  // fetch can't take (the kernel's handshake, for a host the uplink routes).
+  const kernelTls = kernelAtLeast(ctx, '1.124.0');
   const viaSocket = (options) =>
     kernelAtLeast(ctx, '1.116.0') &&
     typeof http?.request === 'function' &&
     (typeof options?.createConnection === 'function' ||
-      (options?.agent != null && options.agent !== false && options.agent !== globalAgent));
+      (options?.agent != null && options.agent !== false && options.agent !== globalAgent) ||
+      (kernelTls && options?.ca != null));
 
   function request(input, options, callback) {
     const norm = normalize(input, options, callback);
     if (viaSocket(norm.options)) {
-      rejectTlsOptions(norm.options);
+      rejectTlsOptions(norm.options, kernelTls);
+      // Node's agent: false is a fresh agent of the default's kind (not a plain socket).
+      const own = norm.options.agent === false && typeof norm.options.createConnection !== 'function' ? { agent: new Agent() } : {};
       return http.request(
-        { _defaultAgent: globalAgent, defaultPort: 443, port: 443, ...norm.options, protocol: 'https:' },
+        { _defaultAgent: globalAgent, defaultPort: 443, port: 443, ...norm.options, ...own, protocol: 'https:' },
         norm.callback
       );
     }

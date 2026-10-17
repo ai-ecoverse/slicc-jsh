@@ -68,8 +68,11 @@ server.listen(0, '127.0.0.1', () => {
   });
 
   // From slicc-kernel 1.116.0 tls.connect has the kernel's TLS
-  // (tls-transport.test.mjs); TLS over an open socket still has none.
+  // (tls-transport.test.mjs); from 1.124.0 TLS over an open socket and a
+  // custom ca too (tls-kernel.test.mjs): those calls don't throw there.
   const transportTls = kernelAtLeast('1.116.0');
+  const kernelTls = kernelAtLeast('1.124.0');
+  const overSocket = kernelTls ? 'no throw' : `ERR_NOT_SUPPORTED slicc-jsh: '${transportTls ? 'tls.connect over a socket' : 'tls.connect'}' is not supported yet (no TLS on ctx.net)`;
   it('a handshake throws ERR_NOT_SUPPORTED when it is called: connect, listen, a TLSSocket over a socket, key material', async () => {
     const r = await jsh.run([
       'node',
@@ -105,15 +108,15 @@ t('https.createServer', () => https.createServer());
     const why = '(no TLS on ctx.net)';
     assert.deepEqual(r.stdout.split('\n'), [
       'loaded function',
-      `connect ERR_NOT_SUPPORTED slicc-jsh: '${transportTls ? 'tls.connect over a socket' : 'tls.connect'}' is not supported yet ${why}`,
-      `connect options ERR_NOT_SUPPORTED slicc-jsh: '${transportTls ? 'tls.connect over a socket' : 'tls.connect'}' is not supported yet ${why}`,
+      `connect ${overSocket}`,
+      `connect options ${overSocket}`,
       `listen ERR_NOT_SUPPORTED slicc-jsh: 'tls.Server.listen' is not supported yet ${why}`,
       'listening false',
-      `TLSSocket over a socket ERR_NOT_SUPPORTED slicc-jsh: 'tls.TLSSocket over a socket' is not supported yet ${why}`,
+      kernelTls ? 'TLSSocket over a socket no throw' : `TLSSocket over a socket ERR_NOT_SUPPORTED slicc-jsh: 'tls.TLSSocket over a socket' is not supported yet ${why}`,
       `TLSSocket connect ERR_NOT_SUPPORTED slicc-jsh: 'tls.TLSSocket.connect' is not supported yet ${why}`,
       `createSecureContext cert ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'cert'' is not supported yet ${why}`,
       `createSecureContext key ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'key'' is not supported yet ${why}`,
-      `createSecureContext ca ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'ca'' is not supported yet ${why}`,
+      kernelTls ? 'createSecureContext ca no throw' : `createSecureContext ca ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'ca'' is not supported yet ${why}`,
       `createServer key ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'cert'' is not supported yet ${why}`,
       `createSecurePair ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecurePair' is not supported yet ${why}`,
       `https.createServer ERR_NOT_SUPPORTED slicc-jsh: 'https.createServer' is not supported yet ${why}`,

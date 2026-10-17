@@ -58,6 +58,16 @@ function parseListenArgs(args) {
 export const kConnectTls = Symbol('slicc-jsh.net.connectTls');
 export const kTlsSession = Symbol('slicc-jsh.net.tlsSession');
 const kRefused = Symbol('slicc-jsh.net.tlsRefused');
+/**
+ * TLS over an open socket (STARTTLS, slicc-kernel 1.124.0): `socket[kDetach]()`
+ * hands over a connected socket's kernel connection (its reads stop, its
+ * writes so far are out), and `tlsSocket[kStartTls](parent, request)` runs
+ * `ctx.net.connect({ socket, host, tls })` on it: at once, or (`request.lazy`)
+ * at the first write, as Node's client TLSSocket does.
+ */
+export const kDetach = Symbol('slicc-jsh.net.detach');
+export const kStartTls = Symbol('slicc-jsh.net.startTls');
+export const kStartNow = Symbol('slicc-jsh.net.startNow');
 
 /** A server-side socket's server (Node's socket._server), told when the socket goes. */
 const kServer = Symbol('slicc-jsh.net.server');
@@ -102,6 +112,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
     #localAddress;
     #localPort;
     #handle;
+    // The last write's promise: what a STARTTLS waits for before the switch.
+    #lastWrite = Promise.resolve();
+    // Handed to a TLS socket (kDetach): no more reads, writes or events here.
+    #detached = false;
+    // A TLS socket's handshake to run at its first write (new TLSSocket(socket)).
+    #startOnWrite = null;
+    // The TLS socket that took the connection: it goes when this one does.
+    #owner;
 
     constructor(options = {}) {
       // Node net.Socket defaults allowHalfOpen to false. HTTP servers opt in
@@ -110,7 +128,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       super({
         allowHalfOpen: Boolean(options.allowHalfOpen),
         autoDestroy: true,
-        emitClose: true,
+        // A TLS socket over another says 'close' itself, after that one's (Node's TLSWrap).
+        emitClose: options.emitClose !== false,
       });
       this.connecting = false;
       this.pending = true;
@@ -200,7 +219,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
     }
 
     /** Bind an already-open kernel connection (server accept path). */
-    _attach(conn) {
+    _attach(conn, { quiet = false } = {}) {
       this.#conn = conn;
       this.#remoteAddress = conn.remote?.host;
       this.#remotePort = conn.remote?.port;
@@ -216,8 +235,117 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       // Node net.Socket delivers 'end'/'close' even without a 'data' listener;
       // resume so buffered EOF from #pumpRead is consumed (fin4.js).
       this.resume?.();
+      if (quiet) return;
       this.emit('connect');
       this.emit('ready');
+    }
+
+    /** The kernel connection, for a TLS socket to upgrade (see kDetach). */
+    async [kDetach](owner) {
+      if (!this.#conn || this.#detached) {
+        throw Object.assign(new Error('slicc-jsh: the socket has no connection to upgrade'), { code: 'ERR_NOT_SUPPORTED' });
+      }
+      this.#detached = true;
+      this.#owner = owner;
+      // What was written in plain text goes out before the handshake.
+      await this.#lastWrite.catch(() => {});
+      // The pump's pending read ends (a TypeError it ignores); a chunk the
+      // kernel is still reading stays queued in the stream for the TLS side.
+      try {
+        this.#reader?.releaseLock();
+      } catch {
+        /* ignore */
+      }
+      try {
+        this.#writer?.releaseLock();
+      } catch {
+        /* ignore */
+      }
+      this.#reader = undefined;
+      this.#writer = undefined;
+      this.#dropHandle();
+      return this.#conn;
+    }
+
+    /**
+     * TLS over `parent`, a connected (or connecting) net.Socket. `request` is
+     * tls's: `dial()` gives `{ host, tls }` for ctx.net.connect, `check(session)`
+     * the error to refuse the session with (`refusedSession(err)` takes it, else
+     * the socket is destroyed with it), `refused(err)` maps the kernel's
+     * refusal, `secured()` is called once the session is up, and `lazy` waits
+     * for the first write (or kStartNow).
+     */
+    [kStartTls](parent, request) {
+      this.#connecting = true;
+      const run = async () => {
+        if (this.destroyed) return;
+        const { host, tls } = request.dial();
+        const conn = await parent[kDetach](this);
+        let secure;
+        try {
+          secure = await ctx.net.connect({ socket: conn, ...(host ? { host } : {}), tls });
+        } catch (err) {
+          // The connection is this socket's now: it goes with the failed handshake.
+          void conn.close?.().catch(() => {});
+          throw request.refused(err) ?? errnoError(err, 'connect');
+        }
+        if (this.destroyed) {
+          void secure.close?.().catch(() => {});
+          return;
+        }
+        this[kTlsSession] = secure.tls;
+        const bad = request.check?.(secure.tls);
+        if (bad) {
+          void secure.close?.().catch(() => {});
+          this.connecting = false;
+          if (request.refusedSession) {
+            // 'secure', whose first listener (Node's onConnectSecure) destroys with it.
+            request.refusedSession(bad);
+            request.secured?.();
+          } else this.destroy(bad);
+          return;
+        }
+        this.connecting = false;
+        this.#connecting = false;
+        this._attach(secure, { quiet: true });
+        for (const chunk of this.#pending) void this.#write(chunk);
+        this.#pending = [];
+        request.secured?.();
+      };
+      const go = () =>
+        void trackPromise(
+          handles,
+          run().catch((err) => {
+            this.connecting = false;
+            if (!this.destroyed) this.destroy(err);
+          })
+        );
+      const start = () => {
+        this.#startOnWrite = null;
+        // A socket still connecting: the handshake once it has. Waiting
+        // keeps nothing alive, as in Node (an unconnected socket has no handle).
+        if (parent._isConnected()) go();
+        else parent.once('connect', go);
+      };
+      if (request.lazy) this.#startOnWrite = start;
+      else start();
+      return this;
+    }
+
+    /** A lazy kStartTls's handshake, now. */
+    [kStartNow]() {
+      this.#startOnWrite?.();
+    }
+
+    /** @internal Whether the socket has its kernel connection. */
+    _isConnected() {
+      return Boolean(this.#conn) && !this.#detached;
+    }
+
+    #write(bytes) {
+      const p = this.#writer.write(bytes);
+      this.#lastWrite = p;
+      return p;
     }
 
     connect(...args) {
@@ -249,11 +377,22 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       this.#connecting = true;
       const host = options.host ?? '127.0.0.1';
       const port = Number(options.port);
+      // Node's: the host connected to (tls's checkServerIdentity falls back on it).
+      this._host = host;
       const tlsRequest = options[kConnectTls];
+      const dial = (tls) => ctx.net.connect({ host, port, signal: options.signal, ...(tls ? { tls } : {}) });
+      let dialled = dial(tlsRequest?.tls);
+      // tls's first choice refused (the kernel path for a host the uplink
+      // doesn't route): its second.
+      if (tlsRequest?.retry) {
+        dialled = dialled.catch((err) => {
+          if ((err?.code ?? err?.cause?.code) !== 'ENOTSUP') throw err;
+          return dial(tlsRequest.retry);
+        });
+      }
       const p = trackPromise(
         handles,
-        ctx.net
-          .connect({ host, port, signal: options.signal, ...(tlsRequest ? { tls: tlsRequest.tls } : {}) })
+        dialled
           .then((conn) => {
             if (this.destroyed) {
               void conn.close();
@@ -265,9 +404,22 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
               void conn.close();
               throw Object.assign(tlsRequest.refused({ code: 'ENOTSUP' }), { [kRefused]: true });
             }
-            if (tlsRequest) this[kTlsSession] = conn.tls;
+            if (tlsRequest) {
+              this[kTlsSession] = conn.tls;
+              // Node's onConnectSecure: a peer it won't take gets nothing.
+              const bad = tlsRequest.check?.(conn.tls);
+              if (bad) {
+                void conn.close();
+                this.connecting = false;
+                this.#connecting = false;
+                this.emit('connect');
+                if (tlsRequest.refusedSession) tlsRequest.refusedSession(bad);
+                else this.destroy(bad);
+                return;
+              }
+            }
             this._attach(conn);
-            for (const chunk of this.#pending) void this.#writer.write(chunk);
+            for (const chunk of this.#pending) void this.#write(chunk);
             this.#pending = [];
           })
           .catch((err) => {
@@ -328,6 +480,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           // An unref'd socket (an idle keep-alive one) doesn't keep the program alive.
           const reading = this.#reader.read();
           const { value, done } = await (this.#refed ? trackPromise(handles, reading) : reading);
+          if (this.#detached) return;
           if (this.#idleTimer) this._touch();
           if (done) {
             this.#readableEof = true;
@@ -352,6 +505,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           await Promise.resolve();
         }
       } catch (err) {
+        // Handed to a TLS socket: its reader was released, nothing ended.
+        if (this.#detached) return;
         // Peer half-close/close can race into EBADF; treat as readable EOF when
         // we are not already destroyed so listeners still see 'end'.
         const code = err?.code ?? err?.cause?.code;
@@ -364,7 +519,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           this.destroy(errnoError(err, 'read'));
         }
       } finally {
-        this.#maybeFinishConn();
+        if (!this.#detached) this.#maybeFinishConn();
       }
     }
 
@@ -400,12 +555,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
         if (this.#connecting) {
           this.#pending.push(bytes);
           callback();
+          this.#startOnWrite?.();
           return;
         }
         callback(new Error('Socket is not connected'));
         return;
       }
-      this.#writer.write(bytes).then(
+      this.#write(bytes).then(
         () => callback(),
         (err) => callback(errnoError(err, 'write'))
       );
@@ -442,6 +598,15 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       }
       if (this.#idleTimer) clearTimeout(this.#idleTimer);
       this.#idleTimer = null;
+      // Handed to a TLS socket, the connection is that socket's to close.
+      if (this.#detached) {
+        this.#conn = undefined;
+        const owner = this.#owner;
+        this.#owner = undefined;
+        if (owner && !owner.destroyed) owner.destroy();
+        callback(err);
+        return;
+      }
       const halfClosedCleanly = this.#finishConnStarted;
       this.#finishConnStarted = true;
       this.#dropHandle();
