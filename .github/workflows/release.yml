@@ -76,7 +76,10 @@ jobs:
         if: steps.head.outputs.current == 'true'
         env:
           SEMANTIC_RELEASE: ${{ steps.semantic-release.outcome }}
-        run: node scripts/release-outcome.mjs
+        run: |
+          set -euo pipefail
+          node scripts/release-outcome.mjs 2>&1 | tee "$RUNNER_TEMP/outcome.out"
+          grep -Eq '^semantic-release (tagged v[0-9]+\.[0-9]+\.[0-9]+|: nothing to release$)' "$RUNNER_TEMP/outcome.out" || { echo "::error title=release outcome: no verdict::release-outcome.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
 
   publish:
     name: release / publish
@@ -144,6 +147,11 @@ jobs:
         id: verify
         run: |
           line=$(node scripts/cert-review/published.mjs --version "$VERSION") && ok=1 || ok=0
+          if [ "$ok" = 1 ] && ! printf '%s\n' "$line" | grep -Eq "^verified @ai-ecoverse/slicc-jsh@$VERSION sha256=[0-9a-f]{64} on npm "; then
+            echo "::error title=verify: no verdict::published.mjs exited 0 without its verified line: a gate's silence is not a pass"
+            line="cert-ci: FAIL published @ai-ecoverse/slicc-jsh@$VERSION: published.mjs exited 0 without its verified line (${line:-no output})"
+            ok=0
+          fi
           { echo '```'; echo "$line"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           echo "$line"
           printf '%s\n' "$line" > "$RUNNER_TEMP/verify.txt"
@@ -155,12 +163,17 @@ jobs:
             --body "$(printf 'The post-publish verify of v%s failed in %s:\n\n```\n%s\n```\n' "$VERSION" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" "$(cat "$RUNNER_TEMP/verify.txt")")"
       - name: The release line (the published tarball, re-fetched from the registry)
         run: |
+          set -euo pipefail
           git fetch --tags --force origin
-          node scripts/release-line.mjs "$VERSION"
+          node scripts/release-line.mjs "$VERSION" 2>&1 | tee "$RUNNER_TEMP/release-line.out"
+          grep -Eq "^wrote the line into the v$VERSION release$" "$RUNNER_TEMP/release-line.out" || { echo "::error title=release line: no verdict::release-line.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: The cert-review section (each pull request in the release, with its cert line)
         run: |
-          prev=$(npm view @ai-ecoverse/slicc-jsh versions --json | jq -r '.[]' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | awk -v v="$VERSION" '$0 != v' | tail -1)
-          node scripts/cert-review/carry.mjs --from "v$prev" --to "v$VERSION" --release "v$VERSION"
+          set -euo pipefail
+          prev=$(npm view @ai-ecoverse/slicc-jsh versions --json | jq -r '.[]' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | awk -v v="$VERSION" '$0 != v' | tail -1) || prev=
+          [ -n "$prev" ] || { echo "::error title=cert-review section: no verdict::npm view named no version before $VERSION: a gate's silence is not a pass"; exit 1; }
+          node scripts/cert-review/carry.mjs --from "v$prev" --to "v$VERSION" --release "v$VERSION" 2>&1 | tee "$RUNNER_TEMP/carry.out"
+          grep -Eq "^wrote the cert-review section of v$VERSION \\([0-9]+ pull request\\(s\\)\\)$" "$RUNNER_TEMP/carry.out" || { echo "::error title=cert-review section: no verdict::carry.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
 
   alert:
     name: release / alert on failure

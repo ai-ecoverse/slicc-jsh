@@ -108,7 +108,10 @@ jobs:
         env:
           BASE: ${{ steps.refs.outputs.base }}
           HEAD_SHA: ${{ steps.refs.outputs.head }}
-        run: node scripts/cert-review/shipped.mjs --base "$BASE" --head "$HEAD_SHA" --work "$RUNNER_TEMP/shipped"
+        run: |
+          set -euo pipefail
+          node scripts/cert-review/shipped.mjs --base "$BASE" --head "$HEAD_SHA" --work "$RUNNER_TEMP/shipped" 2>&1 | tee "$RUNNER_TEMP/shipped.out"
+          { grep -Eq '^shipped: (behaviour|not behaviour): .' "$RUNNER_TEMP/shipped.out" && grep -Eq '^behaviour=(true|false)$' "$GITHUB_OUTPUT"; } || { echo "::error title=scope: no verdict::shipped.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: Pack the candidate and the base, as the release packs
         id: pack
         if: steps.shipped.outputs.behaviour == 'true' && steps.refs.outputs.fork != 'true' && steps.refs.outputs.ready == 'true'
@@ -119,8 +122,10 @@ jobs:
           PREV: ${{ steps.refs.outputs.prev }}
         run: |
           set -euo pipefail
-          node scripts/cert-review/pack.mjs --version "$VERSION" --ref "$HEAD_SHA" --out "$RUNNER_TEMP/pack/head"
-          node scripts/cert-review/pack.mjs --version "$PREV" --ref "$BASE" --out "$RUNNER_TEMP/pack/base"
+          node scripts/cert-review/pack.mjs --version "$VERSION" --ref "$HEAD_SHA" --out "$RUNNER_TEMP/pack/head" 2>&1 | tee "$RUNNER_TEMP/pack-head.out"
+          grep -Eq '^pack: .* sha256=[0-9a-f]{64} ' "$RUNNER_TEMP/pack-head.out" || { echo "::error title=pack: no verdict::pack.mjs (the candidate) exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
+          node scripts/cert-review/pack.mjs --version "$PREV" --ref "$BASE" --out "$RUNNER_TEMP/pack/base" 2>&1 | tee "$RUNNER_TEMP/pack-base.out"
+          grep -Eq '^pack: .* sha256=[0-9a-f]{64} ' "$RUNNER_TEMP/pack-base.out" || { echo "::error title=pack: no verdict::pack.mjs (the base) exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
           echo "head_sha256=$(jq -r .sha256 "$RUNNER_TEMP/pack/head/pack.json")" >> "$GITHUB_OUTPUT"
           echo "base_sha256=$(jq -r .sha256 "$RUNNER_TEMP/pack/base/pack.json")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -167,7 +172,9 @@ jobs:
           HEAD_SHA: ${{ needs.scope.outputs.head }}
           BASE: ${{ needs.scope.outputs.base }}
         run: |
-          node scripts/cert-review/plan.mjs --pr "$N" --version "$VERSION" --prev "$PREV" --head "$HEAD_SHA" --base "$BASE" --out "$RUNNER_TEMP/plan"
+          set -euo pipefail
+          node scripts/cert-review/plan.mjs --pr "$N" --version "$VERSION" --prev "$PREV" --head "$HEAD_SHA" --base "$BASE" --out "$RUNNER_TEMP/plan" 2>&1 | tee "$RUNNER_TEMP/plan.out"
+          grep -Eq '^plan: .* [0-9]+ commit\(s\), [0-9]+ PR\(s\), [0-9]+ file\(s\)$' "$RUNNER_TEMP/plan.out" || { echo "::error title=plan: no verdict::plan.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
           cat "$RUNNER_TEMP/plan/plan.md" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -223,19 +230,27 @@ jobs:
           path: ${{ runner.temp }}/pack
       - name: Stage the head's tarball, the base's dist and kernel ${{ matrix.kernel }}
         run: |
+          set -euo pipefail
           git diff --name-only "$BASE" "$HEAD_SHA" > "$RUNNER_TEMP/touched.txt"
           node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --ref "$HEAD_SHA" --prev-ref "$BASE" --work "$WORK" --kernels "${{ matrix.kernel }}" \
-            --tarball "$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz)" --prev-tarball "$(ls "$RUNNER_TEMP"/pack/pack/base/*.tgz)"
+            --tarball "$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz)" --prev-tarball "$(ls "$RUNNER_TEMP"/pack/pack/base/*.tgz)" 2>&1 | tee "$RUNNER_TEMP/stage.out"
+          grep -Eq '^stage: .* kernels ' "$RUNNER_TEMP/stage.out" || { echo "::error title=stage: no verdict::stage.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: Suites on one tree (golden, jsh parity, integration, cert, node-parallel)
         if: startsWith(matrix.part, 'suites-')
         env:
           TREE: ${{ matrix.part == 'suites-tag' && 'tag' || 'neg' }}
-        run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --tree "$TREE"
+        run: |
+          set -euo pipefail
+          $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --tree "$TREE" 2>&1 | tee "$RUNNER_TEMP/suites.out"
+          grep -Eq "^(suites ${{ matrix.kernel }} $TREE: [1-9][0-9]* run\\(s\\) in runs-$TREE\\.json|suites: kernel ${{ matrix.kernel }} is .*: nothing to run)$" "$RUNNER_TEMP/suites.out" || { echo "::error title=suites: no verdict::suites.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: m-fixtures and rows against host Node 22.22.0 (one shard)
         if: startsWith(matrix.part, 'fixtures-')
         env:
           SHARD: ${{ matrix.part == 'fixtures-1' && '1/2' || '2/2' }}
-        run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/mfixtures.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --shard "$SHARD"
+        run: |
+          set -euo pipefail
+          $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/mfixtures.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --shard "$SHARD" 2>&1 | tee "$RUNNER_TEMP/mfixtures.out"
+          grep -Eq "^(mfixtures ${{ matrix.kernel }}: \\{.*\\}|mfixtures: kernel ${{ matrix.kernel }} is .*: nothing to run)$" "$RUNNER_TEMP/mfixtures.out" || { echo "::error title=m-fixtures: no verdict::mfixtures.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: Chrome for Testing (the head's config.chrome)
         if: matrix.part == 'browser'
         working-directory: ${{ env.WORK }}/tag
@@ -247,7 +262,10 @@ jobs:
           fi
       - name: Browser suite on the head
         if: matrix.part == 'browser'
-        run: $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag
+        run: |
+          set -euo pipefail
+          $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag 2>&1 | tee "$RUNNER_TEMP/suites.out"
+          grep -Eq "^suites [^ ]+ browser: [1-9][0-9]* run\\(s\\) in runs-browser\\.json$" "$RUNNER_TEMP/suites.out" || { echo "::error title=browser suite: no verdict::suites.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
@@ -316,9 +334,16 @@ jobs:
           path: ${{ runner.temp }}/pack
       - name: Stage the trees and every kernel (no secrets in this step)
         run: |
+          set -euo pipefail
           node scripts/cert-review/stage.mjs --version "$VERSION" --prev "$PREV" --ref "$HEAD_SHA" --prev-ref "$BASE" --work "$WORK" \
-            --tarball "$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz)" --prev-tarball "$(ls "$RUNNER_TEMP"/pack/pack/base/*.tgz)"
-          for k in $(jq -r '.kernels[].id' "$WORK/stage.json"); do node scripts/cert-review/suites.mjs --work "$WORK" --kernel "$k" --merge; done
+            --tarball "$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz)" --prev-tarball "$(ls "$RUNNER_TEMP"/pack/pack/base/*.tgz)" 2>&1 | tee "$RUNNER_TEMP/stage.out"
+          grep -Eq '^stage: .* kernels ' "$RUNNER_TEMP/stage.out" || { echo "::error title=stage: no verdict::stage.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
+          kernels=$(jq -r '.kernels[].id' "$WORK/stage.json")
+          [ -n "$kernels" ] || { echo "::error title=stage: no kernels::stage.json names no kernel: a gate's silence is not a pass"; exit 1; }
+          for k in $kernels; do
+            node scripts/cert-review/suites.mjs --work "$WORK" --kernel "$k" --merge 2>&1 | tee "$RUNNER_TEMP/merge-$k.out"
+            grep -Eq "^suites $k \\(.*\\)( suites\\.json: regression [0-9]+, |: no runs to merge )" "$RUNNER_TEMP/merge-$k.out" || { echo "::error title=suites merge: no verdict::suites.mjs --merge exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
+          done
           node scripts/cert-review/digest.mjs --work "$WORK" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: The review instructions
         env:
@@ -415,8 +440,16 @@ jobs:
       - name: The line (this job's tools, main's at the pull request's base)
         id: record
         run: |
+          set -o pipefail
           mkdir -p "$RUNNER_TEMP/cert-review" "$RUNNER_TEMP/record"
           if [ "$BEHAVIOUR" != true ]; then
+            case "$BEHAVIOUR:$WHY" in
+              "false:not behaviour: "?*) ;;
+              *)
+                echo "::error title=record: no verdict::the scope gave no verdict (behaviour '$BEHAVIOUR', why '$WHY'): a gate's silence is not a pass"
+                exit 1
+                ;;
+            esac
             line="$WHY"
             printf '%s\n' "$line" > "$RUNNER_TEMP/record/line.txt"
             printf '**Cert review: not needed.** %s\n\n```\n%s\n```\n' "$WHY" "$line" > "$RUNNER_TEMP/record/section.md"
@@ -424,11 +457,20 @@ jobs:
             echo "state=success" >> "$GITHUB_OUTPUT"
           else
             tgz=$(ls "$RUNNER_TEMP"/pack/pack/head/*.tgz 2> /dev/null | head -1 || true)
-            if node scripts/cert-review/record.mjs --pr "$N" --head "$HEAD_SHA" --commit "$CANDIDATE" --version "$VERSION" --review "$RUNNER_TEMP/cert-review" \
-              --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" --tarball "$tgz" --sha256 "$PACKED" --upstream "$UPSTREAM"; then
+            rc=0
+            node scripts/cert-review/record.mjs --pr "$N" --head "$HEAD_SHA" --commit "$CANDIDATE" --version "$VERSION" --review "$RUNNER_TEMP/cert-review" \
+              --out "$RUNNER_TEMP/record" --run "$RUN_URL" --repo "$GH_REPO" --tarball "$tgz" --sha256 "$PACKED" --upstream "$UPSTREAM" 2>&1 | tee "$RUNNER_TEMP/record.out" || rc=$?
+            certified="^certified @ai-ecoverse/slicc-jsh PR #$N head $HEAD_SHA sha256=[0-9a-f]{64} "
+            if [ "$rc" = 0 ] && grep -Eq "$certified" "$RUNNER_TEMP/record.out" && grep -Eq "$certified" "$RUNNER_TEMP/record/line.txt" 2> /dev/null; then
               echo "verdict=certified" >> "$GITHUB_OUTPUT"
               echo "state=success" >> "$GITHUB_OUTPUT"
             else
+              if [ "$rc" = 0 ]; then
+                echo "::error title=record: no verdict::record.mjs exited 0 without its certified line: a gate's silence is not a pass"
+                line="cert-ci: FAIL @ai-ecoverse/slicc-jsh PR #$N head $HEAD_SHA: record.mjs exited 0 without its certified line ($RUN_URL)"
+                printf '%s\n' "$line" > "$RUNNER_TEMP/record/line.txt"
+                printf '**Cert review: no verdict.** record.mjs exited 0 without its certified line.\n\n```\n%s\n```\n' "$line" > "$RUNNER_TEMP/record/section.md"
+              fi
               echo "verdict=fail" >> "$GITHUB_OUTPUT"
               echo "state=failure" >> "$GITHUB_OUTPUT"
             fi
@@ -484,7 +526,10 @@ jobs:
           BASE: ${{ github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node scripts/cert-review/group.mjs --base "$BASE" --head "$HEAD_SHA" --repo "$GH_REPO" --run "$RUN_URL"
+        run: |
+          set -euo pipefail
+          node scripts/cert-review/group.mjs --base "$BASE" --head "$HEAD_SHA" --repo "$GH_REPO" --run "$RUN_URL" 2>&1 | tee "$RUNNER_TEMP/group.out"
+          grep -Eq '^group status: success: .' "$RUNNER_TEMP/group.out" || { echo "::error title=merge group: no verdict::group.mjs exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
 
   verdict:
     name: cert-review / verdict
@@ -521,11 +566,26 @@ jobs:
             exit 0
           fi
           [ "$SCOPE" = success ] || { echo "::error::cert-review could not decide the scope ($SCOPE)"; exit 1; }
+          case "$BEHAVIOUR" in
+            true | false) ;;
+            *)
+              echo "::error title=scope: no verdict::the scope job succeeded without a behaviour verdict ('$BEHAVIOUR'): a gate's silence is not a pass"
+              exit 1
+              ;;
+          esac
           if [ "$FORK" = true ] && [ "$BEHAVIOUR" = true ]; then
             echo "::error title=fork: no cert review::a fork's pull request that changes shipped behaviour gets no review (no secrets); push the branch to this repository"
             exit 1
           fi
-          if [ "$BEHAVIOUR" != true ]; then
+          if [ "$BEHAVIOUR" = false ]; then
+            case "$WHY" in
+              "not behaviour: "?*) ;;
+              *)
+                echo "::error title=scope: no verdict::not behaviour without its reason ('$WHY'): a gate's silence is not a pass"
+                exit 1
+                ;;
+            esac
+            [ "$FORK" = true ] || [ "$VERDICT" = not-behaviour ] || { echo "::error title=record: no verdict::the record job gave '$VERDICT', not not-behaviour: a gate's silence is not a pass"; exit 1; }
             echo "$WHY"
             exit 0
           fi

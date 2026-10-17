@@ -128,9 +128,13 @@ jobs:
               process.exit(1);
             }
             console.log("NOTICE ok:", pkgs.size, "packages");
-          '
+          ' 2>&1 | tee "$RUNNER_TEMP/notice.out"
+          grep -Eq '^NOTICE ok: [1-9][0-9]* packages$' "$RUNNER_TEMP/notice.out" || { echo "::error title=NOTICE: no verdict::the NOTICE check exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: Lint
-        run: npm run lint
+        run: |
+          set -euo pipefail
+          npm run lint 2>&1 | tee "$RUNNER_TEMP/lint.out"
+          grep -Eq '^lint ok$' "$RUNNER_TEMP/lint.out" || { echo "::error title=lint: no verdict::npm run lint exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       # Each kernel suite below runs in a session of its own (setsid), so a
       # signal to its process group can't reach the runner's step shell, and
       # under scripts/sigwho.pl, which logs who sent the group a SIGINT,
@@ -165,20 +169,35 @@ jobs:
         # golden.mjs's default (their CPU count, at most 6).
         env:
           GOLDEN_JOBS: ${{ needs.runner.outputs.runner != 'ubuntu-latest' && '3' || '' }}
-        run: $ISOLATE npm run test:golden
+        run: |
+          set -euo pipefail
+          $ISOLATE npm run test:golden 2>&1 | tee "$RUNNER_TEMP/golden.out"
+          grep -Eq '^golden check: [1-9][0-9]* fixture\(s\)$' "$RUNNER_TEMP/golden.out" || { echo "::error title=golden: no verdict::npm run test:golden exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: jsh parity (host Node 22 baseline, kernel jsh)
         timeout-minutes: 5
-        run: $ISOLATE npm run test:jsh
+        run: |
+          set -euo pipefail
+          $ISOLATE npm run test:jsh 2>&1 | tee "$RUNNER_TEMP/jsh.out"
+          grep -Eq '^jsh check: [1-9][0-9]* case\(s\)$' "$RUNNER_TEMP/jsh.out" || { echo "::error title=jsh parity: no verdict::npm run test:jsh exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: Kernel integration (Node entry, memory root)
         # wasi-pnpm add -g cases (pnpm-global*.test.mjs) push this past 5m on GHA
         timeout-minutes: 10
-        run: $ISOLATE npm run test:integration
+        run: |
+          set -euo pipefail
+          $ISOLATE npm run test:integration 2>&1 | tee "$RUNNER_TEMP/integration.out"
+          { grep -Eq '^ℹ pass [1-9][0-9]*$' "$RUNNER_TEMP/integration.out" && grep -Eq '^ℹ fail 0$' "$RUNNER_TEMP/integration.out"; } || { echo "::error title=integration: no verdict::npm run test:integration exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: Cert (host Node 22 vs shim; kernel from plain dist)
         timeout-minutes: 10
-        run: $ISOLATE npm run test:cert
+        run: |
+          set -euo pipefail
+          $ISOLATE npm run test:cert 2>&1 | tee "$RUNNER_TEMP/cert.out"
+          grep -Eq '^cert: [1-9][0-9]* suite\(s\), [1-9][0-9]* case\(s\), failed=0$' "$RUNNER_TEMP/cert.out" || { echo "::error title=cert: no verdict::npm run test:cert exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: Node parallel slice (track pass/fail; non-strict)
         timeout-minutes: 8
-        run: $ISOLATE npm run test:node-parallel
+        run: |
+          set -euo pipefail
+          $ISOLATE npm run test:node-parallel 2>&1 | tee "$RUNNER_TEMP/node-parallel.out"
+          grep -Eq '^totals: PASS=[1-9][0-9]* FAIL=[0-9]+ SKIP=[0-9]+ of [1-9][0-9]*$' "$RUNNER_TEMP/node-parallel.out" || { echo "::error title=node-parallel: no verdict::npm run test:node-parallel exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - name: Signals the suites' groups got (#250)
         if: always()
         run: cat "$RUNNER_TEMP/suite-signals.log" 2>/dev/null || true
@@ -190,7 +209,8 @@ jobs:
           # A plain npm pack must already be stripped (prepack runs
           # scripts/strip-own-scripts.mjs): that is what semantic-release's
           # npm publish ships to the registry.
-          node -e "const p=JSON.parse(require('child_process').execFileSync('tar',['-xOzf',process.argv[1],'package/package.json'],{encoding:'utf8'})); if(p.scripts?.prepare||p.scripts?.prepack){console.error('refuse: packed package.json still has prepare/prepack'); process.exit(1)}" "$tgz"
+          node -e "const p=JSON.parse(require('child_process').execFileSync('tar',['-xOzf',process.argv[1],'package/package.json'],{encoding:'utf8'})); if(p.scripts?.prepare||p.scripts?.prepack){console.error('refuse: packed package.json still has prepare/prepack'); process.exit(1)} console.log('packed package.json: no prepare or prepack')" "$tgz" 2>&1 | tee "$RUNNER_TEMP/prepack.out"
+          grep -Eq '^packed package.json: no prepare or prepack$' "$RUNNER_TEMP/prepack.out" || { echo "::error title=pack: no verdict::the packed package.json check exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
           node scripts/strip-pack-scripts.mjs "$tgz"
           echo "packed $tgz"
           tar -tzf "$tgz" | tee "$RUNNER_TEMP/listing.txt"
@@ -245,7 +265,10 @@ jobs:
         if: runner.os == 'Linux'
         run: shellcheck -s sh install.sh test/install/run.sh
       - name: install.sh (Node 22, no Node, pty, uninstall)
-        run: sh test/install/run.sh
+        run: |
+          set -euo pipefail
+          sh test/install/run.sh 2>&1 | tee "$RUNNER_TEMP/install.out"
+          grep -Eq '^all install\.sh cases passed$' "$RUNNER_TEMP/install.out" || { echo "::error title=install.sh: no verdict::sh test/install/run.sh exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
 
   browser:
     # The kernel in a Chromium tab (slicc-shared-web's harness), slicc-jsh and
@@ -277,7 +300,10 @@ jobs:
           fi
       - name: Browser suite
         timeout-minutes: 10
-        run: npm run test:browser
+        run: |
+          set -euo pipefail
+          npm run test:browser 2>&1 | tee "$RUNNER_TEMP/browser.out"
+          { grep -Eq '^ℹ pass [1-9][0-9]*$' "$RUNNER_TEMP/browser.out" && grep -Eq '^ℹ fail 0$' "$RUNNER_TEMP/browser.out"; } || { echo "::error title=browser: no verdict::npm run test:browser exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
