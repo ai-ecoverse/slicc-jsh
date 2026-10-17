@@ -7,6 +7,8 @@ import { createFetch } from '../web/fetch.mjs';
 import { createHttps } from '../builtins/https.mjs';
 import { createNet } from '../builtins/net.mjs';
 import { createTls } from '../builtins/tls.mjs';
+import { createCluster } from '../builtins/cluster.mjs';
+import { createTraceEvents } from '../builtins/trace-events.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
@@ -27,6 +29,7 @@ const BUILTIN_LIST = [
   'async_hooks',
   'buffer',
   'child_process',
+  'cluster',
   'console',
   'constants',
   'crypto',
@@ -59,6 +62,7 @@ const BUILTIN_LIST = [
   'timers',
   'timers/promises',
   'tls',
+  'trace_events',
   'tty',
   'url',
   'util',
@@ -74,10 +78,8 @@ const NOT_YET = [
   'dgram',
   'dns',
   'dns/promises',
-  'cluster',
   'inspector',
   'inspector/promises',
-  'trace_events',
   'wasi',
 ];
 
@@ -226,6 +228,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
   let tls;
   const getTls = () => (tls ??= createTls({ process, Buffer, net: getNet() }));
+  let cluster;
+  let traceEvents;
   let tty;
   let crypto;
   const getCrypto = () => {
@@ -366,6 +370,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     http: () => getHttp(),
     https: () => getHttps(),
     tls: getTls,
+    cluster: () => (cluster ??= createCluster({ process })),
+    trace_events: () => (traceEvents ??= createTraceEvents({ process })),
     child_process: () => getChildProcess(),
   };
 

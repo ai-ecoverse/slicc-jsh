@@ -1,0 +1,14 @@
+{
+  "description": "require('cluster') and require('trace_events') load with Node 22.22.0's exports: cluster as the primary (isPrimary, settings, setupPrimary's 'setup' event and the --prof logfile, disconnect with no workers, the Worker class), trace_events' Tracing objects (enable/disable, inspect), getEnabledCategories as the agent's sorted set, the >10 enabled warning, the argument errors. Host Node writes its trace file to /tmp (hostArgv); jsh writes none.",
+  "argv": [
+    "--no-warnings",
+    "script.mjs"
+  ],
+  "shim": true,
+  "hostArgv": [
+    "--no-warnings",
+    "--trace-event-file-pattern",
+    "/tmp/jsh-golden-trace-${pid}.log",
+    "script.mjs"
+  ]
+}
