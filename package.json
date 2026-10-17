@@ -95,7 +95,7 @@
     "http-proxy-agent": "9.1.0",
     "kernel-cert-186": "npm:@ai-ecoverse/slicc-kernel@1.86.0",
     "kernel-cert-floor": "npm:@ai-ecoverse/slicc-kernel@1.72.0",
-    "kernel-cert-new": "npm:@ai-ecoverse/slicc-kernel@1.119.1",
+    "kernel-cert-new": "npm:@ai-ecoverse/slicc-kernel@1.119.2",
     "minimatch": "10.2.6",
     "monocart-coverage-reports": "2.13.2",
     "node-inspect-extracted": "3.3.4",
