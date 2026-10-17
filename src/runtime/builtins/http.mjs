@@ -1081,6 +1081,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       // Node's: what the request is, readable as res.req's.
       this.method = String(options.method ?? 'GET').toUpperCase();
       this.path = options.path ?? '/';
+      // Node's stored head: null until it is rendered (_implicitHeader) or sent.
+      this._header = null;
       this.host = options.hostname ?? options.host ?? 'localhost';
       this.protocol = options.protocol ?? 'http:';
       for (const [k, v] of Object.entries(options.headers ?? {})) {
@@ -1091,6 +1093,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       const agent = options.agent === false ? null : (options.agent ?? globalAgent);
       this.agent = agent ?? undefined;
       this.shouldKeepAlive = Boolean(agent?.keepAlive);
+      // Node's: Host is set here, after the given headers, so an agent's
+      // addRequest sees it (http-proxy-agent builds the absolute URL from it).
+      if (!this.#headers.host && options.setHost !== false) {
+        let hostHeader = String(options.hostname ?? options.host ?? 'localhost');
+        const colon = hostHeader.indexOf(':');
+        if (colon !== -1 && hostHeader.includes(':', colon + 1) && hostHeader[0] !== '[') hostHeader = `[${hostHeader}]`;
+        const defaultPort = options.defaultPort || agent?.defaultPort || 80;
+        if (options.port && +options.port !== defaultPort) hostHeader += `:${options.port}`;
+        this.#headers.host = hostHeader;
+        this.#names.host = 'Host';
+      }
       if (callback) this.once('response', callback);
       queueMicrotask(() => this.#connect());
     }
@@ -1519,16 +1532,27 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       callback(err);
     }
 
+    /**
+     * Node's ClientRequest._implicitHeader: render the head as it stands into
+     * `_header`. An agent that rewrites `req.path` (http-proxy-agent's
+     * absolute URL) calls it; the head sent is rendered again from the same
+     * method, path and headers when the request goes out.
+     */
+    _implicitHeader() {
+      if (this._header) {
+        const err = new Error('Cannot render headers after they are sent to the client');
+        err.code = 'ERR_HTTP_HEADERS_SENT';
+        throw err;
+      }
+      this._header = this.#writeHead().toString('latin1');
+    }
+
     #writeHead() {
       const opts = this.#opts;
-      const method = (opts.method ?? 'GET').toUpperCase();
-      const path = opts.path ?? '/';
-      const host = opts.hostname ?? opts.host ?? '127.0.0.1';
-      const port = Number(opts.port ?? 80);
-      if (!this.#headers.host) {
-        this.#headers.host = port === 80 || port === 443 ? host : `${host}:${port}`;
-        this.#names.host = 'Host';
-      }
+      // Node's: the request line is the request's method and path as they are
+      // now (an agent may have rewritten the path).
+      const method = String(this.method ?? opts.method ?? 'GET').toUpperCase();
+      const path = this.path ?? opts.path ?? '/';
       if (/\bclose\b/i.test(String(this.#headers.connection ?? ''))) this.shouldKeepAlive = false;
       if (!this.#headers.connection) {
         this.#headers.connection = this.shouldKeepAlive ? 'keep-alive' : 'close';
@@ -1554,7 +1578,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         const bodiless = ['GET', 'HEAD', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT'].includes(method);
         if (body.length > 0 || !bodiless) this.#headers['content-length'] = String(body.length);
       }
-      this.#socket.write(Buffer.concat([this.#writeHead(), body]));
+      const head = this.#writeHead();
+      this._header = head.toString('latin1');
+      this.#socket.write(Buffer.concat([head, body]));
     }
 
     _write(chunk, encoding, callback) {

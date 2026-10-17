@@ -311,9 +311,12 @@ export function createResolver({
       throw moduleNotFound(request, stack);
     }
 
-    if (request.startsWith('/') || request.startsWith('./') || request.startsWith('../')) {
+    if (request === '.' || request === '..' || request.startsWith('/') || request.startsWith('./') || request.startsWith('../')) {
       const abs = path.resolve(fromDir, request);
-      const hit = loadAsFileOrDir(abs);
+      // Node's trailingSlash: '.', '..', and a path ending in '/', '/.' or '/..'
+      // name a directory only, never a file beside it.
+      const dirOnly = !esm && /(?:^|\/)\.{0,2}$/.test(request);
+      const hit = dirOnly ? (tryStat(abs)?.isDirectory ? loadAsDirectory(abs) : null) : loadAsFileOrDir(abs);
       if (hit) return { type: 'file', filename: real(hit) };
       throw moduleNotFound(request, stack);
     }

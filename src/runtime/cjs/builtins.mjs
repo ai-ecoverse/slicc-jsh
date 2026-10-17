@@ -9,6 +9,7 @@ import { createNet } from '../builtins/net.mjs';
 import { createTls } from '../builtins/tls.mjs';
 import { createCluster } from '../builtins/cluster.mjs';
 import { createTraceEvents } from '../builtins/trace-events.mjs';
+import { createHttp2 } from '../builtins/http2.mjs';
 import { createStream, createStreamPromises } from '../builtins/stream.mjs';
 import { createStringDecoder } from '../builtins/string-decoder.mjs';
 import { createTimersModule, createTimersPromises } from '../builtins/timers-module.mjs';
@@ -39,6 +40,7 @@ const BUILTIN_LIST = [
   'fs',
   'fs/promises',
   'http',
+  'http2',
   'https',
   'module',
   'net',
@@ -74,7 +76,6 @@ const BUILTIN_LIST = [
 ];
 
 const NOT_YET = [
-  'http2',
   'dgram',
   'dns',
   'dns/promises',
@@ -230,6 +231,8 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const getTls = () => (tls ??= createTls({ process, Buffer, net: getNet() }));
   let cluster;
   let traceEvents;
+  let http2;
+  const getHttp2 = () => (http2 ??= createHttp2({ process, Buffer, net: getNet(), tls: getTls(), getStream }));
   let tty;
   let crypto;
   const getCrypto = () => {
@@ -372,6 +375,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     tls: getTls,
     cluster: () => (cluster ??= createCluster({ process })),
     trace_events: () => (traceEvents ??= createTraceEvents({ process })),
+    http2: getHttp2,
     child_process: () => getChildProcess(),
   };
 

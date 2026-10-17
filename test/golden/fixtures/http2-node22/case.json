@@ -1,0 +1,5 @@
+{
+  "description": "require('http2') and import 'node:http2' load with Node 22.22.0's exports (axios, got, the AWS SDK's @smithy/node-http-handler require http2 at load): constants and their descriptors, getDefaultSettings, getPackedSettings / getUnpackedSettings (byte order, the custom-settings quirk, the maxHeaderSize warning, ERR_HTTP2_INVALID_SETTING_VALUE and its actual/min/max), sensitiveHeaders, Http2ServerRequest/Response's prototypes, createServer / createSecureServer, connect's argument errors and promisify.custom",
+  "argv": ["--no-warnings", "script.mjs"],
+  "shim": true
+}

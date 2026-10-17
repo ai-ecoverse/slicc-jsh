@@ -15,6 +15,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - [`child_process`](#child_process)
 - [`net`, `http` and `https`](#net-http-and-https)
 - [`tls`](#tls)
+- [`http2`](#http2)
 - [`fetch` and `WebSocket`](#fetch-and-websocket)
 - [`crypto`](#crypto)
 - [`zlib`](#zlib)
@@ -44,7 +45,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 
 ## Modules and ESM
 
-**CommonJS.** `require` resolves as Node does: `node_modules`, `package.json` `"exports"` and `"imports"`, `node:` builtins, JSON. The module wrapper is Node's five-argument form. `process`, `Buffer` and the timers are real globals. Modules resolve through symlinks to their real path, unless `--preserve-symlinks` (or `--preserve-symlinks-main`). `module.createRequire`, `Module._extensions`, `Module.builtinModules` and `isBuiltin` are there.
+**CommonJS.** `require` resolves as Node does: `node_modules`, `package.json` `"exports"` and `"imports"`, `node:` builtins, JSON. `require('.')` and `require('..')` are paths, and a request that ends in `/`, `/.` or `/..` names a directory, never the file beside it (golden `require-dot`). The module wrapper is Node's five-argument form. `process`, `Buffer` and the timers are real globals. Modules resolve through symlinks to their real path, unless `--preserve-symlinks` (or `--preserve-symlinks-main`). `module.createRequire`, `Module._extensions`, `Module.builtinModules` and `isBuiltin` are there.
 
 **ESM.** `.mjs`, `"type": "module"`, static `import`/`export`, dynamic `import()`, `import.meta.url`, `import.meta.resolve`, `import.meta.dirname` and `import.meta.filename`, and JSON with `with { type: 'json' }`. The resolver, its errors and its stack frames are Node 22's. The transform uses acorn, so multi-line imports and exports, strings, comments and `$` identifiers parse correctly. Imports are hoisted, and export getters are registered before evaluation, so cycles work. `-e` and ambiguous `.js` files are detected as Node does; a dynamic `import()` alone stays CommonJS.
 
@@ -227,6 +228,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 **`http` client.**
 - With a `Content-Length`, request body bytes stream as written. Without one, the body is buffered until `end()` and sent with a computed length. Request bodies aren't sent chunked.
 - `'response'` comes at the head, and the body streams as it arrives: by `Content-Length`, chunked, or until the peer's FIN. `socket.end` half-closes.
+- A `ClientRequest` has its `Host` header from the start, set after the given headers and before the agent's `addRequest` sees the request. It's absent with `setHost: false`. The request line is the request's `method` and `path` as they are when it's sent. `_header` and `_implicitHeader()` are Node's. That lets **http-proxy-agent** rewrite the path to the absolute URL and send through a plain `http://` proxy.
 - `http.Agent` follows Node's `_http_agent.js` request path (`addRequest` → `createSocket` → `createConnection`), so **agent-base** subclasses work for plain `http`. `getName`, `destroy`, `keepSocketAlive`, `reuseSocket`, `removeSocket`, and `sockets`/`freeSockets`/`requests` are present.
 - `http.globalAgent` keeps sockets alive, as in Node 22 (`keepAlive: true`, `scheduling: 'lifo'`, `timeout: 5000`). An agent with `keepAlive` reuses a socket once its response is done (`'free'`, then `req.reusedSocket`), queued requests first. As in Node 22, a server's `Keep-Alive: timeout=N`, less `agentKeepAliveTimeoutBuffer` (1 s), caps a free socket's timeout, and a hint that leaves nothing (`timeout=1`) means the socket isn't reused. Free sockets don't keep the program alive, and one the server closes leaves the pool. `agent: false`, or an agent without `keepAlive`, sends `Connection: close`.
 - A connection that closes before its response gives `socket hang up` (`ECONNRESET`). A `101` response is `'upgrade'` (response, socket, head), and without a listener the connection closes.
@@ -253,7 +255,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 
 ## `tls`
 
-`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports, so a package that requires `tls` at load runs as long as it doesn't make a TLS connection. **ws** is one: its `ws://` server over an `http` server's `'upgrade'`, and its client, run as in Node. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too, but loading is all: https-proxy-agent's tunnel needs `tls.connect`, and http-proxy-agent fails at request time even over a plain `http://` proxy, because jsh's `ClientRequest` has no `_implicitHeader()` ([#323](https://github.com/ai-ecoverse/slicc-jsh/issues/323)).
+`require('tls')` and `import … from 'node:tls'` load with Node 22.22.0's exports, so a package that requires `tls` at load runs as long as it doesn't make a TLS connection. **ws** is one: its `ws://` server over an `http` server's `'upgrade'`, and its client, run as in Node. **agent-base**, **http-proxy-agent** and **https-proxy-agent** load too. http-proxy-agent sends plain `http` requests through an `http://` proxy (see `http`). https-proxy-agent's tunnel needs `tls.connect`, so it throws.
 
 The kernel's sockets (`ctx.net`) have no TLS, so whatever needs a handshake throws `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (no TLS on ctx.net)`, as `https.createServer` does) when it's called, not when the module loads:
 - `tls.connect`, after Node's checks of `checkServerIdentity` and `minDHSize`.
@@ -271,6 +273,25 @@ What doesn't need a handshake is Node's:
 **`rootCertificates` is an empty frozen array**, and so are `getCACertificates('bundled')`, `'system'` and `'extra'`. jsh makes no TLS connection of its own (an `https` request goes through `fetch`, which uses the platform's trust store), so Node's 146 bundled certificates (about 220 KB) would be trust anchors nothing in jsh uses. `setDefaultCACertificates` checks its arguments as Node does and keeps the list as given, which `getCACertificates()` returns.
 
 The golden `tls-node22` checks the export list and these behaviours against Node 22.22.0.
+
+## `http2`
+
+`require('http2')` and `import … from 'node:http2'` load with Node 22.22.0's exports. Packages that require `http2` at load but use it only behind an option load and run over HTTP/1.1. **axios** (unless `httpVersion: 2`), the AWS SDK v3's **@smithy/node-http-handler** (`NodeHttpHandler`), googleapis and superagent are examples. got and fastify also need `dns` at load.
+
+There are no HTTP/2 sessions: h2 needs TLS on `ctx.net`, and h2c needs a frame layer jsh doesn't have. These calls throw `ERR_NOT_SUPPORTED` (`slicc-jsh: '<what>' is not supported yet (…)`) when they're made:
+- `http2.connect`, after Node's checks of its arguments (`ERR_HTTP2_UNSUPPORTED_PROTOCOL` for another scheme);
+- `listen()` on `createServer`'s and `createSecureServer`'s servers;
+- `performServerHandshake`.
+
+What's Node's:
+- `constants`, all 240, read-only as in Node.
+- `getDefaultSettings()`.
+- `getPackedSettings`/`getUnpackedSettings`: Node's checks (`ERR_HTTP2_INVALID_SETTING_VALUE` with `actual`, `min` and `max`), byte order and the `maxHeaderSize` warning. As in Node 22.22.0, `getPackedSettings` returns `undefined` when there are custom settings.
+- `sensitiveHeaders`.
+- `Http2ServerRequest` (a `Readable`) and `Http2ServerResponse` (a `Stream`), for `instanceof` and subclassing.
+- `createServer` (a `net.Server`) and `createSecureServer` (a `tls.Server`, ALPN `h2`), with Node's option checks, `setTimeout` and `updateSettings`.
+
+The golden `http2-node22` checks these against Node 22.22.0.
 
 ## `fetch` and `WebSocket`
 
@@ -396,7 +417,7 @@ Scripts run in the program's own realm, which is the only one a process has here
 
 | Module | What `require` does |
 |---|---|
-| `http2`, `dns`, `dns/promises`, `dgram`, `inspector`, `inspector/promises`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `dns`, `dns/promises`, `dgram`, `inspector`, `inspector/promises`, `wasi` | throws `ERR_NOT_SUPPORTED` |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
 
 **`cluster`** is Node 22.22.0's primary: `isPrimary`, `workers` (none), `settings`, `setupPrimary`/`setupMaster` with its `'setup'` event, `schedulingPolicy`, `disconnect`, and the `Worker` class. That's enough for prom-client's `AggregatorRegistry`. A worker would be a `child_process.fork` with an IPC channel, which jsh doesn't have, so `cluster.fork()` throws `ERR_NOT_SUPPORTED` when it's called (golden `cluster-trace-events-node22`).
