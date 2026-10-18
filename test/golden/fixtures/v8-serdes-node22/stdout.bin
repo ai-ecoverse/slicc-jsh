@@ -142,6 +142,20 @@ shared refs                          ff0f41036f22017349027b015e013b5e015e013a022
                                      [ { s: 1 }, { s: 1 }, Map(1) { { s: 1 } => { s: 1 } } ]
 shared buffer views                  ff0f41025c010200005c01020000240002
                                      [ Uint8Array(2) [ 0, 0 ], Uint8Array(2) [ 0, 0 ] ]
+getter deleting itself               ff0f6f220178490e22017949027b02
+                                     { x: 7, y: 1 }
+getter deleting the next             ff0f6f220566697273742201667b01
+                                     { first: 'f' }
+array with an accessor               ff0f61024900490249024904400202
+                                     [ 1, 2 ]
+frozen array                         ff0f61024900490249024904400202
+                                     [ 1, 2 ]
+sealed array                         ff0f61024900490249024904400202
+                                     [ 1, 2 ]
+non-extensible array                 ff0f61024900490249024904400202
+                                     [ 1, 2 ]
+read-only element                    ff0f61024900490249024904400202
+                                     [ 1, 2 ]
 --- refused
 function                 THROWS Error  function f() {} could not be cloned.
 arrow                    THROWS Error  () => 1 could not be cloned.
@@ -162,11 +176,25 @@ arguments                THROWS Error  #<Object> could not be cloned.
 globalThis               THROWS Error  #<Object> could not be cloned.
 shared array buffer      THROWS Error  #<SharedArrayBuffer> could not be cloned.
 detached                 THROWS Error  An ArrayBuffer is detached and could not be cloned.
+accessor element read 1 time(s)
 prototypes are objects ff0f6f7b00 ff0f6f7b00 ff0f6f7b00 ff0f6f7b00
+iterator prototypes are objects ff0f6f7b00 ff0f6f7b00 ff0f6f7b00
+an own tag hides nothing THROWS Error  #<Promise> could not be cloned. / THROWS Error  [object Y] could not be cloned. / THROWS Error  #<Collator> could not be cloned.
 --- base Serializer (views as V8 views)
 view ff0f4201075642000100
 offset view ff0f420800000000000000005642020300
 dataview ff0f420400000000563f010200
+resizable tracking ff0f7e0408000000005642000003 read back follows the buffer: true
+resizable tracking from 1 ff0f7e0408000000005642010003 read back follows the buffer: true
+resizable fixed ff0f7e0408000000005642000202 read back follows the buffer: false
+resizable fixed to the end ff0f7e0408000000005642000402 read back follows the buffer: false
+resizable tracking 16-bit ff0f7e0408000000005657000003 read back follows the buffer: true
+resizable dataview tracking ff0f7e040800000000563f000003 read back follows the buffer: true
+resizable dataview fixed ff0f7e040800000000563f000402 read back follows the buffer: false
+resizable at its max, tracking ff0f7e0404000000005642000003 read back follows the buffer: true
+resizable at its max, fixed ff0f7e0404000000005642000402 read back follows the buffer: true
+resizable at its max, dataview tracking ff0f7e040400000000563f010003 read back follows the buffer: true
+resizable at its max, dataview fixed ff0f7e040400000000563f010302 read back follows the buffer: true
 two views of one buffer ff0f410242040000000056420004005e015657020200240002
 host object, no writer: Error [object Uint8Array] could not be cloned.
 --- reading

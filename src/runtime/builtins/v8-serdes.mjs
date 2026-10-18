@@ -10,10 +10,14 @@
  * - a number is an int32 (`I`) when it is one (and not -0), else a double
  *   (`N`). V8 writes a double for an integral value it happens to hold as a
  *   heap number, such as an object field that held a fraction before;
- * - an array is dense (`A`) when it has no holes, else sparse (`a`). V8 also
- *   writes `new Array(n)` filled later as sparse (its elements stay holey).
+ * - an array is dense (`A`) when it has no holes and plain elements in an
+ *   extensible array, else sparse (`a`), as V8's elements kinds give. V8
+ *   also writes `new Array(n)` filled later as sparse (its elements stay
+ *   holey).
  *   A dense array of numbers only is written as doubles when one isn't an
  *   int32, as V8's double elements are;
+ * - a view of a growable SharedArrayBuffer is written as fixed-length (V8
+ *   knows whether one follows the buffer; finding out here would grow it);
  * - nothing is a host object (V8's embedder fields). A Proxy is refused, as
  *   in V8, when it was made through the runtime's Proxy (run.mjs tracks
  *   them, as for util.types.isProxy).
@@ -179,22 +183,45 @@ function branded(fn, value, ...args) {
   }
 }
 
-// Builtins V8 refuses whose class shows only in their tag (no side-effect-free brand check).
-const REFUSED_TAGS = new Set([
-  'Arguments',
-  'Promise',
-  'Generator',
-  'AsyncGenerator',
-  'Array Iterator',
-  'Map Iterator',
-  'Set Iterator',
-  'String Iterator',
-  'RegExp String Iterator',
-  'Iterator Helper',
-  'Async-from-Sync Iterator',
-  'Segmenter String Iterator',
-  'Module',
-]);
+// Builtins V8 refuses that have no side-effect-free brand check: known by
+// the builtin prototype that tags them (its Symbol.toStringTag), found up
+// the object's chain. An own tag doesn't hide one, and the prototypes
+// themselves are ordinary objects to V8. (So is an object made with one of
+// them as its prototype, such as a generator function's own `prototype`:
+// refused here.)
+const REFUSED_PROTOTYPES = new Map();
+{
+  const add = (proto) => {
+    if (proto === null || typeof proto !== 'object') return;
+    const desc = getOwnPropertyDescriptor(proto, Symbol.toStringTag);
+    const tag = desc && 'value' in desc ? desc.value : undefined;
+    if (typeof tag === 'string') REFUSED_PROTOTYPES.set(proto, tag);
+  };
+  const tryAdd = (make) => {
+    try {
+      add(make());
+    } catch {
+      /* not in this engine */
+    }
+  };
+  add(Promise.prototype);
+  tryAdd(() => getPrototypeOf(getPrototypeOf((function* () {})())));
+  tryAdd(() => getPrototypeOf(getPrototypeOf((async function* () {})())));
+  tryAdd(() => getPrototypeOf([][Symbol.iterator]()));
+  tryAdd(() => getPrototypeOf(new Map().entries()));
+  tryAdd(() => getPrototypeOf(new Set().values()));
+  tryAdd(() => getPrototypeOf(''[Symbol.iterator]()));
+  tryAdd(() => getPrototypeOf(/a/[Symbol.matchAll]('')));
+  tryAdd(() => getPrototypeOf([].values().map((x) => x)));
+  tryAdd(() => getPrototypeOf(new Intl.Segmenter().segment('')[Symbol.iterator]()));
+  for (const name of Object.getOwnPropertyNames(globalThis.Intl ?? {})) {
+    if (typeof Intl[name] === 'function') tryAdd(() => Intl[name].prototype);
+  }
+  for (const name of Object.getOwnPropertyNames(globalThis.WebAssembly ?? {})) {
+    if (typeof WebAssembly[name] === 'function') tryAdd(() => WebAssembly[name].prototype);
+  }
+}
+const REFUSED_PROTOTYPE_SET = new Set(REFUSED_PROTOTYPES.keys());
 
 /** A data property found along the prototype chain, without running a getter (V8's GetDataProperty). */
 function dataProperty(object, key) {
@@ -241,15 +268,18 @@ function refused(object) {
   if (branded(weakMapHas, object, {}) || branded(weakSetHas, object, {})) return true;
   if (branded(weakRefDeref, object) || branded(registryUnregister, object, {})) return true;
   if (branded(symbolValueOf, object)) return true;
-  // A prototype (Promise.prototype, …) is an ordinary object to V8.
-  if (hasOwn(object, Symbol.toStringTag) && getPrototypeOf(object) !== null) return false;
-  let tag;
+  // A module namespace object.
+  if (getPrototypeOf(object) === null && getOwnPropertyDescriptor(object, Symbol.toStringTag)?.value === 'Module') return true;
+  if (REFUSED_PROTOTYPE_SET.has(object)) return false;
+  for (let at = getPrototypeOf(object); at !== null; at = getPrototypeOf(at)) {
+    if (REFUSED_PROTOTYPE_SET.has(at)) return true;
+  }
+  // An arguments object (its builtin tag; it has no prototype of its own).
   try {
-    tag = Reflect.apply(objectToString, object, []).slice(8, -1);
+    return !hasOwn(object, Symbol.toStringTag) && Reflect.apply(objectToString, object, []) === '[object Arguments]';
   } catch {
     return false;
   }
-  return REFUSED_TAGS.has(tag) || tag.startsWith('Intl.') || tag.startsWith('WebAssembly.');
 }
 
 /** Canonical array index (0 … 2**32 - 2) of a property key, or -1. */
@@ -566,10 +596,10 @@ export function createSerdes({ Buffer }) {
   function writeProperties(self, state, object, keys) {
     let written = 0;
     for (const key of keys) {
-      // A getter may have deleted it: then it isn't written.
+      // A getter run before may have deleted it: then it isn't written. Its
+      // own getter's value is written, whatever the getter does.
       if (!hasOwn(object, key)) continue;
       const value = object[key];
-      if (!hasOwn(object, key)) continue;
       writeKey(state.out, key);
       writeObject(self, state, value);
       written++;
@@ -591,7 +621,17 @@ export function createSerdes({ Buffer }) {
     const keys = objectKeys(array);
     let indices = 0;
     while (indices < keys.length && arrayIndex(keys[indices]) >= 0) indices++;
-    if (indices !== length) {
+    // V8 writes fast elements densely: no holes, plain data elements (an
+    // accessor, or a frozen, sealed or non-extensible array, has other
+    // elements kinds). Decided from descriptors: no getter runs for it.
+    let dense = indices === length && Object.isExtensible(array);
+    const values = dense ? new Array(length) : null;
+    for (let i = 0; dense && i < length; i++) {
+      const desc = getOwnPropertyDescriptor(array, i);
+      if (!desc || !('value' in desc) || !desc.writable || !desc.configurable) dense = false;
+      else values[i] = desc.value;
+    }
+    if (!dense) {
       out.byte(T.beginSparseJSArray);
       out.varint(length);
       const written = writeProperties(self, state, array, keys);
@@ -602,15 +642,17 @@ export function createSerdes({ Buffer }) {
     }
     out.byte(T.beginDenseJSArray);
     out.varint(length);
-    let doubles = length > 0;
-    for (let i = 0; i < length && doubles; i++) if (typeof array[i] !== 'number') doubles = false;
-    if (doubles) doubles = !array.every(isInt32);
+    // Double elements: numbers only, one of them not an int32.
+    const doubles = length > 0 && values.every((v) => typeof v === 'number') && !values.every(isInt32);
     for (let i = 0; i < length; i++) {
-      if (!hasOwn(array, i)) {
+      // Writing an element can change the array: as V8, read each one as it
+      // is now, a missing one being a hole.
+      const desc = getOwnPropertyDescriptor(array, i);
+      if (!desc) {
         out.byte(T.theHole);
         continue;
       }
-      const element = array[i];
+      const element = 'value' in desc ? desc.value : array[i];
       if (doubles && typeof element === 'number') {
         out.byte(T.double);
         out.double(element);
@@ -658,12 +700,53 @@ export function createSerdes({ Buffer }) {
       return;
     }
     const info = viewInfo(view);
+    const rab = !!(arrayBufferResizable && branded(arrayBufferResizable, info.buffer) && Reflect.apply(arrayBufferResizable, info.buffer, []));
+    const tracking = rab && lengthTracking(view, info);
     out.byte(T.arrayBufferView);
     out.varint(VIEW_TAGS[info.name]);
     out.varint(info.byteOffset);
-    out.varint(info.byteLength);
-    const rab = !!(arrayBufferResizable && branded(arrayBufferResizable, info.buffer) && Reflect.apply(arrayBufferResizable, info.buffer, []));
-    out.varint(rab ? 2 : 0);
+    // A length-tracking view's length is the buffer's: V8 writes 0.
+    out.varint(tracking ? 0 : info.byteLength);
+    // JSArrayBufferViewIsLengthTracking (bit 0), JSArrayBufferViewIsBackedByRab (bit 1).
+    out.varint((tracking ? 1 : 0) | (rab ? 2 : 0));
+  }
+
+  /**
+   * Whether a view of a resizable ArrayBuffer follows its length (made
+   * without one). JS can't ask; a structured clone (the platform's keeps
+   * it, with a copy of the buffer) is resized to see. A growable
+   * SharedArrayBuffer's clone would share the memory, so its views are
+   * written as fixed-length.
+   */
+  function lengthTracking(view, info) {
+    let clone;
+    try {
+      clone = structuredClone(view);
+    } catch {
+      return false;
+    }
+    const buffer = clone.buffer;
+    const max = buffer.maxByteLength;
+    const size = view.BYTES_PER_ELEMENT ?? 1;
+    const lengthOf = () => (clone instanceof DataView ? clone.byteLength : Reflect.apply(typedArrayByteLength, clone, []));
+    // Grown to the most it can be, a tracking view covers the rest of it.
+    const followed = Math.floor((max - info.byteOffset) / size) * size;
+    if (followed !== info.byteLength) {
+      buffer.resize(max);
+      return lengthOf() !== info.byteLength;
+    }
+    if (info.byteLength === 0) return false;
+    // It covers the rest already: cut to where it starts, a fixed view is
+    // out of bounds, a tracking one empty.
+    // (An out-of-bounds DataView's byteLength throws; a typed array's fill does.)
+    buffer.resize(info.byteOffset);
+    try {
+      if (clone instanceof DataView) lengthOf();
+      else Reflect.apply(TypedArrayPrototype.fill, clone, [0]);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function writeError(self, state, error) {

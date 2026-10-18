@@ -128,6 +128,34 @@ values['shared refs'] = [shared, shared, new Map([[shared, shared]])];
 const ab = new ArrayBuffer(8);
 values['shared buffer views'] = [new Uint8Array(ab, 0, 2), new Uint8Array(ab, 2, 2)];
 
+// Getters: each runs once, and a property is checked before its getter runs.
+const selfDeleting = {
+  get x() {
+    delete selfDeleting.x;
+    return 7;
+  },
+  y: 1,
+};
+values['getter deleting itself'] = selfDeleting;
+const deletesNext = {};
+Object.defineProperty(deletesNext, 'first', {
+  enumerable: true,
+  get() {
+    delete deletesNext.second;
+    return 'f';
+  },
+});
+deletesNext.second = 's';
+values['getter deleting the next'] = deletesNext;
+let reads = 0;
+const accessorArray = [1, 2];
+Object.defineProperty(accessorArray, 0, { enumerable: true, get: () => ++reads });
+values['array with an accessor'] = accessorArray;
+values['frozen array'] = Object.freeze([1, 2]);
+values['sealed array'] = Object.seal([1, 2]);
+values['non-extensible array'] = Object.preventExtensions([1, 2]);
+values['read-only element'] = Object.defineProperty([1, 2], 1, { value: 2, writable: false });
+
 for (const [label, value] of Object.entries(values)) {
   const h = hex(value);
   console.log(label.padEnd(36), h);
@@ -164,12 +192,43 @@ const refused = {
   })(),
 };
 for (const [label, value] of Object.entries(refused)) console.log(label.padEnd(24), hex(value));
+console.log('accessor element read', reads, 'time(s)');
 console.log('prototypes are objects', hex(Promise.prototype), hex(Set.prototype), hex(RegExp.prototype), hex(Math));
+console.log('iterator prototypes are objects', hex(Object.getPrototypeOf([].values())), hex(Object.getPrototypeOf(Object.getPrototypeOf([].values()))), hex(Intl.Collator.prototype));
+const taggedPromise = Promise.resolve();
+taggedPromise[Symbol.toStringTag] = 'X';
+const taggedGenerator = (function* () {})();
+Object.defineProperty(taggedGenerator, Symbol.toStringTag, { value: 'Y' });
+console.log('an own tag hides nothing', hex(taggedPromise), '/', hex(taggedGenerator), '/', hex(new Intl.Collator()));
 
 console.log('--- base Serializer (views as V8 views)');
 console.log('view', hex(new Uint8Array([7]), v8.Serializer));
 console.log('offset view', hex(new Uint8Array(new ArrayBuffer(8), 2, 3), v8.Serializer));
 console.log('dataview', hex(new DataView(new ArrayBuffer(4), 1, 2), v8.Serializer));
+{
+  const rab = new ArrayBuffer(4, { maxByteLength: 8 });
+  const full = new ArrayBuffer(4, { maxByteLength: 4 });
+  for (const [label, view] of [
+    ['tracking', new Uint8Array(rab)],
+    ['tracking from 1', new Uint8Array(rab, 1)],
+    ['fixed', new Uint8Array(rab, 0, 2)],
+    ['fixed to the end', new Uint8Array(rab, 0, 4)],
+    ['tracking 16-bit', new Uint16Array(rab)],
+    ['dataview tracking', new DataView(rab)],
+    ['dataview fixed', new DataView(rab, 0, 4)],
+    ['at its max, tracking', new Uint8Array(full)],
+    ['at its max, fixed', new Uint8Array(full, 0, 4)],
+    ['at its max, dataview tracking', new DataView(full, 1)],
+    ['at its max, dataview fixed', new DataView(full, 1, 3)],
+  ]) {
+    const h = hex(view, v8.Serializer);
+    const d = new v8.Deserializer(Buffer.from(h, 'hex'));
+    d.readHeader();
+    const back = d.readValue();
+    back.buffer.resize(back.buffer.maxByteLength);
+    console.log('resizable', label, h, 'read back follows the buffer:', back.byteLength === back.buffer.byteLength - back.byteOffset);
+  }
+}
 const shared2 = new ArrayBuffer(4);
 console.log('two views of one buffer', hex([new Uint8Array(shared2), new Uint16Array(shared2, 2)], v8.Serializer));
 {
