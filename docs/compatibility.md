@@ -384,7 +384,14 @@ browserify-zlib 0.2.0 (a port of Node's own `zlib.js`) over pako 1.0.11. The ven
 
 Deflate output is byte-identical to Node's (golden `zlib-node22`).
 
-**Not available:** Brotli and Zstd throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`. Their callback forms (`brotliCompress(buf, cb)`, …) pass it to the callback.
+**Brotli decompression.** `brotliDecompress`, `brotliDecompressSync`, `createBrotliDecompress` and `BrotliDecompress` are Node 22's own `zlib.js` code for them over a decoder ported from the one Node links (Google's C decoder, brotli 1.1.0, in `src/brotli`), loaded on the first Brotli stream. A stream decodes as in Node:
+- the same output from each write, the same input consumed (`bytesWritten`), and the same error at the same byte: `Decompression failed` with Brotli's code (`ERR__ERROR_FORMAT_PADDING_2`, …) as `code` and its number as `errno`, or `unexpected end of file` (`Z_BUF_ERROR`) for a stream cut short;
+- `params` (`BROTLI_DECODER_PARAM_LARGE_WINDOW`, `BROTLI_DECODER_PARAM_DISABLE_RING_BUFFER_REALLOCATION`), `flush`, `finishFlush`, `chunkSize`, `maxOutputLength`, `info` and `rejectGarbageAfterEnd`, validated with Node's errors;
+- `flush()`, `reset()`, `close()` and `params()`, Node's quirks included.
+
+Golden `zlib-brotli-node22` decodes streams Node 22's encoder made, across qualities and windows, in pieces down to 1 byte, corrupt and truncated. The decoder decodes Brotli's static dictionary (122,784 bytes) from its own Brotli encoding, on the first stream that uses it. In a bundle it is about 35 KB of code and 69 KB of base64 for the dictionary. It decodes at roughly 90–700 MB/s on Node, depending on the data; the native decoder is several times faster.
+
+**Not available:** Brotli compression (`brotliCompress`, `createBrotliCompress`, …) and Zstd throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`. Their callback forms (`brotliCompress(buf, cb)`, …) pass it to the callback.
 
 ## Streams and `Buffer`
 

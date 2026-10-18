@@ -247,7 +247,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   };
   let zlib;
   const getZlib = () => {
-    zlib ??= createZlib({ ctx, process, Buffer, getStream, util, assert });
+    zlib ??= createZlib({ ctx, process, Buffer, getStream, util, assert, timers });
     return zlib;
   };
   let childProcess;

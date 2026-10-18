@@ -107,10 +107,18 @@ It also includes code from Node.js (https://github.com/nodejs/node): files of
 its lib/ in src/node-lib/lib, and ports of others in src/runtime, under the
 Node.js license reproduced in the node-inspect-extracted section below
 ("This project contains parts of Node.js").
+
+It also includes Brotli's decoder (https://github.com/google/brotli), ported to
+JavaScript in src/brotli, and Brotli's static dictionary, under the license in
+the Brotli section below.
 `;
 
   const missing = [];
-  const sections = [];
+  const sections = [
+    `--------------------------------------------------------------------------------\n` +
+      `This product includes Brotli (ported from github.com/google/brotli). License text follows:\n\n` +
+      `${readFileSync(join(root, 'src/brotli/LICENSE'), 'utf8').trim()}\n`,
+  ];
   const names = [...pkgRoots.keys()].sort((a, b) => a.localeCompare(b));
   for (const name of names) {
     const text = findLicenseText(pkgRoots.get(name));

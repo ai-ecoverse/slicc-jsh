@@ -1,0 +1,5 @@
+{
+  "description": "zlib Brotli decompression against Node's: streams Node 22's encoder made (data.br, from make-data.mjs) across qualities 0-11, windows 10-26 and modes, sync, callback, promisify and stream forms, writes of 1 byte and up, flush/reset/close/params, corrupt and truncated input with Node's error codes, options and params validation, maxOutputLength, and a 17.6 MB payload",
+  "argv": ["script.js"],
+  "shim": true
+}
