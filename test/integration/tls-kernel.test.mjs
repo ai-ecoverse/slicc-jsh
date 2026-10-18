@@ -327,6 +327,7 @@ const go = (label, opts) => new Promise((resolve) => {
   await go('untrusted, rejectUnauthorized false', { port: ports.untrusted, rejectUnauthorized: false });
   await go('wrong name, rejectUnauthorized false', { port: ports.wrongName, rejectUnauthorized: false });
   await go('own check refuses', { port: ports.echo, checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN, typeof c.issuerCertificate), Object.assign(new Error('not mine'), { code: 'MINE' })) });
+  await go('own check refuses a wrong name', { port: ports.wrongName, checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN), Object.assign(new Error('not mine'), { code: 'MINE' })) });
   await go('own check takes a wrong name', { port: ports.wrongName, checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN), undefined) });
   await go('leaf only, issuer from the ca', { port: ports.leafOnly });
   await go('TLS 1.2', { port: ports.tls12 });
@@ -341,6 +342,9 @@ const go = (label, opts) => new Promise((resolve) => {
     assert.equal(host.status, 0, host.stderr);
     assert.equal(shim.stdout, host.stdout);
     assert.equal(shim.stderr, '');
+    assert.match(shim.stdout, /^wrong name error Error ERR_TLS_CERT_ALTNAME_INVALID Hostname\/IP does not match certificate's altnames: /m);
+    assert.match(shim.stdout, /^check secure\.test other\.test\nown check refuses a wrong name error Error MINE not mine /m);
+    assert.match(shim.stdout, /^own check takes a wrong name secureConnect true null TLSv1\.3 other\.test /m);
   });
 
   it('STARTTLS: tls.connect({ socket }) and new tls.TLSSocket(socket) upgrade a plain connection in place', async () => {
@@ -529,6 +533,8 @@ const send = (label, options, body) => new Promise((resolve) => {
   await send('host header names the server', { path: '/c', agent, headers: { Host: 'secure.test' } });
   await send('no agent, a ca', { path: '/d', ca, servername: 'secure.test' });
   await send('no agent, wrong name', { path: '/e', ca, servername: 'other.test' });
+  await send('no agent, wrong name, own check refuses', { path: '/e', ca, servername: 'other.test', checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN), Object.assign(new Error('not mine'), { code: 'MINE' })) });
+  await send('no agent, wrong name, own check takes it', { path: '/e', ca, servername: 'other.test', checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN), undefined) });
   await send('agent: false, a ca', { path: '/f', ca, servername: 'secure.test', agent: false });
   console.log('free', Object.keys(agent.freeSockets).length);
   agent.destroy();
@@ -540,5 +546,8 @@ const send = (label, options, body) => new Promise((resolve) => {
     assert.equal(host.status, 0, host.stderr);
     assert.equal(shim.stdout, host.stdout);
     assert.equal(shim.stderr, '');
+    assert.match(shim.stdout, /^no agent, wrong name error ERR_TLS_CERT_ALTNAME_INVALID Hostname\/IP does not match certificate's altnames: Host: other\.test\. /m);
+    assert.match(shim.stdout, /^check other\.test secure\.test\nno agent, wrong name, own check refuses error MINE not mine$/m);
+    assert.match(shim.stdout, /^check other\.test secure\.test\nno agent, wrong name, own check takes it 200 /m);
   });
 });
