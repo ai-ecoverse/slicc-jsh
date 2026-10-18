@@ -90,7 +90,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
   - `process.umask()` starts as the kernel's umask. jsh reads it once, from `/proc/self/status` on 1.89.0 and later, or before that from the mode the kernel gives a directory jsh makes in `/tmp`.
   - `process.umask(mask)` changes only the umask jsh applies to the files it creates; children keep the kernel's.
 - `process.getuid`, `getgid` and the like read the kernel's credentials. `process.setuid`, `setgid`, `seteuid`, `setegid`, `setgroups` and `initgroups` follow Node on Linux; they're defined only on slicc-kernel 1.81.0 and later.
-- `process.versions` lists what the runtime has or mirrors: no openssl, brotli, ….
+- `process.versions` lists what the runtime has or mirrors: `brotli` (its decoder: `got` then asks for `br`), no openssl, zstd, ….
 - `argv0`, `pid`, `version`, `versions`, `arch`, `platform`, `release`, `config` and `features` are read-only, as in Node. `argv[0]` is `execPath`.
 - `process.report` is Node's API (`getReport`, `writeReport`, the `--report-*` options). It writes on an uncaught exception and on its signal, as Node does. Its header has Linux's fields.
 - `process.execve` runs the command to its end on this program's stdio, and the program then ends as the command did (its status, or the signal it died of), with no `'exit'` event. It needs slicc-kernel 1.65.0.
