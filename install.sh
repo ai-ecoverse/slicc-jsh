@@ -462,6 +462,7 @@ main() {
   opt_version=
   opt_uninstall=
   opt_integrity=
+  has_integrity=
   while [ $# -gt 0 ]; do
     case $1 in
       --version)
@@ -476,10 +477,12 @@ main() {
       --integrity)
         [ $# -ge 2 ] || die "--integrity needs a value, e.g. --integrity sha512-…"
         opt_integrity=$2
+        has_integrity=1
         shift 2
         ;;
       --integrity=*)
         opt_integrity=${1#--integrity=}
+        has_integrity=1
         shift
         ;;
       --uninstall)
@@ -493,8 +496,17 @@ main() {
       *) die "unknown option: $1 (try --help)" ;;
     esac
   done
-  pin=${opt_integrity:-${JSH_INTEGRITY:-}}
-  if [ -n "$pin" ]; then check_integrity "$pin"; fi
+  # An empty pin that was given (an unset variable in a script) is an
+  # error, not "no pin".
+  if [ -n "$has_integrity" ]; then
+    pin=$opt_integrity
+  elif [ -n "${JSH_INTEGRITY+set}" ]; then
+    pin=$JSH_INTEGRITY
+    has_integrity=1
+  else
+    pin=
+  fi
+  if [ -n "$has_integrity" ]; then check_integrity "$pin"; fi
 
   [ -n "${HOME:-}" ] || die "HOME is not set"
   JSH_HOME=$(absolute "${JSH_HOME:-$HOME/.jsh}")

@@ -295,7 +295,19 @@ case_integrity() {
     grep -qF -- "$want" "$work/int-bad.txt" || fail "--integrity $bad: $(cat "$work/int-bad.txt")"
     [ ! -e "$h/.jsh" ] || fail "--integrity $bad left $h/.jsh"
   done
-  pass "malformed and non-sha512 --integrity values are refused up front"
+  # An empty value that was given (an unset variable) is refused, not "no pin".
+  for how in --integrity= "--integrity ''" "JSH_INTEGRITY="; do
+    case $how in
+      JSH_*) cmd="JSH_INTEGRITY= sh '$installer'" ;;
+      *) cmd="sh '$installer' $how" ;;
+    esac
+    if HOME="$h" no_tty sh -c "$cmd" >"$work/int-bad.txt" 2>&1; then
+      fail "an empty pin ($how) was accepted"
+    fi
+    grep -qF -- '--integrity is not a sha512 SRI' "$work/int-bad.txt" || fail "empty pin ($how): $(cat "$work/int-bad.txt")"
+    [ ! -e "$h/.jsh" ] || fail "an empty pin ($how) left $h/.jsh"
+  done
+  pass "malformed, empty and non-sha512 --integrity values are refused up front"
 }
 
 [ $# -gt 0 ] || set -- node no-node pty uninstall integrity
