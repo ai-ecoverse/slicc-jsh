@@ -42,7 +42,11 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - Boolean options take `--x` and `--no-x`, and the last form wins. A value that looks like an option counts as missing (`--require --no-warnings`).
 - Also: the [warning flags](#warnings), `--enable-source-maps`, `--preserve-symlinks`, `--preserve-symlinks-main`, `--expose-internals`, `--title`, `--pending-deprecation` and the `--report-*` options (they set `process.report`).
 - `-c`/`--check` checks the script's syntax and runs nothing, as Node's `check_syntax` does. A file is checked as the module it is: ES module by extension, `"type"`, or detection. Piped input is checked as CommonJS unless `--input-type=module`. A SyntaxError gets the usual report under the script's real path, with exit status 1. Combined with `-e`/`-p`, it's an error (status 9).
-- Any other option, such as `--inspect`, `--watch` or `--experimental-strip-types`, is `bad option` (status 9). `--watch` needs more than `fs.watch` (see [fs](#fs)): Node's watch mode restarts a child, which tells it the modules it loads over an IPC channel, and jsh has no `fork` or `'ipc'` stdio yet.
+- `--watch`, `--watch-path`, `--watch-preserve-output` and `--watch-kill-signal` are Node's watch mode, its own `lib/internal/main/watch_mode.js` (golden `watch-mode-node22`). It needs a kernel with an IPC channel for the child ([slicc-kernel#1093](https://github.com/ai-ecoverse/slicc-kernel/issues/1093)) and `fs.watch` (1.125.0); on older kernels these options are `bad option`, as before.
+  - The program runs in a child. Each module the child requires or imports goes to the watch process over IPC, and when one of them changes the child is restarted. With `--watch-path`, a change anywhere in the given trees restarts it. SIGTERM or SIGINT ends the watch and the child.
+  - Node's errors apply: `--watch requires specifying a file`, and `--watch` with `-e`/`-p`, `--check` or `-i`.
+  - As on Linux, a relative `require` that wasn't found is reported, but its appearing doesn't restart the child: the watcher can't watch a file that isn't there.
+- Any other option, such as `--inspect` or `--experimental-strip-types`, is `bad option` (status 9).
 
 ## Modules and ESM
 

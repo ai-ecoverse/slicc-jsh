@@ -1,0 +1,34 @@
+--- --watch app.js
+app: dep 1 later missing esm a execArgv [] watch env 1
+Completed running 'app.js'. Waiting for file changes before restarting...
+Restarting 'app.js'
+app: dep 2 later missing esm a execArgv [] watch env 1
+Completed running 'app.js'. Waiting for file changes before restarting...
+Restarting 'app.js'
+app: dep 2 later missing esm b execArgv [] watch env 1
+Completed running 'app.js'. Waiting for file changes before restarting...
+Restarting 'app.js'
+app: dep 3 later missing esm b execArgv [] watch env 1
+Completed running 'app.js'. Waiting for file changes before restarting...
+
+watch exit [0,null]
+--- --watch-path=sub plain.js a b
+plain: ran a b undefined
+Completed running 'plain.js a b'. Waiting for file changes before restarting...
+Restarting 'plain.js a b'
+plain: ran a b undefined
+Completed running 'plain.js a b'. Waiting for file changes before restarting...
+
+watch exit [0,null]
+--- a failing program
+Failed running 'fail.js'. Waiting for file changes before restarting...
+
+watch exit [0,null]
+--- flag errors
+["--watch"] 9 "NODE: --watch requires specifying a file\n"
+["--watch","-e","1"] 9 "NODE: either --watch or --eval can be used, not both\n"
+["--watch","-p","1"] 9 "NODE: either --watch or --eval can be used, not both\n"
+["--watch","--check","app.js"] 9 "NODE: either --watch or --check can be used, not both\n"
+["--watch","-i"] 9 "NODE: either --watch or --interactive can be used, not both\n"
+["--watch-path"] 9 "NODE: --watch-path requires an argument\nNODE: --watch requires specifying a file\n"
+["--watch-kill-signal"] 9 "NODE: --watch-kill-signal requires an argument\n"

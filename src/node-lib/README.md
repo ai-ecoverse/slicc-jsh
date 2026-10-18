@@ -20,6 +20,7 @@ To update, copy the files from the new Node tag and re-run the goldens.
 | `lib/internal/process/finalization.js` | `process.finalization` |
 | `lib/internal/source_map/{source_map,source_map_cache,source_map_cache_map,prepare_stack_trace}.js` | source maps: `--enable-source-maps`, `process.setSourceMapsEnabled`, `module.findSourceMap` / `SourceMap` / `get`/`setSourceMapsSupport`, stacks and uncaught reports |
 | `lib/repl.js`, `lib/internal/repl.js`, `lib/internal/repl/{utils,history,await}.js`, `lib/domain.js` | the REPL (`node` with no script on a terminal, or `-i`), `require('repl')`, `require('domain')` |
+| `lib/internal/main/watch_mode.js`, `lib/internal/watch_mode/files_watcher.js` | `node --watch` / `--watch-path` |
 | `lib/internal/child_process/serialization.js` | the IPC channel's `'json'` and `'advanced'` framing (`fork`, `'ipc'` in `stdio`, `process.send`) |
 | `lib/sys.js`, `lib/diagnostics_channel.js`, `lib/stream/consumers.js` | `require('sys')`, `require('diagnostics_channel')` (and the console's channels), `require('stream/consumers')` |
 | `lib/wasi.js` | `require('wasi')`, on `internalBinding('wasi')` from `src/runtime/wasi-binding.mjs` (the kernel's `ctx.sync.wasi.create`) |

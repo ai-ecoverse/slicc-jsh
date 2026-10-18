@@ -437,7 +437,17 @@ export function createCjs({
     return proxy;
   }
 
+  // node --watch's child (WATCH_REPORT_DEPENDENCIES, read once as Node does):
+  // each module it requires goes to the watch process, and so do the files a
+  // relative require that wasn't found would have been.
+  let watchReport;
+  const reportToWatch = (files) => {
+    watchReport ??= Boolean(process.env.WATCH_REPORT_DEPENDENCIES);
+    if (watchReport && typeof process.send === 'function') process.send({ 'watch:require': files });
+  };
+
   function loadFile(filename, parent) {
+    reportToWatch([filename]);
     if (cache[filename]) {
       const existing = cache[filename];
       if (!existing.loaded) {
@@ -507,7 +517,16 @@ export function createCjs({
       return stack;
     };
     const require = (request) => {
-      const resolved = resolver.resolve(request, parentFilename, stackOf());
+      let resolved;
+      try {
+        resolved = resolver.resolve(request, parentFilename, stackOf());
+      } catch (err) {
+        if (err?.code === 'MODULE_NOT_FOUND' && typeof request === 'string' && /^\.{0,2}\/|^\.{1,2}$/.test(request)) {
+          const base = path.resolve(parentFilename.endsWith('/') ? parentFilename : path.dirname(parentFilename), request);
+          reportToWatch(['', ...Object.keys(Module._extensions)].map((ext) => `${base}${ext}`));
+        }
+        throw err;
+      }
       if (resolved.type === 'builtin') return builtins.load(resolved.id);
       return loadFile(resolved.filename, parentModule ?? null);
     };
@@ -536,6 +555,8 @@ export function createCjs({
     mod.id = filename === '[stdin]' || filename === '[eval]' ? filename : '.';
     mod.path = filename.startsWith('[') ? '.' : path.dirname(filename);
     mod.paths = nodeModulePaths(filename.startsWith('[') ? process.cwd() : path.dirname(filename));
+    // Node's Module._load reports the entry too (a [stdin] or [eval] one as its name).
+    reportToWatch([filename]);
     cache[filename] = mod;
     // Node leaves require.main unset for piped [stdin] scripts (typeof → 'undefined').
     mainModule = setMain ? mod : undefined;
