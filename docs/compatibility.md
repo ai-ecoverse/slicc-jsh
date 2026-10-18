@@ -531,7 +531,18 @@ EventEmitter listeners run in the context of the code that emits, as in Node. Th
 - `performance` and the `Performance*` classes are the program's own, and `constants` are Node's.
 - `createHistogram` and `monitorEventLoopDelay` are Node's histograms written in JS. Values are counted exactly, so above 2047 a percentile can differ from Node's 3-significant-figure HDR buckets.
 
-**`v8`:** heap and code statistics (approximate), `cachedDataVersionTag`, `setFlagsFromString` (changes nothing), `startupSnapshot` (never building one), `isStringOneByteRepresentation`, and the coverage no-ops. `serialize`/`deserialize`, heap snapshots and `queryObjects` need V8's own bindings: they throw `ERR_NOT_SUPPORTED`.
+**`v8`:** heap and code statistics (approximate), `cachedDataVersionTag`, `setFlagsFromString` (changes nothing), `startupSnapshot` (never building one), `isStringOneByteRepresentation`, and the coverage no-ops. Heap snapshots and `queryObjects` need V8's own bindings: they throw `ERR_NOT_SUPPORTED`.
+
+**`v8.serialize`/`deserialize`, `Serializer`/`Deserializer` and `DefaultSerializer`/`DefaultDeserializer`** write and read V8's ValueSerializer format, version 15, byte for byte (golden `v8-serdes-node22`). A payload written by Node reads here, and the other way round. This covers:
+- every tag, Node's own handling of Buffers and typed arrays, transfers, `SharedArrayBuffer` ids, and the delegate hooks (`_writeHostObject`, `_readHostObject`, `_getDataCloneError`, `_getSharedArrayBufferId`);
+- V8's `could not be cloned` messages, its deserialization errors, and the versions Node reads (13 to 15).
+
+Where V8's bytes depend on how it lays an object out in memory, which a program can't see, jsh writes what a literal gives:
+- An integral number is an int32 (`I`). V8 writes a double for a value it happens to hold as a heap number, such as an object field that held a fraction before.
+- An array with no holes is dense. V8 writes `new Array(n)` that was filled in afterwards as sparse.
+- A `Float16Array` (there's none in Node 22) is type index 13, as in later Node versions.
+
+Either way the value reads back the same.
 
 ## Modules that are not available
 

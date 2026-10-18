@@ -3,12 +3,13 @@
  * and code statistics (approximate: the platform's performance.memory when
  * it has one), cachedDataVersionTag, setFlagsFromString (no flags change),
  * startupSnapshot (never building one; prettier asks), coverage and
- * snapshot no-ops, isStringOneByteRepresentation, and Node's
- * Serializer/Deserializer names. serialize / deserialize need V8's
- * ValueSerializer wire format: they throw ERR_NOT_SUPPORTED, as do heap
- * snapshots and queryObjects.
+ * snapshot no-ops, isStringOneByteRepresentation, and Serializer /
+ * Deserializer with V8's ValueSerializer wire format (./v8-serdes.mjs), and
+ * on them lib/v8.js's DefaultSerializer / DefaultDeserializer, serialize and
+ * deserialize. Heap snapshots and queryObjects throw ERR_NOT_SUPPORTED.
  */
 import { nodeError, validateString } from '../node-errors.mjs';
+import { createSerdes } from './v8-serdes.mjs';
 
 const notBuilding = () =>
   nodeError(Error, 'ERR_NOT_BUILDING_SNAPSHOT', 'Operation cannot be invoked when not building startup snapshot');
@@ -16,7 +17,7 @@ const notBuilding = () =>
 const notSupported = (what) =>
   nodeError(Error, 'ERR_NOT_SUPPORTED', `slicc-jsh: v8.${what} is not supported (no V8 bindings)`);
 
-export function createV8() {
+export function createV8({ Buffer } = {}) {
   const mem = () => globalThis.performance?.memory ?? {};
   const getHeapStatistics = () => {
     const m = mem();
@@ -42,18 +43,96 @@ export function createV8() {
   };
   const SPACES = ['read_only_space', 'new_space', 'old_space', 'code_space', 'shared_space', 'trusted_space', 'new_large_object_space', 'large_object_space', 'code_large_object_space', 'shared_large_object_space', 'trusted_large_object_space'];
 
-  class Serializer {
+  const { Serializer, Deserializer } = createSerdes({ Buffer });
+
+  // lib/v8.js (Node 22.22.0): the JS half of the serdes API.
+  Serializer.prototype._getDataCloneError = Error;
+  Deserializer.prototype.readRawBytes = function readRawBytes(length) {
+    const offset = this._readRawBytes(length);
+    // `this.buffer` can be a Buffer or a plain Uint8Array.
+    return Buffer.from(this.buffer.buffer, this.buffer.byteOffset + offset, length);
+  };
+
+  const VIEW_TYPES = [
+    Int8Array,
+    Uint8Array,
+    Uint8ClampedArray,
+    Int16Array,
+    Uint16Array,
+    Int32Array,
+    Uint32Array,
+    Float32Array,
+    Float64Array,
+    DataView,
+    null, // 10: FastBuffer
+    BigInt64Array,
+    BigUint64Array,
+    globalThis.Float16Array ?? null,
+  ];
+  const viewTypeToIndex = (view) => {
+    const type = Object.prototype.toString.call(view);
+    return VIEW_TYPES.findIndex((ctor) => ctor !== null && type === `[object ${ctor.name}]`);
+  };
+  const viewIndexToType = (index) => (index === 10 ? Buffer : VIEW_TYPES[index] ?? undefined);
+
+  class DefaultSerializer extends Serializer {
     constructor() {
-      throw notSupported('Serializer');
+      super();
+      this._setTreatArrayBufferViewsAsHostObjects(true);
+    }
+
+    // Buffers are written as their own bytes: their pooled ArrayBuffer may
+    // hold other data, and is often much larger.
+    _writeHostObject(abView) {
+      let i = 10; // FastBuffer
+      if (abView.constructor !== Buffer) {
+        i = viewTypeToIndex(abView);
+        if (i === -1) {
+          throw new this._getDataCloneError(`Unserializable host object: ${String(abView)}`);
+        }
+      }
+      this.writeUint32(i);
+      this.writeUint32(abView.byteLength);
+      this.writeRawBytes(new Uint8Array(abView.buffer, abView.byteOffset, abView.byteLength));
     }
   }
-  class Deserializer {
-    constructor() {
-      throw notSupported('Deserializer');
+
+  class DefaultDeserializer extends Deserializer {
+    _readHostObject() {
+      const typeIndex = this.readUint32();
+      const ctor = viewIndexToType(typeIndex);
+      const byteLength = this.readUint32();
+      const byteOffset = this._readRawBytes(byteLength);
+      const BYTES_PER_ELEMENT = ctor.BYTES_PER_ELEMENT || 1;
+
+      const offset = this.buffer.byteOffset + byteOffset;
+      if (offset % BYTES_PER_ELEMENT === 0) {
+        return ctor === Buffer
+          ? Buffer.from(this.buffer.buffer, offset, byteLength)
+          : new ctor(this.buffer.buffer, offset, byteLength / BYTES_PER_ELEMENT);
+      }
+      // Copy to an aligned buffer first.
+      const copy = Buffer.allocUnsafe(byteLength);
+      copy.set(new Uint8Array(this.buffer.buffer, this.buffer.byteOffset + byteOffset, byteLength));
+      return ctor === Buffer
+        ? copy
+        : new ctor(copy.buffer, copy.byteOffset, byteLength / BYTES_PER_ELEMENT);
     }
   }
-  class DefaultSerializer extends Serializer {}
-  class DefaultDeserializer extends Deserializer {}
+
+  function serialize(value) {
+    const ser = new DefaultSerializer();
+    ser.writeHeader();
+    ser.writeValue(value);
+    return ser.releaseBuffer();
+  }
+
+  function deserialize(buffer) {
+    const der = new DefaultDeserializer(buffer);
+    der.readHeader();
+    return der.readValue();
+  }
+
   class GCProfiler {
     start() {}
     stop() {
@@ -100,12 +179,8 @@ export function createV8() {
     queryObjects() {
       throw notSupported('queryObjects');
     },
-    serialize() {
-      throw notSupported('serialize');
-    },
-    deserialize() {
-      throw notSupported('deserialize');
-    },
+    serialize,
+    deserialize,
     Serializer,
     Deserializer,
     DefaultSerializer,

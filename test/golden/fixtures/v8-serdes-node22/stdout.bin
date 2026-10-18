@@ -1,0 +1,272 @@
+undefined                            ff0f5f
+                                     undefined
+null                                 ff0f30
+                                     null
+true                                 ff0f54
+                                     true
+false                                ff0f46
+                                     false
+int 0                                ff0f4900
+                                     0
+int -1                               ff0f4901
+                                     -1
+int max                              ff0f49feffffff0f
+                                     2147483647
+int min                              ff0f49ffffffff0f
+                                     -2147483648
+int 2**31                            ff0f4e000000000000e041
+                                     2147483648
+-0                                   ff0f4e0000000000000080
+                                     -0
+NaN                                  ff0f4e000000000000f87f
+                                     NaN
+Infinity                             ff0f4e000000000000f0ff
+                                     -Infinity
+fraction                             ff0f4e9a9999999999b93f
+                                     0.1
+1e21                                 ff0f4e50efe2d6e41a4b44
+                                     1e+21
+bigint 0                             ff0f5a00
+                                     0n
+bigint 10                            ff0f5a100a00000000000000
+                                     10n
+bigint -5                            ff0f5a110500000000000000
+                                     -5n
+bigint 2**70                         ff0f5a2000000000000000004000000000000000
+                                     1180591620717411303424n
+bigint -(2**64)                      ff0f5a2100000000000000000100000000000000
+                                     -18446744073709551616n
+empty string                         ff0f2200
+                                     ''
+latin1                               ff0f2206636166e920ff
+                                     'café ÿ'
+two-byte                             ff0f63020001
+                                     'Ā'
+two-byte mixed                       ff0f630661006200ac20
+                                     'ab€'
+emoji                                ff0f63063dd800de2100
+                                     '😀!'
+long string                          ff0f22c8017878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878
+                                     'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+object                               ff0f6f2201614902220162220374776f220163410149062400012201646f220165307b017b04
+                                     { a: 1, b: 'two', c: [ 3 ], d: { e: null } }
+object int keys                      ff0f6f4902220163490422016122016249027b03
+                                     { '1': 'c', '2': 'a', b: 1 }
+object odd keys                      ff0f6f4e000000000000e041490a4e0000c0ffffffef41490622022d314902220a3432393439363732393549042202303149087b05
+                                     { '2147483648': 5, '4294967294': 3, '-1': 1, '4294967295': 2, '01': 4 }
+object __proto__ key                 ff0f6f22095f5f70726f746f5f5f49027b01
+                                     { ['__proto__']: 1 }
+symbol keys skipped                  ff0f6f22016b49047b01
+                                     { k: 2 }
+non-enumerable skipped               ff0f6f22017649027b01
+                                     { v: 1 }
+class instance                       ff0f6f22017849027b01
+                                     { x: 1 }
+getter                               ff0f6f220167490a7b01
+                                     { g: 5 }
+empty array                          ff0f4100240000
+                                     []
+smi array                            ff0f4103490249044906240003
+                                     [ 1, 2, 3 ]
+double array                         ff0f41024e000000000000f83f4e0000000000000040240002
+                                     [ 1.5, 2 ]
+mixed array                          ff0f410449022201614e000000000000f83f30240004
+                                     [ 1, 'a', 1.5, null ]
+holey array                          ff0f61034900490249044906400203
+                                     [ 1, <1 empty item>, 3 ]
+sparse far                           ff0f6106490a4902400106
+                                     [ <5 empty items>, 1 ]
+array props                          ff0f410149022201704904240101
+                                     [ 1, p: 2 ]
+nested arrays                        ff0f410341002400004101410149022400012400016f22016141002400007b01240003
+                                     [ [], [ [ 1 ] ], { a: [] } ]
+undefined elements                   ff0f41045f305446240004
+                                     [ undefined, null, true, false ]
+date                                 ff0f440000000000000000
+                                     1970-01-01T00:00:00.000Z
+date NaN                             ff0f44000000000000f87f
+                                     Invalid Date
+regexp                               ff0f522204615c2f62bf01
+                                     /a\/b/dgimsuy
+regexp v                             ff0f52220a5b5c707b4c7d2d2d615d8002
+                                     /[\p{L}--a]/v
+boxed                                ff0f41056e000000000000f03f7322017379787a100300000000000000240005
+                                     [ [Number: 1], [String: 's'], [Boolean: true], [Boolean: false], [BigInt: 3n] ]
+map                                  ff0f3b49026f22017849027b0122016b410149042400013a04
+                                     Map(2) { 1 => { x: 1 }, 'k' => [ 2 ] }
+set                                  ff0f272201614902302c03
+                                     Set(3) { 'a', 1, null }
+array buffer                         ff0f4203010203
+                                     ArrayBuffer { [Uint8Contents]: <01 02 03>, byteLength: 3 }
+resizable array buffer               ff0f7e02040000
+                                     ArrayBuffer { [Uint8Contents]: <00 00>, byteLength: 2 }
+uint8array                           ff0f5c01020102
+                                     Uint8Array(2) [ 1, 2 ]
+buffer                               ff0f5c0a026162
+                                     <Buffer 61 62>
+buffer slice                         ff0f5c0a026364
+                                     <Buffer 63 64>
+int16array                           ff0f5c0304ffff0200
+                                     Int16Array(2) [ -1, 2 ]
+float64array                         ff0f5c0808000000000000e03f
+                                     Float64Array(1) [ 0.5 ]
+bigint64array                        ff0f5c0b08ffffffffffffffff
+                                     BigInt64Array(1) [ -1n ]
+dataview                             ff0f5c09020000
+                                     DataView(2) <0 0>
+uint8clamped                         ff0f5c0201ff
+                                     Uint8ClampedArray(1) [ 255 ]
+error                                ff0f726d2204626f6f6d732205535441434b2e
+                                     [STACK]
+range error                          ff0f72526d220172732205535441434b2e
+                                     [STACK]
+error cause                          ff0f72546d220174732205535441434b636f220377687949027b012e
+                                     [STACK] { [cause]: { why: 1 } }
+error cause undefined                ff0f726d220163732205535441434b635f2e
+                                     [STACK] { [cause]: undefined }
+error no message                     ff0f72732205535441434b2e
+                                     [STACK]
+error subclass                       ff0f726d220171732205535441434b2e
+                                     [STACK]
+error extra props dropped            ff0f726d220165732205535441434b2e
+                                     [STACK]
+error self cause                     ff0f726d220473656c66732205535441434b635e002e
+                                     <ref *1> [STACK] { [cause]: [Circular *1] }
+error name getter, stack not a string ff0f72546d2201782e
+                                     [TypeError: x]
+error message getter                 ff0f7254732205535441434b2e
+                                     [STACK]
+cyclic                               ff0f6f22046e616d65220163220473656c665e0022046c69737441025e006f22046261636b5e007b012400027b03
+                                     <ref *1> { name: 'c', self: [Circular *1], list: [ [Circular *1], { back: [Circular *1] } ] }
+shared refs                          ff0f41036f22017349027b015e013b5e015e013a02240003
+                                     [ { s: 1 }, { s: 1 }, Map(1) { { s: 1 } => { s: 1 } } ]
+shared buffer views                  ff0f41025c010200005c01020000240002
+                                     [ Uint8Array(2) [ 0, 0 ], Uint8Array(2) [ 0, 0 ] ]
+getter deleting itself               ff0f6f220178490e22017949027b02
+                                     { x: 7, y: 1 }
+getter deleting the next             ff0f6f220566697273742201667b01
+                                     { first: 'f' }
+array with an accessor               ff0f61024900490249024904400202
+                                     [ 1, 2 ]
+frozen array                         ff0f61024900490249024904400202
+                                     [ 1, 2 ]
+sealed array                         ff0f61024900490249024904400202
+                                     [ 1, 2 ]
+non-extensible array                 ff0f61024900490249024904400202
+                                     [ 1, 2 ]
+read-only element                    ff0f61024900490249024904400202
+                                     [ 1, 2 ]
+--- refused
+function                 THROWS Error  function f() {} could not be cloned.
+arrow                    THROWS Error  () => 1 could not be cloned.
+class                    THROWS Error  class K {} could not be cloned.
+symbol                   THROWS Error  Symbol(x) could not be cloned.
+symbol object            THROWS Error  [object Symbol] could not be cloned.
+nested function          THROWS Error  () => 2 could not be cloned.
+weakmap                  THROWS Error  #<WeakMap> could not be cloned.
+weakmap subclass         THROWS Error  #<W> could not be cloned.
+weakset                  THROWS Error  #<WeakSet> could not be cloned.
+weakref                  THROWS Error  #<WeakRef> could not be cloned.
+promise                  THROWS Error  #<Promise> could not be cloned.
+proxy                    THROWS Error  #<Object> could not be cloned.
+generator                THROWS Error  [object Generator] could not be cloned.
+array iterator           THROWS Error  [object Array Iterator] could not be cloned.
+map iterator             THROWS Error  [object Map Iterator] could not be cloned.
+arguments                THROWS Error  #<Object> could not be cloned.
+globalThis               THROWS Error  #<Object> could not be cloned.
+shared array buffer      THROWS Error  #<SharedArrayBuffer> could not be cloned.
+detached                 THROWS Error  An ArrayBuffer is detached and could not be cloned.
+accessor element read 1 time(s)
+prototypes are objects ff0f6f7b00 ff0f6f7b00 ff0f6f7b00 ff0f6f7b00
+iterator prototypes are objects ff0f6f7b00 ff0f6f7b00 ff0f6f7b00
+an own tag hides nothing THROWS Error  #<Promise> could not be cloned. / THROWS Error  [object Y] could not be cloned. / THROWS Error  #<Collator> could not be cloned.
+--- base Serializer (views as V8 views)
+view ff0f4201075642000100
+offset view ff0f420800000000000000005642020300
+dataview ff0f420400000000563f010200
+resizable tracking ff0f7e0408000000005642000003 read back follows the buffer: true
+resizable tracking from 1 ff0f7e0408000000005642010003 read back follows the buffer: true
+resizable fixed ff0f7e0408000000005642000202 read back follows the buffer: false
+resizable fixed to the end ff0f7e0408000000005642000402 read back follows the buffer: false
+resizable tracking 16-bit ff0f7e0408000000005657000003 read back follows the buffer: true
+resizable dataview tracking ff0f7e040800000000563f000003 read back follows the buffer: true
+resizable dataview fixed ff0f7e040800000000563f000402 read back follows the buffer: false
+resizable at its max, tracking ff0f7e0404000000005642000003 read back follows the buffer: true
+resizable at its max, fixed ff0f7e0404000000005642000402 read back follows the buffer: true
+resizable at its max, dataview tracking ff0f7e040400000000563f010003 read back follows the buffer: true
+resizable at its max, dataview fixed ff0f7e040400000000563f010302 read back follows the buffer: true
+two views of one buffer ff0f410242040000000056420004005e015657020200240002
+host object, no writer: Error [object Uint8Array] could not be cloned.
+--- reading
+header only              THROWS Error  Unable to deserialize cloned data.
+no header                THROWS Error  Unable to deserialize cloned data due to invalid or unsupported version.
+version 12               THROWS Error  Unable to deserialize cloned data due to invalid or unsupported version.
+version 13               2
+version 14               2
+version 16               THROWS Error  Unable to deserialize cloned data due to invalid or unsupported version.
+truncated object         THROWS Error  Unable to deserialize cloned data.
+unknown tag              THROWS Error  Unable to deserialize cloned data.
+utf8 string              '€'
+bad utf8                 '�A'
+uint32 tag               4294967295
+verify count             1
+padding before tag       1
+duplicate key            THROWS Error  Unable to deserialize cloned data.
+wrong property count     THROWS Error  Unable to deserialize cloned data.
+bad reference            THROWS Error  Unable to deserialize cloned data.
+odd two-byte length      THROWS Error  Unable to deserialize cloned data.
+regexp bad flags         THROWS Error  Unable to deserialize cloned data.
+regexp linear flag       THROWS Error  Unable to deserialize cloned data.
+regexp bad source        THROWS SyntaxError  Invalid regular expression: /(/g: Unterminated group
+dense array short        THROWS Error  Unable to deserialize cloned data.
+dense array hole         THROWS Error  Unable to deserialize cloned data.
+sparse array             [ 1, <1 empty item>, 3 ]
+error no stack           [Error: x]
+error unknown tag        THROWS Error  Unable to deserialize cloned data.
+shared array buffer      THROWS Error  Unable to deserialize cloned data.
+view on buffer           Uint8Array(2) [ 2, 3 ]
+view out of range        THROWS Error  Unable to deserialize cloned data.
+view misaligned          THROWS Error  Unable to deserialize cloned data.
+version 13 view          Uint8Array(2) [ 1, 2 ]
+host object              BigInt64Array(0) []
+map odd length           THROWS Error  Unable to deserialize cloned data.
+set                      Set(1) { 1 }
+string object            [String: 's']
+bigint object            [BigInt: 3n]
+object number key        { '1.5': 1 }
+object bad key           THROWS Error  Unable to deserialize cloned data.
+error read back RangeError RangeError m "S" 1 [ 'stack', 'message', 'cause' ] { value: 1, writable: true, enumerable: false, configurable: true }
+self cause read back true
+cycle read back true true true
+refs read back true true
+host views read back true [ [ 7, 2 ], [ 12, 2 ] ]
+buffer read back true xyz
+__proto__ read back [ '__proto__' ] true
+resizable read back true 4 2
+--- the serdes methods
+raw ffffffff0f078280808010ffffffffffffffffff010000000000000840090807 true 0 true
+released again 0
+read 4294967295 7 [ 1, 2 ] [ 4294967295, 4294967295 ] 3 <Buffer 09> 30
+readUint32 at end: Error ReadUint32() failed
+readUint64 at end: Error ReadUint64() failed
+readDouble at end: Error ReadDouble() failed
+readRawBytes at end: ReadRawBytes() failed
+writeRawBytes array TypeError ERR_INVALID_ARG_TYPE source must be a TypedArray or a DataView
+transfer a SharedArrayBuffer TypeError ERR_INVALID_ARG_TYPE arrayBuffer must be an ArrayBuffer
+Deserializer of a string TypeError ERR_INVALID_ARG_TYPE buffer must be a TypedArray or a DataView
+deserialize a string TypeError ERR_INVALID_ARG_TYPE buffer must be a TypedArray or a DataView
+Deserializer transfer a number TypeError ERR_INVALID_ARG_TYPE arrayBuffer must be an ArrayBuffer or SharedArrayBuffer
+Serializer without new TypeError ERR_CONSTRUCT_CALL_REQUIRED Class constructor Serializer cannot be invoked without 'new'
+Deserializer without new TypeError ERR_CONSTRUCT_CALL_REQUIRED Class constructor Deserializer cannot be invoked without 'new'
+deserializer [ 'buffer' ] 3 0 true 15
+transfer ff0f410274075e015642010200240002
+no transfer given: Unable to deserialize cloned data.
+transfer read true true 1 2
+shared ids ff0f41027514751e240002
+shared read: Unable to deserialize cloned data.
+custom host ff0f6f2201615c037b01
+custom host read { a: { len: 3 } }
+host returns a primitive: TypeError readHostObject must return an object
+no reader: Error Unable to deserialize cloned data.
+shape _getDataCloneError,_setTreatArrayBufferViewsAsHostObjects,constructor,releaseBuffer,transferArrayBuffer,writeDouble,writeHeader,writeRawBytes,writeUint32,writeUint64,writeValue _readRawBytes,constructor,getWireFormatVersion,readDouble,readHeader,readRawBytes,readUint32,readUint64,readValue,transferArrayBuffer constructor,_writeHostObject constructor,_readHostObject Serializer 0 1 1 1 true
+serialize() ff0f5f
