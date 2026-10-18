@@ -13,6 +13,13 @@ const hide = (s) => String(s).split(dir).join('<dir>');
 const later = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const show = (e) => console.log(e.name, e.code, hide(e.message), e.syscall ?? '', hide(e.path ?? ''));
 
+// A section that waits forever says which, rather than timing out silently.
+let section = 'events until aborted';
+setTimeout(() => {
+  console.log('stuck in', section);
+  process.exit(1);
+}, 10000).unref();
+
 async function main() {
   console.log('same function:', fsp.watch === fs.promises.watch);
 
@@ -34,32 +41,40 @@ async function main() {
   await changes;
 
   // Another encoding, and `break` ends it.
+  section = 'hex';
   setTimeout(() => fs.unlinkSync(at('b.txt')), 50);
   for await (const e of fsp.watch(dir, { encoding: 'hex' })) {
     console.log('hex event:', e.eventType, e.filename, Object.keys(e).join(','));
     break;
   }
 
-  // More events than maxQueue before the iterator reads them.
-  const flood = () => {
-    for (const name of ['c', 'd', 'e']) fs.writeFileSync(at(`${name}.txt`), name);
-  };
+  // More events than maxQueue before the iterator reads them: the first
+  // next() starts the watch, and the changes come before anything is read.
+  section = 'overflow error';
+  const flooded = fsp.watch(dir, { maxQueue: 2, overflow: 'error' });
+  const firstFlooded = flooded.next();
+  for (const name of ['c', 'd', 'e']) fs.writeFileSync(at(`${name}.txt`), name);
   try {
-    setTimeout(flood, 50);
-    for await (const e of fsp.watch(dir, { maxQueue: 2, overflow: 'error' })) console.log('not this:', e.eventType, e.filename);
+    const e = (await firstFlooded).value;
+    console.log('not this:', e.eventType, e.filename);
   } catch (e) {
     show(e);
   }
+  section = 'overflow ignore';
   const warnings = [];
   const onWarning = (w) => warnings.push(w.message);
   process.on('warning', onWarning);
   const stop = new AbortController();
-  setTimeout(() => {
-    for (const name of ['c', 'd', 'e']) fs.unlinkSync(at(`${name}.txt`));
-  }, 50);
+  const kept = fsp.watch(dir, { maxQueue: 2, signal: stop.signal });
+  const firstKept = kept.next();
+  for (const name of ['c', 'd', 'e']) fs.unlinkSync(at(`${name}.txt`));
   setTimeout(() => stop.abort(), 200);
   try {
-    for await (const e of fsp.watch(dir, { maxQueue: 2, signal: stop.signal })) console.log('kept:', e.eventType, e.filename);
+    let e = (await firstKept).value;
+    console.log('kept:', e.eventType, e.filename);
+    e = (await kept.next()).value;
+    console.log('kept:', e.eventType, e.filename);
+    await kept.next();
   } catch (e) {
     show(e);
   }
@@ -68,6 +83,7 @@ async function main() {
   process.off('warning', onWarning);
 
   // Recursive, on Linux: Node's own watcher, one event per next().
+  section = 'recursive';
   fs.mkdirSync(at('sub'));
   const rec = new AbortController();
   setTimeout(() => fs.writeFileSync(at('sub', 's.txt'), 's'), 50);
@@ -81,6 +97,7 @@ async function main() {
   }
 
   // Errors: thrown by the first next().
+  section = 'errors';
   const first = async (...args) => {
     try {
       await fsp.watch(...args).next();
