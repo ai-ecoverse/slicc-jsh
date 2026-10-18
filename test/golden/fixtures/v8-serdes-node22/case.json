@@ -1,0 +1,13 @@
+{
+  "description": "v8.serialize / deserialize and v8.Serializer / Deserializer: V8's wire format byte for byte (every tag, padding, varints, BigInt digits, regexp flags, errors, views as host objects and as V8 views, transfers, SharedArrayBuffer ids), the DataCloneError messages, the deserialization errors and versions, and the serdes methods' errors",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

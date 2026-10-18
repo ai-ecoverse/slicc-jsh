@@ -332,7 +332,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     'path/win32': () => process._nodeLib().path.win32,
     punycode: () => process._nodeLib().punycode,
     async_hooks: () => (asyncHooks ??= createAsyncHooks()),
-    v8: () => (v8 ??= createV8()),
+    v8: () => (v8 ??= createV8({ Buffer })),
     // Node's own lib/repl.js, lib/domain.js, lib/sys.js,
     // lib/diagnostics_channel.js, lib/stream/consumers.js (src/node-lib).
     repl: () => {
