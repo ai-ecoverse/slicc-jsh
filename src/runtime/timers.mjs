@@ -29,12 +29,17 @@ export function createTimers(
   // timers phase, not in the order the platform runs their retries (the
   // turn's own steps come between those). Node keeps a list per delay, in
   // the order the timers were set; it takes the lists by when their first
-  // timer is due, and runs each list's due timers before the next list's.
+  // timer is due (on a tie, the older list first), and runs each list's due
+  // timers before the next list's.
   const held = new Set();
   const nodeOrder = (timers) => {
-    const first = new Map();
-    for (const t of timers) first.set(t.delay, Math.min(first.get(t.delay) ?? Infinity, t.due));
-    return timers.sort((x, y) => first.get(x.delay) - first.get(y.delay) || x.delay - y.delay || x.seq - y.seq);
+    const lists = new Map();
+    for (const t of timers) {
+      const list = lists.get(t.delay) ?? { due: Infinity, seq: Infinity };
+      lists.set(t.delay, { due: Math.min(list.due, t.due), seq: Math.min(list.seq, t.seq) });
+    }
+    const of = (t) => lists.get(t.delay);
+    return timers.sort((x, y) => of(x).due - of(y).due || of(x).seq - of(y).seq || x.seq - y.seq);
   };
   let made = 0;
   const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
