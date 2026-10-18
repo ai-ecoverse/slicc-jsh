@@ -909,6 +909,21 @@ const get = (label, options) => new Promise((resolve) => {
       console.log(label, 'threw', e.code, e.message);
     }
   }
+  // A createConnection of the caller's gets cert and key as given, unparsed.
+  let seen;
+  try {
+    const req = https.get({ host, port: ports.mtlsHttps, cert: 'token', key: 'opaque', createConnection: (o) => {
+      seen = [o.cert, o.key];
+      const s = new (require('net').Socket)();
+      process.nextTick(() => s.destroy());
+      return s;
+    } });
+    req.on('error', () => {});
+  } catch (e) {
+    console.log('own createConnection threw', e.code);
+  }
+  await new Promise((r) => setTimeout(r, 100));
+  console.log('own createConnection got', JSON.stringify(seen));
 })();
 `,
       ports
