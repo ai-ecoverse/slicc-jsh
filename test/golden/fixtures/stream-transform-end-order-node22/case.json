@@ -1,0 +1,5 @@
+{
+  "description": "A Transform that pushes null: 'end' before the write's callback when the push comes from an async transform callback (Node 22 delays the callback a tick), and the order for a sync push, a push with data pending, a flush that ends it, and through pipeline",
+  "argv": ["script.js"],
+  "shim": true
+}

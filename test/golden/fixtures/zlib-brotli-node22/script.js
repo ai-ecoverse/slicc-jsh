@@ -150,10 +150,8 @@ later('promisify', (done) =>
   )
 );
 
-// Streams: writes of a few bytes, each write's output as it arrives. A
-// stream that ends while written to (trailing bytes) logs no write callbacks:
-// jsh's streams call the callback before 'end' (not Brotli's doing).
-function streamLog(input, size, opts, done, { writes = true } = {}) {
+// Streams: writes of a few bytes, each write's output as it arrives.
+function streamLog(input, size, opts, done) {
   const d = zlib.createBrotliDecompress(opts);
   const log = [];
   const parts = [];
@@ -173,7 +171,7 @@ function streamLog(input, size, opts, done, { writes = true } = {}) {
     const piece = input.subarray(at, at + size);
     at += size;
     d.write(piece, (err) => {
-      if (writes) log.push(`written ${at} ${err ? 'err' : 'ok'}`);
+      log.push(`written ${at} ${err ? 'err' : 'ok'}`);
       setImmediate(next);
     });
   };
@@ -189,13 +187,9 @@ later('stream, corrupt', (done) => {
   streamLog(corrupt, 50, {}, done);
 });
 later('stream, truncated', (done) => streamLog(br['utf8 q11 w24'].subarray(0, 200), 64, {}, done));
-later('stream, trailing bytes', (done) =>
-  streamLog(Buffer.concat([br['tiny q5 w16'], Buffer.from('xyz')]), 4, {}, done, { writes: false })
-);
+later('stream, trailing bytes', (done) => streamLog(Buffer.concat([br['tiny q5 w16'], Buffer.from('xyz')]), 4, {}, done));
 later('stream, rejectGarbageAfterEnd', (done) =>
-  streamLog(Buffer.concat([br['tiny q5 w16'], Buffer.from('xyz')]), 64, { rejectGarbageAfterEnd: true }, done, {
-    writes: false,
-  })
+  streamLog(Buffer.concat([br['tiny q5 w16'], Buffer.from('xyz')]), 64, { rejectGarbageAfterEnd: true }, done)
 );
 later('stream, finishFlush FLUSH, truncated', (done) =>
   streamLog(br['text q5 w16'].subarray(0, 500), 64, { finishFlush: C.BROTLI_OPERATION_FLUSH }, done)

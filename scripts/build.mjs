@@ -76,6 +76,26 @@ const stream = await esbuild.build({
       },
     },
     {
+      // Node 22's Transform delays a write's callback a tick once the
+      // transform has pushed null, so 'end' comes before it (#419).
+      name: 'transform-end-node22',
+      setup(build) {
+        build.onLoad({ filter: /streams[/\\]transform\.js$/ }, async (args) => {
+          const { readFile } = await import('node:fs/promises');
+          const text = await readFile(args.path, 'utf8');
+          const from = '    if (\n      wState.ended ||';
+          if (!text.includes(from)) throw new Error(`transform-end-node22: ${args.path} changed`);
+          const to = '    if (rState.ended) {\n      process.nextTick(callback)\n    } else if (\n      wState.ended ||';
+          const head = "module.exports = Transform\n";
+          if (!text.includes(head)) throw new Error(`transform-end-node22: ${args.path} changed`);
+          const contents = text
+            .replace(head, `${head}const process = require('../shims/process')\n`)
+            .replace(from, to);
+          return { contents, loader: 'js' };
+        });
+      },
+    },
+    {
       // Node 22 default highWaterMark is 65536; readable-stream still uses 16384.
       name: 'hwm-node22',
       setup(build) {
