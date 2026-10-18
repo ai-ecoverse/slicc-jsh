@@ -1,5 +1,5 @@
 constructor: FSWatcher ref/unref: undefined undefined
--- write in an existing subdirectory
+-- append in an existing subdirectory
 event: change old/o.txt
 -- mkdir
 event: rename sub

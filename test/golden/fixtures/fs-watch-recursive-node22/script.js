@@ -16,7 +16,9 @@ const w = fs.watch(dir, { recursive: true }, (type, name) => console.log('event:
 console.log('constructor:', w.constructor.name, 'ref/unref:', w.ref(), w.unref());
 
 const steps = [
-  ['write in an existing subdirectory', () => fs.writeFileSync(at('old', 'o.txt'), 'oo')],
+  // An append: an overwrite is a truncate and a write, which Linux reports
+  // twice here, from the file's watch and its directory's in turn (jsh: once).
+  ['append in an existing subdirectory', () => fs.appendFileSync(at('old', 'o.txt'), 'o')],
   ['mkdir', () => fs.mkdirSync(at('sub'))],
   ['create in it', () => fs.writeFileSync(at('sub', 'a.txt'), 'a')],
   ['append', () => fs.appendFileSync(at('sub', 'a.txt'), 'b')],
