@@ -1,0 +1,13 @@
+{
+  "description": "worker_threads.Worker: workerData, parentPort, threadId and isMainThread, 'online' / 'message' / 'error' / 'exit' in order, process.exit and an uncaught error's code, terminate(), eval workers, ESM workers, transfers (an ArrayBuffer detached, a MessagePort that moves with its queued messages, a SharedArrayBuffer shared with Atomics.wait and notify both ways), stdout and stderr piped or as streams, env copied, environment data inherited, resourceLimits, nested workers, unref, and the operations a worker can't do",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.127.0",
+  "files": [
+    { "path": "/os/script.js", "from": "script.js" },
+    { "path": "/os/w.js", "from": "w.js" },
+    { "path": "/os/w-esm.mjs", "from": "w-esm.mjs" }
+  ]
+}

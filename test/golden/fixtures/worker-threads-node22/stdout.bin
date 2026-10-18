@@ -1,0 +1,55 @@
+--- main thread
+isMainThread true threadId 0
+--- echo
+threadId 1
+echo: online | message {"hello":true,"threadId":1,"isMainThread":false,"data":{"mode":"echo","pid":"number","nested":{"a":[1,2]}},"samePid":true,"argv":["x","y"],"execArgv":[]} | message {"echo":"before online"} | message {"echo":{"n":1}} | exit 0
+--- process.exit
+worker stdout before exit
+exit: online | message "before exit" | exit 3
+code 3
+--- uncaught error
+throw: online | message "before throw" | error RangeError undefined boom from worker | exit 1
+throw value: online | error 42 | exit 1
+--- terminate
+terminate: online | message "running" | exit 1
+terminate resolves 1
+terminate again undefined
+--- eval
+eval: online | message ["ev","function","[worker eval]","[worker eval]"] | exit 0
+--- esm
+esm file: online | message {"esm":true,"url":true,"workerData":{"m":1}} | exit 0
+esm url: online | message {"esm":true,"url":true,"workerData":2} | exit 0
+--- transfers
+detached after transfer 0
+worker saw 16 bytes
+transfers: port1 {"fromWorker":"via moved port"} | port1 {"gotOnPort":"queued 1"} | port1 {"gotOnPort":"queued 2"} | worker {"answer":99,"sawLength":16}
+--- receiveMessageOnPort after Atomics.wait
+moved buffer detached 0
+sync receive: online | message ["{\"n\":1}","buf 7,8,9","big 2000000","{\"n\":4}","then empty: undefined"] | exit 0
+--- stdio piped and as streams
+out line 1
+out line 2
+stdio piped: online | exit 0
+stdio streams: online | exit 0
+captured "out line 1\nout line 2\n" "err line 1\n"
+--- env and environment data
+env: online | message {"inherited":"from parent","env":{"v":1},"limits":["codeRangeSizeMb","maxOldGenerationSizeMb","maxYoungGenerationSizeMb","stackSizeMb"]} | exit 0
+parent sees FROM_WORKER undefined
+env given: online | message {"inherited":"given","env":{"v":1},"limits":["codeRangeSizeMb","maxOldGenerationSizeMb","maxYoungGenerationSizeMb","stackSizeMb"]} | exit 0
+SHARE_ENV symbol
+--- resource limits
+limits {"maxYoungGenerationSizeMb":48,"maxOldGenerationSizeMb":64,"codeRangeSizeMb":0,"stackSizeMb":4}
+limits after exit {}
+--- nested
+nested: online | message {"outer":16,"inner":17,"innerSamePid":true} | exit 0
+--- unsupported in a worker
+unsupported: online | message ["chdir ERR_WORKER_UNSUPPORTED_OPERATION process.chdir() is not supported in workers","abort ERR_WORKER_UNSUPPORTED_OPERATION process.abort() is not supported in workers","umask set ERR_WORKER_UNSUPPORTED_OPERATION Setting process.umask() is not supported in workers","setuid ERR_WORKER_UNSUPPORTED_OPERATION process.setuid() is not supported in workers","umask read number"] | exit 0
+--- errors
+bare name TypeError ERR_WORKER_PATH The worker script or module filename must be an absolute path or a relative path starting with './' or '../'. Received "w.js"
+not a string TypeError ERR_INVALID_ARG_TYPE The "filename" argument must be of type string or an instance of URL. Received type number (42)
+eval not a string TypeError ERR_INVALID_ARG_VALUE The property 'options.eval' must be false when 'filename' is not a string. Received true
+bad argv TypeError ERR_INVALID_ARG_TYPE The "options.argv" property must be an instance of Array. Received type string ('x')
+bad env TypeError ERR_INVALID_ARG_TYPE The "options.env" property must be of type object or one of undefined, null, or worker_threads.SHARE_ENV. Received type number (1)
+bad resourceLimits no throw
+--- unref
+unref: the program ends with the worker running

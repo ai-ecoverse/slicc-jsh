@@ -28,6 +28,11 @@ import { createFetch } from './web/fetch.mjs';
 import { createWebSocket } from './web/websocket.mjs';
 import { createPorts } from './web/broadcast-channel.mjs';
 import { setupChildChannel } from './builtins/ipc-channel.mjs';
+import { createRemotePorts } from './web/remote-ports.mjs';
+
+// The platform's MessageChannel, before the program's own (jsh's) takes the
+// global: worker_threads' ports between threads are its ports.
+const NativeMessageChannel = globalThis.MessageChannel;
 
 const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
 
@@ -208,6 +213,31 @@ function trackPlatformAsync(handles) {
 // The platform's setTimeout, for the turns after the program's loop ended.
 const platformSetTimeout = globalThis.setTimeout.bind(globalThis);
 
+/** A data: URL's text (a worker's module given as one). */
+function dataUrlText(url) {
+  const comma = url.indexOf(',');
+  const head = url.slice(5, comma);
+  const body = url.slice(comma + 1);
+  if (/;base64$/i.test(head)) return new TextDecoder().decode(Uint8Array.from(atob(body), (c) => c.charCodeAt(0)));
+  return decodeURIComponent(body);
+}
+
+/**
+ * A worker's command line, as Node gives a Worker's thread: its execArgv
+ * (the Worker's option, else its parent's), its script (or its eval code, or
+ * a data: URL's module), then its argv. An eval worker's argv[1] is
+ * `[worker eval]`.
+ */
+function workerCommandLine(data) {
+  const argv = ['node', ...(data.execArgv ?? [])];
+  if (data.eval !== undefined) argv.push('-e', data.eval, '--', ...data.argv);
+  else if (data.url !== undefined) argv.push('--input-type=module', '-e', dataUrlText(data.url), '--', ...data.argv);
+  else argv.push(data.file, ...data.argv);
+  const parsed = parseNodeArgv(argv);
+  if (parsed.mode === 'eval') parsed.processArgv = [parsed.processArgv[0], '[worker eval]', ...data.argv];
+  return parsed;
+}
+
 /**
  * Run the node CLI against a JsProgramContext. Resolves with an exit status.
  *
@@ -240,6 +270,11 @@ export async function runNode(ctx, options = {}) {
     // process.report.reportOnUncaughtException: Node writes the report
     // between the error and its `Node.js v…` line.
     const trailer = `\nNode.js v${NODE_SHIM_VERSION}\n`;
+    // A worker's uncaught exception is its Worker's 'error', not printed.
+    if (options.worker) {
+      options.worker.io.error(err);
+      return;
+    }
     const report = processRef?._reportUncaught;
     if (typeof report !== 'function' || !body.endsWith(trailer)) {
       writeStderr(body);
@@ -327,11 +362,13 @@ export async function runNode(ctx, options = {}) {
   };
 
   // NODE_OPTIONS first, as Node reads it.
-  const parsed = parseNodeArgv([...ctx.argv], {
-    nodeOptions: ctx.env?.NODE_OPTIONS,
-    // --watch: the child's IPC channel (slicc-kernel#1093) and fs.watch (1.125.0).
-    watch: typeof ctx.socketpair === 'function' && typeof ctx.fs?.watch === 'function',
-  });
+  const parsed = options.worker
+    ? workerCommandLine(options.worker.data)
+    : parseNodeArgv([...ctx.argv], {
+        nodeOptions: ctx.env?.NODE_OPTIONS,
+        // --watch: the child's IPC channel (slicc-kernel#1093) and fs.watch (1.125.0).
+        watch: typeof ctx.socketpair === 'function' && typeof ctx.fs?.watch === 'function',
+      });
   if (parsed.error) {
     await ctx.write(2, `${parsed.error}\n`);
     return parsed.status ?? 9;
@@ -464,6 +501,58 @@ export async function runNode(ctx, options = {}) {
     bcSlot && bcSlot.value === undefined && !bcSlot.get && (bcSlot.writable || bcSlot.configurable) ? JshBroadcastChannel : undefined;
   process._broadcastChannel = JshBroadcastChannel;
   process._ports = ports;
+  // worker_threads: ports whose other end is in another thread.
+  let serdes;
+  process._remotePorts = NativeMessageChannel
+    ? createRemotePorts({
+        ports,
+        NativeMessageChannel,
+        // The structured clone's own algorithm (V8's ValueSerializer), for the mailboxes.
+        serdes: () =>
+          (serdes ??= (() => {
+            const v8 = process._builtin('v8');
+            return {
+              serialize(value) {
+                const ser = new v8.Serializer();
+                ser.writeHeader();
+                ser.writeValue(value);
+                return ser.releaseBuffer();
+              },
+              deserialize(bytes) {
+                const der = new v8.Deserializer(bytes);
+                der.readHeader();
+                return der.readValue();
+              },
+            };
+          })()),
+      })
+    : null;
+  if (options.worker) {
+    process._worker = options.worker.io;
+    // What a worker can't do (lib/internal/bootstrap/switches/
+    // does_not_own_process_state.js): the process's state is the main
+    // thread's.
+    const unavailable = (name) => {
+      const unavailableInWorker = () => {
+        throw nodeError(TypeError, 'ERR_WORKER_UNSUPPORTED_OPERATION', `${name} is not supported in workers`);
+      };
+      unavailableInWorker.disabled = true;
+      return unavailableInWorker;
+    };
+    for (const name of ['abort', 'chdir', 'initgroups', 'setgroups', 'setegid', 'seteuid', 'setgid', 'setuid']) {
+      if (name in process) process[name] = unavailable(`process.${name}()`);
+    }
+    const umask = process.umask;
+    process.umask = function wrappedUmask(mask) {
+      // Read-only in workers.
+      if (mask !== undefined) throw nodeError(TypeError, 'ERR_WORKER_UNSUPPORTED_OPERATION', 'Setting process.umask() is not supported in workers');
+      return Reflect.apply(umask, process, []);
+    };
+    delete process._debugProcess;
+    delete process._debugEnd;
+    // The thread runs: its Worker's 'online', before any of its code.
+    options.worker.io.online();
+  }
   // Node's MessageChannel / MessagePort, in-process, on the same turns as
   // BroadcastChannel (where the kernel leaves their slots writable).
   const portSlot = (name) => {
@@ -998,10 +1087,12 @@ export async function runNode(ctx, options = {}) {
           if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
           flushTicks();
         } else {
-          const evalParent = `${process.cwd()}/[eval]`;
+          // A worker's eval code is Node's `[worker eval]`.
+          const evalName = options.worker ? '[worker eval]' : '[eval]';
+          const evalParent = `${process.cwd()}/${evalName}`;
           const require = cjs.makeRequire(evalParent);
           const exports = {};
-          const module = { exports, id: '[eval]' };
+          const module = { exports, id: evalName };
           // Dynamic import() is valid in CJS; rewrite to the kernel loader
           // (host import() cannot see the in-memory FS).
           const {
@@ -1011,10 +1102,10 @@ export async function runNode(ctx, options = {}) {
           } = rewriteDynamicImports(parsed.code);
           const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
           const body = parsed.print
-            ? `return (${cjsCode}\n)\n//# sourceURL=[eval]`
-            : `${cjsCode}\n//# sourceURL=[eval]`;
+            ? `return (${cjsCode}\n)\n//# sourceURL=${evalName}`
+            : `${cjsCode}\n//# sourceURL=${evalName}`;
           const args = ['exports', 'require', 'module', '__filename', '__dirname'];
-          const values = [exports, require, module, '[eval]', process.cwd()];
+          const values = [exports, require, module, evalName, process.cwd()];
           if (hasImport) {
             args.push(importBinding);
             values.push(dynImport);
@@ -1028,7 +1119,7 @@ export async function runNode(ctx, options = {}) {
             // the code itself (not for the `return (…)` around it).
             const report =
               err instanceof SyntaxError &&
-              syntaxReport(parsed.code, { kind: 'commonjs', filename: '[eval]', error: parsed.print ? undefined : err });
+              syntaxReport(parsed.code, { kind: 'commonjs', filename: evalName, error: parsed.print ? undefined : err });
             if (report) {
               Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
               err.stack = report.stack;

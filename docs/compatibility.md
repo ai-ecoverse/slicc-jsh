@@ -585,7 +585,29 @@ Not as in Node: the stdio fds are the program's kernel fds. 0, 1, 2 and a device
 
 **`trace_events`** is Node's: `createTracing` and its checks, `Tracing` objects (`enable`, `disable`, `enabled`, `categories`, and their inspect form), and `getEnabledCategories()` as the agent's sorted set (with `--trace-event-categories`). It also gives Node's warning past 10 enabled objects. There's no trace agent, so no trace file is written.
 
-**`worker_threads`** is the main thread's view: `isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, `BroadcastChannel`, `MessageChannel`, `MessagePort` and `receiveMessageOnPort`. A `Worker` can't be made yet (`ERR_NOT_SUPPORTED`).
+**`worker_threads`** has Node 22.22.0's `Worker` on a kernel with JS threads ([slicc-kernel#1094](https://github.com/ai-ecoverse/slicc-kernel/issues/1094)), golden `worker-threads-node22`. On older kernels it is the main thread's view only (`isMainThread` true, `parentPort` and `workerData` null, `threadId` 0, environment data, `BroadcastChannel`, `MessageChannel`, `MessagePort` and `receiveMessageOnPort`), and a `Worker` can't be made (`ERR_NOT_SUPPORTED`), as before.
+
+How a worker runs:
+- It is a thread of this process, with the same pid, running jsh with the worker's own globals and module graph.
+- Its entry can be a file, an ES module, a `data:` or `file:` URL, or `eval` code (`[worker eval]`).
+- It gets `workerData` and its `transferList`, `argv`, `execArgv`, a copy of `env` (or the given object), the parent's environment data, `parentPort`, `threadId` (counted per process from 1, nested workers included), `threadName` and `resourceLimits`.
+- `'online'`, `'message'`, `'error'` (its uncaught exception, as the thrown value) and `'exit'` come in Node's order. What it posts or prints before it exits comes before `'exit'`.
+- `process.exit(n)` ends the worker with `n`, an uncaught error with 1, and `terminate()` with 1. Once the worker has exited, `terminate()` resolves `undefined`.
+- Its stdout and stderr go to the parent's own unless `stdout`/`stderr` is set, in which case they are `worker.stdout`/`worker.stderr`. `stdin: true` gives `worker.stdin`.
+- `ref()` and `unref()` decide whether it holds the parent.
+- `process.chdir`, `abort`, the `set*id`/`*groups` calls and setting `umask` throw `ERR_WORKER_UNSUPPORTED_OPERATION`.
+
+How ports cross between threads:
+- A message is the platform's structured clone. An `ArrayBuffer` in the transfer list is detached, a `SharedArrayBuffer` is shared (`Atomics.wait`/`notify` work across threads), and a `MessagePort` moves with the messages waiting in it.
+- Each direction also has a mailbox in shared memory. So `receiveMessageOnPort()` has a message as soon as it is posted, even in a thread blocked in `Atomics.wait`; piscina's and tinypool's atomics loops depend on that.
+- A message that transfers ports or carries a `SharedArrayBuffer` goes the platform's way instead. `receiveMessageOnPort()` can't return it until the receiving thread is back in its event loop, but it still comes in order.
+
+The real piscina 5 (in each of its `atomics` modes) and tinypool 1 run on it, and so does eslint 9's `--concurrency`.
+
+Not as in Node:
+- `resourceLimits` is reported but not enforced. A worker that runs out of memory ends with `ERR_WORKER_OUT_OF_MEMORY`.
+- `env: SHARE_ENV` gives the worker a copy of the environment, not a shared one.
+- `postMessageToThread`, `getHeapSnapshot` and `BroadcastChannel` between threads aren't there yet. A worker's `performance.eventLoopUtilization()` is zeros.
 
 **`MessageChannel` and `MessagePort`** are Node 22's, within one program, and are also the globals:
 - A message is a structured clone (an `ArrayBuffer` in the transfer list is transferred; a `MessagePort` in it goes as itself, in `ports`). Its `MessageEvent` comes on a later turn.

@@ -19,6 +19,7 @@ import { createTimersModule, createTimersPromises } from '../builtins/timers-mod
 import { createUtil } from '../builtins/util.mjs';
 import { createAsyncHooks } from '../builtins/async-hooks.mjs';
 import { createV8 } from '../builtins/v8.mjs';
+import { createWorkerThreads } from '../builtins/worker-threads.mjs';
 import { createVm } from '../builtins/vm.mjs';
 import { createPerfHooks, createStreamWeb } from '../builtins/perf-hooks.mjs';
 import { patchReplServer } from '../node-lib.mjs';
@@ -273,46 +274,18 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   let workerThreads;
   const implemented = {
     process: () => process,
-    // One thread: the main one. BroadcastChannel talks within the program;
-    // a Worker can't be made yet.
+    // node:worker_threads: Workers on the kernel's JS threads (ctx.thread);
+    // without them, the main thread's view and no Worker (worker-threads.mjs).
     worker_threads: () =>
-      (workerThreads ??= (() => {
-        const environmentData = new Map();
-        class Worker {
-          constructor() {
-            const err = new Error("slicc-jsh: worker_threads.Worker is not supported yet");
-            err.code = 'ERR_NOT_SUPPORTED';
-            throw err;
-          }
-        }
-        return {
-          isInternalThread: false,
-          isMainThread: true,
-          MessagePort: process._ports?.MessagePort ?? globalThis.MessagePort,
-          MessageChannel: process._ports?.MessageChannel ?? globalThis.MessageChannel,
-          markAsUncloneable: () => {},
-          markAsUntransferable: () => {},
-          isMarkedAsUntransferable: () => false,
-          moveMessagePortToContext: (port) => port,
-          receiveMessageOnPort: (port) => process._ports?.receiveMessageOnPort(port),
-          resourceLimits: {},
-          postMessageToThread: async () => {
-            throw Object.assign(new Error('slicc-jsh: worker_threads.postMessageToThread is not supported yet'), { code: 'ERR_NOT_SUPPORTED' });
-          },
-          threadId: 0,
-          threadName: '',
-          SHARE_ENV: Symbol.for('nodejs.worker_threads.SHARE_ENV'),
-          Worker,
-          parentPort: null,
-          workerData: null,
-          BroadcastChannel: process._broadcastChannel,
-          setEnvironmentData(key, value) {
-            if (value === undefined) environmentData.delete(key);
-            else environmentData.set(key, value);
-          },
-          getEnvironmentData: (key) => environmentData.get(key),
-        };
-      })()),
+      (workerThreads ??= createWorkerThreads({
+        ctx,
+        process,
+        handles,
+        ports: process._ports,
+        remote: process._remotePorts,
+        getStream,
+        Buffer,
+      })),
     buffer: () => (bufferExports ??= bufferModule(Buffer)),
     console: () => console,
     // lib/constants.js (deprecated, DEP0008, documentation only): os's

@@ -1,0 +1,288 @@
+/**
+ * MessagePorts across threads (worker_threads on a kernel with JS threads,
+ * ai-ecoverse/slicc-kernel#1094). A jsh port whose other end is in another
+ * thread talks to it over the platform's own MessagePort, whose structured
+ * clone shares a SharedArrayBuffer and moves an ArrayBuffer or a native
+ * port, as Node's does between its threads. The jsh port keeps its own
+ * queue and turns (./broadcast-channel.mjs).
+ *
+ * Each direction also has a mailbox in shared memory (./mailbox.mjs): a
+ * message with nothing to transfer goes there, as its V8 serialization
+ * (the structured clone's own algorithm), so the receiving thread has it at
+ * once, for receiveMessageOnPort() even while it never returns to its event
+ * loop. Its ArrayBuffers in the transfer list are copied there and detached
+ * here, which a program can't tell from a move. A message the mailbox can't
+ * take (one transferring ports, or with SharedArrayBuffers in it) goes on
+ * the native port. Every message has the sender's next number, and the receiver hands
+ * them to its port in that order, whichever way they came.
+ *
+ * A jsh port in a message (in its transfer list) goes as the end of a native
+ * channel, with its mailboxes, its numbering, the messages it had waiting,
+ * and whether it was closed. If its other end is in this thread, that end
+ * now talks over the channel's other end.
+ *
+ * On the native port: { t: 'm', seq, data, ports } for a message (its jsh
+ * ports marked in `data`, as the in-thread clone marks them), { t: 'c', seq }
+ * for a close. Anything else is the thread's own (a worker's 'online', its
+ * output, …), for `onOther`.
+ */
+import { createMailbox, mailboxReader, mailboxWriter } from './mailbox.mjs';
+
+const CLOSE = Symbol('close');
+const arrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get;
+const isArrayBuffer = (value) => {
+  try {
+    Reflect.apply(arrayBufferByteLength, value, []);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const CHANNEL_MAILBOX = 256 * 1024;
+
+export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
+  const { MessagePort, makePort, kPortMark } = ports;
+
+  const transferListOf = (transfer) =>
+    transfer === undefined || transfer === null ? [] : Array.isArray(transfer) ? transfer : [...(transfer?.transfer ?? [])];
+
+  // Swap the jsh ports in a value's plain objects and arrays (what a message
+  // is made of) for marks, and back.
+  function swapPorts(value, map, seen = new Set()) {
+    if (value === null || typeof value !== 'object' || seen.has(value)) return value;
+    if (map.has(value)) return map.get(value);
+    if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
+    seen.add(value);
+    for (const key of Object.keys(value)) value[key] = swapPorts(value[key], map, seen);
+    return value;
+  }
+  function restorePorts(value, list, seen = new Set()) {
+    if (value === null || typeof value !== 'object' || seen.has(value)) return value;
+    if (kPortMark in value && typeof value[kPortMark] === 'number') return list[value[kPortMark]];
+    if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
+    seen.add(value);
+    for (const key of Object.keys(value)) value[key] = restorePorts(value[key], list, seen);
+    return value;
+  }
+
+  /**
+   * `message` and its transfer list as the platform can clone them: the
+   * message (its jsh ports marked) and the native transfer list, for `fn`,
+   * which must clone at once (postMessage does); the value is unmarked after.
+   */
+  function pack(message, transfer, fn) {
+    const list = transferListOf(transfer);
+    const jshPorts = list.filter((x) => x instanceof MessagePort);
+    const rest = list.filter((x) => !(x instanceof MessagePort));
+    for (const port of jshPorts) {
+      if (port._detached) throw new DOMException('MessagePort in transfer list is already detached', 'DataCloneError');
+    }
+    if (jshPorts.length === 0) return fn({ data: message, ports: [] }, rest);
+    const marks = new Map(jshPorts.map((port, i) => [port, { [kPortMark]: i }]));
+    const marked = swapPorts(message, marks);
+    const natives = [];
+    try {
+      const envelopes = jshPorts.map((port) => exportPort(port, natives));
+      return fn({ data: marked, ports: envelopes }, [...natives, ...rest]);
+    } finally {
+      swapPorts(marked, new Map([...marks].map(([port, mark]) => [mark, port])));
+    }
+  }
+
+  function receive(message) {
+    const list = (message.ports ?? []).map(importPort);
+    return { data: list.length ? restorePorts(message.data, list) : message.data, ports: list };
+  }
+
+  /** A pair of mailboxes, as the two ends of a link see them. */
+  function mailboxPair(size) {
+    const ab = createMailbox(size);
+    const ba = createMailbox(size);
+    return [
+      { send: ab, receive: ba },
+      { send: ba, receive: ab },
+    ];
+  }
+
+  /**
+   * Make `port` (a jsh port) the end of `native`. `box` is its mailboxes
+   * ({ send, receive }), `state` the numbering it continues (a port that
+   * moved), `onOther` where a message that isn't a port's goes (a worker's
+   * own, on its thread's port; that port then stays open when this one
+   * closes).
+   */
+  function link(port, native, onOther, box, state = {}) {
+    const writer = box ? mailboxWriter(box.send) : null;
+    const reader = box ? mailboxReader(box.receive) : null;
+    let nextSend = state.nextSend ?? 0;
+    let expect = state.expect ?? 0;
+    const stash = new Map(state.stash ?? []);
+    let ended = false;
+
+    const end = () => {
+      ended = true;
+      if (!onOther) {
+        native.onmessage = null;
+        native.close();
+      }
+    };
+    // Hand the port what has come, in its numbers' order.
+    const deliver = (seq, entry) => {
+      stash.set(seq, entry);
+      while (stash.has(expect)) {
+        const next = stash.get(expect);
+        stash.delete(expect);
+        expect += 1;
+        if (next === CLOSE) {
+          end();
+          port._remoteClosed();
+          return;
+        }
+        port._enqueue(next);
+      }
+    };
+    const pull = () => {
+      if (!reader || ended) return;
+      for (const [seq, bytes] of reader.take()) deliver(seq, { data: serdes().deserialize(bytes), ports: [] });
+    };
+    // Mailbox messages wake the event loop as native ones do. The count is
+    // read before taking what is there, so a record written in between
+    // ends the wait at once.
+    const watch = () => {
+      if (!reader || ended) return;
+      const seen = reader.count();
+      pull();
+      const wait = reader.waitAfter(seen);
+      if (wait) wait.then(watch);
+    };
+
+    const remote = {
+      native,
+      box,
+      pull,
+      post(message, transfer) {
+        const seq = nextSend++;
+        const list = transferListOf(transfer);
+        // Nothing to transfer but ArrayBuffers: the mailbox, the buffers'
+        // bytes copied and theirs detached (a move, as a program sees it).
+        if (writer && list.every(isArrayBuffer)) {
+          let bytes;
+          try {
+            bytes = serdes().serialize(message);
+          } catch {
+            bytes = null;
+          }
+          if (bytes && writer.write(seq, bytes)) {
+            if (list.length) structuredClone(list, { transfer: list });
+            return;
+          }
+        }
+        pack(message, transfer, (packed, natives) => native.postMessage({ t: 'm', seq, ...packed }, natives));
+      },
+      // A message packed and cloned before (with its transfers), now sent.
+      postPacked(packed, list) {
+        native.postMessage({ t: 'm', seq: nextSend++, ...packed }, list);
+      },
+      close() {
+        try {
+          native.postMessage({ t: 'c', seq: nextSend++ });
+        } catch {
+          /* the other thread is gone */
+        }
+        end();
+      },
+      // What a port that moves takes with it (all that has come, in its stash).
+      state() {
+        pull();
+        const closing = [...stash.values()].includes(CLOSE);
+        return { nextSend, expect, stash: [...stash].filter(([, entry]) => entry !== CLOSE), closing };
+      },
+    };
+    port._attachLink(remote);
+    native.onmessage = (event) => {
+      const message = event.data;
+      if (message?.t === 'm') {
+        pull();
+        deliver(message.seq, receive(message));
+      } else if (message?.t === 'c') {
+        pull();
+        deliver(message.seq, CLOSE);
+      } else onOther?.(message);
+    };
+    watch();
+    return remote;
+  }
+
+  /**
+   * A jsh port leaving this thread: its envelope, its native port added to
+   * `natives` (the transfer list). Its queued messages go with it, their own
+   * ports as envelopes too.
+   */
+  function exportPort(port, natives) {
+    const peer = port._localPeer();
+    const linked = port._remote();
+    const state = linked?.state();
+    const { queue, open } = port._detach();
+    let native;
+    let box;
+    if (linked) {
+      // Its other end is in another thread already: the native port and
+      // the mailboxes go on.
+      linked.native.onmessage = null;
+      native = linked.native;
+      box = linked.box;
+    } else {
+      const channel = new NativeMessageChannel();
+      const [here, there] = mailboxPair(CHANNEL_MAILBOX);
+      if (peer && !peer._detached) link(peer, channel.port1, undefined, here);
+      else channel.port1.close();
+      native = channel.port2;
+      box = there;
+    }
+    natives.push(native);
+    const exportEntry = ({ data, ports: list }) => {
+      if (!list?.length) return { data, ports: [] };
+      const marks = new Map(list.map((p, i) => [p, { [kPortMark]: i }]));
+      return { data: swapPorts(data, marks), ports: list.map((p) => exportPort(p, natives)) };
+    };
+    return {
+      native,
+      box,
+      state: state && { nextSend: state.nextSend, expect: state.expect, stash: state.stash.map(([seq, entry]) => [seq, exportEntry(entry)]) },
+      queue: queue.map(exportEntry),
+      open: open && !state?.closing,
+    };
+  }
+
+  /** A jsh port for one that came from another thread. */
+  function importPort(envelope) {
+    const port = makePort();
+    for (const entry of envelope.queue ?? []) port._enqueue(receive(entry));
+    const state = envelope.state && { ...envelope.state, stash: envelope.state.stash.map(([seq, entry]) => [seq, receive(entry)]) };
+    link(port, envelope.native, undefined, envelope.box, state ?? {});
+    if (!envelope.open) port._remoteClosed();
+    return port;
+  }
+
+  /**
+   * A message posted before its link is there (a Worker's before its thread
+   * is): taken now, as postMessage takes it (its transfers detached here),
+   * and sent once the link is there (`remote.postPacked(...held)`).
+   */
+  function hold(message, transfer) {
+    return pack(message, transfer, (packed, list) => {
+      const held = structuredClone(packed, { transfer: list });
+      return [held, natives(held)];
+    });
+  }
+  const NativePort = NativeMessageChannel ? Object.getPrototypeOf(new NativeMessageChannel().port1).constructor : null;
+  function natives(value, out = [], seen = new Set()) {
+    if (value === null || typeof value !== 'object' || seen.has(value)) return out;
+    seen.add(value);
+    if (NativePort && value instanceof NativePort) out.push(value);
+    else if (Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype) for (const key of Object.keys(value)) natives(value[key], out, seen);
+    return out;
+  }
+
+  return { link, pack, hold, receive, exportPort, importPort, mailboxPair, NativeMessageChannel };
+}
