@@ -1,0 +1,8 @@
+{
+  "description": "fs.watch on a directory and on a file, as Node 22 reports it on Linux (inotify): create, append, overwrite, chmod, rename, mkdir, a nested write it doesn't see, unlink, rmdir, the watched file changed and removed; 'buffer' and 'hex' filenames; close and 'close'; ref/unref; getActiveResourcesInfo's FSEventWrap; ENOENT and the argument errors; an AbortSignal; persistent: false and unref() let the program end",
+  "argv": ["script.js"],
+  "shim": true,
+  "kernel": "1.125.0",
+  "hostPlatform": "linux",
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

@@ -1,0 +1,25 @@
+constructor: FSWatcher ref/unref: undefined undefined
+-- write in an existing subdirectory
+event: change old/o.txt
+-- mkdir
+event: rename sub
+-- create in it
+event: rename sub/a.txt
+-- append
+event: change sub/a.txt
+-- mkdir deeper
+event: rename sub/deep
+-- create deeper
+event: rename sub/deep/d.txt
+-- change deeper
+event: change sub/deep/d.txt
+-- unlink
+event: rename sub/a.txt
+-- create at the top
+event: rename top.txt
+-- close
+close
+ENOENT ENOENT: no such file or directory, stat '<dir>/missing' -2 stat <dir>/missing <dir>/missing
+ERR_INVALID_ARG_TYPE The "options.recursive" property must be of type boolean. Received type string ('yes') undefined undefined undefined undefined
+ERR_INVALID_ARG_TYPE The "options.persistent" property must be of type boolean. Received type number (1) undefined undefined undefined undefined
+no error

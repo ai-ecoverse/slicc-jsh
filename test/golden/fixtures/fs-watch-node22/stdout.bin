@@ -1,0 +1,46 @@
+FSWatcher: FSWatcher true exported: false
+prototype: close,constructor,ref,start,unref
+ref/unref return it: true true start(): undefined
+active: 1
+active: 3
+dir: rename a.txt, change a.txt
+-- append
+dir: change a.txt
+-- overwrite
+dir: change a.txt
+-- chmod
+dir: change a.txt
+-- rename
+dir: rename a.txt, rename b.txt
+-- mkdir
+dir: rename sub
+-- nested write (not reported)
+-- unlink
+dir: rename b.txt
+-- rmdir
+dir: rename sub
+-- append to the watched file
+dir: change f.txt
+file: change true f.txt
+hex: change 662e747874
+-- unlink the watched file
+dir: rename f.txt
+file: change true f.txt, rename true f.txt, rename true f.txt
+hex: change 662e747874, rename 662e747874, rename 662e747874
+-- close
+file: close
+dir: close
+ENOENT ENOENT: no such file or directory, watch '<dir>/missing' -2 watch <dir>/missing <dir>/missing
+ENOENT ENOENT: no such file or directory, watch 'missing' -2 watch missing missing
+ENOENT ENOENT: no such file or directory, watch '<dir>/missing' -2 watch <dir>/missing <dir>/missing
+ERR_INVALID_ARG_TYPE The "path" argument must be of type string or an instance of Buffer or URL. Received type number (42) undefined undefined undefined undefined
+ERR_INVALID_ARG_TYPE The "options" argument must be one of type string or object. Received type number (42) undefined undefined undefined undefined
+ERR_INVALID_ARG_VALUE The argument 'encoding' is invalid encoding. Received 'nope' undefined undefined undefined undefined
+ERR_INVALID_ARG_TYPE The "options.signal" property must be an instance of AbortSignal. Received an instance of Object undefined undefined undefined undefined
+ERR_INVALID_ARG_VALUE The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received '<dir>/x\x00y' undefined undefined undefined undefined
+ERR_INVALID_ARG_TYPE The "options" argument must be one of type string or object. Received type number (42) undefined undefined undefined undefined
+ENOENT ENOENT: no such file or directory, watch '<dir>/missing' -2 watch <dir>/missing <dir>/missing
+ERR_INVALID_URL_SCHEME The URL must be of scheme file undefined undefined undefined undefined
+aborted: close
+pre-aborted: close
+exit while watching

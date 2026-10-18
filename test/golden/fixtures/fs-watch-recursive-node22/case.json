@@ -1,0 +1,8 @@
+{
+  "description": "fs.watch with recursive: true, as Node 22 has it on Linux (its own watcher over a watch per file and directory): changes in an existing subdirectory, mkdir, files created, changed and removed below it and deeper, a file at the top, relative filenames, close emitted at once; ENOENT from stat, and the option errors",
+  "argv": ["script.js"],
+  "shim": true,
+  "kernel": "1.125.0",
+  "hostPlatform": "linux",
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

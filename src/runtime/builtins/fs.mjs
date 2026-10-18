@@ -5,6 +5,7 @@
 import { trackPromise } from '../async-handles.mjs';
 import { createCp } from './fs-cp.mjs';
 import { createStatWatchers } from './fs-watchers.mjs';
+import { createFsWatch } from './fs-watch.mjs';
 import { UV_ERRORS } from '../node-bindings.mjs';
 import {
   ERR_INVALID_ARG_TYPE,
@@ -15,6 +16,7 @@ import {
   validateInteger,
   validateObject,
   validateUint32,
+  validateAbortSignal,
 } from '../node-errors.mjs';
 import { kernelAtLeast, kernelVersion } from '../kernel-version.mjs';
 
@@ -59,6 +61,7 @@ const decoder = new TextDecoder();
 
 // libuv's error names, numbers (Linux) and messages, as Node's fs errors carry them.
 const ERRNO = Object.fromEntries(UV_ERRORS.map(([n, name]) => [name, n]));
+const ERRNO_NAMES = Object.fromEntries(UV_ERRORS.map(([n, name]) => [n, name]));
 const DESCRIPTIONS = Object.fromEntries(UV_ERRORS.map(([, name, msg]) => [name, msg]));
 
 function nodeFsError(code, syscall, pathArg, err, dest) {
@@ -2687,8 +2690,47 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     validatePathType(filename);
     return statWatchers.unwatchFile(filename, listener);
   };
+  // slicc-kernel 1.125.0: file-change events for programs, registered when
+  // ctx.sync.fs.watch returns (ai-ecoverse/slicc-kernel#1047). An older
+  // kernel has none, and fs.watch stays out, as before.
+  const fsWatch =
+    typeof syncFs.watch === 'function'
+      ? createFsWatch({
+          process,
+          path,
+          Buffer,
+          handles,
+          timers,
+          watch: (target, options, onNote) => syncFs.watch(target, options, onNote),
+          barrier: () => asyncFs.stat('/'),
+          stat: (target) => statView(syncFs.stat(target)),
+          errno: (code) => ERRNO[code] ?? ERRNO.EIO,
+          uvException: (errno, syscall, pathArg) => nodeFsError(ERRNO_NAMES[errno] ?? 'EIO', syscall, pathArg),
+          validatedPath: (value, name) => {
+            value = toPathArg(value, name);
+            if (typeof value !== 'string' && !(value instanceof Uint8Array)) throw ERR_INVALID_ARG_TYPE(name, ['string', 'Buffer', 'URL'], value);
+            return value;
+          },
+          getOptions: (options) => {
+            if (options == null || typeof options === 'function') return {};
+            if (typeof options === 'string') options = { encoding: options };
+            else if (typeof options !== 'object') throw ERR_INVALID_ARG_TYPE('options', ['string', 'Object'], options);
+            if (options.encoding !== 'buffer') checkEncoding(options.encoding);
+            if (options.signal !== undefined) validateAbortSignal(options.signal, 'options.signal');
+            return options;
+          },
+          fs: () => fsModule,
+          StatWatcher: statWatchers.StatWatcher,
+        })
+      : null;
   acceptFileUrls(fsModule);
   acceptFileUrls(promises, { async: true });
+  // After acceptFileUrls: they take URLs themselves, after their options, as
+  // Node's do, and promises.watch, an async generator, only when first iterated.
+  if (fsWatch) {
+    fsModule.watch = fsWatch.watch;
+    promises.watch = fsWatch.promisesWatch;
+  }
   // Not enumerable: require('fs') lists only Node's names.
   Object.defineProperty(fsModule, '_sliccOpenFile', { value: openFileOf });
   return fsModule;
@@ -2716,19 +2758,22 @@ const PATH_NAMES = {
  * `file:` URL (its fileURLToPath, with Node's errors for another scheme, a
  * host, or an encoded `/`). Wraps each function of `api` in place.
  */
+let fileURLToPath;
+// Node's nullCheck: a path with a NUL byte, as a string, bytes or a URL.
+const nullCheck = (value, name) => {
+  const bad = typeof value === 'string' ? value.includes('\u0000') : value instanceof Uint8Array && value.includes(0);
+  if (bad) throw ERR_INVALID_ARG_VALUE(name, value, 'must be a string, Uint8Array, or URL without null bytes');
+  return value;
+};
+/** toPathIfFileURL, then nullCheck. */
+function toPathArg(value, name) {
+  if (!isURL(value)) return nullCheck(value, name);
+  fileURLToPath ??= globalThis.process?._builtin?.('url').fileURLToPath;
+  return nullCheck(fileURLToPath(value), name);
+}
+
 function acceptFileUrls(api, { async = false } = {}) {
-  let fileURLToPath;
-  // Node's nullCheck: a path with a NUL byte, as a string, bytes or a URL.
-  const nullCheck = (value, name) => {
-    const bad = typeof value === 'string' ? value.includes('\u0000') : value instanceof Uint8Array && value.includes(0);
-    if (bad) throw ERR_INVALID_ARG_VALUE(name, value, 'must be a string, Uint8Array, or URL without null bytes');
-    return value;
-  };
-  const toPath = (value, name) => {
-    if (!isURL(value)) return nullCheck(value, name);
-    fileURLToPath ??= globalThis.process?._builtin?.('url').fileURLToPath;
-    return nullCheck(fileURLToPath(value), name);
-  };
+  const toPath = toPathArg;
   const wrap = (name, fn) => {
     const count = TWO_PATHS.has(name.replace(/Sync$/, '')) ? 2 : 1;
     // A path Node can't take: fs.promises rejects; exists / existsSync say
