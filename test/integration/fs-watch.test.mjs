@@ -191,13 +191,20 @@ describe('fs.watch in the kernel', needs, () => {
       'const first = it.next();',
       "mark('ready');",
       'const out = [`first ${(await first).value.filename}`];',
+      // Another watcher, to know when the last file has come.
+      'const sawLast = new Promise((resolve) => {',
+      "  const w = fs.watch(`/tmp/flood-${overflow}`, (type, name) => name === 'f5' && (w.close(), resolve()));",
+      '});',
+      "mark('got');",
       // No next() waiting until the test has made its changes: they queue
       // meanwhile, as in Node, where the iterator reads them as they come
       // whenever a next() is waiting.
-      "mark('got');",
-      "while (!fs.existsSync(`/os/flood-${overflow}.go`)) await new Promise((resolve) => setTimeout(resolve, 10));",
-      // The events made before the go mark come in meanwhile.
-      'await new Promise((resolve) => setTimeout(resolve, 200));',
+      // Then until they are all in: with 'ignore', when all nine are dropped;
+      // with 'error', when another watcher has seen the last file, and a moment later.
+      'const until = async (done) => { while (!done()) await new Promise((resolve) => setTimeout(resolve, 10)); };',
+      "await until(() => fs.existsSync(`/os/flood-${overflow}.go`));",
+      "if (overflow === 'ignore') await until(() => warnings.length >= 9);",
+      'else await sawLast.then(() => new Promise((resolve) => setTimeout(resolve, 100)));',
       'try {',
       '  for (const { value } of [await it.next(), await it.next()]) out.push(`${value.eventType} ${value.filename}`);',
       '  setTimeout(() => ac.abort(), 100);',

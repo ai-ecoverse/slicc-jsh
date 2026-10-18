@@ -33,10 +33,13 @@ async function main() {
     setTimeout(() => fs.writeFileSync(at('a.txt'), 'a'), 50);
     setTimeout(() => fs.appendFileSync(at('a.txt'), 'b'), 150);
     setTimeout(() => fs.renameSync(at('a.txt'), at('b.txt')), 250);
-    setTimeout(() => ac.abort(), 350);
   })();
   try {
-    for await (const { eventType, filename } of it) console.log('event:', eventType, filename);
+    // Aborted at the last event, not on a timer: under load events can come late.
+    for await (const { eventType, filename } of it) {
+      console.log('event:', eventType, filename);
+      if (filename === 'b.txt') ac.abort();
+    }
   } catch (e) {
     show(e);
   }
