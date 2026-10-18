@@ -241,7 +241,7 @@ export function createHttps({ ctx, Buffer, http, handles, getStream, getTls }) {
     typeof http?.request === 'function' &&
     (typeof options?.createConnection === 'function' ||
       (options?.agent != null && options.agent !== false && options.agent !== globalAgent) ||
-      (kernelTls && options?.ca != null) ||
+      (kernelTls && (options?.ca != null || options?.secureContext != null)) ||
       (kernelCerts && (options?.cert != null || options?.key != null)));
 
   function request(input, options, callback) {

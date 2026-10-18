@@ -799,6 +799,7 @@ let leafSerial;
   });
   await go('own check, the leaf', { host, port: ports.sni, servername: 'secure.test', checkServerIdentity: (h, c) => own(h, c) });
   await go('own check, by host', { host: 'secure.test', port: ports.sni, lookup, checkServerIdentity: (h, c) => own(h, c) });
+  await go('a secureContext of its own', { host, port: ports.sni, servername: 'secure.test', ca: undefined, secureContext: tls.createSecureContext({ ca }) });
   await go('own check returns an error', { host, port: ports.sni, servername: 'secure.test', checkServerIdentity: (h, c) => (own(h, c), new Error('not this one')) });
   await go('own check returns an error, rejectUnauthorized false', { host, port: ports.sni, servername: 'secure.test', rejectUnauthorized: false, checkServerIdentity: (h, c) => (own(h, c), Object.assign(new Error('not this one'), { code: 'MINE' })) });
   await go("Node's check, rejectUnauthorized false, a wrong name", { host, port: ports.sni, servername: 'other.test', rejectUnauthorized: false });
@@ -806,7 +807,11 @@ let leafSerial;
     console.log('uncaught', e.message);
     process.exit(0);
   });
-  await go('own check throws', { host, port: ports.sni, servername: 'secure.test', checkServerIdentity: (h, c) => { own(h, c); throw new Error('thrown'); } });
+  await upgraded('over a socket, own check throws', (socket) => {
+    const s = tls.connect({ socket, servername: 'secure.test', ca, checkServerIdentity: (h, c) => { own(h, c); throw new Error('thrown over a socket'); } });
+    s.on('secure', () => console.log('secure listener ran'));
+    return s;
+  });
   console.log('not reached');
 })();
 `,
@@ -819,6 +824,28 @@ let leafSerial;
     assert.match(shim.stdout, /^a hostname data client=none sni=false$/m);
     assert.match(shim.stdout, /^servername data client=none sni=secure\.test$/m);
     assert.match(shim.stdout, /^TLS 1\.2 suite secureConnect true null "secure\.test" \{"name":"ECDHE-ECDSA-AES256-GCM-SHA384","standardName":"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384","version":"TLSv1\.2"\}$/m);
+    assert.match(shim.stdout, /^uncaught thrown over a socket$/m);
+    assert.doesNotMatch(shim.stdout, /secure listener ran/);
+    // The same throw from a tls.connect of its own: later 'secure' listeners don't run.
+    const thrown = await both(
+      'throws.js',
+      `const tls = require('tls');
+const fs = require('fs');
+const [host, portsJson, dir] = process.argv.slice(2);
+const ports = JSON.parse(portsJson);
+process.on('uncaughtException', (e) => {
+  console.log('uncaught', e.message);
+  process.exit(0);
+});
+const s = tls.connect({ host, port: ports.sni, servername: 'secure.test', ca: fs.readFileSync(dir + '/ca.pem'), checkServerIdentity: (h, c) => { console.log('check', h, c.subject.CN); throw new Error('thrown'); } }, () => console.log('secureConnect'));
+s.on('secure', () => console.log('secure listener ran'));
+s.on('error', (e) => console.log('error', e.message));
+`,
+      ports
+    );
+    assert.equal(thrown.host.status, 0, thrown.host.stderr);
+    assert.equal(thrown.shim.stdout, thrown.host.stdout);
+    assert.equal(thrown.shim.stdout, 'check secure.test secure.test\nuncaught thrown\n');
   });
 
   it('client certificates in the real pg (sslcert, sslkey) and in https.request, with an agent and without', { skip: skipControls }, async () => {
@@ -869,6 +896,7 @@ const get = (label, options) => new Promise((resolve) => {
   await get('agent again', { path: '/again', agent });
   await get('request options', { path: '/request', cert, key, agent: false });
   await get('globalAgent', { path: '/global', cert, key });
+  await get('secureContext only', { path: '/context', ca: undefined, secureContext: require('tls').createSecureContext({ ca, cert, key }) });
   console.log('free', Object.keys(agent.freeSockets).length);
   agent.destroy();
 })();

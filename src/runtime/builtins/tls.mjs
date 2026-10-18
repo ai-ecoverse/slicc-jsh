@@ -965,7 +965,16 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
           this[kVerifyError] = err;
         },
         refused: (err) => refusal(err, { what: 'tls.connect over a socket', options: optionsNow() ?? {}, ca, own, overSocket: true }),
-        secured: () => this.emit('secure'),
+        // A throwing listener (onConnectSecure's checkServerIdentity) is uncaught, as in Node.
+        secured: () => {
+          try {
+            this.emit('secure');
+          } catch (err) {
+            process.nextTick(() => {
+              throw err;
+            });
+          }
+        },
       });
     }
 
@@ -1187,12 +1196,9 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
   function onConnectSecure() {
     const err = this[kVerifyError];
     if (err && err === this[kThrown]) {
-      // Out of the 'secure' listener, uncaught, as in Node.
+      // Out of the 'secure' listener, so later ones don't run: uncaught, as in Node.
       this[kVerifyError] = undefined;
-      process.nextTick(() => {
-        throw err;
-      });
-      return;
+      throw err;
     }
     if (err) {
       this[kVerifyError] = undefined;
