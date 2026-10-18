@@ -33,6 +33,7 @@ Run it again to upgrade jsh, and to update its private Node to the latest 22.
 | `JSH_HOME` | `~/.jsh` | where jsh and its private Node go |
 | `JSH_BIN_DIR` | `~/.local/bin` | where the `jsh` command goes |
 | `JSH_VERSION` | latest | the version to install (or `--version x.y.z`) |
+| `JSH_INTEGRITY` | none | the sha512 the tarball must have (or `--integrity sha512-…`) |
 
 ```sh
 # a given version
@@ -43,7 +44,18 @@ curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/slicc-jsh/main/install.
 
 `--uninstall` uses the same `JSH_HOME` and `JSH_BIN_DIR`, if you set them. It doesn't edit rc files; it tells you which line to remove.
 
-**Trust.** The script trusts the npm registry and nodejs.org over HTTPS. The hashes it checks come from the same place as the files, and it pins no hash of its own. `--version` pins a version, not a hash. To pin the bytes, download the tarball and compare its sha256 with one you trust.
+**Trust.** The script trusts the npm registry and nodejs.org over HTTPS. By default the hashes it checks come from the same place as the files, and it pins no hash of its own. `--version` pins a version, not a hash.
+
+To pin the bytes, give `--integrity` (or `JSH_INTEGRITY`) with the version. Then the registry's `dist.integrity` and the downloaded tarball must both equal that value, or the installer stops and prints the expected and actual values:
+
+```sh
+# the sha512 to pin, from a source you trust
+npm view @ai-ecoverse/slicc-jsh@0.37.1 dist.integrity
+curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/slicc-jsh/main/install.sh |
+  sh -s -- --version 0.37.1 --integrity sha512-…
+```
+
+The release line of each GitHub release (`… integrity=sha512-… …`) carries the same value, checked against the registry when it was published. Only a `sha512-` value is accepted; other algorithms and malformed values are refused before anything is downloaded. The pin covers the jsh tarball, not the installer script or the private Node.
 
 **Windows** isn't covered yet: [ai-ecoverse/slicc-jsh#127](https://github.com/ai-ecoverse/slicc-jsh/issues/127). With npm, `jsh file.jsh` runs through npm's `.cmd` shim.
 
