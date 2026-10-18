@@ -1,0 +1,26 @@
+-- by delay
+b m1
+b m2
+b m3
+c m1
+c m2
+c m3
+interval 5
+timeout 10
+interval 15
+timeout 20
+interval 25
+timeout 30
+interval 35
+timeout 40
+interval 45
+timeout 50
+interval 55
+-- per list
+b m1
+b m2
+c m1
+c m2
+first 20
+second 20
+interval 15

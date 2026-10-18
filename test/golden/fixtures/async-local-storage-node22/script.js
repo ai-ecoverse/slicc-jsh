@@ -71,8 +71,10 @@ setTimeout(() => {
   note('after disable');
   als.run('J', () => note('run re-enables'));
 }, 8);
-// Sorted: which of a timer and an immediate goes first is the event loop's
-// timing (in Node too); the store each one sees is what's checked.
-setTimeout(() => {
+// Once everything above has run (the loop has nothing left), not at a set
+// time: a nested timer can come late on a loaded machine. Sorted: which of
+// a timer and an immediate goes first is the event loop's timing (in Node
+// too); the store each one sees is what's checked.
+process.once('beforeExit', () => {
   for (const line of [...log].sort()) console.log(line);
-}, 20);
+});
