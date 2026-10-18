@@ -1,0 +1,11 @@
+{
+  "description": "cluster.fork on fork's IPC channel: two workers with NODE_UNIQUE_ID, 'fork' / 'online' / 'listening' / 'message' / 'disconnect' / 'exit' on the cluster and the workers, an http server in each worker on one port the primary owns, requests answered by both, worker.send and process.send both ways, cluster.worker in a worker, disconnect and exitedAfterDisconnect, kill, and cluster.disconnect",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.126.0",
+  "files": [
+    { "path": "/os/script.js", "from": "script.js" }
+  ]
+}

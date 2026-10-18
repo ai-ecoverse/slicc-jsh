@@ -1,0 +1,13 @@
+primary true false 0
+listening 1 4 127.0.0.1
+listening 2 4 127.0.0.1
+answered by ["worker 1","worker 2"]
+same port from both true
+message from 1 {"id":1,"isWorker":true,"isPrimary":false,"state":"listening"}
+message from 2 {"id":2,"isWorker":true,"isPrimary":false,"state":"listening"}
+first exit 0 null exitedAfterDisconnect true state dead
+second exit 4 null exitedAfterDisconnect false
+workers left 0
+events disconnect 1, disconnect 2, exit 1 0 , exit 2 4 , fork 1, fork 2, listening 1, listening 2, online 1, online 2
+third exit null SIGTERM dead true
+cluster.disconnect done

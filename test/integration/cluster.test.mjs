@@ -3,14 +3,18 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageTree, withJsh } from './helpers.mjs';
+import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
+
+// fork's IPC channel (ai-ecoverse/slicc-kernel#1093): cluster.fork works
+// there (golden cluster-fork-node22).
+const IPC_KERNEL = '1.126.0';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
 
 // The golden cluster-trace-events-node22 pins both modules against Node;
 // here the real prom-client's cluster aggregation runs as the primary, and
-// a fork throws when it's called.
+// a fork throws when it's called, without the kernel's IPC channel.
 describe('cluster (kernel)', () => {
   let jsh;
   before(async () => {
@@ -40,7 +44,7 @@ client.register.metrics().then((m) => console.log(m.split('\\n').filter((l) => l
     assert.deepEqual(r.stdout.split('\n'), ['cluster metrics ""', 'jobs_total 2', '']);
   });
 
-  it('cluster.fork throws ERR_NOT_SUPPORTED when it is called, after setupPrimary', async () => {
+  it('cluster.fork throws ERR_NOT_SUPPORTED when it is called, after setupPrimary', { skip: kernelAtLeast(IPC_KERNEL) }, async () => {
     const r = await jsh.run([
       'node',
       '-e',

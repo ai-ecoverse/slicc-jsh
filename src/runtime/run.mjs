@@ -713,6 +713,14 @@ export async function runNode(ctx, options = {}) {
   });
   // A forked child's IPC channel (NODE_CHANNEL_FD), before the program runs.
   setupChildChannel({ ctx, process, handles });
+  // A cluster worker (pre_execution's initializeClusterPrimary): it says it
+  // is online, and its servers listen through the primary (net.mjs).
+  if (process.argv[1] && process.env.NODE_UNIQUE_ID !== undefined && typeof process.send === 'function') {
+    const cluster = process._builtin('cluster');
+    cluster._setupWorker();
+    process._clusterWorker = cluster;
+    delete process.env.NODE_UNIQUE_ID;
+  }
 
   /**
    * Node's internal/main/repl.js: the banner, then lib/internal/repl.js's
