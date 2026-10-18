@@ -68,6 +68,8 @@ const kRefused = Symbol('slicc-jsh.net.tlsRefused');
 export const kDetach = Symbol('slicc-jsh.net.detach');
 export const kStartTls = Symbol('slicc-jsh.net.startTls');
 export const kStartNow = Symbol('slicc-jsh.net.startNow');
+/** A TLS socket's error for a failed read or write (a fatal alert), or undefined for errnoError's. */
+export const kIoError = Symbol('slicc-jsh.net.ioError');
 
 /** A server-side socket's server (Node's socket._server), told when the socket goes. */
 const kServer = Symbol('slicc-jsh.net.server');
@@ -516,7 +518,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
           this.#scheduleAutoEnd();
           handles.notify();
         } else if (!this.destroyed) {
-          this.destroy(errnoError(err, 'read'));
+          this.destroy(this[kIoError]?.(err) ?? errnoError(err, 'read'));
         }
       } finally {
         if (!this.#detached) this.#maybeFinishConn();
@@ -563,7 +565,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       }
       this.#write(bytes).then(
         () => callback(),
-        (err) => callback(errnoError(err, 'write'))
+        (err) => callback(this[kIoError]?.(err) ?? errnoError(err, 'write'))
       );
     }
 
