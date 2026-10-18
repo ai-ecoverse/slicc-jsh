@@ -43,3 +43,32 @@ describe('cert-review checks its tools out from main', () => {
     }
   });
 });
+
+describe("cert-review's self-guard", () => {
+  const GUARD = 'ai-ecoverse/slicc-shared-web/.github/actions/cert-self-guard';
+  const V1_24_2 = 'f342d7cf558c817ce517bbbbc4cc46df6eac2f97';
+
+  it('is slicc-shared-web v1.24.2, whose globs cover dot paths (scripts/cert-review/.x), in every workflow that uses it', () => {
+    const uses = ['cert-review.yml', 'ci.yml', 'release.yml'].flatMap((f) =>
+      [...readFileSync(join(root, '.github/workflows', f), 'utf8').matchAll(/uses: ([^\s@]+)@(\S+)/g)].filter((m) => m[1] === GUARD).map((m) => `${f} ${m[2]}`)
+    );
+    assert.deepEqual(uses, [`cert-review.yml ${V1_24_2}`]);
+  });
+
+  it('guards the cert workflows, tools, release scripts and fixtures: exactly these paths', () => {
+    const paths = /paths: \|\n((?: {12}\S.*\n)+)/.exec(job('guard'))[1].trim().split(/\s+/);
+    assert.deepEqual(paths, [
+      '.github/workflows/cert*.yml',
+      '.github/workflows/ci.yml',
+      '.github/workflows/release.yml',
+      'scripts/cert-review/**',
+      'scripts/release-line.mjs',
+      'scripts/release-body.mjs',
+      'scripts/release-outcome.mjs',
+      '.releaserc.json',
+      'test/cert-review/**',
+      'test/fixtures/cert-review/**',
+      '.github/actions/cert-self-guard/**',
+    ]);
+  });
+});
