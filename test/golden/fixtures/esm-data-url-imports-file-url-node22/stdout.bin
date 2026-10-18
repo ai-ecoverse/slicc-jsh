@@ -4,3 +4,4 @@ dynamic file: URL "lib"
 node: builtin "/"
 relative THROWS ERR_UNSUPPORTED_RESOLVE_REQUEST Failed to resolve module specifier "./lib.mjs"
 absolute path THROWS ERR_UNSUPPORTED_RESOLVE_REQUEST Failed to resolve module specifier "DIR/lib.mjs"
+import.meta.resolve ["DIR/lib.mjs?v=1#h","DIR/nope.mjs?q","node:fs","node:fs"]

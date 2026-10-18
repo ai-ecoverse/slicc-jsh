@@ -19,4 +19,9 @@ const t = async (label, source) => {
   await t('node: builtin', `import { sep } from 'node:path'; export default sep;`);
   await t('relative', `import f from './lib.mjs'; export default f(3);`);
   await t('absolute path', `import f from ${JSON.stringify(path.join(__dirname, 'lib.mjs'))}; export default f(4);`);
+  const clean = (u) => u.split(pathToFileURL(__dirname).href).join('DIR');
+  const resolved = await import(
+    data(`export default [${JSON.stringify(lib + '?v=1#h')}, ${JSON.stringify(lib.replace('lib.mjs', 'nope.mjs?q'))}, 'node:fs', 'fs'].map((s) => import.meta.resolve(s));`)
+  );
+  console.log('import.meta.resolve', JSON.stringify(resolved.default.map(clean)));
 })();

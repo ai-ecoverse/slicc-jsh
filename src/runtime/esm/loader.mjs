@@ -379,8 +379,19 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       return {
         url: filename,
         resolve: (specifier) => {
-          const r = esmResolve(specifier, filename);
-          return r.type === 'builtin' ? `node:${r.id}` : r.type === 'data' ? r.url : pathToFileURL(r.filename);
+          const spec = String(specifier);
+          let r;
+          try {
+            r = esmResolve(spec, filename);
+          } catch (err) {
+            // A file: URL is resolved as a URL, there or not (Node's).
+            if ((err?.code === 'ERR_MODULE_NOT_FOUND' || err?.code === 'ERR_UNSUPPORTED_DIR_IMPORT') && /^file:/i.test(spec)) {
+              return new URL(spec).href;
+            }
+            throw err;
+          }
+          // (Its query and fragment kept.)
+          return urlOfResolved(r);
         },
       };
     }
