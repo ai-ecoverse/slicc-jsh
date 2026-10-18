@@ -248,6 +248,15 @@ export function createHttps({ ctx, Buffer, http, handles, getStream, getTls }) {
     const norm = normalize(input, options, callback);
     if (viaSocket(norm.options)) {
       rejectTlsOptions(norm.options, kernelTls, kernelCerts);
+      // Node's agent calls tls.connect inside https.request, so key material
+      // that isn't (ERR_OSSL_*) throws from it; jsh's agent connects later.
+      // Only https's own connection parses it: a createConnection of the
+      // caller's (or an agent's own) gets cert and key as given, as in Node.
+      const { cert, key, secureContext, createConnection, agent } = norm.options;
+      const used = agent === false || agent == null ? globalAgent : agent;
+      const ownTls =
+        typeof createConnection !== 'function' && used instanceof Agent && used.createConnection === Agent.prototype.createConnection;
+      if (kernelCerts && ownTls && (cert != null || key != null) && secureContext == null) getTls().createSecureContext(norm.options);
       // Node's agent: false is a fresh agent of the default's kind (not a plain socket).
       const own = norm.options.agent === false && typeof norm.options.createConnection !== 'function' ? { agent: new Agent() } : {};
       return http.request(
