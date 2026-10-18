@@ -1,6 +1,6 @@
 # Workers and IPC: `worker_threads.Worker`, `child_process.fork`, `cluster.fork`
 
-Status: **proposal, 2026-10-18. Waiting for the kernel side to be agreed with the Kernel Coordinator.** No code yet.
+Status: **approved on 2026-10-18 (W-B for workers, F-1 for fork).** The kernel side is K1, [slicc-kernel#1093](https://github.com/ai-ecoverse/slicc-kernel/issues/1093), and K2, [slicc-kernel#1094](https://github.com/ai-ecoverse/slicc-kernel/issues/1094). The open shape questions at the end are settled on those issues. K3 isn't filed yet.
 
 Goal: a repo's tests run on seven as they run on Lars's machine. Today jest, vitest, eslint `--concurrency`, piscina and tinypool, nodemon and `node --watch` fail or fall back, because jsh has no `worker_threads.Worker` and no `child_process.fork` with an IPC channel.
 
@@ -122,18 +122,18 @@ Two things follow. First, `'advanced'` serialization is on the hot path (jest an
 
 ## Kernel asks
 
-These are for the Kernel Coordinator (@thread:thr_j726323nz3), to file as issues on ai-ecoverse/slicc-kernel. Each one adds API to the JS ctx, and jsh feature-detects it (`typeof ctx.socketpair === 'function'`, `ctx.thread`) as well as checking `ctx.kernel.version`.
+Filed by the Kernel Coordinator as slicc-kernel#1093 (K1) and slicc-kernel#1094 (K2). Each one adds API to the JS ctx, and jsh feature-detects it (`typeof ctx.socketpair === 'function'`, `ctx.thread`) as well as checking `ctx.kernel.version`.
 
-**K1: fds for children, for `fork`, `'ipc'` and `--watch`.** Needed by stage 1.
+**K1 ([slicc-kernel#1093](https://github.com/ai-ecoverse/slicc-kernel/issues/1093)): fds for children, for `fork`, `'ipc'` and `--watch`.** Needed by stage 1.
 1. `ctx.socketpair(): Promise<[number, number]>` and `ctx.sync.socketpair(): [number, number]`: an AF_UNIX stream pair, two fds of the calling process (the existing `sock-pair` with `domain: 'unix', type: 'stream'`).
 2. On `JsSpawnOptions` (async and sync): `fds?: Record<number, number>`, where `{ 3: f }` installs the caller's fd `f` at fd 3 of the child. This maps to `proc-spawn`'s existing `inherit: [{ fd: 3, kernel: f }]`. Keys must be ≥ 3; `stdin`/`stdout`/`stderr` stay as they are. The parent keeps its own `f`, and jsh closes it after the spawn.
 3. Confirm, with a test on the kernel side, that `ctx.read`/`ctx.write`/`ctx.close` and their `ctx.sync` forms work on a socket fd:
    - `read` resolves with what's there and returns zero bytes at the peer's EOF;
    - a `read` that is pending when the fd is closed resolves (EOF or `EBADF`) and doesn't hang;
-   - `write` to a closed peer is `EPIPE`, not `SIGPIPE`. Node ignores SIGPIPE, so either an `EPIPE` error or a way to ignore the signal (`ctx.signals.ignore('SIGPIPE')`, which exists) is fine. Say which.
+   - `write` to a closed peer raises SIGPIPE, the kernel's default, as on Linux. Node ignores SIGPIPE, so jsh calls `ctx.signals.ignore('SIGPIPE')` and gets `EPIPE` (settled; slicc-kernel#1093 pins it with a test).
 4. Nice to have, on the same shape: Node's extra `stdio` pipes (`stdio: ['pipe', 'pipe', 'pipe', 'pipe']`) need nothing more than `fds` plus `ctx.pipe()`. Exposing `fd-pipe` as `ctx.pipe()` / `ctx.sync.pipe()` would cover them.
 
-**K2: JS threads, for `worker_threads.Worker`.** Needed by stage 2.
+**K2 ([slicc-kernel#1094](https://github.com/ai-ecoverse/slicc-kernel/issues/1094)): JS threads, for `worker_threads.Worker`.** Needed by stage 2.
 1. `ctx.thread.spawn({ data, transfer }): Promise<JsThread>`, with `JsThread = { tid, port: MessagePort, exited: Promise<number>, terminate(): Promise<void> }`. It does for `abi: js` what `WASM_THREAD_SPAWN` does for WASI:
    - a new process worker in the same process (same pid, fd table, cwd, umask, creds), with its own sync-lane SAB;
    - the kernel's lockdown, applied as in the main thread;
@@ -230,6 +230,8 @@ Memory: an 8-worker vitest run is about 9 × 65 MB on the node host, well within
 
 ## Open questions for the kernel side
 
-- K1: is `fds: Record<number, number>` the right shape, or should it be an array of `{ fd, from }`? What about the sync form's fd lifetimes? And SIGPIPE versus EPIPE.
+These are settled on slicc-kernel#1093 and slicc-kernel#1094.
+
+- K1: is `fds: Record<number, number>` the right shape, or should it be an array of `{ fd, from }`? What about the sync form's fd lifetimes?
 - K2: should a thread run the same module export with `ctx.thread`, or a named `thread` export of the module? Should the port be a native `MessagePort` (simplest, and what gives SAB sharing), or a kernel-wrapped object? And how should a thread's exit code show OOM?
 - K2: what is the per-process thread cap, and how does it count against the renderer's worker budget (slicc-kernel#979)?
