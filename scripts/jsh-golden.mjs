@@ -19,7 +19,7 @@
  * Host runs happen in a temporary copy of the fixture, so a case can write
  * files. Usage: node scripts/jsh-golden.mjs record|check [case…]
  */
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -37,6 +37,7 @@ import { fileURLToPath } from 'node:url';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
 import { packageFiles } from '../test/integration/helpers.mjs';
 import { node22Bin, node22Env } from './node22.mjs';
+import { watchdog } from './watchdog.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixturesDir = join(root, 'test/jsh/fixtures');
@@ -76,7 +77,45 @@ function fixtureFiles(dir) {
   return out;
 }
 
-function runHost(dir, meta) {
+const MAX_BUFFER = 4 * 1024 * 1024;
+
+/** A child's stdout, stderr and status, failing on no progress (the watchdog) or past MAX_BUFFER. */
+function runChild(file, args, { input, ...options }) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, options);
+    const out = { stdout: [], stderr: [] };
+    let size = 0;
+    let failure = null;
+    const watch = watchdog(`host ${args.join(' ')}`, (error) => {
+      failure = error;
+      child.kill();
+    });
+    for (const name of ['stdout', 'stderr']) {
+      child[name].on('data', (chunk) => {
+        watch.seen(chunk);
+        size += chunk.length;
+        if (size > MAX_BUFFER && !failure) {
+          failure = new Error(`${args.join(' ')}: output over ${MAX_BUFFER} bytes`);
+          child.kill();
+        }
+        out[name].push(chunk);
+      });
+    }
+    child.on('error', (error) => {
+      watch.stop();
+      reject(error);
+    });
+    child.on('close', (status) => {
+      watch.stop();
+      if (failure) return reject(failure);
+      resolve({ status, stdout: Buffer.concat(out.stdout), stderr: Buffer.concat(out.stderr) });
+    });
+    child.stdin.on('error', () => {});
+    child.stdin.end(input);
+  });
+}
+
+async function runHost(dir, meta) {
   const work = realpathSync(mkdtempSync(join(tmpdir(), 'jsh-golden-')));
   try {
     for (const { rel, data } of fixtureFiles(dir)) {
@@ -87,17 +126,13 @@ function runHost(dir, meta) {
     delete env.FORCE_COLOR;
     delete env.NO_COLOR;
     Object.assign(env, meta.env ?? {});
-    const result = spawnSync(node22Bin(), [hostJsh, meta.entry ?? 'main.jsh', ...(meta.args ?? [])], {
+    const result = await runChild(node22Bin(), [hostJsh, meta.entry ?? 'main.jsh', ...(meta.args ?? [])], {
       // As under npx: Node's own messages name it `node`.
       argv0: 'node',
       cwd: work,
       input: Buffer.from(meta.stdin ?? ''),
-      encoding: 'buffer',
-      timeout: 30_000,
-      maxBuffer: 4 * 1024 * 1024,
       env: node22Env(env),
     });
-    if (result.error) throw result.error;
     // The kernel runs the case in /os; say the same for the host's copy.
     const asOs = (buf) => Buffer.from((buf ?? Buffer.alloc(0)).toString('utf8').split(work).join('/os'));
     return {
@@ -117,15 +152,16 @@ async function runKernel(dir, meta) {
       await kernel.writeFile(`/node_modules/@ai-ecoverse/slicc-jsh/${rel}`, data);
     }
     for (const { rel, data } of fixtureFiles(dir)) await kernel.writeFile(`/os/${rel}`, data);
+    let watch;
+    const stuck = new Promise((_, reject) => (watch = watchdog('kernel', reject)));
     const work = kernel.run(['jsh', meta.entry ?? 'main.jsh', ...(meta.args ?? [])], {
       cwd: '/os',
       env: { ...(meta.env ?? {}) },
       ...(meta.stdin !== undefined ? { stdin: meta.stdin } : {}),
+      onStdout: watch.seen,
+      onStderr: watch.seen,
     });
-    const result = await Promise.race([
-      work,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('kernel timeout after 30s')), 30_000)),
-    ]);
+    const result = await Promise.race([work, stuck]).finally(watch.stop);
     return { status: result.status, stdout: Buffer.from(result.stdout), stderr: Buffer.from(result.stderr) };
   } finally {
     kernel.terminate();
@@ -169,7 +205,7 @@ let ran = 0;
 for (const name of listCases()) {
   const dir = join(fixturesDir, name);
   const meta = JSON.parse(readFileSync(join(dir, 'case.json'), 'utf8'));
-  const host = runHost(dir, meta);
+  const host = await runHost(dir, meta);
   if (mode === 'record') {
     writeFileSync(join(dir, 'stdout.bin'), host.stdout);
     // An error-line case keeps only that line: stacks name machine paths.
