@@ -1,0 +1,13 @@
+{
+  "description": "an ES module's class fields and static fields named like its imports keep their names: only references are its imports (vite 8's PluginContext has a field fs beside an import fs), and import.meta is not an import",
+  "argv": [
+    "script.mjs"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.mjs",
+      "from": "script.mjs"
+    }
+  ]
+}

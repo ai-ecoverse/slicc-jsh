@@ -358,13 +358,21 @@ function isValueReference(node, parent) {
   if (parent.type === 'MemberExpression' && parent.property === node && !parent.computed) {
     return false;
   }
-  // Object/class property key (including shorthand — key and value are the same node).
-  if (parent.type === 'Property' || parent.type === 'MethodDefinition') {
+  // Object/class property key (including shorthand — key and value are the
+  // same node), a class field's or auto-accessor's key among them.
+  if (
+    parent.type === 'Property' ||
+    parent.type === 'MethodDefinition' ||
+    parent.type === 'PropertyDefinition' ||
+    parent.type === 'AccessorProperty'
+  ) {
     if (parent.key === node && !parent.computed) return false;
     // Shorthand `{ x }` must expand to `{ x: __live["x"] }`, not `{ __live["x"] }`.
     if (parent.shorthand && parent.value === node) return false;
   }
   if (parent.type === 'LabeledStatement' && parent.label === node) return false;
+  // `import.meta`, `new.target`: names, not bindings.
+  if (parent.type === 'MetaProperty') return false;
   if (parent.type === 'ImportSpecifier' || parent.type === 'ImportDefaultSpecifier') {
     return false;
   }
