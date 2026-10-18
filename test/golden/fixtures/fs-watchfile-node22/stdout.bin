@@ -1,0 +1,43 @@
+StatWatcher: StatWatcher true
+prototype: constructor,ref,start,stop,unref
+start() is a no-op: undefined
+same watcher: true 2
+a relative path is the same file: true
+watching: 1
+change 0: curr size=0 nlink=0 mode=0 file=false ino=false mtimeMs=false epoch=true blksize=0
+change 0: prev size=0 nlink=0 mode=0 file=false ino=false mtimeMs=false epoch=true blksize=0
+change 1: curr size=5 nlink=1 mode=100644 file=true ino=true mtimeMs=true epoch=false blksize=4096
+change 1: prev size=0 nlink=0 mode=0 file=false ino=false mtimeMs=false epoch=true blksize=0
+change 2: curr size=11 nlink=1 mode=100644 file=true ino=true mtimeMs=true epoch=false blksize=4096
+change 2: prev size=5 nlink=1 mode=100644 file=true ino=true mtimeMs=true epoch=false blksize=4096
+change 3: curr size=0 nlink=0 mode=0 file=false ino=false mtimeMs=false epoch=true blksize=0
+change 3: prev size=11 nlink=1 mode=100644 file=true ino=true mtimeMs=true epoch=false blksize=4096
+after unwatchFile(file, first): 1 listener(s), 1 watching
+after unwatchFile(file): 0 listener(s), 0 watching
+stop; the second listener saw 4 changes
+bigint watcher: true
+bigint: bigint bigint true bigint true true
+unref returns it: true 1
+one unref of two refs: 1
+both unref: 0
+a third unref: 0
+ref returns it: true 1
+ref past the listener count: 1
+unref twice: 0
+unwatchFile one listener: 0 1
+stop(): 0 stop again: undefined
+the map keeps a stopped watcher: true
+no listener: ERR_INVALID_ARG_TYPE The "listener" argument must be of type function. Received undefined
+options, no listener: ERR_INVALID_ARG_TYPE The "listener" argument must be of type function. Received undefined
+null options: ERR_INVALID_ARG_TYPE The "listener" argument must be of type function. Received null
+interval -1: ERR_OUT_OF_RANGE The value of "interval" is out of range. It must be >= 0 && <= 4294967295. Received -1
+interval string: ERR_INVALID_ARG_TYPE The "interval" argument must be of type number. Received type string ('10')
+interval 1.5: ERR_OUT_OF_RANGE The value of "interval" is out of range. It must be an integer. Received 1.5
+path number: ERR_INVALID_ARG_TYPE The "path" argument must be of type string or an instance of Buffer or URL. Received type number (1)
+path NUL: ERR_INVALID_ARG_VALUE The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'a\x00b'
+path Buffer: ERR_INVALID_ARG_TYPE The "paths[0]" argument must be of type string. Received an instance of Buffer
+unwatchFile number: ERR_INVALID_ARG_TYPE The "path" argument must be of type string or an instance of Buffer or URL. Received type number (1)
+unwatchFile unknown: ok
+true
+URL: ok
+done

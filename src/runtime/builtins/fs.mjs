@@ -4,6 +4,7 @@
  */
 import { trackPromise } from '../async-handles.mjs';
 import { createCp } from './fs-cp.mjs';
+import { createStatWatchers } from './fs-watchers.mjs';
 import { UV_ERRORS } from '../node-bindings.mjs';
 import {
   ERR_INVALID_ARG_TYPE,
@@ -218,6 +219,14 @@ function statView(st, bigint = false) {
   });
 }
 
+/** The Stats uv_fs_poll gives for a file that isn't there: every field 0. */
+function zeroStats(bigint) {
+  const z = bigint ? 0n : 0;
+  const fields = ['dev', 'mode', 'nlink', 'uid', 'gid', 'rdev', 'blksize', 'ino', 'size', 'blocks', 'atimeMs', 'mtimeMs', 'ctimeMs', 'birthtimeMs'];
+  if (bigint) fields.push('atimeNs', 'mtimeNs', 'ctimeNs', 'birthtimeNs');
+  return Object.assign(new Stats(), Object.fromEntries(fields.map((k) => [k, z])));
+}
+
 class Dirent {
   constructor(name, type, parentPath) {
     this.name = name;
@@ -248,7 +257,7 @@ class Dirent {
   }
 }
 
-export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
+export function createFs({ ctx, path, process, Buffer, handles, getStream, timers = globalThis }) {
   const abs = (p) => {
     if (typeof p === 'number') return p;
     return path.isAbsolute(p) ? path.normalize(p) : path.resolve(process.cwd(), p);
@@ -2660,6 +2669,23 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       UV_FS_COPYFILE_FICLONE_FORCE: 4,
       COPYFILE_FICLONE_FORCE: 4,
     },
+  };
+  const statWatchers = createStatWatchers({
+    process,
+    path,
+    handles,
+    timers,
+    stat: (target, bigint) => statView(syncFs.stat(target), bigint),
+    zeroStats,
+    errno: (code) => ERRNO[code] ?? ERRNO.EIO,
+  });
+  fsModule.watchFile = function watchFile(filename, options, listener) {
+    validatePathType(filename);
+    return statWatchers.watchFile(filename, options, listener);
+  };
+  fsModule.unwatchFile = function unwatchFile(filename, listener) {
+    validatePathType(filename);
+    return statWatchers.unwatchFile(filename, listener);
   };
   acceptFileUrls(fsModule);
   acceptFileUrls(promises, { async: true });

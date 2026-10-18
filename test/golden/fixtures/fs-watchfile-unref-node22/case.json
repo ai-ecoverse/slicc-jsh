@@ -1,0 +1,6 @@
+{
+  "description": "fs.watchFile's loop semantics: persistent: false and unref() don't keep the program alive; a ref'd watcher does until unwatchFile; the default interval (5007 ms) doesn't poll again within half a second",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

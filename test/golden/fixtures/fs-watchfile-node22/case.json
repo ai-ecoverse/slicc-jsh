@@ -1,0 +1,6 @@
+{
+  "description": "fs.watchFile / unwatchFile, as Node 22 polls with stat: a missing file's zeroed Stats, then (curr, prev) as it appears, grows and goes; bigint Stats; listeners on one path share one StatWatcher; unwatchFile with and without a listener, and 'stop'; the StatWatcher's ref / unref / stop; the argument errors",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}
