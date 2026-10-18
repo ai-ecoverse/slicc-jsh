@@ -1,0 +1,11 @@
+{
+  "description": "a data: URL module imports an absolute file: URL (with or without a query, statically or with import()) and a node: builtin; a relative or absolute-path specifier from it is ERR_UNSUPPORTED_RESOLVE_REQUEST, as in Node",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    { "path": "/os/script.js", "from": "script.js" },
+    { "path": "/os/lib.mjs", "from": "lib.mjs" }
+  ]
+}

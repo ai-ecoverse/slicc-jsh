@@ -256,8 +256,9 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       }
       let url;
       try {
+        // An absolute file: URL needs no base (its importer may be a data: module).
         const base = parentFilename && !parentFilename.startsWith('[') ? pathOf(parentFilename) : `${process.cwd().replace(/\/$/, '')}/`;
-        url = new URL(spec, `file://${encodeFilePath(base)}`);
+        url = scheme === 'file' ? new URL(spec) : new URL(spec, `file://${encodeFilePath(base)}`);
       } catch {
         url = undefined;
       }
