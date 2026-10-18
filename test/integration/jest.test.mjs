@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
 
 // fork and its IPC channel: socketpairs and spawn's fds (ai-ecoverse/slicc-kernel#1093).
-const IPC_KERNEL = '1.126.0';
+const IPC_KERNEL = '1.125.11';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
