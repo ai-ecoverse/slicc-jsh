@@ -5,7 +5,7 @@ import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { ARGV, NORMALIZE, ROWS, ROW_DIRS, SKIP, SKIP_CASES } from '../../test/cert-review/fixtures.mjs';
-import { npmFlags, readJson, root, sh, walk } from './lib.mjs';
+import { npmFlags, progressRun, readJson, root, sh, walk } from './lib.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -29,7 +29,8 @@ if (kernel.id !== values.kernel) {
 }
 const NODE22 = process.env.NODE22;
 if (!NODE22) throw new Error('mfixtures: $NODE22 must name host Node 22.22.0');
-const CASE_MS = Number(values.timeout);
+const QUIET_MS = Number(values.timeout);
+const OUTER_MS = 300_000;
 const [shardIx, shardOf] = (() => {
   const [i, n] = values.shard.split('/').map(Number);
   return [i - 1, n];
@@ -39,7 +40,8 @@ const out = join(work, 'fixtures', kernel.id);
 mkdirSync(out, { recursive: true });
 const base = stage.trees.base;
 
-const fx = join(work, 'fx');
+const own = join(work, 'mfx', kernel.id);
+const fx = join(own, 'fx');
 if (!existsSync(join(fx, '.staged'))) {
   rmSync(fx, { recursive: true, force: true });
   cpSync(join(root, 'test/fixtures/cert-review/fx'), fx, { recursive: true });
@@ -63,27 +65,16 @@ async function boot(pkgDir) {
   return k;
 }
 
-const race = (p, ms) =>
-  Promise.race([p, new Promise((res) => setTimeout(() => res({ status: 'TIMEOUT', stdout: '', stderr: '' }), ms))]);
-
-async function krun(k, argv, opts, ms = CASE_MS) {
-  let so = '';
-  let se = '';
-  const r = await race(
-    k.run(argv, { ...opts, onStdout: (t) => (so += t), onStderr: (t) => (se += t) }).catch((e) => ({ status: `ERROR ${e.message}`, stdout: so, stderr: se })),
-    ms
-  );
-  return r.status === 'TIMEOUT' ? { status: 'TIMEOUT', stdout: so, stderr: se } : r;
-}
+const krun = (k, argv, opts, quiet = QUIET_MS) => progressRun(k, argv, opts, { quiet, outer: OUTER_MS });
 
 const hostJshCache = new Map();
 function hostJsh(name) {
   if (hostJshCache.has(name)) return hostJshCache.get(name);
   const tgz = name === 'new' ? stage.published.tarball : stage.previous.tarball;
-  const prefix = join(work, 'hostjsh', name);
+  const prefix = join(own, 'hostjsh', name);
   rmSync(prefix, { recursive: true, force: true });
   sh('npm', ['install', '-g', '--prefix', prefix, '--ignore-scripts', ...npmFlags, tgz]);
-  const bin = mkdtempSync(join(work, 'hostbin-'));
+  const bin = mkdtempSync(join(own, 'hostbin-'));
   symlinkSync(NODE22, join(bin, 'node'));
   symlinkSync(join(prefix, 'bin/jsh'), join(bin, 'jsh'));
   hostJshCache.set(name, bin);
@@ -157,7 +148,7 @@ async function casesFor(dir, mode) {
 const hostCache = new Map();
 const hostDirs = new Set();
 function hostDir(dir, pkgName) {
-  const d = join(work, 'hostfx', pkgName, dir);
+  const d = join(own, 'hostfx', pkgName, dir);
   if (!hostDirs.has(d)) {
     rmSync(d, { recursive: true, force: true });
     cpSync(join(fx, dir), d, { recursive: true, verbatimSymlinks: true });
@@ -236,12 +227,12 @@ async function runDirs(pkgName, pkgDir, pick = null) {
       const extra = NORMALIZE.filter(([re]) => re.test(key)).flatMap(([, subs]) => subs);
       const normCase = (t) => extra.reduce((acc, [re, to]) => acc.replace(re, to), norm(t));
       const opts = { cwd: `${kdir}${c.cwd ? `/${c.cwd}` : ''}`, ...(user !== 'root' ? { user } : {}), ...(c.stdin !== undefined ? { stdin: c.stdin } : {}) };
-      const r = await krun(k, c.argv, opts, c.timeout ?? CASE_MS);
+      const r = await krun(k, c.argv, opts, c.timeout ?? QUIET_MS);
       const h = hostRun(dir, c, pkgName);
       const a = render(c, r, normCase);
       const b = render(c, h, normCase);
       const same = a === b && r.status !== 'TIMEOUT';
-      results[`${dir}/${c.name}`] = { status: same ? 'same' : 'diff', jsh: a.slice(0, 4000), node: same ? undefined : b.slice(0, 4000) };
+      results[`${dir}/${c.name}`] = { status: same ? 'same' : 'diff', jsh: a.slice(0, 4000), node: same ? undefined : b.slice(0, 4000), ...(r.why ? { timeout: r.why } : {}) };
       if (r.status === 'TIMEOUT' || String(r.status).startsWith('ERROR')) {
         try {
           await k.terminate();

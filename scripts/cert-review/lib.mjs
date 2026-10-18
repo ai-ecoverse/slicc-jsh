@@ -150,3 +150,41 @@ export function packTree(dir, version, commit, dest, ref) {
 export function manifestOf(tgz) {
   return JSON.parse(execFileSync('tar', ['-xzf', tgz, '-O', 'package/package.json'], { encoding: 'utf8' }));
 }
+
+export async function progressRun(k, argv, opts, { quiet, outer }) {
+  let so = '';
+  let se = '';
+  let tail = '';
+  const start = Date.now();
+  let last = start;
+  const seen = (t) => {
+    last = Date.now();
+    tail = (tail + t).slice(-120);
+  };
+  let watch;
+  const stuck = new Promise((res) => {
+    watch = setInterval(() => {
+      const now = Date.now();
+      const why = now - last >= quiet ? `no output for ${quiet / 1000} s` : now - start >= outer ? `still running` : null;
+      if (why) res({ status: 'TIMEOUT', why: `${why} after ${Math.round((now - start) / 1000)} s; ${tail ? `it last printed ${JSON.stringify(tail)}` : 'it printed nothing'}` });
+    }, 250);
+  });
+  const r = await Promise.race([
+    k
+      .run(argv, {
+        ...opts,
+        onStdout: (t) => {
+          so += t;
+          seen(t);
+        },
+        onStderr: (t) => {
+          se += t;
+          seen(t);
+        },
+      })
+      .catch((e) => ({ status: `ERROR ${e.message}`, stdout: so, stderr: se })),
+    stuck,
+  ]);
+  clearInterval(watch);
+  return r.status === 'TIMEOUT' ? { status: 'TIMEOUT', stdout: so, stderr: se, why: r.why } : r;
+}
