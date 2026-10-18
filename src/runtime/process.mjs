@@ -913,6 +913,19 @@ const Process = { process: class extends EventEmitter {
   }
 } }.process;
 Object.defineProperty(Process, 'name', { value: 'process' });
+// Node's process.constructor is a plain function (its C++ template's), so
+// it can be called without new: jest-util's createProcessObject calls each
+// constructor up the prototype chain on its copy of process.
+// (Named by its key, which the bundler keeps: V8's messages use that name.)
+const processConstructor = { process: function () {} }.process;
+// process instanceof process.constructor, as inspect asks of a constructor.
+processConstructor.prototype = Process.prototype;
+Object.defineProperty(Process.prototype, 'constructor', {
+  value: processConstructor,
+  writable: true,
+  enumerable: false,
+  configurable: true,
+});
 
 // Node's process methods are own properties that work from any receiver
 // (yargs keeps `cwd: process.cwd` and calls it detached).

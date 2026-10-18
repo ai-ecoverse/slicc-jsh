@@ -1,0 +1,9 @@
+constructors process < EventEmitter < Object function
+call site 0 CallSite true
+clone false 19 string true
+detached method TypeError
+copied onto a subclass all true true
+b sees a.early 1 a.missing undefined
+d sees c.early 1 c.missing undefined
+warning event: Warning Accessing non-existent property 'missing' of module exports inside circular dependency
+done

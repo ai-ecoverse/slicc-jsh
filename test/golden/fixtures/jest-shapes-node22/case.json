@@ -1,0 +1,29 @@
+{
+  "description": "what jest and source-map-support take from the runtime's shapes: process.constructor up the prototype chain called without new (jest-util's createProcessObject), Error.prepareStackTrace call sites with their methods on CallSite.prototype (source-map-support's cloneCallSite), Module's enumerable keys assigned onto a subclass (jest-runtime), and the circular require warning only for a plain exports object not marked __esModule",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    },
+    {
+      "path": "/os/a.js",
+      "from": "a.js"
+    },
+    {
+      "path": "/os/b.js",
+      "from": "b.js"
+    },
+    {
+      "path": "/os/c.js",
+      "from": "c.js"
+    },
+    {
+      "path": "/os/d.js",
+      "from": "d.js"
+    }
+  ]
+}
