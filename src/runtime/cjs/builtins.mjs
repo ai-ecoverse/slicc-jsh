@@ -221,7 +221,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   let kernelFetch;
   const getHttp = () => {
     // Its fetch fallback (no route) goes through jsh's own fetch, as fetch() does.
-    if (!http) http = createHttp({ ctx, process, Buffer, handles, getStream, net: getNet(), getFetch: () => (kernelFetch ??= createFetch(ctx, { handles, getHttp })) });
+    if (!http) http = createHttp({ ctx, process, Buffer, handles, getStream, net: getNet(), getFetch: () => (kernelFetch ??= createFetch(ctx, { handles, getHttp, getZlib })) });
     return http;
   };
   let https;
