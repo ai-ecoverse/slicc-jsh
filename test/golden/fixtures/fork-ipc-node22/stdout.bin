@@ -1,0 +1,64 @@
+--- echo json
+send returns true true object
+send callback null
+echo json: message {"got":{"a":1,"s":"xé€😀"},"kind":"[object Object]"} | message {"got":[1,"two",null,true],"kind":"[object Array]"} | message {"got":"a string","kind":"string"} | message {"got":42,"kind":"number"} | message {"got":false,"kind":"boolean"} | message "bye too" | disconnect | exit 0 null | close 0 null
+after close false null
+--- echo advanced
+top-level bigint TypeError ERR_INVALID_ARG_TYPE The "message" argument must be one of type string, object, number, or boolean. Received type bigint (10n)
+echo advanced: message {"got":{},"kind":"[object Map]"} | message {"got":"1970-01-01T00:00:00.000Z","kind":"[object Date]"} | message {"got":{"0":1,"1":2},"kind":"[object Uint8Array]"} | message {"got":{"big":"10n"},"kind":"[object Object]"} | message "bye too" | disconnect | exit 0 null | close 0 null
+--- child info
+child info: message {"send":"function","connected":true,"channel":"object","fd":3,"execArgv":["--no-warnings"],"argv":["info","x","y"]} | disconnect | exit 0 null | close 0 null
+child info advanced: message {"send":"function","connected":true,"channel":"object","fd":3,"execArgv":[],"argv":["info"]} | disconnect | exit 0 null | close 0 null
+--- advanced values
+advanced values: message {"map":[["k",{"v":1}]],"set":[1,"a"],"date":"1970-01-02T00:00:00.000Z","big":"bigint","buf":"Buffer 6869","u16":[1,65535],"err":["RangeError","bad","why"],"circular":true,"holes":"3 false undefined","undef":true} | message {} | disconnect | exit 0 null | close 0 null
+--- json is lossy
+json lossy: message {"seen":{"map":{},"date":"1970-01-01T00:00:00.000Z","nan":null,"nested":"custom"},"keys":["map","date","nan","nested"]} | disconnect | exit 0 null | close 0 null
+--- internal messages
+internalMessage {"cmd":"NODE_TEST","n":1}
+internal: message {"cmd":"NODE_","n":2} | message {"cmd":"user","n":3} | disconnect | exit 0 null | close 0 null
+--- many messages in order
+many: message {"received":2000} | disconnect | exit 0 null | close 0 null
+--- big messages
+big json 1000000 xxxxx 300000
+big advanced 1000000 xxxxx 300000
+--- parent disconnects first
+child: parent disconnected
+parent disconnects first: after disconnect() connected=false channel=null | disconnect | exit 0 null connected false
+--- send after disconnect
+send returns false
+callback: Error ERR_IPC_CHANNEL_CLOSED Channel closed
+error event: Error ERR_IPC_CHANNEL_CLOSED Channel closed
+second disconnect: Error ERR_IPC_DISCONNECTED IPC channel is already disconnected
+child: parent disconnected
+--- a channel without listeners lets the child end
+child: done without listeners
+no listener: disconnect | exit 0 null | close 0 null
+--- exit code and kill
+exit code: message "about to exit" | disconnect | exit 7 null | close 7 null
+killed: message "ready" | disconnect | exit null SIGTERM | close null SIGTERM
+--- silent
+silent: message "sent" | disconnect | exit 0 null | close 0 null
+silent stdio "to stdout\n" "to stderr\n" 4
+--- spawn with ipc
+spawn ipc 3: message {"send":"function","connected":true,"channel":"object","fd":3,"execArgv":[],"argv":["info"]} | disconnect | exit 0 null | close 0 null
+spawn ipc 4: message {"send":"function","connected":true,"channel":"object","fd":4,"execArgv":[],"argv":["info"]} | disconnect | exit 0 null | close 0 null
+fork stdio pipe: message {"send":"function","connected":true,"channel":"object","fd":3,"execArgv":[],"argv":["info"]} | disconnect | exit 0 null | close 0 null
+--- v8 in the child
+serializer: message {"serialized":{"a":[1,2]}} | disconnect | exit 0 null | close 0 null
+--- errors
+fork without ipc Error ERR_CHILD_PROCESS_IPC_REQUIRED Forked processes must have an IPC channel, missing value 'ipc' in options.stdio
+two ipc Error ERR_IPC_ONE_PIPE Child process can have only one IPC pipe
+bad serialization TypeError ERR_INVALID_ARG_VALUE The property 'options.serialization' must be one of: undefined, 'json', 'advanced'. Received 'yaml'
+spawnSync ipc Error ERR_IPC_SYNC_FORK IPC cannot be used with synchronous forks
+bad modulePath TypeError ERR_INVALID_ARG_TYPE The "modulePath" argument must be of type string or an instance of Buffer or URL. Received type number (42)
+bad args TypeError ERR_INVALID_ARG_TYPE The "args" argument must be an instance of Array. Received type string ('x')
+bad stdio string TypeError ERR_INVALID_ARG_VALUE The argument 'stdio' is invalid. Received 'bogus'
+send undefined TypeError ERR_MISSING_ARGS The "message" argument must be specified
+send symbol TypeError ERR_INVALID_ARG_TYPE The "message" argument must be one of type string, object, number, or boolean. Received type symbol (Symbol(s))
+send function TypeError ERR_INVALID_ARG_TYPE The "message" argument must be one of type string, object, number, or boolean. Received function 
+json bigint TypeError undefined Do not know how to serialize a BigInt
+child: parent disconnected
+advanced function Error undefined f() {} could not be cloned.
+child: parent disconnected
+--- no channel here
+process.send undefined connected undefined channel undefined

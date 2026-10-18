@@ -1,7 +1,11 @@
 /**
  * Minimal `child_process`: spawn / execFile / exec on top of ctx.spawn, and
  * spawnSync / execSync / execFileSync on ctx.sync.run (slicc-kernel 1.65.0+).
- * fork stays ERR_NOT_SUPPORTED.
+ * fork, and 'ipc' in spawn's stdio, need a kernel that makes socketpairs and
+ * gives a child more descriptors than its stdio (ctx.socketpair, spawn's
+ * `fds`, ai-ecoverse/slicc-kernel#1093): the channel is one end of a pair,
+ * the child's NODE_CHANNEL_FD the other (./ipc-channel.mjs). On older
+ * kernels fork stays ERR_NOT_SUPPORTED and 'ipc' does nothing, as before.
  */
 import { kernelAtLeast, kernelVersion } from '../kernel-version.mjs';
 import { trackPromise } from '../async-handles.mjs';
@@ -11,12 +15,15 @@ import {
   ERR_OUT_OF_RANGE,
   nodeError,
   validateBoolean,
+  validateArray,
   validateObject,
+  validateOneOf,
   validateString,
 } from '../node-errors.mjs';
 import { createPath } from '../path.mjs';
 import { SIGNALS } from '../process.mjs';
 import { EventEmitter } from './events.mjs';
+import { channelOn, setupChannel } from './ipc-channel.mjs';
 
 /** Same symbol util.promisify reads (`nodejs.util.promisify.custom`). */
 const PROMISIFY_CUSTOM = Symbol.for('nodejs.util.promisify.custom');
@@ -219,6 +226,26 @@ function validatedCwd(cwd) {
   return path;
 }
 
+/** getValidatedPath(modulePath, 'modulePath'): a string, a Buffer or a file: URL. */
+function validatedModulePath(value) {
+  let path = value;
+  if (path != null && typeof path === 'object' && typeof path.href === 'string' && path.protocol !== undefined) {
+    if (path.protocol !== 'file:') throw nodeError(TypeError, 'ERR_INVALID_URL_SCHEME', 'The URL must be of scheme file');
+    if (path.hostname !== '' && path.hostname !== 'localhost') {
+      throw nodeError(TypeError, 'ERR_INVALID_FILE_URL_HOST', 'File URL host must be "localhost" or empty on linux');
+    }
+    path = decodeURIComponent(path.pathname);
+  } else if (isArrayBufferView(path)) {
+    path = new TextDecoder().decode(path);
+  } else if (typeof path !== 'string') {
+    throw ERR_INVALID_ARG_TYPE('modulePath', ['string', 'Buffer', 'URL'], value);
+  }
+  if (path.includes('\u0000')) {
+    throw ERR_INVALID_ARG_VALUE('modulePath', path, 'must be a string or Uint8Array without null bytes');
+  }
+  return path;
+}
+
 function isExitError(err) {
   return err?.name === 'NodeExitError';
 }
@@ -249,6 +276,40 @@ function normalizeStdio(stdio) {
     return [fdOf(stdio[0] ?? 'pipe'), fdOf(stdio[1] ?? 'pipe'), fdOf(stdio[2] ?? 'pipe')];
   }
   return ['pipe', 'pipe', 'pipe'];
+}
+
+const STDIO_NAMES = ['stdin', 'stdout', 'stderr'];
+const kIpc = Symbol('ipc');
+
+/** Where 'ipc' is in a stdio array (Node: one at most), or -1. */
+function ipcIndexOf(stdio) {
+  if (!Array.isArray(stdio)) return -1;
+  let index = -1;
+  stdio.forEach((s, i) => {
+    if (s !== 'ipc') return;
+    if (index !== -1) throw nodeError(Error, 'ERR_IPC_ONE_PIPE', 'Child process can have only one IPC pipe');
+    index = i;
+  });
+  return index;
+}
+
+/** lib/internal/child_process.js stdioStringToArray. */
+function stdioStringToArray(stdio, channel) {
+  const options = [];
+  switch (stdio) {
+    case 'ignore':
+    case 'overlapped':
+    case 'pipe':
+      options.push(stdio, stdio, stdio);
+      break;
+    case 'inherit':
+      options.push(0, 1, 2);
+      break;
+    default:
+      throw ERR_INVALID_ARG_VALUE('stdio', stdio);
+  }
+  if (channel) options.push(channel);
+  return options;
 }
 
 function toKernelStdio(mode) {
@@ -332,6 +393,36 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
 
   // Spawns on a kernel without ctx.sync.spawn (before 1.87.0), until they settle.
   const inflightSpawns = new Set();
+
+  // An IPC channel: a socketpair, one end passed to the child at fd >= 3
+  // (ai-ecoverse/slicc-kernel#1093). Without it, as before: no fork, and
+  // 'ipc' in stdio is passed over.
+  const ipcSupported =
+    typeof ctx?.socketpair === 'function' && typeof ctx?.sync?.socketpair === 'function' && typeof ctx?.sync?.spawn === 'function';
+
+  /** The parent's end of a channel: Node's setupChannel on the kernel fd. */
+  function setupIpc(child, fd, serializationMode) {
+    const serialization = process._nodeLib().childProcessSerialization;
+    const channel = channelOn({ ctx, handles, serialization, fd });
+    let closed;
+    let ended = false;
+    // Node's 'close' also waits for the channel's end (its _closesNeeded):
+    // never, when the parent disconnected first.
+    child._ipcClosed = new Promise((resolve) => {
+      closed = () => {
+        ended = true;
+        resolve();
+      };
+    });
+    // Linux closes an exiting child's descriptors before its parent can
+    // reap it, so Node sees the channel's end ('disconnect') before 'exit'.
+    // The kernel answers this process's calls in order: once a call made
+    // after the exit is answered, the read pending on the channel has had
+    // its end of file, if it was coming.
+    child._ipcSettle = () => (ended || !child.channel ? null : ctx.fdStatus(fd).catch(() => {}));
+    const deprecate = process._builtin?.('util')?.deprecate ?? ((fn) => fn);
+    setupChannel({ target: child, channel, serializationMode, serialization, process, deprecate, maybeClose: () => closed() });
+  }
   /**
    * The 'close' of a spawn that failed at run time (ENOENT, EACCES, …).
    * Node's comes after its stdio pipes' EOF, on the next loop turn (after
@@ -698,6 +789,13 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     const after = (child._stdioPumps ?? Promise.resolve()).then(() => Promise.all([child.stdout, child.stderr].map(streamClosed)));
     trackPromise(handles, after);
     after.finally(() => {
+      if (child._ipcClosed) {
+        // The channel holds the program while it's open (it is ref'd).
+        child._release();
+        handles.notify?.();
+        child._ipcClosed.then(() => safeEmit(child, 'close', code, signal));
+        return;
+      }
       const closeErr = safeEmit(child, 'close', code, signal);
       child._release();
       handles.notify?.();
@@ -771,6 +869,33 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       // ignore it and the child sees what the kernel resolved.
       argv0,
     };
+    // The child's end of the IPC channel, at the 'ipc' index.
+    const ipc = options[kIpc];
+    let pair = null;
+    if (ipc && sync) {
+      try {
+        pair = ctx.sync.socketpair();
+      } catch (err) {
+        releaseAll();
+        process.nextTick(() => {
+          safeEmit(child, 'error', err);
+          finish(child, 1, null);
+        });
+        return;
+      }
+      if (ipc.index < 3) request[STDIO_NAMES[ipc.index]] = pair[1];
+      else request.fds = { [ipc.index]: pair[1] };
+    }
+    const closePair = (both) => {
+      if (!pair) return;
+      for (const fd of both ? pair : [pair[1]]) {
+        try {
+          ctx.sync.close(fd);
+        } catch {
+          /* already closed */
+        }
+      }
+    };
 
     const run = (kernelChild) => {
       connectStdio(child, kernelChild, served);
@@ -781,7 +906,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       waitP.then(
         (status) => {
           const { code, signal } = decodeWait(status);
-          finish(child, code, signal);
+          const settling = child._ipcSettle?.();
+          if (!settling) return finish(child, code, signal);
+          // After the channel's end of file and its 'disconnect' tick.
+          trackPromise(handles, settling).then(() => setImmediate(() => finish(child, code, signal)));
         },
         (err) => {
           if (isExitError(err)) return;
@@ -843,13 +971,16 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       try {
         kernelChild = ctx.sync.spawn(request);
       } catch (err) {
+        closePair(true);
         releaseAll();
         failed(err);
         return;
       }
+      closePair(false);
       releaseDirect();
       releaseServedOutput();
       child._bindKernel(kernelChild);
+      if (pair) setupIpc(child, pair[0], ipc.serialization);
       process.nextTick(() => run(kernelChild));
       return;
     }
@@ -890,6 +1021,20 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     // a tick later here.
     opts = { ...opts, env: { ...(opts.env || process.env) } };
 
+    // 'ipc' in stdio: the channel, and the child told where it is (Node's
+    // envPairs come after the environment's).
+    if (ipcSupported) {
+      const index = ipcIndexOf(opts.stdio);
+      validateOneOf(opts.serialization, 'options.serialization', [undefined, 'json', 'advanced']);
+      if (index !== -1) {
+        const serialization = opts.serialization || 'json';
+        opts.env.NODE_CHANNEL_FD = String(index);
+        opts.env.NODE_CHANNEL_SERIALIZATION_MODE = serialization;
+        opts.stdio = opts.stdio.map((s) => (s === 'ipc' ? 'ignore' : s));
+        opts[kIpc] = { index, serialization };
+      }
+    }
+
     if (opts.shell) {
       // Node on Unix defaults shell:true to /bin/sh (errors say `spawn /bin/sh`).
       const shell = typeof opts.shell === 'string' ? opts.shell : '/bin/sh';
@@ -900,6 +1045,12 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
 
     const stdio = normalizeStdio(opts.stdio);
     const child = new ChildProcess();
+    // Node's child.stdio: one entry per stdio slot (at least three), null
+    // for those without a stream.
+    const slots = Array.isArray(opts.stdio) ? Math.max(3, opts.stdio.length) : 3;
+    const setStdio = () => {
+      child.stdio = [child.stdin, child.stdout, child.stderr, ...new Array(slots - 3).fill(null)];
+    };
     // Node sets these in spawn() itself, before the process starts.
     child.spawnfile = file;
     child.spawnargs = [typeof opts.argv0 === 'string' ? opts.argv0 : file, ...argv];
@@ -915,6 +1066,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         } catch {
           /* ignore pipe setup when we will fail spawn anyway */
         }
+        setStdio();
         child.spawnfile = file;
         child.spawnargs = [typeof opts.argv0 === 'string' ? opts.argv0 : file, ...argv];
         failSpawnEnoent(child, process, handles, file, argv, closeLater);
@@ -926,6 +1078,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     // spawn() (seven: missing /node_modules/.../vendor → uncaught, no callback).
     try {
       prepareStdio(child, stdio);
+      setStdio();
     } catch (err) {
       const code = err?.code === 'ENOENT' || /\bENOENT\b/.test(err?.message ?? '') ? 'ENOENT' : err?.code ?? 'ERR_SPAWN_FAILED';
       const error =
@@ -1504,6 +1657,51 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     return ret.stdout;
   }
 
+  /** lib/child_process.js fork (Node 22.22.0): spawn of execPath with an IPC channel. */
+  function fork(modulePath, args = [], options) {
+    if (!ipcSupported) notSupported('fork');
+    modulePath = validatedModulePath(modulePath);
+
+    if (args == null) {
+      args = [];
+    } else if (typeof args === 'object' && !Array.isArray(args)) {
+      options = args;
+      args = [];
+    } else {
+      validateArray(args, 'args');
+    }
+
+    if (options != null) validateObject(options, 'options');
+    options = { __proto__: null, ...options, shell: false };
+    options.execPath ||= process.execPath;
+    validateArgumentNullCheck(options.execPath, 'options.execPath');
+
+    let execArgv = options.execArgv || process.execArgv;
+    for (const [i, arg] of (execArgv ?? []).entries()) validateArgumentNullCheck(arg, `options.execArgv[${i}]`);
+    const evalCode = process._evalCode ?? process._eval;
+    if (execArgv === process.execArgv && evalCode != null) {
+      const index = execArgv.lastIndexOf(evalCode);
+      if (index > 0) {
+        // Leave out -e and its code, or the child would fork itself again.
+        execArgv = execArgv.slice();
+        execArgv.splice(index - 1, 2);
+      }
+    }
+
+    args = [...execArgv, modulePath, ...args];
+
+    if (typeof options.stdio === 'string') {
+      options.stdio = stdioStringToArray(options.stdio, 'ipc');
+    } else if (!Array.isArray(options.stdio)) {
+      // fd 3 is the channel; stdin, stdout and stderr are the parent's unless silent.
+      options.stdio = stdioStringToArray(options.silent ? 'pipe' : 'inherit', 'ipc');
+    } else if (!options.stdio.includes('ipc')) {
+      throw nodeError(Error, 'ERR_CHILD_PROCESS_IPC_REQUIRED', "Forked processes must have an IPC channel, missing value 'ipc' in options.stdio");
+    }
+
+    return spawn(options.execPath, args, options);
+  }
+
   Object.defineProperty(exec, PROMISIFY_CUSTOM, {
     enumerable: false,
     value: customPromiseExecFunction(exec),
@@ -1520,9 +1718,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     spawnSync,
     execSync,
     execFileSync,
-    fork() {
-      notSupported('fork');
-    },
+    fork,
     ChildProcess,
     // Expose for tests / advanced callers
     _SIGNAL_NAMES: SIGNAL_NAMES,
