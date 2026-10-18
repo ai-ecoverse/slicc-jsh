@@ -42,7 +42,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - Boolean options take `--x` and `--no-x`, and the last form wins. A value that looks like an option counts as missing (`--require --no-warnings`).
 - Also: the [warning flags](#warnings), `--enable-source-maps`, `--preserve-symlinks`, `--preserve-symlinks-main`, `--expose-internals`, `--title`, `--pending-deprecation` and the `--report-*` options (they set `process.report`).
 - `-c`/`--check` checks the script's syntax and runs nothing, as Node's `check_syntax` does. A file is checked as the module it is: ES module by extension, `"type"`, or detection. Piped input is checked as CommonJS unless `--input-type=module`. A SyntaxError gets the usual report under the script's real path, with exit status 1. Combined with `-e`/`-p`, it's an error (status 9).
-- Any other option, such as `--inspect`, `--watch` or `--experimental-strip-types`, is `bad option` (status 9).
+- Any other option, such as `--inspect`, `--watch` or `--experimental-strip-types`, is `bad option` (status 9). `--watch` needs `fs.watch` (see [fs](#fs)).
 
 ## Modules and ESM
 
@@ -165,7 +165,14 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 
 `/dev` entries can't be removed: `unlink`, `rm` and `rmSync` of them give `EACCES` for a user and `EPERM` for root, from the kernel on 1.93.0 and later, and from jsh before that, where the kernel says `ENOENT` or reports a success that removed nothing.
 
-**Not available:** `watch`, `watchFile`, `unwatchFile`, `glob`, `globSync`, `promises.glob`, `promises.watch`, `openAsBlob`, `readv`, `writev`, `fs.Dir` as an export (`opendir` works), and `promises.constants`.
+**`watchFile` and `unwatchFile`** poll `stat`, as Node's do (libuv's `uv_fs_poll`). They see a change made by any process in the kernel, or by the embedder (goldens `fs-watchfile-node22` and `fs-watchfile-unref-node22`):
+- The poll stats at the start and then every `interval` ms (default 5007). A listener gets `(curr, prev)` Stats when the times, size, mode, owner, inode or device differ from the last poll. With `bigint: true` the Stats are bigint ones.
+- A missing file gives Stats with every field 0 (dates at the epoch). As in Node, the listener is called once with those at the start, again when the file appears, and again when it goes.
+- Listeners on one path share one `StatWatcher`, which every call returns. `unwatchFile(path, listener)` removes one listener, and `unwatchFile(path)` removes them all. The watcher stops when none is left, and emits `'stop'`.
+- `persistent: false`, or `unref()` on the returned watcher, lets the program end while it watches. `ref()` and `unref()` count per listener, as Node 22 counts them. `stop()` and the no-op `start()` are there too.
+- The kernel's times are in milliseconds, so two writes in the same millisecond that leave the size unchanged look like one.
+
+**Not available:** `watch`, `promises.watch` and `FSWatcher`, because the kernel has no file-change events for programs yet ([slicc-kernel#1031](https://github.com/ai-ecoverse/slicc-kernel/issues/1031)). Polling isn't a stand-in for them. Also not available: `glob`, `globSync`, `promises.glob`, `openAsBlob`, `readv`, `writev`, `fs.Dir` as an export (`opendir` works), and `promises.constants`.
 
 ## `child_process`
 

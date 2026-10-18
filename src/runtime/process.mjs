@@ -461,7 +461,7 @@ const Process = { process: class extends EventEmitter {
   /** Node's: the kinds of what keeps the loop alive ('Timeout', 'FSReqCallback', …). */
   getActiveResourcesInfo() {
     // Node's order: requests, handles, then timers and immediates.
-    const NAMES = { promise: 'FSReqCallback', stdin: 'TTYWrap', child: 'ProcessWrap', socket: 'TCPWrap', server: 'TCPServerWrap' };
+    const NAMES = { promise: 'FSReqCallback', stdin: 'TTYWrap', child: 'ProcessWrap', socket: 'TCPWrap', server: 'TCPServerWrap', StatWatcher: 'StatWatcher' };
     const out = [];
     const timers = [];
     for (const h of this._handles?.list?.() ?? []) {

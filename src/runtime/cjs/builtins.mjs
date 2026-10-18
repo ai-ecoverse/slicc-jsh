@@ -209,7 +209,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     },
   };
   const stringDecoder = createStringDecoder({ ctx, process, Buffer });
-  const fs = createFs({ ctx, path, process, Buffer, handles, getStream });
+  const fs = createFs({ ctx, path, process, Buffer, handles, getStream, timers });
   const timersMod = createTimersModule(timers);
   const timersPromises = createTimersPromises(timers, handles);
   let net;
