@@ -3,6 +3,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/slicc-jsh/main/install.sh | sh
 #   curl -fsSL …/install.sh | sh -s -- --version 0.16.1
+#   curl -fsSL …/install.sh | sh -s -- --version 0.16.1 --integrity sha512-…
 #   curl -fsSL …/install.sh | sh -s -- --uninstall
 #
 # It needs Node 22 or later. If `node` on PATH is missing or older, it asks
@@ -14,6 +15,7 @@
 #   JSH_HOME     where jsh (and a private Node) live   (default: ~/.jsh)
 #   JSH_BIN_DIR  where the `jsh` wrapper goes          (default: ~/.local/bin)
 #   JSH_VERSION  the slicc-jsh version to install      (default: the latest)
+#   JSH_INTEGRITY  the sha512 SRI the tarball must have (default: none)
 #
 # Windows: ai-ecoverse/slicc-jsh#127.
 #
@@ -87,6 +89,27 @@ sha256_of() {
   else
     die "need sha256sum, shasum or openssl to verify the Node download"
   fi
+}
+
+# Refuse an --integrity / JSH_INTEGRITY that is not one sha512 SRI:
+# "sha512-" and the 88-character base64 of 64 bytes.
+check_integrity() {
+  algo=${1%%-*}
+  case $1 in
+    sha512-*) ;;
+    *-*)
+      case $algo in
+        '' | *[!a-z0-9]*) ;;
+        *) die "--integrity takes a sha512- value, not $algo-: $1" ;;
+      esac
+      ;;
+  esac
+  body=${1#sha512-}
+  b64=${body%==}
+  case $1 in sha512-*) ;; *) b64=/ ;; esac
+  case $b64 in *[!A-Za-z0-9+/]*) b64= ;; esac
+  [ ${#body} -eq 88 ] && [ ${#b64} -eq 86 ] ||
+    die "--integrity is not a sha512 SRI (sha512- and 88 base64 characters): $1"
 }
 
 # The major version of a node binary, or nothing if it does not run.
@@ -251,19 +274,29 @@ install_jsh() {
     read -r tarball
     read -r integrity
   } <"$tmp/dist.txt"
+  says="the registry says"
+  if [ -n "$pin" ]; then
+    [ "$integrity" = "$pin" ] ||
+      die "the registry's integrity for $PKG@$version is $integrity, --integrity says $pin"
+    says="--integrity says"
+  fi
 
   say "downloading $PKG@$version"
   fetch "$tarball" "$tmp/jsh.tgz" || die "could not download $tarball"
   "$node_bin" -e '
-    const [file, want] = process.argv.slice(1);
+    const [file, want, says] = process.argv.slice(1);
     const got = "sha512-" + require("crypto").createHash("sha512")
       .update(require("fs").readFileSync(file)).digest("base64");
     if (got !== want) {
-      console.error("jsh: error: tarball integrity is " + got + ", the registry says " + want);
+      console.error("jsh: error: tarball integrity is " + got + ", " + says + " " + want);
       process.exit(1);
     }
-  ' "$tmp/jsh.tgz" "$integrity" || die "the $PKG@$version tarball does not match the registry"
-  say "verified the tarball against the registry's sha512"
+  ' "$tmp/jsh.tgz" "${pin:-$integrity}" "$says" || die "the $PKG@$version tarball does not match ${pin:+--integrity and }the registry"
+  if [ -n "$pin" ]; then
+    say "verified the tarball against --integrity and the registry's sha512"
+  else
+    say "verified the tarball against the registry's sha512"
+  fi
 
   mkdir "$tmp/pkg"
   tar -xzf "$tmp/jsh.tgz" -C "$tmp/pkg" || die "could not unpack the $PKG tarball"
@@ -403,14 +436,16 @@ usage() {
 Install the host jsh (@ai-ecoverse/slicc-jsh) on macOS or Linux.
 
   curl -fsSL $INSTALL_URL | sh
-  curl -fsSL $INSTALL_URL | sh -s -- [--version X.Y.Z] [--uninstall]
+  curl -fsSL $INSTALL_URL | sh -s -- [--version X.Y.Z] [--integrity sha512-…] [--uninstall]
 
   --version X.Y.Z  install that version (default: \$JSH_VERSION, else the latest)
+  --integrity SRI  refuse a tarball (or registry entry) whose sha512 is not SRI
+                   (default: \$JSH_INTEGRITY; npm view $PKG@X.Y.Z dist.integrity)
   --uninstall      remove \$JSH_HOME and the jsh wrapper
   -h, --help       show this help
 
 Environment: JSH_HOME (default ~/.jsh), JSH_BIN_DIR (default ~/.local/bin),
-JSH_VERSION.
+JSH_VERSION, JSH_INTEGRITY.
 EOF
 }
 
@@ -425,6 +460,7 @@ cleanup() {
 main() {
   opt_version=
   opt_uninstall=
+  opt_integrity=
   while [ $# -gt 0 ]; do
     case $1 in
       --version)
@@ -434,6 +470,15 @@ main() {
         ;;
       --version=*)
         opt_version=${1#--version=}
+        shift
+        ;;
+      --integrity)
+        [ $# -ge 2 ] || die "--integrity needs a value, e.g. --integrity sha512-…"
+        opt_integrity=$2
+        shift 2
+        ;;
+      --integrity=*)
+        opt_integrity=${1#--integrity=}
         shift
         ;;
       --uninstall)
@@ -447,6 +492,8 @@ main() {
       *) die "unknown option: $1 (try --help)" ;;
     esac
   done
+  pin=${opt_integrity:-${JSH_INTEGRITY:-}}
+  if [ -n "$pin" ]; then check_integrity "$pin"; fi
 
   [ -n "${HOME:-}" ] || die "HOME is not set"
   JSH_HOME=$(absolute "${JSH_HOME:-$HOME/.jsh}")

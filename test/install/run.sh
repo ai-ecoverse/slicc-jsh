@@ -2,7 +2,7 @@
 # Exercise install.sh from this checkout in throwaway HOMEs, against the
 # published package on the npm registry.
 #
-#   test/install/run.sh [node|no-node|pty|uninstall]...   (default: all four)
+#   test/install/run.sh [node|no-node|pty|uninstall|integrity]...   (default: all five)
 #
 # node       Node 22+ on PATH: install an older version, run a
 #            #!/usr/bin/env jsh script, re-run to upgrade to the latest, and
@@ -12,6 +12,8 @@
 # pty        no Node on PATH, on a pseudo-terminal (test/install/answer-tty.py):
 #            answer "no", then "yes" to the Node download and the rc line.
 # uninstall  --uninstall removes JSH_HOME and the wrapper, names the rc line.
+# integrity  --integrity / JSH_INTEGRITY: a matching pin installs, a wrong or
+#            malformed one is refused.
 #
 # Needs curl, node 22+ (for this harness and the "node" case), python3 (pty)
 # and perl (to drop the controlling terminal for no-node).
@@ -237,7 +239,66 @@ case_uninstall() {
   pass "leaves files it did not write"
 }
 
-[ $# -gt 0 ] || set -- node no-node pty uninstall
+# The registry's dist.integrity for version $1.
+integrity_of() {
+  curl -fsSL "https://registry.npmjs.org/@ai-ecoverse/slicc-jsh/$1" |
+    node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(0, "utf8")).dist.integrity)'
+}
+
+case_integrity() {
+  h=$(fresh_home integrity)
+  sri=$(integrity_of "$PREV")
+  other=$(integrity_of "$latest")
+  case $sri in sha512-*) ;; *) fail "the registry's integrity for $PREV is $sri" ;; esac
+
+  # A matching pin, piped as from curl.
+  out=$(HOME="$h" no_tty sh -c "cat '$installer' | sh -s -- --version $PREV --integrity $sri" 2>&1) ||
+    fail "install with a matching --integrity: $out"
+  printf '%s\n' "$out" | grep -qF 'verified the tarball against --integrity' || fail "matching pin: $out"
+  check_wrapper_version "$h" "$h/.local/bin" "$PREV"
+  pass "--integrity with the registry's value installs $PREV"
+
+  # A wrong pin (another version's sha512) is refused; the install is kept.
+  if HOME="$h" no_tty sh "$installer" --version "$PREV" --integrity="$other" >"$work/int-wrong.txt" 2>&1; then
+    fail "a wrong --integrity installed: $(cat "$work/int-wrong.txt")"
+  fi
+  grep -qF "integrity for @ai-ecoverse/slicc-jsh@$PREV is $sri, --integrity says $other" "$work/int-wrong.txt" ||
+    fail "wrong pin: $(cat "$work/int-wrong.txt")"
+  ! grep -q 'downloading @ai-ecoverse' "$work/int-wrong.txt" || fail "downloaded the tarball for a wrong pin"
+  check_wrapper_version "$h" "$h/.local/bin" "$PREV"
+  pass "a wrong --integrity is refused, naming both values"
+
+  # JSH_INTEGRITY: the same, from the environment.
+  if HOME="$h" JSH_VERSION="$latest" JSH_INTEGRITY="$sri" no_tty sh "$installer" >"$work/int-env.txt" 2>&1; then
+    fail "a wrong JSH_INTEGRITY installed: $(cat "$work/int-env.txt")"
+  fi
+  grep -qF "integrity for @ai-ecoverse/slicc-jsh@$latest is $other, --integrity says $sri" "$work/int-env.txt" ||
+    fail "wrong JSH_INTEGRITY: $(cat "$work/int-env.txt")"
+  check_wrapper_version "$h" "$h/.local/bin" "$PREV"
+  HOME="$h" JSH_VERSION="$latest" JSH_INTEGRITY="$other" no_tty sh "$installer" >"$work/int-env.txt" 2>&1 ||
+    fail "a matching JSH_INTEGRITY: $(cat "$work/int-env.txt")"
+  grep -qF 'verified the tarball against --integrity' "$work/int-env.txt" || fail "JSH_INTEGRITY: $(cat "$work/int-env.txt")"
+  check_wrapper_version "$h" "$h/.local/bin" "$latest"
+  pass "JSH_INTEGRITY pins like --integrity"
+
+  # Malformed values, and other algorithms, are refused before anything runs.
+  h=$(fresh_home integrity-bad)
+  for bad in "${sri%?????}" "${sri}x" "sha512--${sri#sha512-?}" "$sri sha1-AAAA" \
+    "sha256-$(printf '%s' "${sri#sha512-}" | cut -c 1-43)=" "$(printf '%s' "${sri#sha512-}")" sha512-; do
+    if HOME="$h" JSH_INTEGRITY="$bad" no_tty sh "$installer" >"$work/int-bad.txt" 2>&1; then
+      fail "--integrity $bad was accepted"
+    fi
+    case $bad in
+      sha256-*) want='--integrity takes a sha512- value, not sha256-' ;;
+      *) want='--integrity is not a sha512 SRI' ;;
+    esac
+    grep -qF -- "$want" "$work/int-bad.txt" || fail "--integrity $bad: $(cat "$work/int-bad.txt")"
+    [ ! -e "$h/.jsh" ] || fail "--integrity $bad left $h/.jsh"
+  done
+  pass "malformed and non-sha512 --integrity values are refused up front"
+}
+
+[ $# -gt 0 ] || set -- node no-node pty uninstall integrity
 for c in "$@"; do
   printf '\n== %s ==\n' "$c"
   case $c in
@@ -245,6 +306,7 @@ for c in "$@"; do
     no-node) case_no_node ;;
     pty) case_pty ;;
     uninstall) case_uninstall ;;
+    integrity) case_integrity ;;
     *) fail "unknown case: $c" ;;
   esac
 done
