@@ -371,6 +371,21 @@ const zlib = await esbuild.build({
   legalComments: 'inline',
 });
 
+// zstd: Facebook's C decoder (v1.5.7) ported to JavaScript (src/zstd).
+const zstd = await esbuild.build({
+  entryPoints: [join(root, 'src/zstd/decompress.mjs')],
+  outfile: join(dist, 'vendor/zstd.cjs'),
+  bundle: true,
+  format: 'cjs',
+  platform: 'neutral',
+  target: ['es2022'],
+  logLevel: 'info',
+  metafile: true,
+  minify: true,
+  keepNames: true,
+  legalComments: 'inline',
+});
+
 // brotli: Google's C decoder ported to JavaScript (src/brotli), its static
 // dictionary embedded in the Brotli encoding it decodes itself from.
 const brotli = await esbuild.build({
@@ -405,7 +420,7 @@ function writeVendorEmbedded(full) {
     writeFileSync(vendorEmbeddedPath, vendorEmbeddedPlaceholder);
     return;
   }
-  const names = ['readable-stream', 'string_decoder', 'zlib', 'brotli', 'crypto', 'node-lib'];
+  const names = ['readable-stream', 'string_decoder', 'zlib', 'brotli', 'zstd', 'crypto', 'node-lib'];
   const entries = names.map((name) => {
     const text = readFileSync(join(dist, 'vendor', `${name}.cjs`), 'utf8');
     return `  ${JSON.stringify(name)}: ${JSON.stringify(text)}`;
@@ -450,6 +465,7 @@ writeMeta('meta-stream.json', stream.metafile);
 writeMeta('meta-decoder.json', decoder.metafile);
 writeMeta('meta-zlib.json', zlib.metafile);
 writeMeta('meta-brotli.json', brotli.metafile);
+writeMeta('meta-zstd.json', zstd.metafile);
 writeMeta('meta-crypto.json', crypto.metafile);
 writeMeta('meta-node-lib.json', nodeLib.metafile);
 

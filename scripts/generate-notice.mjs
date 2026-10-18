@@ -111,6 +111,9 @@ Node.js license reproduced in the node-inspect-extracted section below
 It also includes Brotli's decoder (https://github.com/google/brotli), ported to
 JavaScript in src/brotli, and Brotli's static dictionary, under the license in
 the Brotli section below.
+
+It also includes Zstandard's decoder (https://github.com/facebook/zstd), ported
+to JavaScript in src/zstd, under the license in the Zstandard section below.
 `;
 
   const missing = [];
@@ -118,6 +121,9 @@ the Brotli section below.
     `--------------------------------------------------------------------------------\n` +
       `This product includes Brotli (ported from github.com/google/brotli). License text follows:\n\n` +
       `${readFileSync(join(root, 'src/brotli/LICENSE'), 'utf8').trim()}\n`,
+    `--------------------------------------------------------------------------------\n` +
+      `This product includes Zstandard (ported from github.com/facebook/zstd). License text follows:\n\n` +
+      `${readFileSync(join(root, 'src/zstd/LICENSE'), 'utf8').trim()}\n`,
   ];
   const names = [...pkgRoots.keys()].sort((a, b) => a.localeCompare(b));
   for (const name of names) {

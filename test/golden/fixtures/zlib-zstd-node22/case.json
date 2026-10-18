@@ -1,0 +1,5 @@
+{
+  "description": "zlib zstd decompression against Node's: frames Node 22's encoder made (data.zst, from make-data.mjs) across levels -5 to 22 and windows 2**10 to 2**28, checksums, no content size, several and skippable frames, raw and trained dictionaries (dict.bin), sync, callback, promisify and stream forms, writes of 1 byte and up, flush/reset/close, corrupt and truncated input with Node's ZSTD_error_* codes, options, params, pledgedSrcSize and dictionary validation, maxOutputLength, and a 17.6 MB payload",
+  "argv": ["script.js"],
+  "shim": true
+}

@@ -90,7 +90,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
   - `process.umask()` starts as the kernel's umask. jsh reads it once, from `/proc/self/status` on 1.89.0 and later, or before that from the mode the kernel gives a directory jsh makes in `/tmp`.
   - `process.umask(mask)` changes only the umask jsh applies to the files it creates; children keep the kernel's.
 - `process.getuid`, `getgid` and the like read the kernel's credentials. `process.setuid`, `setgid`, `seteuid`, `setegid`, `setgroups` and `initgroups` follow Node on Linux; they're defined only on slicc-kernel 1.81.0 and later.
-- `process.versions` lists what the runtime has or mirrors: `brotli` (its decoder: `got` then asks for `br`), no openssl, zstd, ….
+- `process.versions` lists what the runtime has or mirrors: `brotli` and `zstd` (their decoders: `got` then asks for `br` and `zstd`), no openssl, ….
 - `argv0`, `pid`, `version`, `versions`, `arch`, `platform`, `release`, `config` and `features` are read-only, as in Node. `argv[0]` is `execPath`.
 - `process.report` is Node's API (`getReport`, `writeReport`, the `--report-*` options). It writes on an uncaught exception and on its signal, as Node does. Its header has Linux's fields.
 - `process.execve` runs the command to its end on this program's stdio, and the program then ends as the command did (its status, or the signal it died of), with no `'exit'` event. It needs slicc-kernel 1.65.0.
@@ -354,7 +354,7 @@ The golden `dns-node22` checks the surface against Node 22.22.0, and `test/integ
 
 **Loopback.** As with Node on a machine, a loopback URL reaches a server of *this* kernel. The loopback names are `127.0.0.0/8`, `::1`, `0.0.0.0`, `localhost`, `*.localhost` and `<port>.kernel.localhost`. jsh does the HTTP over the kernel's sockets on every kernel. A `ws:` URL goes to the kernel's own loopback `ctx.websocket` on slicc-kernel 1.106.3 and later, which answers as undici does ([slicc-kernel#822](https://github.com/ai-ecoverse/slicc-kernel/issues/822)). On older kernels jsh does the WebSocket handshake and framing over the kernel's sockets itself. Either way, `new WebSocket(process.env.SLICC_CDP_URL)` reaches the kernel's CDP facade on 127.0.0.1:9222, and the loopback WebSocket holds the server to RFC 6455 as undici does. The one difference between the two is the message of a refused upgrade's `event.error.cause` (`… with 503 Service Unavailable` from the kernel, `… with 503` from jsh).
 - A loopback redirect to another origin drops `authorization`, `proxy-authorization`, `cookie` and `host`.
-- A body is decoded as undici decodes it: `gzip`, `x-gzip`, `deflate` and `br` (`br` through zlib, so one cut short ends without an error and a corrupt one fails the read with `TypeError: terminated`), a list of them last first, none if one is unknown, and more than five is `fetch failed`. The request asks for `gzip, deflate`, as undici does for `http:`.
+- A body is decoded as undici decodes it: `gzip`, `x-gzip`, `deflate` and `br` (`br` through zlib, so one cut short ends without an error and a corrupt one fails the read with `TypeError: terminated`), a list of them last first, none if one is unknown (`zstd` too, as in Node 22), and more than five is `fetch failed`. The request asks for `gzip, deflate`, as undici does for `http:`.
 - `host.slicc.internal` (and `10.0.2.2`) reach the real machine's loopback, through the kernel's proxy.
 
 **Why not the kernel's loopback `fetch`.** The kernel's own loopback `ctx.fetch` (added in [slicc-kernel#510](https://github.com/ai-ecoverse/slicc-kernel/issues/510)) still differs from Node's undici in two ways, so jsh keeps its own:
@@ -399,7 +399,17 @@ Deflate output is byte-identical to Node's (golden `zlib-node22`).
 
 Golden `zlib-brotli-node22` decodes streams Node 22's encoder made, across qualities and windows, in pieces down to 1 byte, corrupt and truncated. The decoder decodes Brotli's static dictionary (122,784 bytes) from its own Brotli encoding, on the first stream that uses it. In a bundle it is about 35 KB of code and 69 KB of base64 for the dictionary. It decodes at roughly 90–700 MB/s on Node, depending on the data; the native decoder is several times faster.
 
-**Not available:** Brotli compression (`brotliCompress`, `createBrotliCompress`, …) and Zstd throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`. Their callback forms (`brotliCompress(buf, cb)`, …) pass it to the callback.
+**Zstd decompression.** `zstdDecompress`, `zstdDecompressSync`, `createZstdDecompress` and `ZstdDecompress` are Node 22's own `zlib.js` code for them over a decoder ported from the one Node links (Facebook's C decoder, zstd 1.5.7, in `src/zstd`), loaded on the first zstd stream. A stream decodes as in Node:
+- the same output from each write, the same input consumed, and the same error at the same byte: zstd's message (`Data corruption detected`, …) with `ZSTD_error_*` as `code` and zstd's number as `errno`;
+- as in Node, input cut short is no error (the output so far), and the stream ends after the first frame, a skippable frame counting as one;
+- `params` (`ZSTD_d_windowLogMax`), `dictionary` (raw content or zstd's format, `Failed to load zstd dictionary`), `pledgedSrcSize`, `flush`, `finishFlush`, `chunkSize`, `maxOutputLength`, `info` and `rejectGarbageAfterEnd`, validated with Node's errors;
+- `flush()`, `reset()` (which drops the dictionary and the parameters, as in Node) and `close()`.
+
+Golden `zlib-zstd-node22` decodes frames Node 22's encoder made, across levels and windows, with checksums and dictionaries, in pieces down to 1 byte, corrupt and truncated; a differential fuzz against Node 22's own decoder found no difference in 16,000 cases. In a bundle the decoder is about 46 KB (17 KB gzipped). It decodes at roughly 400–500 MB/s on Node for data with few long matches, and faster for repetitive data; the native decoder is about five times faster on the former.
+
+`fetch` doesn't decode `zstd`, as undici in Node 22 doesn't: it doesn't ask for it, and a `zstd` body comes as it was sent.
+
+**Not available:** Brotli and Zstd compression (`brotliCompress`, `createBrotliCompress`, `zstdCompress`, `createZstdCompress`, …) throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`. Their callback forms (`brotliCompress(buf, cb)`, …) pass it to the callback.
 
 ## Streams and `Buffer`
 

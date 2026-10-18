@@ -185,9 +185,10 @@ const Process = { process: class extends EventEmitter {
     this.argv0 = argv[0] ?? 'node';
     this.env = createEnv(ctx.env);
     // Node 22.22.0's versions for what the runtime has or mirrors (zlib's
-    // output is zlib 1.3.1's; brotli's decoder is 1.1.0's, ported: with it, a
-    // client such as got asks for `br`). No zstd, openssl, nghttp2, …: code
-    // that checks for them would then try what isn't there.
+    // output is zlib 1.3.1's; the brotli and zstd decoders are 1.1.0's and
+    // 1.5.7's, ported: with them, a client such as got asks for `br` and
+    // `zstd`). No openssl, nghttp2, …: code that checks for them would then
+    // try what isn't there.
     this.versions = {
       node: NODE_SHIM_VERSION,
       brotli: '1.1.0',
@@ -200,6 +201,7 @@ const Process = { process: class extends EventEmitter {
       uv: '1.51.0',
       v8: '12.4.254.21-node.33',
       zlib: '1.3.1-470d3a2',
+      zstd: '1.5.7',
     };
     this.version = `v${NODE_SHIM_VERSION}`;
     this.release = {

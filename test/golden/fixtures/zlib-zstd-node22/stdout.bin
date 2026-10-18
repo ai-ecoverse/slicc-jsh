@@ -1,0 +1,406 @@
+process.versions.zstd: "1.5.7"
+sync text l-5 w10: "ok <3581>"
+sync text l-5 w17: "ok <3581>"
+sync text l-5 w23: "ok <3581>"
+sync text l1 w10: "ok <3581>"
+sync text l1 w17: "ok <3581>"
+sync text l1 w23: "ok <3581>"
+sync text l3 w10: "ok <3581>"
+sync text l3 w17: "ok <3581>"
+sync text l3 w23: "ok <3581>"
+sync text l9 w10: "ok <3581>"
+sync text l9 w17: "ok <3581>"
+sync text l9 w23: "ok <3581>"
+sync text l19 w10: "ok <3581>"
+sync text l19 w17: "ok <3581>"
+sync text l19 w23: "ok <3581>"
+sync json l-5 w10: "ok <3258>"
+sync json l-5 w17: "ok <3258>"
+sync json l-5 w23: "ok <3258>"
+sync json l1 w10: "ok <3258>"
+sync json l1 w17: "ok <3258>"
+sync json l1 w23: "ok <3258>"
+sync json l3 w10: "ok <3258>"
+sync json l3 w17: "ok <3258>"
+sync json l3 w23: "ok <3258>"
+sync json l9 w10: "ok <3258>"
+sync json l9 w17: "ok <3258>"
+sync json l9 w23: "ok <3258>"
+sync json l19 w10: "ok <3258>"
+sync json l19 w17: "ok <3258>"
+sync json l19 w23: "ok <3258>"
+sync utf8 l-5 w10: "ok <1365>"
+sync utf8 l-5 w17: "ok <1365>"
+sync utf8 l-5 w23: "ok <1365>"
+sync utf8 l1 w10: "ok <1365>"
+sync utf8 l1 w17: "ok <1365>"
+sync utf8 l1 w23: "ok <1365>"
+sync utf8 l3 w10: "ok <1365>"
+sync utf8 l3 w17: "ok <1365>"
+sync utf8 l3 w23: "ok <1365>"
+sync utf8 l9 w10: "ok <1365>"
+sync utf8 l9 w17: "ok <1365>"
+sync utf8 l9 w23: "ok <1365>"
+sync utf8 l19 w10: "ok <1365>"
+sync utf8 l19 w17: "ok <1365>"
+sync utf8 l19 w23: "ok <1365>"
+sync binary l-5 w10: "ok <800>"
+sync binary l-5 w17: "ok <800>"
+sync binary l-5 w23: "ok <800>"
+sync binary l1 w10: "ok <800>"
+sync binary l1 w17: "ok <800>"
+sync binary l1 w23: "ok <800>"
+sync binary l3 w10: "ok <800>"
+sync binary l3 w17: "ok <800>"
+sync binary l3 w23: "ok <800>"
+sync binary l9 w10: "ok <800>"
+sync binary l9 w17: "ok <800>"
+sync binary l9 w23: "ok <800>"
+sync binary l19 w10: "ok <800>"
+sync binary l19 w17: "ok <800>"
+sync binary l19 w23: "ok <800>"
+sync tiny l-5 w10: "ok <1>"
+sync tiny l-5 w17: "ok <1>"
+sync tiny l-5 w23: "ok <1>"
+sync tiny l1 w10: "ok <1>"
+sync tiny l1 w17: "ok <1>"
+sync tiny l1 w23: "ok <1>"
+sync tiny l3 w10: "ok <1>"
+sync tiny l3 w17: "ok <1>"
+sync tiny l3 w23: "ok <1>"
+sync tiny l9 w10: "ok <1>"
+sync tiny l9 w17: "ok <1>"
+sync tiny l9 w23: "ok <1>"
+sync tiny l19 w10: "ok <1>"
+sync tiny l19 w17: "ok <1>"
+sync tiny l19 w23: "ok <1>"
+sync empty l-5 w10: "ok <0>"
+sync empty l-5 w17: "ok <0>"
+sync empty l-5 w23: "ok <0>"
+sync empty l1 w10: "ok <0>"
+sync empty l1 w17: "ok <0>"
+sync empty l1 w23: "ok <0>"
+sync empty l3 w10: "ok <0>"
+sync empty l3 w17: "ok <0>"
+sync empty l3 w23: "ok <0>"
+sync empty l9 w10: "ok <0>"
+sync empty l9 w17: "ok <0>"
+sync empty l9 w23: "ok <0>"
+sync empty l19 w10: "ok <0>"
+sync empty l19 w17: "ok <0>"
+sync empty l19 w23: "ok <0>"
+sync text l22: "ok <3581>"
+sync text checksum: "ok <3581>"
+sync text no-size: "ok <3581>"
+sync medium l1 w17: "ok <303410>"
+sync medium l19 w23: "ok <303410>"
+sync medium checksum no-size: "ok <303410>"
+sync medium streamed w27: "ok <303410>"
+sync text streamed w28: "ok <3581>"
+sync json raw-dict: "ok <3258>"
+sync record 0 dict l1: "ok <170>"
+sync record 0 dict l19: "ok <170>"
+sync record 1 dict l1: "ok <469>"
+sync record 1 dict l19: "ok <469>"
+sync record 2 dict l1: "ok <381>"
+sync record 2 dict l19: "ok <381>"
+sync record 3 dict no-id: "ok <298>"
+two frames: the first only: <3581> crc 2355407883
+frame then garbage: <3258> crc 1454378242
+skippable then frame: <0> crc 0
+skippable 15, empty, then frame: <0> crc 0
+skippable only: <0> crc 0
+skippable, truncated: <0> crc 0
+empty frame twice: <0> crc 0
+window 2**28 over the default limit: THROW Error ZSTD_error_frameParameter_windowTooLarge 16 "Frame requires too much memory for decoding"
+window 2**28, windowLogMax 27: THROW Error ZSTD_error_frameParameter_windowTooLarge 16 "Frame requires too much memory for decoding"
+window 2**27, windowLogMax 26: THROW Error ZSTD_error_frameParameter_windowTooLarge 16 "Frame requires too much memory for decoding"
+window 2**23, windowLogMax 10: THROW Error ZSTD_error_frameParameter_windowTooLarge 16 "Frame requires too much memory for decoding"
+window 2**10, windowLogMax 10: <3581> crc 2355407883
+windowLogMax 0 is the default: THROW Error ZSTD_error_frameParameter_windowTooLarge 16 "Frame requires too much memory for decoding"
+windowLogMax 9: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Setting parameter failed"
+windowLogMax 32: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Setting parameter failed"
+windowLogMax 31: <3581> crc 2355407883
+windowLogMax true: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Setting parameter failed"
+windowLogMax 27.9: <303410> crc 3212153536
+dictionary frame without it: THROW Error ZSTD_error_dictionary_wrong 32 "Dictionary mismatch"
+dictionary frame, other dictionary: THROW Error ZSTD_error_dictionary_wrong 32 "Dictionary mismatch"
+no-id dictionary frame without it: THROW Error ZSTD_error_dictionary_corrupted 30 "Dictionary is corrupted"
+raw-dict frame without it: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+raw-dict frame, other dictionary: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+plain frame with a dictionary: <3258> crc 1454378242
+dictionary as Uint16Array: true
+dictionary as DataView: true
+dictionary as ArrayBuffer is ignored: THROW Error ZSTD_error_dictionary_wrong 32 "Dictionary mismatch"
+dictionary as string is ignored: <3581> crc 2355407883
+dictionary empty is none: <3581> crc 2355407883
+dictionary truncated: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Failed to load zstd dictionary"
+dictionary header only: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Failed to load zstd dictionary"
+dictionary byte 9 corrupt: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Failed to load zstd dictionary"
+dictionary byte 20 corrupt: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Failed to load zstd dictionary"
+dictionary byte 60 corrupt: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Failed to load zstd dictionary"
+dictionary byte 130 corrupt: <381> crc 77082255
+dictionary content corrupt: <381> crc 77082255
+string input: THROW Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+Uint8Array input: <3581> crc 2355407883
+ArrayBuffer input: <3581> crc 2355407883
+DataView input: <3581> crc 2355407883
+number input: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"buffer\" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer. Received type number (42)"
+null input: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"buffer\" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer. Received null"
+info: info <3581> crc 2355407883 engine ZstdDecompress bytesWritten 1493
+info, two frames: info <3581> crc 2355407883 engine ZstdDecompress bytesWritten 1493
+chunkSize 64: <3581> crc 2355407883
+chunkSize 63: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.chunkSize\" is out of range. It must be >= 64. Received 63"
+chunkSize NaN is the default: <3581> crc 2355407883
+maxOutputLength: THROW RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 100 bytes"
+maxOutputLength exact: <3581> crc 2355407883
+maxOutputLength one short: THROW RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 3580 bytes"
+maxOutputLength 0: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.maxOutputLength\" is out of range. It must be >= 1 and <= 9007199254740991. Received 0"
+flush 2: <3581> crc 2355407883
+flush 3: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.flush\" is out of range. It must be >= 0 and <= 2. Received 3"
+finishFlush -1: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.finishFlush\" is out of range. It must be >= 0 and <= 2. Received -1"
+finishFlush continue: <3581> crc 2355407883
+finishFlush flush, truncated: <0> crc 0
+params: encoder parameter: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Setting parameter failed"
+params: key 101: THROW RangeError ERR_ZSTD_INVALID_PARAM undefined "101 is not a valid zstd parameter"
+params: key -1: THROW RangeError ERR_ZSTD_INVALID_PARAM undefined "-1 is not a valid zstd parameter"
+params: key abc: THROW RangeError ERR_ZSTD_INVALID_PARAM undefined "abc is not a valid zstd parameter"
+params: key 100 twice: THROW RangeError ERR_ZSTD_INVALID_PARAM undefined "100.0 is not a valid zstd parameter"
+params: string value: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"options.params[key]\" property must be of type number. Received type string ('20')"
+params: null: <3581> crc 2355407883
+params: value -1 is unset: <3581> crc 2355407883
+params before chunkSize: THROW RangeError ERR_ZSTD_INVALID_PARAM undefined "200 is not a valid zstd parameter"
+pledgedSrcSize -1: THROW TypeError ERR_INVALID_ARG_VALUE undefined "pledgedSrcSize may not be negative"
+pledgedSrcSize -0.5: <3581> crc 2355407883
+pledgedSrcSize NaN: <3581> crc 2355407883
+pledgedSrcSize wrong: <3581> crc 2355407883
+pledgedSrcSize string: <3581> crc 2355407883
+pledgedSrcSize -1 before params: THROW TypeError ERR_INVALID_ARG_VALUE undefined "pledgedSrcSize may not be negative"
+encoding option ignored: <3581> crc 2355407883
+empty: <0> crc 0
+not zstd: THROW Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+magic only: <0> crc 0
+reserved bit: THROW Error ZSTD_error_frameParameter_unsupported 14 "Unsupported frame parameter"
+checksum wrong: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+checksum truncated: <3581> crc 2355407883
+text l3 w17 truncated to 1: <0> crc 0
+text l3 w17 truncated to 5: <0> crc 0
+text l3 w17 truncated to 6: <0> crc 0
+text l3 w17 truncated to 746: <0> crc 0
+text l3 w17 truncated to 1492: <0> crc 0
+text l3 w17 bit 0 of byte 0 flipped: THROW Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+text l3 w17 bit 1 of byte 454 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+text l3 w17 bit 2 of byte 908 flipped: <3581> crc 3168645329
+text l3 w17 bit 3 of byte 1362 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+text l3 w17 bit 4 of byte 323 flipped: <3581> crc 1438853211
+text l3 w17 bit 5 of byte 777 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+text l3 w17 bit 6 of byte 1231 flipped: <3581> crc 3452853191
+text l3 w17 bit 7 of byte 192 flipped: <3581> crc 2876939475
+text l3 w17 bit 0 of byte 646 flipped: <3581> crc 3228201529
+text l3 w17 bit 1 of byte 1100 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+text l3 w17 bit 2 of byte 61 flipped: <3581> crc 435948539
+text l3 w17 bit 3 of byte 515 flipped: <3581> crc 2213360905
+text l3 w17 bit 4 of byte 969 flipped: <3581> crc 864910488
+text l3 w17 bit 5 of byte 1423 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+text l3 w17 bit 6 of byte 384 flipped: <3581> crc 4133801372
+text l3 w17 bit 7 of byte 838 flipped: <3581> crc 3654545374
+text l3 w17 bit 0 of byte 1292 flipped: <3581> crc 4235298353
+text l3 w17 bit 1 of byte 253 flipped: <3581> crc 2463764607
+text l3 w17 bit 2 of byte 707 flipped: <3581> crc 3090697750
+text l3 w17 bit 3 of byte 1161 flipped: <3581> crc 3800365832
+text l3 w17 bit 4 of byte 122 flipped: <3581> crc 254732416
+text l3 w17 bit 5 of byte 576 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+text l3 w17 bit 6 of byte 1030 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+text l3 w17 bit 7 of byte 1484 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 truncated to 1: <0> crc 0
+json l19 w23 truncated to 5: <0> crc 0
+json l19 w23 truncated to 6: <0> crc 0
+json l19 w23 truncated to 319: <0> crc 0
+json l19 w23 truncated to 638: <0> crc 0
+json l19 w23 bit 0 of byte 0 flipped: THROW Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+json l19 w23 bit 1 of byte 251 flipped: <3258> crc 2630921110
+json l19 w23 bit 2 of byte 502 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 bit 3 of byte 114 flipped: <3258> crc 1713372645
+json l19 w23 bit 4 of byte 365 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 bit 5 of byte 616 flipped: <3258> crc 947560270
+json l19 w23 bit 6 of byte 228 flipped: <3258> crc 1079339944
+json l19 w23 bit 7 of byte 479 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 bit 0 of byte 91 flipped: <3258> crc 1960737258
+json l19 w23 bit 1 of byte 342 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 bit 2 of byte 593 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 bit 3 of byte 205 flipped: <3258> crc 1396660172
+json l19 w23 bit 4 of byte 456 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 bit 5 of byte 68 flipped: <3258> crc 1583229842
+json l19 w23 bit 6 of byte 319 flipped: <3258> crc 3991294648
+json l19 w23 bit 7 of byte 570 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 bit 0 of byte 182 flipped: <3258> crc 1694959784
+json l19 w23 bit 1 of byte 433 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 bit 2 of byte 45 flipped: <3258> crc 1107985264
+json l19 w23 bit 3 of byte 296 flipped: <3258> crc 700530909
+json l19 w23 bit 4 of byte 547 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+json l19 w23 bit 5 of byte 159 flipped: <3258> crc 1721566400
+json l19 w23 bit 6 of byte 410 flipped: <3258> crc 2907593761
+json l19 w23 bit 7 of byte 22 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+binary l1 w10 truncated to 1: <0> crc 0
+binary l1 w10 truncated to 5: <0> crc 0
+binary l1 w10 truncated to 6: <0> crc 0
+binary l1 w10 truncated to 405: <395> crc 970674618
+binary l1 w10 truncated to 809: <799> crc 1519601569
+binary l1 w10 bit 0 of byte 0 flipped: THROW Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+binary l1 w10 bit 1 of byte 629 flipped: <800> crc 2369513328
+binary l1 w10 bit 2 of byte 448 flipped: <800> crc 1620166092
+binary l1 w10 bit 3 of byte 267 flipped: <800> crc 1034736360
+binary l1 w10 bit 4 of byte 86 flipped: <800> crc 1134905248
+binary l1 w10 bit 5 of byte 715 flipped: <800> crc 935105828
+binary l1 w10 bit 6 of byte 534 flipped: <800> crc 3463200457
+binary l1 w10 bit 7 of byte 353 flipped: <800> crc 2533319021
+binary l1 w10 bit 0 of byte 172 flipped: <800> crc 1347071997
+binary l1 w10 bit 1 of byte 801 flipped: <800> crc 1662103785
+binary l1 w10 bit 2 of byte 620 flipped: <800> crc 3135466077
+binary l1 w10 bit 3 of byte 439 flipped: <800> crc 48680929
+binary l1 w10 bit 4 of byte 258 flipped: <800> crc 2014945772
+binary l1 w10 bit 5 of byte 77 flipped: <800> crc 3999056509
+binary l1 w10 bit 6 of byte 706 flipped: <800> crc 3568676781
+binary l1 w10 bit 7 of byte 525 flipped: <800> crc 1170539528
+binary l1 w10 bit 0 of byte 344 flipped: <800> crc 1032989141
+binary l1 w10 bit 1 of byte 163 flipped: <800> crc 1915336768
+binary l1 w10 bit 2 of byte 792 flipped: <800> crc 1179602793
+binary l1 w10 bit 3 of byte 611 flipped: <800> crc 3477370317
+binary l1 w10 bit 4 of byte 430 flipped: <800> crc 3297622576
+binary l1 w10 bit 5 of byte 249 flipped: <800> crc 3721386146
+binary l1 w10 bit 6 of byte 68 flipped: <800> crc 1623418344
+binary l1 w10 bit 7 of byte 697 flipped: <800> crc 3097690960
+utf8 l-5 w17 truncated to 1: <0> crc 0
+utf8 l-5 w17 truncated to 5: <0> crc 0
+utf8 l-5 w17 truncated to 6: <0> crc 0
+utf8 l-5 w17 truncated to 55: <0> crc 0
+utf8 l-5 w17 truncated to 109: <0> crc 0
+utf8 l-5 w17 bit 0 of byte 0 flipped: THROW Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+utf8 l-5 w17 bit 1 of byte 109 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+utf8 l-5 w17 bit 2 of byte 108 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+utf8 l-5 w17 bit 3 of byte 107 flipped: <1365> crc 759815097
+utf8 l-5 w17 bit 4 of byte 106 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+utf8 l-5 w17 bit 5 of byte 105 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+utf8 l-5 w17 bit 6 of byte 104 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+utf8 l-5 w17 bit 7 of byte 103 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+utf8 l-5 w17 bit 0 of byte 102 flipped: <1365> crc 1930124145
+utf8 l-5 w17 bit 1 of byte 101 flipped: <1365> crc 2753540473
+utf8 l-5 w17 bit 2 of byte 100 flipped: <1365> crc 3087435977
+utf8 l-5 w17 bit 3 of byte 99 flipped: <1365> crc 4119649250
+utf8 l-5 w17 bit 4 of byte 98 flipped: <1365> crc 1998535557
+utf8 l-5 w17 bit 5 of byte 97 flipped: <1365> crc 180810738
+utf8 l-5 w17 bit 6 of byte 96 flipped: <1365> crc 1301253917
+utf8 l-5 w17 bit 7 of byte 95 flipped: <1365> crc 745202231
+utf8 l-5 w17 bit 0 of byte 94 flipped: <1365> crc 104363408
+utf8 l-5 w17 bit 1 of byte 93 flipped: <1365> crc 3516888248
+utf8 l-5 w17 bit 2 of byte 92 flipped: <1365> crc 3143330638
+utf8 l-5 w17 bit 3 of byte 91 flipped: <1365> crc 305286434
+utf8 l-5 w17 bit 4 of byte 90 flipped: <1365> crc 2607334792
+utf8 l-5 w17 bit 5 of byte 89 flipped: <1365> crc 4135380340
+utf8 l-5 w17 bit 6 of byte 88 flipped: <1365> crc 1170257691
+utf8 l-5 w17 bit 7 of byte 87 flipped: <1365> crc 634138732
+medium l19 w23 truncated to 1: <0> crc 0
+medium l19 w23 truncated to 5: <0> crc 0
+medium l19 w23 truncated to 6: <0> crc 0
+medium l19 w23 truncated to 2615: <0> crc 0
+medium l19 w23 truncated to 5230: <262144> crc 1464773147
+medium l19 w23 bit 0 of byte 0 flipped: THROW Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+medium l19 w23 bit 1 of byte 2688 flipped: <303410> crc 2715673604
+medium l19 w23 bit 2 of byte 145 flipped: <303410> crc 1566462211
+medium l19 w23 bit 3 of byte 2833 flipped: <303410> crc 2562411518
+medium l19 w23 bit 4 of byte 290 flipped: <303410> crc 1025445022
+medium l19 w23 bit 5 of byte 2978 flipped: <303410> crc 3587564786
+medium l19 w23 bit 6 of byte 435 flipped: <303410> crc 2439264620
+medium l19 w23 bit 7 of byte 3123 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+medium l19 w23 bit 0 of byte 580 flipped: <303410> crc 2207614901
+medium l19 w23 bit 1 of byte 3268 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+medium l19 w23 bit 2 of byte 725 flipped: <303410> crc 2644396684
+medium l19 w23 bit 3 of byte 3413 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+medium l19 w23 bit 4 of byte 870 flipped: <303410> crc 3029101059
+medium l19 w23 bit 5 of byte 3558 flipped: <303410> crc 1888711837
+medium l19 w23 bit 6 of byte 1015 flipped: <303410> crc 1352464830
+medium l19 w23 bit 7 of byte 3703 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+medium l19 w23 bit 0 of byte 1160 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+medium l19 w23 bit 1 of byte 3848 flipped: <303410> crc 3916379189
+medium l19 w23 bit 2 of byte 1305 flipped: <303410> crc 4106808594
+medium l19 w23 bit 3 of byte 3993 flipped: <303410> crc 4184858648
+medium l19 w23 bit 4 of byte 1450 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+medium l19 w23 bit 5 of byte 4138 flipped: <303410> crc 1131274547
+medium l19 w23 bit 6 of byte 1595 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+medium l19 w23 bit 7 of byte 4283 flipped: <303410> crc 1194821895
+record 1 dict l19 truncated to 1: <0> crc 0
+record 1 dict l19 truncated to 5: <0> crc 0
+record 1 dict l19 truncated to 6: <0> crc 0
+record 1 dict l19 truncated to 49: <0> crc 0
+record 1 dict l19 truncated to 97: <469> crc 3095507034
+record 1 dict l19 bit 0 of byte 0 flipped: THROW Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+record 1 dict l19 bit 1 of byte 79 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+record 1 dict l19 bit 2 of byte 60 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+record 1 dict l19 bit 3 of byte 41 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 4 of byte 22 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 5 of byte 3 flipped: THROW Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+record 1 dict l19 bit 6 of byte 82 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+record 1 dict l19 bit 7 of byte 63 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 0 of byte 44 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 1 of byte 25 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 2 of byte 6 flipped: THROW Error ZSTD_error_dictionary_wrong 32 "Dictionary mismatch"
+record 1 dict l19 bit 3 of byte 85 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+record 1 dict l19 bit 4 of byte 66 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 5 of byte 47 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 6 of byte 28 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 7 of byte 9 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+record 1 dict l19 bit 0 of byte 88 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 1 of byte 69 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 2 of byte 50 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+record 1 dict l19 bit 3 of byte 31 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 4 of byte 12 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+record 1 dict l19 bit 5 of byte 91 flipped: THROW Error ZSTD_error_corruption_detected 20 "Data corruption detected"
+record 1 dict l19 bit 6 of byte 72 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+record 1 dict l19 bit 7 of byte 53 flipped: THROW Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+ZstdDecompress without new: THROW TypeError undefined undefined "Class constructor ZstdDecompress cannot be invoked without 'new'"
+createZstdDecompress: [true,true,false,0,16384,"undefined",2]
+names: ["ZstdDecompress","function","function","value","value"]
+stream option errors: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.chunkSize\" is out of range. It must be >= 64. Received 10"
+stream params error: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Setting parameter failed"
+stream dictionary error: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Failed to load zstd dictionary"
+callback: <3581> crc 2355407883
+callback with options: info <3581> crc 2355407883 engine ZstdDecompress bytesWritten 1493
+callback, dictionary: true
+callback, Uint16Array input: <0> crc 0
+callback, corrupt: Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor"
+callback, checksum wrong: Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum"
+callback, truncated: <0> crc 0
+callback, empty: <0> crc 0
+callback, maxOutputLength: RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 1000 bytes"
+callback missing: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"callback\" argument must be of type function. Received undefined"
+callback, param error throws: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Setting parameter failed"
+promisify: true
+stream, 1-byte writes: written 1 ok, written 2 ok, written 3 ok, written 4 ok, written 5 ok, written 6 ok, written 7 ok, written 8 ok, written 9 ok, written 10 ok, written 11 ok, written 12 ok, written 13 ok, written 14 ok, written 15 ok, written 16 ok, written 17 ok, written 18 ok, written 19 ok, written 20 ok, written 21 ok, written 22 ok, written 23 ok, written 24 ok, written 25 ok, written 26 ok, written 27 ok, written 28 ok, written 29 ok, written 30 ok, written 31 ok, written 32 ok, written 33 ok, written 34 ok, written 35 ok, written 36 ok, written 37 ok, written 38 ok, written 39 ok, written 40 ok, written 41 ok, written 42 ok, written 43 ok, written 44 ok, written 45 ok, written 46 ok, written 47 ok, written 48 ok, written 49 ok, written 50 ok, written 51 ok, written 52 ok, written 53 ok, written 54 ok, written 55 ok, written 56 ok, written 57 ok, written 58 ok, written 59 ok, written 60 ok, written 61 ok, written 62 ok, written 63 ok, written 64 ok, written 65 ok, written 66 ok, written 67 ok, written 68 ok, written 69 ok, written 70 ok, written 71 ok, written 72 ok, written 73 ok, written 74 ok, written 75 ok, written 76 ok, written 77 ok, written 78 ok, written 79 ok, written 80 ok, written 81 ok, written 82 ok, written 83 ok, written 84 ok, written 85 ok, written 86 ok, written 87 ok, written 88 ok, written 89 ok, written 90 ok, written 91 ok, written 92 ok, written 93 ok, written 94 ok, written 95 ok, written 96 ok, written 97 ok, written 98 ok, written 99 ok, written 100 ok, written 101 ok, written 102 ok, written 103 ok, written 104 ok, written 105 ok, written 106 ok, written 107 ok, written 108 ok, written 109 ok, written 110 ok, written 111 ok, written 112 ok, written 113 ok, written 114 ok, written 115 ok, written 116 ok, written 117 ok, written 118 ok, written 119 ok, written 120 ok, end, close crc 0 bytesWritten 120
+stream, 1-byte writes, whole frame with checksum: written 1 ok, written 2 ok, written 3 ok, written 4 ok, written 5 ok, written 6 ok, written 7 ok, written 8 ok, written 9 ok, written 10 ok, written 11 ok, written 12 ok, written 13 ok, written 14 ok, written 15 ok, written 16 ok, written 17 ok, written 18 ok, written 19 ok, written 20 ok, written 21 ok, written 22 ok, written 23 ok, written 24 ok, written 25 ok, written 26 ok, written 27 ok, written 28 ok, written 29 ok, written 30 ok, written 31 ok, written 32 ok, written 33 ok, written 34 ok, written 35 ok, written 36 ok, written 37 ok, written 38 ok, written 39 ok, written 40 ok, written 41 ok, written 42 ok, written 43 ok, written 44 ok, written 45 ok, written 46 ok, written 47 ok, written 48 ok, written 49 ok, written 50 ok, written 51 ok, written 52 ok, written 53 ok, written 54 ok, written 55 ok, written 56 ok, written 57 ok, written 58 ok, written 59 ok, written 60 ok, written 61 ok, written 62 ok, written 63 ok, written 64 ok, written 65 ok, written 66 ok, written 67 ok, written 68 ok, written 69 ok, written 70 ok, written 71 ok, written 72 ok, written 73 ok, written 74 ok, written 75 ok, written 76 ok, written 77 ok, written 78 ok, written 79 ok, written 80 ok, written 81 ok, written 82 ok, written 83 ok, written 84 ok, written 85 ok, written 86 ok, written 87 ok, written 88 ok, written 89 ok, written 90 ok, written 91 ok, written 92 ok, written 93 ok, written 94 ok, written 95 ok, written 96 ok, written 97 ok, written 98 ok, written 99 ok, written 100 ok, written 101 ok, written 102 ok, written 103 ok, written 104 ok, written 105 ok, written 106 ok, written 107 ok, written 108 ok, written 109 ok, written 110 ok, written 111 ok, written 112 ok, written 113 ok, written 114 ok, written 115 ok, written 116 ok, written 117 ok, written 118 ok, written 119 ok, written 120 ok, written 121 ok, written 122 ok, written 123 ok, written 124 ok, written 125 ok, written 126 ok, written 127 ok, written 128 ok, written 129 ok, written 130 ok, written 131 ok, written 132 ok, written 133 ok, written 134 ok, written 135 ok, written 136 ok, written 137 ok, written 138 ok, written 139 ok, written 140 ok, written 141 ok, written 142 ok, written 143 ok, written 144 ok, written 145 ok, written 146 ok, written 147 ok, written 148 ok, written 149 ok, written 150 ok, written 151 ok, written 152 ok, written 153 ok, written 154 ok, written 155 ok, written 156 ok, written 157 ok, written 158 ok, written 159 ok, written 160 ok, written 161 ok, written 162 ok, written 163 ok, written 164 ok, written 165 ok, written 166 ok, written 167 ok, written 168 ok, written 169 ok, written 170 ok, written 171 ok, written 172 ok, written 173 ok, written 174 ok, written 175 ok, written 176 ok, written 177 ok, written 178 ok, written 179 ok, written 180 ok, written 181 ok, written 182 ok, written 183 ok, written 184 ok, written 185 ok, written 186 ok, written 187 ok, written 188 ok, written 189 ok, written 190 ok, written 191 ok, written 192 ok, written 193 ok, written 194 ok, written 195 ok, written 196 ok, written 197 ok, written 198 ok, written 199 ok, written 200 ok, written 201 ok, written 202 ok, written 203 ok, written 204 ok, written 205 ok, written 206 ok, written 207 ok, written 208 ok, written 209 ok, written 210 ok, written 211 ok, written 212 ok, written 213 ok, written 214 ok, written 215 ok, written 216 ok, written 217 ok, written 218 ok, written 219 ok, written 220 ok, written 221 ok, written 222 ok, written 223 ok, written 224 ok, written 225 ok, written 226 ok, written 227 ok, written 228 ok, written 229 ok, written 230 ok, written 231 ok, written 232 ok, written 233 ok, written 234 ok, written 235 ok, written 236 ok, written 237 ok, written 238 ok, written 239 ok, written 240 ok, written 241 ok, written 242 ok, written 243 ok, written 244 ok, written 245 ok, written 246 ok, written 247 ok, written 248 ok, written 249 ok, written 250 ok, written 251 ok, written 252 ok, written 253 ok, written 254 ok, written 255 ok, written 256 ok, written 257 ok, written 258 ok, written 259 ok, written 260 ok, written 261 ok, written 262 ok, written 263 ok, written 264 ok, written 265 ok, written 266 ok, written 267 ok, written 268 ok, written 269 ok, written 270 ok, written 271 ok, written 272 ok, written 273 ok, written 274 ok, written 275 ok, written 276 ok, written 277 ok, written 278 ok, written 279 ok, written 280 ok, written 281 ok, written 282 ok, written 283 ok, written 284 ok, written 285 ok, written 286 ok, written 287 ok, written 288 ok, written 289 ok, written 290 ok, written 291 ok, written 292 ok, written 293 ok, written 294 ok, written 295 ok, written 296 ok, written 297 ok, written 298 ok, written 299 ok, written 300 ok, written 301 ok, written 302 ok, written 303 ok, written 304 ok, written 305 ok, written 306 ok, written 307 ok, written 308 ok, written 309 ok, written 310 ok, written 311 ok, written 312 ok, written 313 ok, written 314 ok, written 315 ok, written 316 ok, written 317 ok, written 318 ok, written 319 ok, written 320 ok, written 321 ok, written 322 ok, written 323 ok, written 324 ok, written 325 ok, written 326 ok, written 327 ok, written 328 ok, written 329 ok, written 330 ok, written 331 ok, written 332 ok, written 333 ok, written 334 ok, written 335 ok, written 336 ok, written 337 ok, written 338 ok, written 339 ok, written 340 ok, written 341 ok, written 342 ok, written 343 ok, written 344 ok, written 345 ok, written 346 ok, written 347 ok, written 348 ok, written 349 ok, written 350 ok, written 351 ok, written 352 ok, written 353 ok, written 354 ok, written 355 ok, written 356 ok, written 357 ok, written 358 ok, written 359 ok, written 360 ok, written 361 ok, written 362 ok, written 363 ok, written 364 ok, written 365 ok, written 366 ok, written 367 ok, written 368 ok, written 369 ok, written 370 ok, written 371 ok, written 372 ok, written 373 ok, written 374 ok, written 375 ok, written 376 ok, written 377 ok, written 378 ok, written 379 ok, written 380 ok, written 381 ok, written 382 ok, written 383 ok, written 384 ok, written 385 ok, written 386 ok, written 387 ok, written 388 ok, written 389 ok, written 390 ok, written 391 ok, written 392 ok, written 393 ok, written 394 ok, written 395 ok, written 396 ok, written 397 ok, written 398 ok, written 399 ok, written 400 ok, written 401 ok, written 402 ok, written 403 ok, written 404 ok, written 405 ok, written 406 ok, written 407 ok, written 408 ok, written 409 ok, written 410 ok, written 411 ok, written 412 ok, written 413 ok, written 414 ok, written 415 ok, written 416 ok, written 417 ok, written 418 ok, written 419 ok, written 420 ok, written 421 ok, written 422 ok, written 423 ok, written 424 ok, written 425 ok, written 426 ok, written 427 ok, written 428 ok, written 429 ok, written 430 ok, written 431 ok, written 432 ok, written 433 ok, written 434 ok, written 435 ok, written 436 ok, written 437 ok, written 438 ok, written 439 ok, written 440 ok, written 441 ok, written 442 ok, written 443 ok, written 444 ok, written 445 ok, written 446 ok, written 447 ok, written 448 ok, written 449 ok, written 450 ok, written 451 ok, written 452 ok, written 453 ok, written 454 ok, written 455 ok, written 456 ok, written 457 ok, written 458 ok, written 459 ok, written 460 ok, written 461 ok, written 462 ok, written 463 ok, written 464 ok, written 465 ok, written 466 ok, written 467 ok, written 468 ok, written 469 ok, written 470 ok, written 471 ok, written 472 ok, written 473 ok, written 474 ok, written 475 ok, written 476 ok, written 477 ok, written 478 ok, written 479 ok, written 480 ok, written 481 ok, written 482 ok, written 483 ok, written 484 ok, written 485 ok, written 486 ok, written 487 ok, written 488 ok, written 489 ok, written 490 ok, written 491 ok, written 492 ok, written 493 ok, written 494 ok, written 495 ok, written 496 ok, written 497 ok, written 498 ok, written 499 ok, written 500 ok, written 501 ok, written 502 ok, written 503 ok, written 504 ok, written 505 ok, written 506 ok, written 507 ok, written 508 ok, written 509 ok, written 510 ok, written 511 ok, written 512 ok, written 513 ok, written 514 ok, written 515 ok, written 516 ok, written 517 ok, written 518 ok, written 519 ok, written 520 ok, written 521 ok, written 522 ok, written 523 ok, written 524 ok, written 525 ok, written 526 ok, written 527 ok, written 528 ok, written 529 ok, written 530 ok, written 531 ok, written 532 ok, written 533 ok, written 534 ok, written 535 ok, written 536 ok, written 537 ok, written 538 ok, written 539 ok, written 540 ok, written 541 ok, written 542 ok, written 543 ok, written 544 ok, written 545 ok, written 546 ok, written 547 ok, written 548 ok, written 549 ok, written 550 ok, written 551 ok, written 552 ok, written 553 ok, written 554 ok, written 555 ok, written 556 ok, written 557 ok, written 558 ok, written 559 ok, written 560 ok, written 561 ok, written 562 ok, written 563 ok, written 564 ok, written 565 ok, written 566 ok, written 567 ok, written 568 ok, written 569 ok, written 570 ok, written 571 ok, written 572 ok, written 573 ok, written 574 ok, written 575 ok, written 576 ok, written 577 ok, written 578 ok, written 579 ok, written 580 ok, written 581 ok, written 582 ok, written 583 ok, written 584 ok, written 585 ok, written 586 ok, written 587 ok, written 588 ok, written 589 ok, written 590 ok, written 591 ok, written 592 ok, written 593 ok, written 594 ok, written 595 ok, written 596 ok, written 597 ok, written 598 ok, written 599 ok, written 600 ok, written 601 ok, written 602 ok, written 603 ok, written 604 ok, written 605 ok, written 606 ok, written 607 ok, written 608 ok, written 609 ok, written 610 ok, written 611 ok, written 612 ok, written 613 ok, written 614 ok, written 615 ok, written 616 ok, written 617 ok, written 618 ok, written 619 ok, written 620 ok, written 621 ok, written 622 ok, written 623 ok, written 624 ok, written 625 ok, written 626 ok, written 627 ok, written 628 ok, written 629 ok, written 630 ok, written 631 ok, written 632 ok, written 633 ok, written 634 ok, written 635 ok, written 636 ok, written 637 ok, written 638 ok, written 639 ok, written 640 ok, written 641 ok, written 642 ok, written 643 ok, written 644 ok, written 645 ok, written 646 ok, written 647 ok, written 648 ok, written 649 ok, written 650 ok, written 651 ok, written 652 ok, written 653 ok, written 654 ok, written 655 ok, written 656 ok, written 657 ok, written 658 ok, written 659 ok, written 660 ok, written 661 ok, written 662 ok, written 663 ok, written 664 ok, written 665 ok, written 666 ok, written 667 ok, written 668 ok, written 669 ok, written 670 ok, written 671 ok, written 672 ok, written 673 ok, written 674 ok, written 675 ok, written 676 ok, written 677 ok, written 678 ok, written 679 ok, written 680 ok, written 681 ok, written 682 ok, written 683 ok, written 684 ok, written 685 ok, written 686 ok, written 687 ok, written 688 ok, written 689 ok, written 690 ok, written 691 ok, written 692 ok, written 693 ok, written 694 ok, written 695 ok, written 696 ok, written 697 ok, written 698 ok, written 699 ok, written 700 ok, written 701 ok, written 702 ok, written 703 ok, written 704 ok, written 705 ok, written 706 ok, written 707 ok, written 708 ok, written 709 ok, written 710 ok, written 711 ok, written 712 ok, written 713 ok, written 714 ok, written 715 ok, written 716 ok, written 717 ok, written 718 ok, written 719 ok, written 720 ok, written 721 ok, written 722 ok, written 723 ok, written 724 ok, written 725 ok, written 726 ok, written 727 ok, written 728 ok, written 729 ok, written 730 ok, written 731 ok, written 732 ok, written 733 ok, written 734 ok, written 735 ok, written 736 ok, written 737 ok, written 738 ok, written 739 ok, written 740 ok, written 741 ok, written 742 ok, written 743 ok, written 744 ok, written 745 ok, written 746 ok, written 747 ok, written 748 ok, written 749 ok, written 750 ok, written 751 ok, written 752 ok, written 753 ok, written 754 ok, written 755 ok, written 756 ok, written 757 ok, written 758 ok, written 759 ok, written 760 ok, written 761 ok, written 762 ok, written 763 ok, written 764 ok, written 765 ok, written 766 ok, written 767 ok, written 768 ok, written 769 ok, written 770 ok, written 771 ok, written 772 ok, written 773 ok, written 774 ok, written 775 ok, written 776 ok, written 777 ok, written 778 ok, written 779 ok, written 780 ok, written 781 ok, written 782 ok, written 783 ok, written 784 ok, written 785 ok, written 786 ok, written 787 ok, written 788 ok, written 789 ok, written 790 ok, written 791 ok, written 792 ok, written 793 ok, written 794 ok, written 795 ok, written 796 ok, written 797 ok, written 798 ok, written 799 ok, written 800 ok, written 801 ok, written 802 ok, written 803 ok, written 804 ok, written 805 ok, written 806 ok, written 807 ok, written 808 ok, written 809 ok, written 810 ok, written 811 ok, written 812 ok, written 813 ok, written 814 ok, written 815 ok, written 816 ok, written 817 ok, written 818 ok, written 819 ok, written 820 ok, written 821 ok, written 822 ok, written 823 ok, written 824 ok, written 825 ok, written 826 ok, written 827 ok, written 828 ok, written 829 ok, written 830 ok, written 831 ok, written 832 ok, written 833 ok, written 834 ok, written 835 ok, written 836 ok, written 837 ok, written 838 ok, written 839 ok, written 840 ok, written 841 ok, written 842 ok, written 843 ok, written 844 ok, written 845 ok, written 846 ok, written 847 ok, written 848 ok, written 849 ok, written 850 ok, written 851 ok, written 852 ok, written 853 ok, written 854 ok, written 855 ok, written 856 ok, written 857 ok, written 858 ok, written 859 ok, written 860 ok, written 861 ok, written 862 ok, written 863 ok, written 864 ok, written 865 ok, written 866 ok, written 867 ok, written 868 ok, written 869 ok, written 870 ok, written 871 ok, written 872 ok, written 873 ok, written 874 ok, written 875 ok, written 876 ok, written 877 ok, written 878 ok, written 879 ok, written 880 ok, written 881 ok, written 882 ok, written 883 ok, written 884 ok, written 885 ok, written 886 ok, written 887 ok, written 888 ok, written 889 ok, written 890 ok, written 891 ok, written 892 ok, written 893 ok, written 894 ok, written 895 ok, written 896 ok, written 897 ok, written 898 ok, written 899 ok, written 900 ok, written 901 ok, written 902 ok, written 903 ok, written 904 ok, written 905 ok, written 906 ok, written 907 ok, written 908 ok, written 909 ok, written 910 ok, written 911 ok, written 912 ok, written 913 ok, written 914 ok, written 915 ok, written 916 ok, written 917 ok, written 918 ok, written 919 ok, written 920 ok, written 921 ok, written 922 ok, written 923 ok, written 924 ok, written 925 ok, written 926 ok, written 927 ok, written 928 ok, written 929 ok, written 930 ok, written 931 ok, written 932 ok, written 933 ok, written 934 ok, written 935 ok, written 936 ok, written 937 ok, written 938 ok, written 939 ok, written 940 ok, written 941 ok, written 942 ok, written 943 ok, written 944 ok, written 945 ok, written 946 ok, written 947 ok, written 948 ok, written 949 ok, written 950 ok, written 951 ok, written 952 ok, written 953 ok, written 954 ok, written 955 ok, written 956 ok, written 957 ok, written 958 ok, written 959 ok, written 960 ok, written 961 ok, written 962 ok, written 963 ok, written 964 ok, written 965 ok, written 966 ok, written 967 ok, written 968 ok, written 969 ok, written 970 ok, written 971 ok, written 972 ok, written 973 ok, written 974 ok, written 975 ok, written 976 ok, written 977 ok, written 978 ok, written 979 ok, written 980 ok, written 981 ok, written 982 ok, written 983 ok, written 984 ok, written 985 ok, written 986 ok, written 987 ok, written 988 ok, written 989 ok, written 990 ok, written 991 ok, written 992 ok, written 993 ok, written 994 ok, written 995 ok, written 996 ok, written 997 ok, written 998 ok, written 999 ok, written 1000 ok, written 1001 ok, written 1002 ok, written 1003 ok, written 1004 ok, written 1005 ok, written 1006 ok, written 1007 ok, written 1008 ok, written 1009 ok, written 1010 ok, written 1011 ok, written 1012 ok, written 1013 ok, written 1014 ok, written 1015 ok, written 1016 ok, written 1017 ok, written 1018 ok, written 1019 ok, written 1020 ok, written 1021 ok, written 1022 ok, written 1023 ok, written 1024 ok, written 1025 ok, written 1026 ok, written 1027 ok, written 1028 ok, written 1029 ok, written 1030 ok, written 1031 ok, written 1032 ok, written 1033 ok, written 1034 ok, written 1035 ok, written 1036 ok, written 1037 ok, written 1038 ok, written 1039 ok, written 1040 ok, written 1041 ok, written 1042 ok, written 1043 ok, written 1044 ok, written 1045 ok, written 1046 ok, written 1047 ok, written 1048 ok, written 1049 ok, written 1050 ok, written 1051 ok, written 1052 ok, written 1053 ok, written 1054 ok, written 1055 ok, written 1056 ok, written 1057 ok, written 1058 ok, written 1059 ok, written 1060 ok, written 1061 ok, written 1062 ok, written 1063 ok, written 1064 ok, written 1065 ok, written 1066 ok, written 1067 ok, written 1068 ok, written 1069 ok, written 1070 ok, written 1071 ok, written 1072 ok, written 1073 ok, written 1074 ok, written 1075 ok, written 1076 ok, written 1077 ok, written 1078 ok, written 1079 ok, written 1080 ok, written 1081 ok, written 1082 ok, written 1083 ok, written 1084 ok, written 1085 ok, written 1086 ok, written 1087 ok, written 1088 ok, written 1089 ok, written 1090 ok, written 1091 ok, written 1092 ok, written 1093 ok, written 1094 ok, written 1095 ok, written 1096 ok, written 1097 ok, written 1098 ok, written 1099 ok, written 1100 ok, written 1101 ok, written 1102 ok, written 1103 ok, written 1104 ok, written 1105 ok, written 1106 ok, written 1107 ok, written 1108 ok, written 1109 ok, written 1110 ok, written 1111 ok, written 1112 ok, written 1113 ok, written 1114 ok, written 1115 ok, written 1116 ok, written 1117 ok, written 1118 ok, written 1119 ok, written 1120 ok, written 1121 ok, written 1122 ok, written 1123 ok, written 1124 ok, written 1125 ok, written 1126 ok, written 1127 ok, written 1128 ok, written 1129 ok, written 1130 ok, written 1131 ok, written 1132 ok, written 1133 ok, written 1134 ok, written 1135 ok, written 1136 ok, written 1137 ok, written 1138 ok, written 1139 ok, written 1140 ok, written 1141 ok, written 1142 ok, written 1143 ok, written 1144 ok, written 1145 ok, written 1146 ok, written 1147 ok, written 1148 ok, written 1149 ok, written 1150 ok, written 1151 ok, written 1152 ok, written 1153 ok, written 1154 ok, written 1155 ok, written 1156 ok, written 1157 ok, written 1158 ok, written 1159 ok, written 1160 ok, written 1161 ok, written 1162 ok, written 1163 ok, written 1164 ok, written 1165 ok, written 1166 ok, written 1167 ok, written 1168 ok, written 1169 ok, written 1170 ok, written 1171 ok, written 1172 ok, written 1173 ok, written 1174 ok, written 1175 ok, written 1176 ok, written 1177 ok, written 1178 ok, written 1179 ok, written 1180 ok, written 1181 ok, written 1182 ok, written 1183 ok, written 1184 ok, written 1185 ok, written 1186 ok, written 1187 ok, written 1188 ok, written 1189 ok, written 1190 ok, written 1191 ok, written 1192 ok, written 1193 ok, written 1194 ok, written 1195 ok, written 1196 ok, written 1197 ok, written 1198 ok, written 1199 ok, written 1200 ok, written 1201 ok, written 1202 ok, written 1203 ok, written 1204 ok, written 1205 ok, written 1206 ok, written 1207 ok, written 1208 ok, written 1209 ok, written 1210 ok, written 1211 ok, written 1212 ok, written 1213 ok, written 1214 ok, written 1215 ok, written 1216 ok, written 1217 ok, written 1218 ok, written 1219 ok, written 1220 ok, written 1221 ok, written 1222 ok, written 1223 ok, written 1224 ok, written 1225 ok, written 1226 ok, written 1227 ok, written 1228 ok, written 1229 ok, written 1230 ok, written 1231 ok, written 1232 ok, written 1233 ok, written 1234 ok, written 1235 ok, written 1236 ok, written 1237 ok, written 1238 ok, written 1239 ok, written 1240 ok, written 1241 ok, written 1242 ok, written 1243 ok, written 1244 ok, written 1245 ok, written 1246 ok, written 1247 ok, written 1248 ok, written 1249 ok, written 1250 ok, written 1251 ok, written 1252 ok, written 1253 ok, written 1254 ok, written 1255 ok, written 1256 ok, written 1257 ok, written 1258 ok, written 1259 ok, written 1260 ok, written 1261 ok, written 1262 ok, written 1263 ok, written 1264 ok, written 1265 ok, written 1266 ok, written 1267 ok, written 1268 ok, written 1269 ok, written 1270 ok, written 1271 ok, written 1272 ok, written 1273 ok, written 1274 ok, written 1275 ok, written 1276 ok, written 1277 ok, written 1278 ok, written 1279 ok, written 1280 ok, written 1281 ok, written 1282 ok, written 1283 ok, written 1284 ok, written 1285 ok, written 1286 ok, written 1287 ok, written 1288 ok, written 1289 ok, written 1290 ok, written 1291 ok, written 1292 ok, written 1293 ok, written 1294 ok, written 1295 ok, written 1296 ok, written 1297 ok, written 1298 ok, written 1299 ok, written 1300 ok, written 1301 ok, written 1302 ok, written 1303 ok, written 1304 ok, written 1305 ok, written 1306 ok, written 1307 ok, written 1308 ok, written 1309 ok, written 1310 ok, written 1311 ok, written 1312 ok, written 1313 ok, written 1314 ok, written 1315 ok, written 1316 ok, written 1317 ok, written 1318 ok, written 1319 ok, written 1320 ok, written 1321 ok, written 1322 ok, written 1323 ok, written 1324 ok, written 1325 ok, written 1326 ok, written 1327 ok, written 1328 ok, written 1329 ok, written 1330 ok, written 1331 ok, written 1332 ok, written 1333 ok, written 1334 ok, written 1335 ok, written 1336 ok, written 1337 ok, written 1338 ok, written 1339 ok, written 1340 ok, written 1341 ok, written 1342 ok, written 1343 ok, written 1344 ok, written 1345 ok, written 1346 ok, written 1347 ok, written 1348 ok, written 1349 ok, written 1350 ok, written 1351 ok, written 1352 ok, written 1353 ok, written 1354 ok, written 1355 ok, written 1356 ok, written 1357 ok, written 1358 ok, written 1359 ok, written 1360 ok, written 1361 ok, written 1362 ok, written 1363 ok, written 1364 ok, written 1365 ok, written 1366 ok, written 1367 ok, written 1368 ok, written 1369 ok, written 1370 ok, written 1371 ok, written 1372 ok, written 1373 ok, written 1374 ok, written 1375 ok, written 1376 ok, written 1377 ok, written 1378 ok, written 1379 ok, written 1380 ok, written 1381 ok, written 1382 ok, written 1383 ok, written 1384 ok, written 1385 ok, written 1386 ok, written 1387 ok, written 1388 ok, written 1389 ok, written 1390 ok, written 1391 ok, written 1392 ok, written 1393 ok, written 1394 ok, written 1395 ok, written 1396 ok, written 1397 ok, written 1398 ok, written 1399 ok, written 1400 ok, written 1401 ok, written 1402 ok, written 1403 ok, written 1404 ok, written 1405 ok, written 1406 ok, written 1407 ok, written 1408 ok, written 1409 ok, written 1410 ok, written 1411 ok, written 1412 ok, written 1413 ok, written 1414 ok, written 1415 ok, written 1416 ok, written 1417 ok, written 1418 ok, written 1419 ok, written 1420 ok, written 1421 ok, written 1422 ok, written 1423 ok, written 1424 ok, written 1425 ok, written 1426 ok, written 1427 ok, written 1428 ok, written 1429 ok, written 1430 ok, written 1431 ok, written 1432 ok, written 1433 ok, written 1434 ok, written 1435 ok, written 1436 ok, written 1437 ok, written 1438 ok, written 1439 ok, written 1440 ok, written 1441 ok, written 1442 ok, written 1443 ok, written 1444 ok, written 1445 ok, written 1446 ok, written 1447 ok, written 1448 ok, written 1449 ok, written 1450 ok, written 1451 ok, written 1452 ok, written 1453 ok, written 1454 ok, written 1455 ok, written 1456 ok, written 1457 ok, written 1458 ok, written 1459 ok, written 1460 ok, written 1461 ok, written 1462 ok, written 1463 ok, written 1464 ok, written 1465 ok, written 1466 ok, written 1467 ok, written 1468 ok, written 1469 ok, written 1470 ok, written 1471 ok, written 1472 ok, written 1473 ok, written 1474 ok, written 1475 ok, written 1476 ok, written 1477 ok, written 1478 ok, written 1479 ok, written 1480 ok, written 1481 ok, written 1482 ok, written 1483 ok, written 1484 ok, written 1485 ok, written 1486 ok, written 1487 ok, written 1488 ok, written 1489 ok, written 1490 ok, written 1491 ok, written 1492 ok, data 512, data 512, data 512, data 512, data 512, data 512, data 509, written 1493 ok, written 1494 ok, written 1495 ok, written 1496 ok, written 1497 ok, end, close crc 2355407883 bytesWritten 1497
+stream, 7-byte writes, chunkSize 64: written 7 ok, written 14 ok, written 21 ok, written 28 ok, written 35 ok, written 42 ok, written 49 ok, written 56 ok, written 63 ok, written 70 ok, written 77 ok, written 84 ok, written 91 ok, written 98 ok, written 105 ok, written 112 ok, written 119 ok, written 126 ok, written 133 ok, written 140 ok, written 147 ok, written 154 ok, written 161 ok, written 168 ok, written 175 ok, written 182 ok, written 189 ok, written 196 ok, written 203 ok, written 210 ok, written 217 ok, written 224 ok, written 231 ok, written 238 ok, written 245 ok, written 252 ok, written 259 ok, written 266 ok, written 273 ok, written 280 ok, written 287 ok, written 294 ok, written 301 ok, written 308 ok, written 315 ok, written 322 ok, written 329 ok, written 336 ok, written 343 ok, written 350 ok, written 357 ok, written 364 ok, written 371 ok, written 378 ok, written 385 ok, written 392 ok, written 399 ok, written 406 ok, written 413 ok, written 420 ok, written 427 ok, written 434 ok, written 441 ok, written 448 ok, written 455 ok, written 462 ok, written 469 ok, written 476 ok, written 483 ok, written 490 ok, written 497 ok, written 504 ok, written 511 ok, written 518 ok, written 525 ok, written 532 ok, written 539 ok, written 546 ok, written 553 ok, written 560 ok, written 567 ok, written 574 ok, written 581 ok, written 588 ok, written 595 ok, written 602 ok, written 609 ok, written 616 ok, written 623 ok, written 630 ok, written 637 ok, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 64, data 58, written 644 ok, end, close crc 1454378242 bytesWritten 639
+stream, 100-byte writes, binary: data 90, written 100 ok, data 100, written 200 ok, data 66, data 34, written 300 ok, data 100, written 400 ok, data 100, written 500 ok, data 22, data 78, written 600 ok, data 100, written 700 ok, data 78, data 22, written 800 ok, data 10, written 900 ok, end, close crc 1307023471 bytesWritten 810
+stream, 33-byte writes, dictionary: written 33 ok, data 170, written 66 ok, end, close crc 3235181098 bytesWritten 53
+stream, two frames in one write: data 1, end, written 4096 ok, close crc 3904355907 bytesWritten 10
+stream, two frames in separate writes: data 1, written 10 ok, written 20 ok, written 30 ok, written 40 ok, written 50 ok, written 60 ok, written 70 ok, written 80 ok, written 90 ok, written 100 ok, written 110 ok, written 120 ok, written 130 ok, written 140 ok, written 150 ok, written 160 ok, written 170 ok, written 180 ok, written 190 ok, written 200 ok, written 210 ok, written 220 ok, written 230 ok, written 240 ok, written 250 ok, written 260 ok, written 270 ok, written 280 ok, written 290 ok, written 300 ok, written 310 ok, written 320 ok, written 330 ok, written 340 ok, written 350 ok, written 360 ok, written 370 ok, written 380 ok, written 390 ok, written 400 ok, written 410 ok, written 420 ok, written 430 ok, written 440 ok, written 450 ok, written 460 ok, written 470 ok, written 480 ok, written 490 ok, written 500 ok, written 510 ok, written 520 ok, written 530 ok, written 540 ok, written 550 ok, written 560 ok, written 570 ok, written 580 ok, written 590 ok, written 600 ok, written 610 ok, written 620 ok, written 630 ok, written 640 ok, written 650 ok, written 660 ok, written 670 ok, written 680 ok, data 3258, written 690 ok, end, close crc 3098907133 bytesWritten 685
+stream, skippable frames: written 16 ok, written 32 ok, written 48 ok, written 64 ok, written 80 ok, written 96 ok, written 112 ok, written 128 ok, written 144 ok, data 1365, end, written 160 ok, error Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor", close crc 1576767423 bytesWritten 156
+stream, corrupt: written 50 ok, written 100 ok, written 150 ok, written 200 ok, written 250 ok, written 300 ok, written 350 ok, written 400 ok, written 450 ok, written 500 ok, written 550 ok, written 600 ok, written 650 ok, written 700 ok, written 750 ok, written 800 ok, written 850 ok, written 900 ok, written 950 ok, written 1000 ok, written 1050 ok, written 1100 ok, written 1150 ok, written 1200 ok, written 1250 ok, written 1300 ok, written 1350 ok, written 1400 ok, written 1450 ok, data 3581, written 1500 ok, end, close crc 2357306161 bytesWritten 1462
+stream, checksum wrong: written 1000 ok, written 2000 ok, written 3000 ok, written 4000 ok, written 5000 ok, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, error Error ZSTD_error_checksum_wrong 22 "Restored data doesn't match checksum", close crc 1596691645 bytesWritten 5812
+stream, truncated: written 64 ok, data 1365, written 128 ok, end, close crc 1576767423 bytesWritten 108
+stream, trailing bytes: written 4 ok, written 8 ok, data 1, end, written 12 ok, error Error ZSTD_error_prefix_unknown 10 "Unknown frame descriptor", close crc 3904355907 bytesWritten 10
+stream, rejectGarbageAfterEnd: data 1, written 64 err, error TypeError ERR_TRAILING_JUNK_AFTER_STREAM_END undefined "Trailing junk found after the end of the compressed stream", close crc 3904355907 bytesWritten 10
+stream, window over the limit: error Error ZSTD_error_frameParameter_windowTooLarge 16 "Frame requires too much memory for decoding", close crc 0 bytesWritten 0
+stream, window 2**27: written 2000 ok, written 4000 ok, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 16384, data 8498, end, written 6000 ok, close crc 3212153536 bytesWritten 5816
+stream, flush option: written 300 ok, data 1024, written 600 ok, written 900 ok, data 1024, written 1200 ok, written 1500 ok, data 1024, written 1800 ok, data 509, written 2100 ok, end, close crc 2355407883 bytesWritten 1906
+flush(): flushed, flushed again, data 3581, ended, flush after end
+reset(): 3258
+reset() drops the dictionary: data 170, error Error ZSTD_error_dictionary_wrong 32 "Dictionary mismatch"
+reset() drops windowLogMax: data 3581, ended
+close() while writing: close event, close cb _closed true destroyed true
+write after error: error ZSTD_error_prefix_unknown, write cb ERR_STREAM_DESTROYED
+pipeline, from a Readable: true
+async iteration, chunkSize 1024: 1024 1024 1024 186
+backpressure: highWaterMark 1: 56 reads, 3581 bytes
+large, sync: <17617490> crc 1058822620 equal true
+large, maxOutputLength: THROW RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 5000000 bytes"
+large, callback maxOutputLength: RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 5000000 bytes"
+large, stream in 1000-byte writes: <17617490> crc 1058822620 in 1076 chunks, bytesWritten 22289

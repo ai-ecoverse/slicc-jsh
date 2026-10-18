@@ -1,0 +1,537 @@
+[
+ {
+  "name": "text l-5 w10",
+  "offset": 0,
+  "length": 3239
+ },
+ {
+  "name": "text l-5 w17",
+  "offset": 3239,
+  "length": 2704
+ },
+ {
+  "name": "text l-5 w23",
+  "offset": 5943,
+  "length": 2704
+ },
+ {
+  "name": "text l1 w10",
+  "offset": 8647,
+  "length": 1906
+ },
+ {
+  "name": "text l1 w17",
+  "offset": 10553,
+  "length": 1524
+ },
+ {
+  "name": "text l1 w23",
+  "offset": 12077,
+  "length": 1524
+ },
+ {
+  "name": "text l3 w10",
+  "offset": 13601,
+  "length": 1871
+ },
+ {
+  "name": "text l3 w17",
+  "offset": 15472,
+  "length": 1493
+ },
+ {
+  "name": "text l3 w23",
+  "offset": 16965,
+  "length": 1493
+ },
+ {
+  "name": "text l9 w10",
+  "offset": 18458,
+  "length": 1627
+ },
+ {
+  "name": "text l9 w17",
+  "offset": 20085,
+  "length": 1462
+ },
+ {
+  "name": "text l9 w23",
+  "offset": 21547,
+  "length": 1462
+ },
+ {
+  "name": "text l19 w10",
+  "offset": 23009,
+  "length": 1571
+ },
+ {
+  "name": "text l19 w17",
+  "offset": 24580,
+  "length": 1398
+ },
+ {
+  "name": "text l19 w23",
+  "offset": 25978,
+  "length": 1398
+ },
+ {
+  "name": "json l-5 w10",
+  "offset": 27376,
+  "length": 1613
+ },
+ {
+  "name": "json l-5 w17",
+  "offset": 28989,
+  "length": 1212
+ },
+ {
+  "name": "json l-5 w23",
+  "offset": 30201,
+  "length": 1212
+ },
+ {
+  "name": "json l1 w10",
+  "offset": 31413,
+  "length": 952
+ },
+ {
+  "name": "json l1 w17",
+  "offset": 32365,
+  "length": 762
+ },
+ {
+  "name": "json l1 w23",
+  "offset": 33127,
+  "length": 762
+ },
+ {
+  "name": "json l3 w10",
+  "offset": 33889,
+  "length": 941
+ },
+ {
+  "name": "json l3 w17",
+  "offset": 34830,
+  "length": 743
+ },
+ {
+  "name": "json l3 w23",
+  "offset": 35573,
+  "length": 743
+ },
+ {
+  "name": "json l9 w10",
+  "offset": 36316,
+  "length": 763
+ },
+ {
+  "name": "json l9 w17",
+  "offset": 37079,
+  "length": 675
+ },
+ {
+  "name": "json l9 w23",
+  "offset": 37754,
+  "length": 675
+ },
+ {
+  "name": "json l19 w10",
+  "offset": 38429,
+  "length": 732
+ },
+ {
+  "name": "json l19 w17",
+  "offset": 39161,
+  "length": 639
+ },
+ {
+  "name": "json l19 w23",
+  "offset": 39800,
+  "length": 639
+ },
+ {
+  "name": "utf8 l-5 w10",
+  "offset": 40439,
+  "length": 126
+ },
+ {
+  "name": "utf8 l-5 w17",
+  "offset": 40565,
+  "length": 110
+ },
+ {
+  "name": "utf8 l-5 w23",
+  "offset": 40675,
+  "length": 110
+ },
+ {
+  "name": "utf8 l1 w10",
+  "offset": 40785,
+  "length": 122
+ },
+ {
+  "name": "utf8 l1 w17",
+  "offset": 40907,
+  "length": 110
+ },
+ {
+  "name": "utf8 l1 w23",
+  "offset": 41017,
+  "length": 110
+ },
+ {
+  "name": "utf8 l3 w10",
+  "offset": 41127,
+  "length": 120
+ },
+ {
+  "name": "utf8 l3 w17",
+  "offset": 41247,
+  "length": 108
+ },
+ {
+  "name": "utf8 l3 w23",
+  "offset": 41355,
+  "length": 108
+ },
+ {
+  "name": "utf8 l9 w10",
+  "offset": 41463,
+  "length": 120
+ },
+ {
+  "name": "utf8 l9 w17",
+  "offset": 41583,
+  "length": 108
+ },
+ {
+  "name": "utf8 l9 w23",
+  "offset": 41691,
+  "length": 108
+ },
+ {
+  "name": "utf8 l19 w10",
+  "offset": 41799,
+  "length": 119
+ },
+ {
+  "name": "utf8 l19 w17",
+  "offset": 41918,
+  "length": 108
+ },
+ {
+  "name": "utf8 l19 w23",
+  "offset": 42026,
+  "length": 108
+ },
+ {
+  "name": "binary l-5 w10",
+  "offset": 42134,
+  "length": 810
+ },
+ {
+  "name": "binary l-5 w17",
+  "offset": 42944,
+  "length": 810
+ },
+ {
+  "name": "binary l-5 w23",
+  "offset": 43754,
+  "length": 810
+ },
+ {
+  "name": "binary l1 w10",
+  "offset": 44564,
+  "length": 810
+ },
+ {
+  "name": "binary l1 w17",
+  "offset": 45374,
+  "length": 810
+ },
+ {
+  "name": "binary l1 w23",
+  "offset": 46184,
+  "length": 810
+ },
+ {
+  "name": "binary l3 w10",
+  "offset": 46994,
+  "length": 810
+ },
+ {
+  "name": "binary l3 w17",
+  "offset": 47804,
+  "length": 810
+ },
+ {
+  "name": "binary l3 w23",
+  "offset": 48614,
+  "length": 810
+ },
+ {
+  "name": "binary l9 w10",
+  "offset": 49424,
+  "length": 810
+ },
+ {
+  "name": "binary l9 w17",
+  "offset": 50234,
+  "length": 810
+ },
+ {
+  "name": "binary l9 w23",
+  "offset": 51044,
+  "length": 810
+ },
+ {
+  "name": "binary l19 w10",
+  "offset": 51854,
+  "length": 810
+ },
+ {
+  "name": "binary l19 w17",
+  "offset": 52664,
+  "length": 810
+ },
+ {
+  "name": "binary l19 w23",
+  "offset": 53474,
+  "length": 810
+ },
+ {
+  "name": "tiny l-5 w10",
+  "offset": 54284,
+  "length": 10
+ },
+ {
+  "name": "tiny l-5 w17",
+  "offset": 54294,
+  "length": 10
+ },
+ {
+  "name": "tiny l-5 w23",
+  "offset": 54304,
+  "length": 10
+ },
+ {
+  "name": "tiny l1 w10",
+  "offset": 54314,
+  "length": 10
+ },
+ {
+  "name": "tiny l1 w17",
+  "offset": 54324,
+  "length": 10
+ },
+ {
+  "name": "tiny l1 w23",
+  "offset": 54334,
+  "length": 10
+ },
+ {
+  "name": "tiny l3 w10",
+  "offset": 54344,
+  "length": 10
+ },
+ {
+  "name": "tiny l3 w17",
+  "offset": 54354,
+  "length": 10
+ },
+ {
+  "name": "tiny l3 w23",
+  "offset": 54364,
+  "length": 10
+ },
+ {
+  "name": "tiny l9 w10",
+  "offset": 54374,
+  "length": 10
+ },
+ {
+  "name": "tiny l9 w17",
+  "offset": 54384,
+  "length": 10
+ },
+ {
+  "name": "tiny l9 w23",
+  "offset": 54394,
+  "length": 10
+ },
+ {
+  "name": "tiny l19 w10",
+  "offset": 54404,
+  "length": 10
+ },
+ {
+  "name": "tiny l19 w17",
+  "offset": 54414,
+  "length": 10
+ },
+ {
+  "name": "tiny l19 w23",
+  "offset": 54424,
+  "length": 10
+ },
+ {
+  "name": "empty l-5 w10",
+  "offset": 54434,
+  "length": 9
+ },
+ {
+  "name": "empty l-5 w17",
+  "offset": 54443,
+  "length": 9
+ },
+ {
+  "name": "empty l-5 w23",
+  "offset": 54452,
+  "length": 9
+ },
+ {
+  "name": "empty l1 w10",
+  "offset": 54461,
+  "length": 9
+ },
+ {
+  "name": "empty l1 w17",
+  "offset": 54470,
+  "length": 9
+ },
+ {
+  "name": "empty l1 w23",
+  "offset": 54479,
+  "length": 9
+ },
+ {
+  "name": "empty l3 w10",
+  "offset": 54488,
+  "length": 9
+ },
+ {
+  "name": "empty l3 w17",
+  "offset": 54497,
+  "length": 9
+ },
+ {
+  "name": "empty l3 w23",
+  "offset": 54506,
+  "length": 9
+ },
+ {
+  "name": "empty l9 w10",
+  "offset": 54515,
+  "length": 9
+ },
+ {
+  "name": "empty l9 w17",
+  "offset": 54524,
+  "length": 9
+ },
+ {
+  "name": "empty l9 w23",
+  "offset": 54533,
+  "length": 9
+ },
+ {
+  "name": "empty l19 w10",
+  "offset": 54542,
+  "length": 9
+ },
+ {
+  "name": "empty l19 w17",
+  "offset": 54551,
+  "length": 9
+ },
+ {
+  "name": "empty l19 w23",
+  "offset": 54560,
+  "length": 9
+ },
+ {
+  "name": "text l22",
+  "offset": 54569,
+  "length": 1398
+ },
+ {
+  "name": "text checksum",
+  "offset": 55967,
+  "length": 1497
+ },
+ {
+  "name": "text no-size",
+  "offset": 57464,
+  "length": 1492
+ },
+ {
+  "name": "medium l1 w17",
+  "offset": 58956,
+  "length": 6359
+ },
+ {
+  "name": "medium l19 w23",
+  "offset": 65315,
+  "length": 5231
+ },
+ {
+  "name": "medium checksum no-size",
+  "offset": 70546,
+  "length": 5816
+ },
+ {
+  "name": "medium streamed w27",
+  "offset": 76362,
+  "length": 5829
+ },
+ {
+  "name": "text streamed w28",
+  "offset": 82191,
+  "length": 1529
+ },
+ {
+  "name": "json raw-dict",
+  "offset": 83720,
+  "length": 744
+ },
+ {
+  "name": "record 0 dict l1",
+  "offset": 84464,
+  "length": 54
+ },
+ {
+  "name": "record 0 dict l19",
+  "offset": 84518,
+  "length": 53
+ },
+ {
+  "name": "record 1 dict l1",
+  "offset": 84571,
+  "length": 91
+ },
+ {
+  "name": "record 1 dict l19",
+  "offset": 84662,
+  "length": 98
+ },
+ {
+  "name": "record 2 dict l1",
+  "offset": 84760,
+  "length": 77
+ },
+ {
+  "name": "record 2 dict l19",
+  "offset": 84837,
+  "length": 79
+ },
+ {
+  "name": "record 3 dict no-id",
+  "offset": 84916,
+  "length": 66
+ },
+ {
+  "name": "large l3 w23",
+  "offset": 84982,
+  "length": 22289
+ }
+]

@@ -78,7 +78,7 @@ describe('smaller Node 22 gaps (kernel)', () => {
         "const zlib = require('zlib'); const crypto = require('crypto');",
         "let sync = true;",
         "zlib.brotliCompress('x', (e) => console.log('brotliCompress', e.code, sync));",
-        "zlib.zstdDecompress(Buffer.alloc(1), {}, (e) => console.log('zstdDecompress', e.code, sync));",
+        "zlib.zstdCompress(Buffer.alloc(1), {}, (e) => console.log('zstdCompress', e.code, sync));",
         "crypto.generateKeyPair('rsa', { modulusLength: 512 }, (e) => console.log('generateKeyPair', e.code, sync));",
         "crypto.generatePrime(8, (e) => console.log('generatePrime', e.code, sync));",
         'sync = false;',
@@ -89,7 +89,7 @@ describe('smaller Node 22 gaps (kernel)', () => {
       r.stdout,
       [
         'brotliCompress ERR_FEATURE_UNAVAILABLE_ON_PLATFORM false',
-        'zstdDecompress ERR_FEATURE_UNAVAILABLE_ON_PLATFORM false',
+        'zstdCompress ERR_FEATURE_UNAVAILABLE_ON_PLATFORM false',
         'generateKeyPair ERR_FEATURE_UNAVAILABLE_ON_PLATFORM false',
         'generatePrime ERR_FEATURE_UNAVAILABLE_ON_PLATFORM false',
         '',
