@@ -8,20 +8,25 @@ function run(label, transform, writes, done) {
   t.on('finish', () => log.push('finish'));
   t.on('close', () => log.push('close'));
   t.on('error', (e) => log.push(`error ${e.code}`));
+  // Printed once the last write's callback has run and the ticks it leaves
+  // ('error', 'close') have too.
+  const print = () =>
+    setImmediate(() =>
+      setImmediate(() => {
+        console.log(`${label}: ${log.join(', ')}`);
+        done();
+      })
+    );
   let i = 0;
   const next = () => {
-    if (i >= writes.length) return;
     const w = writes[i++];
     t.write(w, (err) => {
       log.push(`cb ${w}${err ? ` ${err.code}` : ''}`);
-      setImmediate(next);
+      if (i < writes.length) setImmediate(next);
+      else print();
     });
   };
   next();
-  setTimeout(() => {
-    console.log(`${label}: ${log.join(', ')}`);
-    done();
-  }, 30);
 }
 
 const cases = [
@@ -67,7 +72,7 @@ const cases = [
 let k = 0;
 const step = () => {
   if (k < cases.length) return run(...cases[k++], step);
-  // Through pipeline: the destination sees 'end' and pipeline's callback.
+  // Through pipeline: the source ends, so pipeline's callback runs too.
   const log = [];
   const t = new Transform({
     transform(chunk, enc, cb) {
@@ -82,9 +87,9 @@ const step = () => {
   t.on('end', () => log.push('end'));
   pipeline(src, t, new Writable({ write(c, e, cb) { log.push(`sink ${c}`); cb(); } }), (err) => {
     log.push(`pipeline ${err ? err.code : 'ok'}`);
+    setImmediate(() => console.log(`pipeline: ${log.join(', ')}`));
   });
-  setTimeout(() => console.log(`pipeline: ${log.join(', ')}`), 50);
   src.write('1', () => log.push('cb 1'));
-  setImmediate(() => src.write('2', () => log.push('cb 2')));
+  setImmediate(() => src.end('2', () => log.push('cb 2')));
 };
 step();
