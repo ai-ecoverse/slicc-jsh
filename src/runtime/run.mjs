@@ -427,7 +427,11 @@ export async function runNode(ctx, options = {}) {
 
   // Node's own console (lib/internal/console), on process.stdout / stderr.
   const console = process._nodeLib().consoleFor(process);
-  const fetch = createFetch(ctx, { handles, getHttp: () => process._builtin('http') });
+  const fetch = createFetch(ctx, {
+    handles,
+    getHttp: () => process._builtin('http'),
+    getZlib: () => process._builtin('zlib'),
+  });
   const restorePlatform = trackPlatformAsync(handles);
   const WebSocket = createWebSocket(ctx, { handles, trackPromise, getNet: () => process._builtin('net') });
   // Node's BroadcastChannel, in-process, where the kernel leaves the slot

@@ -1,0 +1,5 @@
+{
+  "description": "fetch() to a server of this program on the loopback decodes br as undici does: the Accept-Encoding it sends, br bodies whole and in pieces, case, `br, gzip`, an unknown coding, more than five codings, truncated and corrupt bodies, HEAD and 204; node:http's client leaves br as sent",
+  "argv": ["script.js"],
+  "shim": true
+}

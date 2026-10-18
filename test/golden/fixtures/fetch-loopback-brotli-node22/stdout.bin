@@ -1,0 +1,12 @@
+accept-encoding 200 null 15 "\"gzip, deflate\""
+br 200 br 3407 body
+BR 200 BR 3407 body
+br, gzip 200 br, gzip 3407 body
+br in chunks 200 br 3407 body
+br truncated 200 br 11 "<p>brotli o"
+br corrupt THROWS TypeError terminated Error ERR__ERROR_FORMAT_PADDING_2 Decompression failed
+br HEAD 200 br 0 ""
+br 204 204 br 0 ""
+br, unknown 200 br, zz 36 "\u001bN\røEwx½»ô\u001d\u0011E,J\u000b\u000b\u0004x*\u0000ÀÖã¨iðóPÒj"
+too many codings THROWS TypeError fetch failed Error undefined too many content-encodings in response: 6, maximum allowed is 5
+http.get br true

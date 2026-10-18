@@ -90,9 +90,9 @@ const fetchFailed = (cause) => Object.assign(new TypeError('fetch failed'), { ca
  * fetch to the kernel's loopback: an HTTP/1.1 request over the kernel's
  * sockets (node:http's client, as http.get reaches a server of this kernel),
  * answered as undici's fetch answers: redirects followed (or manual / error),
- * gzip and deflate bodies decoded, AbortSignal, `fetch failed` errors.
+ * gzip, deflate and br bodies decoded, AbortSignal, `fetch failed` errors.
  */
-async function loopbackFetch(getHttp, request, target, initHeaders) {
+async function loopbackFetch(getHttp, getZlib, request, target, initHeaders) {
   const http = getHttp();
   const signal = request.signal;
   if (signal?.aborted) throw signal.reason;
@@ -171,15 +171,62 @@ async function loopbackFetch(getHttp, request, target, initHeaders) {
       addr = next;
       continue;
     }
-    return { response: toResponse(res, { method, signal, request }, url, redirected) };
+    return { response: toResponse(res, { method, signal, request, getZlib }, url, redirected) };
   }
 }
 
-function toResponse(res, { method, signal, request }, url, redirected) {
+/**
+ * undici's decoder for a `br` body: zlib's BrotliDecompress, which ends
+ * without an error where the body stops short. A corrupt body fails the read
+ * with TypeError('terminated'), the zlib error its cause.
+ */
+function brotliDecoder(zlib) {
+  const { BROTLI_OPERATION_FLUSH } = zlib.constants;
+  const decoder = zlib.createBrotliDecompress({ flush: BROTLI_OPERATION_FLUSH, finishFlush: BROTLI_OPERATION_FLUSH });
+  const terminated = (cause) => Object.assign(new TypeError('terminated'), { cause });
+  return new TransformStream({
+    start(controller) {
+      decoder.on('data', (chunk) => controller.enqueue(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength)));
+      decoder.on('error', (err) => controller.error(terminated(err)));
+    },
+    transform(chunk) {
+      return new Promise((resolve, reject) => decoder.write(chunk, (err) => (err ? reject(terminated(err)) : resolve())));
+    },
+    flush() {
+      return new Promise((resolve, reject) => {
+        decoder.once('end', resolve);
+        decoder.once('error', (err) => reject(terminated(err)));
+        decoder.end();
+      });
+    },
+  });
+}
+
+function toResponse(res, { method, signal, request, getZlib }, url, redirected) {
   const headers = new Headers();
   for (let i = 0; i < res.rawHeaders.length; i += 2) headers.append(res.rawHeaders[i], res.rawHeaders[i + 1]);
   let stream = null;
   if (!NULL_BODY.has(res.statusCode) && method !== 'HEAD') {
+    // undici decodes the codings it knows (gzip, deflate, br), the last
+    // applied first; any other leaves the body as it came.
+    const contentEncoding = headers.get('content-encoding');
+    const codings = contentEncoding ? contentEncoding.toLowerCase().split(',') : [];
+    if (codings.length > 5) {
+      res.destroy();
+      throw fetchFailed(new Error(`too many content-encodings in response: ${codings.length}, maximum allowed is 5`));
+    }
+    const decoders = [];
+    for (let i = codings.length - 1; i >= 0; --i) {
+      const coding = codings[i].trim();
+      if ((coding === 'gzip' || coding === 'x-gzip' || coding === 'deflate') && typeof DecompressionStream === 'function') {
+        decoders.push(() => new DecompressionStream(coding === 'deflate' ? 'deflate' : 'gzip'));
+      } else if (coding === 'br' && getZlib) {
+        decoders.push(() => brotliDecoder(getZlib()));
+      } else {
+        decoders.length = 0;
+        break;
+      }
+    }
     let onAbort;
     let settled = false;
     const done = () => {
@@ -224,11 +271,7 @@ function toResponse(res, { method, signal, request }, url, redirected) {
         res.destroy();
       },
     });
-    // undici decodes what it asked for (gzip, deflate).
-    const coding = String(headers.get('content-encoding') ?? '').toLowerCase().trim();
-    if ((coding === 'gzip' || coding === 'x-gzip' || coding === 'deflate') && typeof DecompressionStream === 'function') {
-      stream = stream.pipeThrough(new DecompressionStream(coding === 'deflate' ? 'deflate' : 'gzip'));
-    }
+    for (const decoder of decoders) stream = stream.pipeThrough(decoder());
   }
   const response = new Response(stream, { status: res.statusCode, statusText: res.statusMessage ?? '', headers });
   Object.defineProperty(response, 'url', { value: url.href, configurable: true });
@@ -236,7 +279,7 @@ function toResponse(res, { method, signal, request }, url, redirected) {
   return response;
 }
 
-export function createFetch(ctx, { handles, getHttp } = {}) {
+export function createFetch(ctx, { handles, getHttp, getZlib } = {}) {
   const track = (p) => (handles ? trackPromise(handles, p) : p);
   async function fetch(input, init) {
     if (typeof ctx.fetch !== 'function') {
@@ -268,7 +311,7 @@ export function createFetch(ctx, { handles, getHttp } = {}) {
       if (getHttp) target = kernelRoute(url);
     }
     if (target) {
-      const result = await track(loopbackFetch(getHttp, request, target, init?.headers));
+      const result = await track(loopbackFetch(getHttp, getZlib, request, target, init?.headers));
       if (result.response) return handles ? trackBody(result.response, track) : result.response;
       input = result.handoff;
       init = undefined;

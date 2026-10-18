@@ -3,11 +3,13 @@
  * 1.0.11 (MIT AND Zlib), bundled lazily as dist/vendor/zlib.cjs. Its streams
  * are this runtime's readable-stream Transform, its Buffer ours.
  *
- * On top of the port: Node 22's `constants` and `codes`, `crc32`, and the
- * Brotli and Zstd entry points, which no pure-JS library here provides; they
- * throw ERR_FEATURE_UNAVAILABLE_ON_PLATFORM.
+ * On top of the port: Node 22's `constants` and `codes`, `crc32`, Brotli
+ * decompression (zlib-brotli.mjs, over the decoder in src/brotli), and the
+ * Brotli compression and Zstd entry points, which throw
+ * ERR_FEATURE_UNAVAILABLE_ON_PLATFORM.
  */
 import { loadVendorCjs } from '../vendor-load.mjs';
+import { createBrotli } from './zlib-brotli.mjs';
 import { ZLIB_CODES, ZLIB_CONSTANTS } from './zlib-constants.mjs';
 
 const PACKAGE_ROOT = '/node_modules/@ai-ecoverse/slicc-jsh';
@@ -144,7 +146,8 @@ function zlibOptionsHelpers(Buffer) {
 }
 
 function unavailableError(name) {
-  const err = new Error(`zlib.${name} is not available in slicc-jsh (no Brotli/Zstd implementation)`);
+  const what = name.toLowerCase().includes('brotli') ? 'no Brotli compression' : 'no Zstd implementation';
+  const err = new Error(`zlib.${name} is not available in slicc-jsh (${what})`);
   err.code = 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM';
   return err;
 }
@@ -193,7 +196,7 @@ const UNAVAILABLE = [
   'createZstdDecompress',
 ];
 
-export function createZlib({ ctx, process, Buffer, getStream, util, assert }) {
+export function createZlib({ ctx, process, Buffer, getStream, util, assert, timers }) {
   const port = loadVendorCjs({
     ctx,
     packageRoot: PACKAGE_ROOT,
@@ -212,7 +215,15 @@ export function createZlib({ ctx, process, Buffer, getStream, util, assert }) {
   zlib.constants = ZLIB_CONSTANTS;
   zlib.codes = ZLIB_CODES;
   zlib.crc32 = crc32;
-  for (const name of UNAVAILABLE) zlib[name] = unavailable(name);
+  const brotli = createBrotli({
+    Buffer,
+    getStream,
+    process,
+    util,
+    setImmediate: (fn) => timers.setImmediate(fn),
+    loadDecoder: () => loadVendorCjs({ ctx, packageRoot: PACKAGE_ROOT, name: 'brotli', process }),
+  });
+  for (const name of UNAVAILABLE) zlib[name] = brotli[name] ?? unavailable(name);
   // Node 22's deprecated top-level copies of the constants (all but
   // BROTLI_*): read-only and non-enumerable.
   for (const [key, value] of Object.entries(ZLIB_CONSTANTS)) {

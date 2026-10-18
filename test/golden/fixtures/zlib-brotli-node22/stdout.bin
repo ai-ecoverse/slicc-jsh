@@ -1,0 +1,283 @@
+sync text q0 w10: "ok <3581>"
+sync text q0 w16: "ok <3581>"
+sync text q0 w24: "ok <3581>"
+sync text q1 w10: "ok <3581>"
+sync text q1 w16: "ok <3581>"
+sync text q1 w24: "ok <3581>"
+sync text q5 w10: "ok <3581>"
+sync text q5 w16: "ok <3581>"
+sync text q5 w24: "ok <3581>"
+sync text q9 w10: "ok <3581>"
+sync text q9 w16: "ok <3581>"
+sync text q9 w24: "ok <3581>"
+sync text q11 w10: "ok <3581>"
+sync text q11 w16: "ok <3581>"
+sync text q11 w24: "ok <3581>"
+sync json q0 w10: "ok <3258>"
+sync json q0 w16: "ok <3258>"
+sync json q0 w24: "ok <3258>"
+sync json q1 w10: "ok <3258>"
+sync json q1 w16: "ok <3258>"
+sync json q1 w24: "ok <3258>"
+sync json q5 w10: "ok <3258>"
+sync json q5 w16: "ok <3258>"
+sync json q5 w24: "ok <3258>"
+sync json q9 w10: "ok <3258>"
+sync json q9 w16: "ok <3258>"
+sync json q9 w24: "ok <3258>"
+sync json q11 w10: "ok <3258>"
+sync json q11 w16: "ok <3258>"
+sync json q11 w24: "ok <3258>"
+sync utf8 q0 w10: "ok <1365>"
+sync utf8 q0 w16: "ok <1365>"
+sync utf8 q0 w24: "ok <1365>"
+sync utf8 q1 w10: "ok <1365>"
+sync utf8 q1 w16: "ok <1365>"
+sync utf8 q1 w24: "ok <1365>"
+sync utf8 q5 w10: "ok <1365>"
+sync utf8 q5 w16: "ok <1365>"
+sync utf8 q5 w24: "ok <1365>"
+sync utf8 q9 w10: "ok <1365>"
+sync utf8 q9 w16: "ok <1365>"
+sync utf8 q9 w24: "ok <1365>"
+sync utf8 q11 w10: "ok <1365>"
+sync utf8 q11 w16: "ok <1365>"
+sync utf8 q11 w24: "ok <1365>"
+sync binary q0 w10: "ok <800>"
+sync binary q0 w16: "ok <800>"
+sync binary q0 w24: "ok <800>"
+sync binary q1 w10: "ok <800>"
+sync binary q1 w16: "ok <800>"
+sync binary q1 w24: "ok <800>"
+sync binary q5 w10: "ok <800>"
+sync binary q5 w16: "ok <800>"
+sync binary q5 w24: "ok <800>"
+sync binary q9 w10: "ok <800>"
+sync binary q9 w16: "ok <800>"
+sync binary q9 w24: "ok <800>"
+sync binary q11 w10: "ok <800>"
+sync binary q11 w16: "ok <800>"
+sync binary q11 w24: "ok <800>"
+sync tiny q0 w10: "ok <1>"
+sync tiny q0 w16: "ok <1>"
+sync tiny q0 w24: "ok <1>"
+sync tiny q1 w10: "ok <1>"
+sync tiny q1 w16: "ok <1>"
+sync tiny q1 w24: "ok <1>"
+sync tiny q5 w10: "ok <1>"
+sync tiny q5 w16: "ok <1>"
+sync tiny q5 w24: "ok <1>"
+sync tiny q9 w10: "ok <1>"
+sync tiny q9 w16: "ok <1>"
+sync tiny q9 w24: "ok <1>"
+sync tiny q11 w10: "ok <1>"
+sync tiny q11 w16: "ok <1>"
+sync tiny q11 w24: "ok <1>"
+sync empty q0 w10: "ok <0>"
+sync empty q0 w16: "ok <0>"
+sync empty q0 w24: "ok <0>"
+sync empty q1 w10: "ok <0>"
+sync empty q1 w16: "ok <0>"
+sync empty q1 w24: "ok <0>"
+sync empty q5 w10: "ok <0>"
+sync empty q5 w16: "ok <0>"
+sync empty q5 w24: "ok <0>"
+sync empty q9 w10: "ok <0>"
+sync empty q9 w16: "ok <0>"
+sync empty q9 w24: "ok <0>"
+sync empty q11 w10: "ok <0>"
+sync empty q11 w16: "ok <0>"
+sync empty q11 w24: "ok <0>"
+sync text text-mode q11: "ok <3581>"
+sync text large-window w26: "ok <3581>"
+string input: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+Uint8Array input: <3581> crc 2355407883
+ArrayBuffer input: <3581> crc 2355407883
+DataView input: <3581> crc 2355407883
+number input: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"buffer\" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer. Received type number (42)"
+null input: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"buffer\" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer. Received null"
+info: info <3581> crc 2355407883 engine BrotliDecompress bytesWritten 1290
+info, trailing bytes: info <3581> crc 2355407883 engine BrotliDecompress bytesWritten 1290
+chunkSize 64: <3581> crc 2355407883
+chunkSize 63: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.chunkSize\" is out of range. It must be >= 64. Received 63"
+chunkSize Infinity: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.chunkSize\" is out of range. It must be a finite number. Received Infinity"
+chunkSize NaN is the default: <3581> crc 2355407883
+chunkSize string: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"options.chunkSize\" property must be of type number. Received type string ('64')"
+maxOutputLength: THROW RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 100 bytes"
+maxOutputLength exact: <3581> crc 2355407883
+maxOutputLength 0: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.maxOutputLength\" is out of range. It must be >= 1 and <= 9007199254740991. Received 0"
+maxOutputLength 2**53: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.maxOutputLength\" is out of range. It must be >= 1 and <= 9007199254740991. Received 9_007_199_254_740_992"
+flush 3: <3581> crc 2355407883
+flush 4: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.flush\" is out of range. It must be >= 0 and <= 3. Received 4"
+finishFlush -1: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.finishFlush\" is out of range. It must be >= 0 and <= 3. Received -1"
+finishFlush FLUSH, truncated: <2363> crc 1711801900
+finishFlush PROCESS, truncated: <2363> crc 1711801900
+params LARGE_WINDOW: <3581> crc 2355407883
+params DISABLE_RING_BUFFER_REALLOCATION: <3581> crc 2355407883
+large window without the param: THROW Error ERR__ERROR_FORMAT_WINDOW_BITS -13 "Decompression failed"
+params: encoder parameter: <3581> crc 2355407883
+params: key 9: THROW RangeError ERR_BROTLI_INVALID_PARAM undefined "9 is not a valid Brotli parameter"
+params: key -1: THROW RangeError ERR_BROTLI_INVALID_PARAM undefined "-1 is not a valid Brotli parameter"
+params: key abc: THROW RangeError ERR_BROTLI_INVALID_PARAM undefined "abc is not a valid Brotli parameter"
+params: key 0 twice: THROW RangeError ERR_BROTLI_INVALID_PARAM undefined "00 is not a valid Brotli parameter"
+params: string value: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"options.params[key]\" property must be of type number. Received type string ('1')"
+params: null: <3581> crc 2355407883
+params: value -1 is unset: <3581> crc 2355407883
+params before chunkSize: THROW RangeError ERR_BROTLI_INVALID_PARAM undefined "9 is not a valid Brotli parameter"
+encoding option ignored: <3581> crc 2355407883
+empty: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+not brotli: THROW Error ERR__ERROR_FORMAT_PADDING_2 -15 "Decompression failed"
+text q5 w16 truncated to 1: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+text q5 w16 truncated to 2: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+text q5 w16 truncated to 5: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+text q5 w16 truncated to 707: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+text q5 w16 truncated to 1414: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+text q5 w16 bit 0 of byte 0 flipped: THROW Error ERR__ERROR_FORMAT_CL_SPACE -6 "Decompression failed"
+text q5 w16 bit 1 of byte 844 flipped: <3581> crc 1128904990
+text q5 w16 bit 2 of byte 273 flipped: <3581> crc 3846035595
+text q5 w16 bit 3 of byte 1117 flipped: <3581> crc 2084007005
+text q5 w16 bit 4 of byte 546 flipped: <3581> crc 3720908510
+text q5 w16 bit 5 of byte 1390 flipped: <3581> crc 1422310291
+text q5 w16 bit 6 of byte 819 flipped: <3581> crc 2419904972
+text q5 w16 bit 7 of byte 248 flipped: THROW Error ERR__ERROR_FORMAT_BLOCK_LENGTH_2 -10 "Decompression failed"
+text q5 w16 bit 0 of byte 1092 flipped: <3581> crc 2885197034
+text q5 w16 bit 1 of byte 521 flipped: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+text q5 w16 bit 2 of byte 1365 flipped: <3581> crc 3585270896
+text q5 w16 bit 3 of byte 794 flipped: THROW Error ERR__ERROR_FORMAT_BLOCK_LENGTH_2 -10 "Decompression failed"
+text q5 w16 bit 4 of byte 223 flipped: THROW Error ERR__ERROR_FORMAT_BLOCK_LENGTH_2 -10 "Decompression failed"
+text q5 w16 bit 5 of byte 1067 flipped: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+text q5 w16 bit 6 of byte 496 flipped: THROW Error ERR__ERROR_FORMAT_BLOCK_LENGTH_2 -10 "Decompression failed"
+text q5 w16 bit 7 of byte 1340 flipped: <3581> crc 913249924
+text q5 w16 bit 0 of byte 769 flipped: <3581> crc 1604747980
+text q5 w16 bit 1 of byte 198 flipped: <3581> crc 444650412
+text q5 w16 bit 2 of byte 1042 flipped: <3581> crc 768152135
+text q5 w16 bit 3 of byte 471 flipped: <3581> crc 2397463730
+text q5 w16 bit 4 of byte 1315 flipped: THROW Error ERR__ERROR_FORMAT_BLOCK_LENGTH_2 -10 "Decompression failed"
+text q5 w16 bit 5 of byte 744 flipped: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+text q5 w16 bit 6 of byte 173 flipped: THROW Error ERR__ERROR_FORMAT_BLOCK_LENGTH_2 -10 "Decompression failed"
+text q5 w16 bit 7 of byte 1017 flipped: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+json q11 w24 truncated to 1: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+json q11 w24 truncated to 2: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+json q11 w24 truncated to 5: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+json q11 w24 truncated to 263: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+json q11 w24 truncated to 526: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+json q11 w24 bit 0 of byte 0 flipped: THROW Error ERR__ERROR_FORMAT_PADDING_2 -15 "Decompression failed"
+json q11 w24 bit 1 of byte 14 flipped: THROW Error ERR__ERROR_FORMAT_CONTEXT_MAP_REPEAT -8 "Decompression failed"
+json q11 w24 bit 2 of byte 28 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 3 of byte 42 flipped: THROW Error ERR__ERROR_FORMAT_DISTANCE -16 "Decompression failed"
+json q11 w24 bit 4 of byte 56 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+json q11 w24 bit 5 of byte 70 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 6 of byte 84 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+json q11 w24 bit 7 of byte 98 flipped: <3258> crc 164876529
+json q11 w24 bit 0 of byte 112 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 1 of byte 126 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 2 of byte 140 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 3 of byte 154 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 4 of byte 168 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 5 of byte 182 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 6 of byte 196 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 7 of byte 210 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 0 of byte 224 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 1 of byte 238 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 2 of byte 252 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 3 of byte 266 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 4 of byte 280 flipped: THROW Error ERR__ERROR_FORMAT_PADDING_2 -15 "Decompression failed"
+json q11 w24 bit 5 of byte 294 flipped: <3258> crc 1595221357
+json q11 w24 bit 6 of byte 308 flipped: THROW Error ERR__ERROR_FORMAT_DICTIONARY -12 "Decompression failed"
+json q11 w24 bit 7 of byte 322 flipped: THROW Error ERR__ERROR_FORMAT_PADDING_2 -15 "Decompression failed"
+binary q9 w10 truncated to 1: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+binary q9 w10 truncated to 2: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+binary q9 w10 truncated to 5: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+binary q9 w10 truncated to 402: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+binary q9 w10 truncated to 804: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+binary q9 w10 bit 0 of byte 0 flipped: THROW Error ERR__ERROR_FORMAT_CL_SPACE -6 "Decompression failed"
+binary q9 w10 bit 1 of byte 674 flipped: <800> crc 1050622167
+binary q9 w10 bit 2 of byte 543 flipped: <800> crc 3048039559
+binary q9 w10 bit 3 of byte 412 flipped: <800> crc 66187404
+binary q9 w10 bit 4 of byte 281 flipped: <800> crc 1862898093
+binary q9 w10 bit 5 of byte 150 flipped: <800> crc 4172513348
+binary q9 w10 bit 6 of byte 19 flipped: <800> crc 650186508
+binary q9 w10 bit 7 of byte 693 flipped: <800> crc 375097418
+binary q9 w10 bit 0 of byte 562 flipped: <800> crc 1173623881
+binary q9 w10 bit 1 of byte 431 flipped: <800> crc 3263206779
+binary q9 w10 bit 2 of byte 300 flipped: <800> crc 2099530779
+binary q9 w10 bit 3 of byte 169 flipped: <800> crc 618127996
+binary q9 w10 bit 4 of byte 38 flipped: <800> crc 1301407747
+binary q9 w10 bit 5 of byte 712 flipped: <800> crc 590410892
+binary q9 w10 bit 6 of byte 581 flipped: <800> crc 1400034826
+binary q9 w10 bit 7 of byte 450 flipped: <800> crc 3166457703
+binary q9 w10 bit 0 of byte 319 flipped: <800> crc 3800380411
+binary q9 w10 bit 1 of byte 188 flipped: <800> crc 2912864558
+binary q9 w10 bit 2 of byte 57 flipped: <800> crc 2148297345
+binary q9 w10 bit 3 of byte 731 flipped: <800> crc 2655084827
+binary q9 w10 bit 4 of byte 600 flipped: <800> crc 1852049384
+binary q9 w10 bit 5 of byte 469 flipped: <800> crc 4019461820
+binary q9 w10 bit 6 of byte 338 flipped: <800> crc 1022006462
+binary q9 w10 bit 7 of byte 207 flipped: <800> crc 1995634738
+utf8 q1 w16 truncated to 1: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+utf8 q1 w16 truncated to 2: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+utf8 q1 w16 truncated to 5: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+utf8 q1 w16 truncated to 66: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+utf8 q1 w16 truncated to 132: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+utf8 q1 w16 bit 0 of byte 0 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+utf8 q1 w16 bit 1 of byte 72 flipped: <1365> crc 3068891682
+utf8 q1 w16 bit 2 of byte 11 flipped: <1365> crc 128246674
+utf8 q1 w16 bit 3 of byte 83 flipped: <1365> crc 2006337856
+utf8 q1 w16 bit 4 of byte 22 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+utf8 q1 w16 bit 5 of byte 94 flipped: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+utf8 q1 w16 bit 6 of byte 33 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+utf8 q1 w16 bit 7 of byte 105 flipped: <1365> crc 4192077320
+utf8 q1 w16 bit 0 of byte 44 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+utf8 q1 w16 bit 1 of byte 116 flipped: <1365> crc 2565307954
+utf8 q1 w16 bit 2 of byte 55 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+utf8 q1 w16 bit 3 of byte 127 flipped: <1365> crc 2605828240
+utf8 q1 w16 bit 4 of byte 66 flipped: THROW Error ERR__ERROR_FORMAT_CL_SPACE -6 "Decompression failed"
+utf8 q1 w16 bit 5 of byte 5 flipped: THROW Error ERR__ERROR_FORMAT_CL_SPACE -6 "Decompression failed"
+utf8 q1 w16 bit 6 of byte 77 flipped: <1365> crc 91310294
+utf8 q1 w16 bit 7 of byte 16 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+utf8 q1 w16 bit 0 of byte 88 flipped: <1365> crc 1298207011
+utf8 q1 w16 bit 1 of byte 27 flipped: THROW Error ERR__ERROR_FORMAT_CL_SPACE -6 "Decompression failed"
+utf8 q1 w16 bit 2 of byte 99 flipped: THROW Error Z_BUF_ERROR -5 "unexpected end of file"
+utf8 q1 w16 bit 3 of byte 38 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+utf8 q1 w16 bit 4 of byte 110 flipped: THROW Error ERR__ERROR_FORMAT_BLOCK_LENGTH_2 -10 "Decompression failed"
+utf8 q1 w16 bit 5 of byte 49 flipped: THROW Error ERR__ERROR_FORMAT_HUFFMAN_SPACE -7 "Decompression failed"
+utf8 q1 w16 bit 6 of byte 121 flipped: <1365> crc 2141556186
+utf8 q1 w16 bit 7 of byte 60 flipped: THROW Error ERR__ERROR_FORMAT_BLOCK_LENGTH_1 -9 "Decompression failed"
+BrotliDecompress without new: true
+createBrotliDecompress: [true,true,false,0,16384,false]
+names: ["BrotliDecompress","function","function"]
+stream option errors: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.chunkSize\" is out of range. It must be >= 64. Received 10"
+stream params error: THROW Error ERR_ZLIB_INITIALIZATION_FAILED undefined "Initialization failed"
+callback: <3581> crc 2355407883
+callback with options: info <3581> crc 2355407883 engine BrotliDecompress bytesWritten 1290
+callback, Uint16Array input: <3581> crc 2355407883
+callback, ArrayBuffer input: <3581> crc 2355407883
+callback, corrupt: Error ERR__ERROR_FORMAT_PADDING_2 -15 "Decompression failed"
+callback, truncated: Error Z_BUF_ERROR -5 "unexpected end of file"
+callback, empty: Error Z_BUF_ERROR -5 "unexpected end of file"
+callback, maxOutputLength: RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 1000 bytes"
+callback missing: THROW TypeError ERR_INVALID_ARG_TYPE undefined "The \"callback\" argument must be of type function. Received undefined"
+callback, option error throws: THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"options.chunkSize\" is out of range. It must be >= 64. Received 1"
+promisify: true
+stream, 1-byte writes: written 1 ok, written 2 ok, written 3 ok, written 4 ok, written 5 ok, written 6 ok, written 7 ok, written 8 ok, written 9 ok, written 10 ok, written 11 ok, written 12 ok, written 13 ok, written 14 ok, written 15 ok, written 16 ok, written 17 ok, written 18 ok, written 19 ok, written 20 ok, written 21 ok, written 22 ok, written 23 ok, written 24 ok, written 25 ok, written 26 ok, written 27 ok, written 28 ok, written 29 ok, written 30 ok, written 31 ok, written 32 ok, written 33 ok, written 34 ok, written 35 ok, written 36 ok, written 37 ok, written 38 ok, written 39 ok, written 40 ok, written 41 ok, written 42 ok, written 43 ok, written 44 ok, written 45 ok, written 46 ok, written 47 ok, written 48 ok, written 49 ok, written 50 ok, written 51 ok, written 52 ok, written 53 ok, written 54 ok, written 55 ok, written 56 ok, written 57 ok, written 58 ok, written 59 ok, written 60 ok, written 61 ok, written 62 ok, written 63 ok, written 64 ok, written 65 ok, written 66 ok, written 67 ok, written 68 ok, written 69 ok, written 70 ok, written 71 ok, written 72 ok, written 73 ok, written 74 ok, written 75 ok, written 76 ok, data 1, written 77 ok, data 1, written 78 ok, data 2, written 79 ok, data 6, written 80 ok, written 81 ok, data 2, written 82 ok, data 2, written 83 ok, data 2, written 84 ok, data 1, written 85 ok, data 6, written 86 ok, written 87 ok, data 8, written 88 ok, data 5, written 89 ok, data 1, written 90 ok, written 91 ok, data 5, written 92 ok, data 1, written 93 ok, data 4, written 94 ok, written 95 ok, data 2, written 96 ok, data 2, written 97 ok, written 98 ok, data 5, written 99 ok, written 100 ok, data 1, written 101 ok, data 2, written 102 ok, data 2, written 103 ok, data 2, written 104 ok, data 1, written 105 ok, data 2, written 106 ok, written 107 ok, data 2, written 108 ok, data 1, written 109 ok, data 2, written 110 ok, data 1, written 111 ok, data 2, written 112 ok, written 113 ok, data 5, written 114 ok, data 6, written 115 ok, written 116 ok, written 117 ok, written 118 ok, data 5, written 119 ok, data 6, written 120 ok, error Error Z_BUF_ERROR -5 "unexpected end of file", close crc 3542556940 bytesWritten 120
+stream, 7-byte writes, chunkSize 64: written 7 ok, written 14 ok, written 21 ok, written 28 ok, written 35 ok, written 42 ok, written 49 ok, written 56 ok, written 63 ok, written 70 ok, written 77 ok, written 84 ok, data 8, written 91 ok, data 15, written 98 ok, data 19, written 105 ok, data 12, written 112 ok, data 10, data 26, written 119 ok, data 32, written 126 ok, data 6, data 16, written 133 ok, data 48, written 140 ok, data 50, written 147 ok, data 14, data 26, written 154 ok, data 38, data 15, written 161 ok, data 21, written 168 ok, data 28, data 21, written 175 ok, data 38, written 182 ok, data 5, data 46, written 189 ok, data 18, data 25, written 196 ok, data 39, data 23, written 203 ok, data 41, data 15, written 210 ok, data 46, written 217 ok, data 3, data 52, written 224 ok, data 12, data 42, written 231 ok, data 22, data 12, written 238 ok, data 52, written 245 ok, data 61, written 252 ok, data 3, data 42, written 259 ok, data 22, data 18, written 266 ok, data 46, data 6, written 273 ok, data 56, written 280 ok, data 2, data 49, written 287 ok, data 15, data 39, written 294 ok, data 25, data 30, written 301 ok, data 34, data 21, written 308 ok, data 43, data 30, written 315 ok, data 34, data 20, written 322 ok, data 44, data 6, written 329 ok, data 58, written 336 ok, data 64, written 343 ok, data 44, written 350 ok, data 20, data 57, written 357 ok, data 7, data 50, written 364 ok, data 14, data 52, written 371 ok, data 12, data 42, written 378 ok, data 22, data 33, written 385 ok, data 31, data 22, written 392 ok, data 42, data 14, written 399 ok, data 46, written 406 ok, data 4, data 51, written 413 ok, data 13, data 43, written 420 ok, data 21, data 33, written 427 ok, data 31, data 33, written 434 ok, data 31, data 27, written 441 ok, data 37, data 18, written 448 ok, data 46, data 24, written 455 ok, data 40, data 40, written 462 ok, data 24, data 39, written 469 ok, data 25, data 32, written 476 ok, data 32, data 64, written 483 ok, data 64, data 1, written 490 ok, data 54, written 497 ok, data 9, data 46, written 504 ok, data 18, data 55, written 511 ok, data 9, data 64, data 7, written 518 ok, data 33, written 525 ok, data 18, written 532 ok, end, close crc 1454378242 bytesWritten 527
+stream, 100-byte writes, binary: data 97, written 100 ok, data 100, written 200 ok, data 59, data 41, written 300 ok, data 100, written 400 ok, data 100, written 500 ok, data 15, data 85, written 600 ok, data 100, written 700 ok, data 71, data 29, written 800 ok, data 3, written 900 ok, end, close crc 1307023471 bytesWritten 804
+stream, uncompressed metablocks: data 30, written 33 ok, data 33, written 66 ok, data 33, written 99 ok, data 33, written 132 ok, data 33, written 165 ok, data 33, written 198 ok, data 33, written 231 ok, data 33, written 264 ok, data 33, written 297 ok, data 33, written 330 ok, data 33, written 363 ok, data 33, written 396 ok, data 33, written 429 ok, data 33, written 462 ok, data 33, written 495 ok, data 33, written 528 ok, data 33, written 561 ok, data 33, written 594 ok, data 33, written 627 ok, data 33, written 660 ok, data 33, written 693 ok, data 33, written 726 ok, data 33, written 759 ok, data 33, written 792 ok, data 11, written 825 ok, end, close crc 1307023471 bytesWritten 804
+stream, corrupt: written 50 ok, data 60, written 100 ok, data 101, written 150 ok, data 107, written 200 ok, data 103, written 250 ok, data 113, written 300 ok, data 121, written 350 ok, data 113, written 400 ok, data 125, written 450 ok, data 132, written 500 ok, data 115, written 550 ok, data 135, written 600 ok, data 134, written 650 ok, data 139, written 700 ok, data 133, written 750 ok, data 136, written 800 ok, data 131, written 850 ok, data 141, written 900 ok, data 151, written 950 ok, data 155, written 1000 ok, data 156, written 1050 ok, data 141, written 1100 ok, data 152, written 1150 ok, data 158, written 1200 ok, data 143, written 1250 ok, data 133, written 1300 ok, data 142, written 1350 ok, data 155, written 1400 ok, data 56, written 1450 ok, end, close crc 2988284690 bytesWritten 1418
+stream, truncated: data 25, written 64 ok, data 1340, written 128 ok, end, close crc 1576767423 bytesWritten 86
+stream, trailing bytes: data 1, end, close crc 3904355907 bytesWritten 5
+stream, rejectGarbageAfterEnd: data 1, error TypeError ERR_TRAILING_JUNK_AFTER_STREAM_END undefined "Trailing junk found after the end of the compressed stream", close crc 3904355907 bytesWritten 5
+stream, finishFlush FLUSH, truncated: written 64 ok, data 111, written 128 ok, data 134, written 192 ok, data 132, written 256 ok, data 155, written 320 ok, data 153, written 384 ok, data 154, written 448 ok, data 142, written 512 ok, end, close crc 1649726176 bytesWritten 500
+stream, flush option: data 447, written 300 ok, data 577, written 600 ok, data 505, written 900 ok, data 519, written 1200 ok, data 578, written 1500 ok, data 502, written 1800 ok, data 453, written 2100 ok, end, close crc 2355407883 bytesWritten 2018
+flush(): data 1461, flushed, flushed again, data 2120, ended, flush after end
+reset(): 3734
+close() while writing: close event, close cb _closed true destroyed true
+write after error: error ERR__ERROR_FORMAT_PADDING_2, write cb ERR_STREAM_DESTROYED
+params(): THROW RangeError ERR_OUT_OF_RANGE undefined "The value of \"level\" is out of range. It must be >= -1 and <= 9. Received 10", then error Error Z_BUF_ERROR -5 "unexpected end of file"
+pipeline, from a Readable: true
+async iteration, chunkSize 1024: 1024 1024 1024 186
+backpressure: highWaterMark 1: 56 reads, 3581 bytes
+large, sync: <17617490> crc 1058822620 equal true
+large, maxOutputLength: THROW RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 5000000 bytes"
+large, callback maxOutputLength: RangeError ERR_BUFFER_TOO_LARGE undefined "Cannot create a Buffer larger than 5000000 bytes"
+large, stream in 1000-byte writes: <17617490> crc 1058822620 in 1095 chunks, bytesWritten 19852
