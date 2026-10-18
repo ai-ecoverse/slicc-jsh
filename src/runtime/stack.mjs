@@ -27,7 +27,7 @@ function isLoaderImplFrame(frame) {
 }
 
 function isKernelFrame(frame) {
-  if (frame?.[kWrapped]) return false;
+  if (frame instanceof CallSite) return false;
   if (isLoaderImplFrame(frame)) return true;
   // The runtime's own code: the kernel imports it from a data: URL of the
   // whole bundle (MBs), so its frames' file name and text are that long.
@@ -165,13 +165,68 @@ function resolveFile(frame, parsed) {
   );
 }
 
-/** Marks a CallSite this module made (wrapping it again would remap it twice). */
-const kWrapped = Symbol('slicc-jsh.wrappedCallSite');
+const kSite = Symbol('slicc-jsh.callSite');
 
-/** Wrap a V8 CallSite so getters match err.stack remapping. */
+/**
+ * V8's CallSite shape: no own properties, the methods on CallSite.prototype
+ * (source-map-support's cloneCallSite copies them from there). Each one asks
+ * the frame's remapped answers.
+ */
+class CallSite {
+  constructor(site) {
+    Object.defineProperty(this, kSite, { value: site });
+  }
+}
+const SITE_METHODS = [
+  'getColumnNumber',
+  'getEnclosingColumnNumber',
+  'getEnclosingLineNumber',
+  'getEvalOrigin',
+  'getFileName',
+  'getFunction',
+  'getFunctionName',
+  'getLineNumber',
+  'getMethodName',
+  'getPosition',
+  'getPromiseIndex',
+  'getScriptNameOrSourceURL',
+  'getScriptHash',
+  'getScriptId',
+  'getThis',
+  'getTypeName',
+  'isAsync',
+  'isConstructor',
+  'isEval',
+  'isNative',
+  'isPromiseAll',
+  'isToplevel',
+  'toString',
+];
+const SITE_DEFAULTS = {
+  getPosition: () => undefined,
+  getScriptNameOrSourceURL: (site) => site.getFileName(),
+  getScriptHash: () => '',
+};
+for (const name of SITE_METHODS) {
+  Object.defineProperty(CallSite.prototype, name, {
+    value: {
+      [name]() {
+        const site = this?.[kSite];
+        if (!site) throw new TypeError(`CallSite method ${name} expects CallSite as receiver`);
+        if (typeof site[name] === 'function') return site[name]();
+        return SITE_DEFAULTS[name]?.(site);
+      },
+    }[name],
+    writable: true,
+    enumerable: false,
+    configurable: true,
+  });
+}
+
+/** Wrap a V8 CallSite so getters match err.stack remapping (one this module made is kept). */
 export function wrapCallSite(frame) {
-  if (frame?.[kWrapped]) return frame;
-  return Object.assign(wrapRaw(frame), { [kWrapped]: true });
+  if (frame instanceof CallSite) return frame;
+  return new CallSite(wrapRaw(frame));
 }
 
 function wrapRaw(frame) {

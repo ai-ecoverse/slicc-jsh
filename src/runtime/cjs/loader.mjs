@@ -134,8 +134,14 @@ export function createCjs({
   Module.findSourceMap = function findSourceMap(path) {
     return sourceMaps.findSourceMap(path);
   };
+  // Loaded on first use. Node's is a writable data property: an assignment
+  // (jest-runtime copies Module's keys onto a subclass) makes one on the
+  // object assigned to.
   Object.defineProperty(Module, 'SourceMap', {
     get: () => sourceMaps.SourceMapClass(),
+    set(value) {
+      Object.defineProperty(this, 'SourceMap', { value, writable: true, enumerable: true, configurable: true });
+    },
     enumerable: true,
     configurable: true,
   });
@@ -386,12 +392,11 @@ export function createCjs({
     mod._compile(wrapper, filename);
   }
 
+  // Node's emitCircularRequireWarning: a process warning (printed by the
+  // default 'warning' listener, on a later tick).
   function warnCircular(prop) {
     try {
-      process.stderr.write(
-        `(node:${process.pid}) Warning: Accessing non-existent property '${String(prop)}' of module exports inside circular dependency\n` +
-          `(Use \`node --trace-warnings ...\` to show where the warning was created)\n`
-      );
+      process.emitWarning(`Accessing non-existent property '${String(prop)}' of module exports inside circular dependency`);
     } catch {
       /* ignore */
     }
@@ -435,7 +440,15 @@ export function createCjs({
   function loadFile(filename, parent) {
     if (cache[filename]) {
       const existing = cache[filename];
-      if (!existing.loaded) return circularExportsProxy(existing);
+      if (!existing.loaded) {
+        // Node's getExportsForCircularRequire: it warns only on a plain
+        // exports object that isn't marked __esModule (Babel's output is).
+        const exports = existing.exports;
+        if (exports && Object.getPrototypeOf(exports) === Object.prototype && !exports.__esModule) {
+          return circularExportsProxy(existing);
+        }
+        return exports;
+      }
       return existing.exports;
     }
     const mod = new Module(filename, parent);
