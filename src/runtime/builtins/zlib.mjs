@@ -3,13 +3,13 @@
  * 1.0.11 (MIT AND Zlib), bundled lazily as dist/vendor/zlib.cjs. Its streams
  * are this runtime's readable-stream Transform, its Buffer ours.
  *
- * On top of the port: Node 22's `constants` and `codes`, `crc32`, Brotli
- * decompression (zlib-brotli.mjs, over the decoder in src/brotli), and the
- * Brotli compression and Zstd entry points, which throw
+ * On top of the port: Node 22's `constants` and `codes`, `crc32`, Brotli and
+ * Zstd decompression (zlib-native.mjs, over the decoders in src/brotli and
+ * src/zstd), and the Brotli and Zstd compression entry points, which throw
  * ERR_FEATURE_UNAVAILABLE_ON_PLATFORM.
  */
 import { loadVendorCjs } from '../vendor-load.mjs';
-import { createBrotli } from './zlib-brotli.mjs';
+import { createNative } from './zlib-native.mjs';
 import { ZLIB_CODES, ZLIB_CONSTANTS } from './zlib-constants.mjs';
 
 const PACKAGE_ROOT = '/node_modules/@ai-ecoverse/slicc-jsh';
@@ -146,7 +146,7 @@ function zlibOptionsHelpers(Buffer) {
 }
 
 function unavailableError(name) {
-  const what = name.toLowerCase().includes('brotli') ? 'no Brotli compression' : 'no Zstd implementation';
+  const what = name.toLowerCase().includes('brotli') ? 'no Brotli compression' : 'no Zstd compression';
   const err = new Error(`zlib.${name} is not available in slicc-jsh (${what})`);
   err.code = 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM';
   return err;
@@ -215,15 +215,16 @@ export function createZlib({ ctx, process, Buffer, getStream, util, assert, time
   zlib.constants = ZLIB_CONSTANTS;
   zlib.codes = ZLIB_CODES;
   zlib.crc32 = crc32;
-  const brotli = createBrotli({
+  const native = createNative({
     Buffer,
     getStream,
     process,
     util,
     setImmediate: (fn) => timers.setImmediate(fn),
-    loadDecoder: () => loadVendorCjs({ ctx, packageRoot: PACKAGE_ROOT, name: 'brotli', process }),
+    loadBrotli: () => loadVendorCjs({ ctx, packageRoot: PACKAGE_ROOT, name: 'brotli', process }),
+    loadZstd: () => loadVendorCjs({ ctx, packageRoot: PACKAGE_ROOT, name: 'zstd', process }),
   });
-  for (const name of UNAVAILABLE) zlib[name] = brotli[name] ?? unavailable(name);
+  for (const name of UNAVAILABLE) zlib[name] = native[name] ?? unavailable(name);
   // Node 22's deprecated top-level copies of the constants (all but
   // BROTLI_*): read-only and non-enumerable.
   for (const [key, value] of Object.entries(ZLIB_CONSTANTS)) {

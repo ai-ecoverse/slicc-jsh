@@ -81,9 +81,8 @@ server.close();
     const r = await jsh.run(['node', 'got-br.mjs']);
     assert.equal(r.stderr, '');
     assert.equal(r.status, 0);
-    // Node 22 asks for zstd too (got checks process.versions.zstd): jsh has no Zstd.
     assert.deepEqual(r.stdout.split('\n'), [
-      'accept-encoding gzip, deflate, br',
+      'accept-encoding gzip, deflate, br, zstd',
       `page ${page.length} true`,
       `stream ${page.length} true`,
       'corrupt ReadError ERR_READING_RESPONSE_STREAM',
