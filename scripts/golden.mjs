@@ -8,7 +8,9 @@
  * with `npx -y node@22.22.0`) so host major cannot poison
  * goldens. Fixtures live under test/golden/fixtures/ and are not published.
  * case.json `kernel` ("1.86.0"): the oldest slicc-kernel the shim run needs;
- * with an older one installed only the host run is checked.
+ * with an older one installed only the host run is checked. case.json
+ * `hostPlatform` ("linux"): the only platform whose host Node output the
+ * golden is, recorded and checked there only.
  *
  * Fixtures run GOLDEN_JOBS at a time (default: the CPU count, at most 6);
  * each one's output is printed in fixture order once it is done.
@@ -250,6 +252,14 @@ async function fixture(name) {
   const hostArgv = meta.hostArgv ?? argv;
   const shimArgv = meta.shimArgv ?? argv;
 
+  // case.json `hostPlatform` ("linux"): Node's own output depends on the
+  // platform (fs.watch: inotify), so the host side is recorded and checked
+  // only there; the shim side is checked everywhere.
+  const hostHere = !meta.hostPlatform || meta.hostPlatform === process.platform;
+  if (mode === 'record' && !hostHere) {
+    out.log(`${name}: not recorded (host output is ${meta.hostPlatform}'s; this is ${process.platform})`);
+    return { out, ran: false };
+  }
   if (mode === 'record') {
     const recorded = await runNode22(hostArgv, { cwd, stdin: meta.stdin, env: meta.env });
     writeGolden(dir, recorded);
@@ -266,8 +276,12 @@ async function fixture(name) {
     }
   }
   const expected = readGolden(dir);
-  const host = await runNode22(hostArgv, { cwd, stdin: meta.stdin, env: meta.env });
-  compare(out, name, 'host', host, expected);
+  if (hostHere) {
+    const host = await runNode22(hostArgv, { cwd, stdin: meta.stdin, env: meta.env });
+    compare(out, name, 'host', host, expected);
+  } else {
+    out.log(`${name}: host skipped (its output is ${meta.hostPlatform}'s; this is ${process.platform})`);
+  }
 
   if (meta.shim && meta.kernel && !atLeast(kernelVersion, meta.kernel)) {
     out.log(`${name}: shim skipped (slicc-kernel ${kernelVersion} < ${meta.kernel})`);
