@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageTree, withJsh } from './helpers.mjs';
+import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
+
+// fork and its IPC channel: socketpairs and spawn's fds (ai-ecoverse/slicc-kernel#1093).
+const IPC_KERNEL = '1.126.0';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
@@ -67,5 +70,25 @@ test.each([[1, 1, 2], [2, 3, 5]])('%i + %i', (a, b, c) => expect(a + b).toBe(c))
     assert.match(r.stderr, /^ {6}at (Object\.)?toEqual \(fail\.test\.js:2:20\)$/m);
     assert.match(r.stderr, /^Tests: {7}1 failed, 6 passed, 7 total$/m);
     assert.match(r.stderr, /^Test Suites: 1 failed, 2 passed, 3 total$/m);
+  });
+
+  it('runs a project on forked workers, each suite in a worker process of its own id', { skip: !kernelAtLeast(IPC_KERNEL) }, async () => {
+    await jsh.kernel.writeFile(
+      '/os/proj/worker.test.js',
+      `test('in a worker', () => {
+  expect(process.env.JEST_WORKER_ID).toMatch(/^[12]$/);
+  expect(typeof process.send).toBe('function');
+  console.log('worker id ' + process.env.JEST_WORKER_ID);
+});
+`
+    );
+    const r = await jsh.run(['node', '/node_modules/jest/bin/jest.js', '--maxWorkers=2', '--no-cache', '--ci'], { cwd: '/os/proj' });
+    assert.equal(r.status, 1, r.stderr);
+    assert.doesNotMatch(r.stderr, /Warning|child process exceptions/);
+    for (const name of ['sum', 'mock', 'worker']) assert.match(r.stderr, new RegExp(`^PASS \\./${name}\\.test\\.js( \\([\\d.]+ m?s\\))?$`, 'm'));
+    assert.match(r.stderr, /^FAIL \.\/fail\.test\.js( \([\d.]+ m?s\))?$/m);
+    assert.match(r.stderr, /^ {6}worker id [12]$/m);
+    assert.match(r.stderr, /^Tests: {7}1 failed, 7 passed, 8 total$/m);
+    assert.match(r.stderr, /^Test Suites: 1 failed, 3 passed, 4 total$/m);
   });
 });

@@ -215,7 +215,14 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 
 **pnpm.** `fs.realpathSync`, `process.getuid`/`getgid` and `process.kill(self)` are there for pnpm's global command shims, which resolve their target and re-raise signals. Piped stdio loads `readable-stream` from sources embedded in the bundle, so a package installed with `pnpm add -g` (under `$PNPM_HOME/global/v11/<hash>/`) works.
 
-**Not available:** `fork` throws `ERR_NOT_SUPPORTED`.
+**`fork` and `'ipc'` in `stdio`** work on a kernel that makes socketpairs and passes a child more descriptors than its stdio ([slicc-kernel#1093](https://github.com/ai-ecoverse/slicc-kernel/issues/1093)). On older kernels `fork` throws `ERR_NOT_SUPPORTED`, and `'ipc'` is ignored, as before. The channel is Node 22.22.0's (golden `fork-ipc-node22`):
+- It is one end of a unix socketpair. The child has the other end at the `'ipc'` index, fd 3 for `fork`, and finds it in `NODE_CHANNEL_FD`, which leaves its environment at start, as in Node.
+- Messages are framed by Node's own `lib/internal/child_process/serialization.js`, `'json'` (the default) or `'advanced'` (V8's serialization, see `v8` below), so the bytes are Node's.
+- In the parent: `send` (with its callback and `false` under backpressure), `connected`, `disconnect`, `channel` with `ref`/`unref`, `'message'` and `'disconnect'`. `'close'` waits for the channel's end. When the parent disconnected first, `'close'` never comes, as in Node.
+- In the child: `process.send`, `process.connected`, `process.disconnect`, `process.channel`, `'message'` and `'disconnect'`. The channel keeps the child alive only while it has `'message'` or `'disconnect'` listeners.
+- Messages whose `cmd` starts with `NODE_` are `'internalMessage'`s. `fork`'s and `spawn`'s IPC errors are Node's: `ERR_CHILD_PROCESS_IPC_REQUIRED`, `ERR_IPC_ONE_PIPE`, `ERR_IPC_SYNC_FORK`, `ERR_IPC_CHANNEL_CLOSED`, `ERR_IPC_DISCONNECTED`, and the `options.serialization` check.
+- An exiting child's `'disconnect'` comes before its `'exit'`, as Linux closes its descriptors before the parent reaps it.
+- Not as in Node: a handle can't be sent (`send(message, socket)`): the kernel has no descriptor passing, so the send fails with `ERR_NOT_SUPPORTED`. A write still queued when the channel closes is written out first (Node drops it). Stdio slots past fd 2 other than `'ipc'` are still not passed.
 
 ## `net`, `http` and `https`
 

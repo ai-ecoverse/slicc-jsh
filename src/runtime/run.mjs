@@ -27,6 +27,7 @@ import { createTimers } from './timers.mjs';
 import { createFetch } from './web/fetch.mjs';
 import { createWebSocket } from './web/websocket.mjs';
 import { createPorts } from './web/broadcast-channel.mjs';
+import { setupChildChannel } from './builtins/ipc-channel.mjs';
 
 const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
 
@@ -706,6 +707,8 @@ export async function runNode(ctx, options = {}) {
     configurable: true,
     writable: true,
   });
+  // A forked child's IPC channel (NODE_CHANNEL_FD), before the program runs.
+  setupChildChannel({ ctx, process, handles });
 
   /**
    * Node's internal/main/repl.js: the banner, then lib/internal/repl.js's

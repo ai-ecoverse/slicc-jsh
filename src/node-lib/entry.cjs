@@ -27,6 +27,17 @@ module.exports = {
   get sourceMap() {
     return require('internal/source_map/source_map');
   },
+  /**
+   * The IPC channel's framing (lib/internal/child_process/serialization.js),
+   * with the stream_wrap state its writes report through.
+   */
+  get childProcessSerialization() {
+    const { streamBaseState, kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync } = internalBinding('stream_wrap');
+    return {
+      ...require('internal/child_process/serialization'),
+      streamWrap: { streamBaseState, kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync },
+    };
+  },
   /** process.finalization: lib/internal/process/finalization.js. */
   get finalization() {
     return require('internal/process/finalization');

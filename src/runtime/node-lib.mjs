@@ -466,6 +466,7 @@ export function loadNodeLib({ ctx, process } = {}) {
       // The REPL's (src/node-lib/lib/repl.js and internal/repl/*).
       'internal/deps/acorn/acorn/dist/acorn': acorn,
       vm: lazy(() => builtin('vm')),
+      v8: lazy(() => builtin('v8')),
       'internal/vm': lazy(() => ({ makeContextifyScript: makeContextifyScriptWith(builtin('vm')) })),
       'internal/async_hooks': { useDomainTrampoline() {} },
       'internal/bootstrap/realm': {
