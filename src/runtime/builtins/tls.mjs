@@ -24,7 +24,7 @@ import {
   validateUint32,
 } from '../node-errors.mjs';
 import { deprecate } from './util.mjs';
-import { kConnectTls, kDetach, kStartNow, kStartTls, kTlsSession } from './net.mjs';
+import { kConnectTls, kDetach, kIoError, kStartNow, kStartTls, kTlsSession } from './net.mjs';
 import { certificateObject, isIssuedBy, likelyIssued, parseCertificate } from './x509.mjs';
 import { kernelAtLeast } from '../kernel-version.mjs';
 
@@ -37,6 +37,38 @@ const kPeerChain = Symbol('slicc-jsh.tls.peerChain');
 const kStore = Symbol('slicc-jsh.tls.store');
 // The verdict onConnectSecure destroys with, after 'secure' (as Node's does).
 const kVerifyError = Symbol('slicc-jsh.tls.verifyError');
+// What a checkServerIdentity threw: onConnectSecure throws it on, as Node's does.
+const kThrown = Symbol('slicc-jsh.tls.thrown');
+// A SecureContext's client certificate and key (slicc-kernel 1.124.13), and
+// the certificate parsed, on the context and on a socket that has it.
+const kOwnCert = Symbol('slicc-jsh.tls.ownCert');
+const kOwnKey = Symbol('slicc-jsh.tls.ownKey');
+const kOwnLeaf = Symbol('slicc-jsh.tls.ownLeaf');
+
+// OpenSSL 3.0's errors for key material, as Node 22.22.0 throws them.
+const OSSL_ERRORS = {
+  ERR_OSSL_BAD_DECRYPT: [
+    'Provider routines',
+    'bad decrypt',
+    'error:1C800064',
+    [
+      'error:11800074:PKCS12 routines::pkcs12 cipherfinal error',
+      'error:1C800064:Provider routines::bad decrypt',
+      'error:11800074:PKCS12 routines::pkcs12 cipherfinal error',
+    ],
+  ],
+  ERR_OSSL_UNSUPPORTED: ['DECODER routines', 'unsupported', 'error:1E08010C'],
+  ERR_OSSL_X509_KEY_VALUES_MISMATCH: ['x509 certificate routines', 'key values mismatch', 'error:05800074'],
+  ERR_OSSL_PEM_NO_START_LINE: ['PEM routines', 'no start line', 'error:0480006C'],
+  ERR_OSSL_PEM_BAD_END_LINE: ['PEM routines', 'bad end line', 'error:04800066'],
+};
+
+function osslError(code) {
+  const [library, reason, id, stack] = OSSL_ERRORS[code];
+  const err = new Error(`${id}:${library}::${reason}`);
+  if (stack) err.opensslErrorStack = [...stack];
+  return Object.assign(err, { library, reason, code });
+}
 
 // OpenSSL 3.0's X509_verify_cert_error_string for the codes a check gives.
 const VERIFY_MESSAGES = {
@@ -362,6 +394,10 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
   // protocol, a custom ca, STARTTLS) and hands over the session: protocol,
   // ALPN, its verdict and the server's chain.
   const kernelTls = transportTls && kernelAtLeast(ctx, '1.124.0');
+  // slicc-kernel 1.124.13 (ai-ecoverse/slicc-kernel#1004): the handshake
+  // takes a client certificate and `sni: false`, and its session says the
+  // cipher.
+  const kernelControls = kernelTls && kernelAtLeast(ctx, '1.124.13');
   const options = () => process?._options ?? process?.execArgv ?? [];
   const hasOption = (flag) => options().includes(flag);
   const optionValue = (name) => {
@@ -519,10 +555,29 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       context[kCa] = Array.isArray(ca) ? [...ca] : [ca];
     }
     if (cert) {
-      for (const c of Array.isArray(cert) ? cert : [cert]) validateKeyOrCertOption(`${name}.cert`, c);
-      refuse('cert');
+      const certs = Array.isArray(cert) ? cert : [cert];
+      for (const c of certs) validateKeyOrCertOption(`${name}.cert`, c);
+      // The kernel's handshake takes a client certificate (slicc-kernel 1.124.13).
+      if (!kernelControls) refuse('cert');
+      // Text with no certificate in it is OpenSSL's PEM error, here as there.
+      const pemError = pemCertError(certs[0]);
+      if (pemError) throw osslError(pemError);
+      context[kOwnCert] = { cert: certs, leaf: caCertificates(certs)[0] };
     }
-    if (key) refuse('key');
+    if (key) {
+      if (!kernelControls) refuse('key');
+      // One key: a key per algorithm (RSA and EC) is OpenSSL's choice to make.
+      const keys = Array.isArray(key) ? key : [key];
+      if (keys.length > 1) throw noTls(`tls.createSecureContext option 'key' with more than one key`, 'the kernel takes one client key');
+      const pem = keys[0]?.pem !== undefined ? keys[0].pem : keys[0];
+      const pass = keys[0]?.passphrase !== undefined ? keys[0].passphrase : options.passphrase;
+      validateKeyOrCertOption(`${name}.key`, pem);
+      if (pass !== undefined && pass !== null) validateString(pass, `${name}.passphrase`);
+      // What isn't a key at all fails here, as in Node; a passphrase or a
+      // key that doesn't match the certificate, at connect (the kernel's).
+      if (!isKeyMaterial(pem)) throw osslError('ERR_OSSL_UNSUPPORTED');
+      context[kOwnKey] = { key: pem, ...(pass !== undefined && pass !== null ? { passphrase: pass } : {}) };
+    }
     if (sigalgs !== undefined && sigalgs !== null) {
       validateString(sigalgs, `${name}.sigalgs`);
       if (sigalgs === '') throw ERR_INVALID_ARG_VALUE(`${name}.sigalgs`, sigalgs);
@@ -562,6 +617,31 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     if (sessionTimeout !== undefined && sessionTimeout !== null) {
       validateInt32(sessionTimeout, `${name}.sessionTimeout`, 0);
     }
+  }
+
+  /** OpenSSL's PEM error for a certificate that isn't one (DER passes), or undefined. */
+  function pemCertError(cert) {
+    if (typeof cert !== 'string' && cert[0] === 0x30) return undefined;
+    const text = typeof cert === 'string' ? cert : Buffer.from(cert.buffer, cert.byteOffset, cert.byteLength).toString('latin1');
+    if (!text.includes('-----BEGIN ')) return 'ERR_OSSL_PEM_NO_START_LINE';
+    return /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/.test(text) ? undefined : 'ERR_OSSL_PEM_BAD_END_LINE';
+  }
+
+  /** A key as PEM (PKCS#8, encrypted or not, PKCS#1 or SEC1) or DER: what the kernel reads. */
+  function isKeyMaterial(key) {
+    if (typeof key !== 'string' && key[0] === 0x30) return true;
+    const text = typeof key === 'string' ? key : Buffer.from(key.buffer, key.byteOffset, key.byteLength).toString('latin1');
+    return /-----BEGIN (?:RSA |EC |ENCRYPTED )?PRIVATE KEY-----/.test(text);
+  }
+
+  /**
+   * The kernel's client certificate from a context: only with both a
+   * certificate and a key, as OpenSSL sends one only then.
+   */
+  function clientCredentials(context) {
+    const cert = context?.[kOwnCert];
+    const key = context?.[kOwnKey];
+    return cert && key ? { cert: cert.cert, ...key } : undefined;
   }
 
   function createSecureContext(options) {
@@ -711,7 +791,15 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       socket.authorizationError = socket.authorized ? null : 'UNABLE_TO_VERIFY_LEAF_SIGNATURE';
       return undefined;
     }
-    const err = verifyError(socket, session, options);
+    let err;
+    try {
+      err = verifyError(socket, session, options);
+    } catch (thrown) {
+      // Node's checkServerIdentity throws out of onConnectSecure: the
+      // session is refused here, and 'secure' throws it on.
+      socket[kThrown] = thrown;
+      return thrown;
+    }
     if (err) {
       socket.authorized = false;
       socket.authorizationError = err.code || err.message;
@@ -733,6 +821,18 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     };
   }
 
+  /**
+   * What only the kernel's own handshake does (slicc-kernel 1.124.13): the
+   * client certificate, and no SNI where Node sends none. Node sends one
+   * only for tls.connect's `servername` (not the host, and never a bare
+   * TLSSocket's); the kernel still checks the certificate against the name.
+   */
+  function kernelControlsOf(context, sni) {
+    if (!kernelControls) return {};
+    const own = clientCredentials(context?.context);
+    return { ...(sni ? {} : { sni: false }), ...(own ?? {}) };
+  }
+
   /** Node's ConnResetException for a server that left during the handshake. */
   function handshakeReset(options) {
     const error = new Error('Client network socket disconnected before secure TLS connection was established');
@@ -745,8 +845,12 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
   }
 
   /** A kernel refusal as Node's error (or ERR_NOT_SUPPORTED for what it won't do). */
-  function refusal(err, { what, options, ca, overSocket }) {
+  function refusal(err, { what, options, ca, own, overSocket }) {
     const code = err?.code ?? err?.cause?.code;
+    // The key's errors (the engine's, before anything is dialled) as Node's.
+    // Without a passphrase OpenSSL decrypts with an empty one: a bad decrypt.
+    if (code === 'ERR_OSSL_CRYPTO_INTERRUPTED_OR_CANCELLED') return osslError('ERR_OSSL_BAD_DECRYPT');
+    if (typeof code === 'string' && Object.hasOwn(OSSL_ERRORS, code)) return osslError(code);
     if (code === 'EPROTONOSUPPORT') {
       return noTls(
         what,
@@ -755,7 +859,11 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
           : "the kernel's TLS carries HTTP/1.1 and WebSocket only"
       );
     }
+    // Over a socket, sni: false (or a client certificate) takes the kernel's
+    // own path, which says ENOTSUP for a connection its uplink doesn't route.
+    if (code === 'ENOTSUP' && overSocket) return noTls(what, "the kernel upgrades only a plain connection its uplink routes");
     if (code === 'ENOTSUP') {
+      if (own) return noTls(what, "a client certificate needs a host the kernel's uplink routes");
       if (ca) return noTls(what, "a custom ca needs a host the kernel's uplink routes");
       return noTls(what, "the kernel's TLS goes through its transport, which has no loopback");
     }
@@ -767,10 +875,30 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     if (typeof code === 'string' && Object.hasOwn(VERIFY_MESSAGES, code)) {
       return Object.assign(new Error(VERIFY_MESSAGES[code]), { code });
     }
+    if (typeof code === 'string' && code.startsWith('ERR_SSL_')) return sslError(code, err.detail ?? err.message);
     if (typeof code === 'string' && code.startsWith('ERR_')) {
       return Object.assign(new Error(err.detail ?? err.message), { code });
     }
     return undefined;
+  }
+
+  /**
+   * The kernel's TLS failure (ERR_SSL_HANDSHAKE_FAILURE, ERR_SSL_FATAL_ALERT)
+   * shaped as Node's OpenSSL errors: `library`, `reason` (whose words the
+   * code is), `code`. Which alert the server sent the kernel doesn't say
+   * yet, where Node's code names it (ERR_SSL_TLSV13_ALERT_CERTIFICATE_REQUIRED).
+   */
+  function sslError(code, detail) {
+    const err = new Error(String(detail ?? code).replace(/^ERR_SSL_[A-Z_]+: /, ''));
+    const reason = code.slice('ERR_SSL_'.length).toLowerCase().replaceAll('_', ' ');
+    return Object.assign(err, { library: 'SSL routines', reason, code });
+  }
+
+  /** A failed read or write on the kernel's session as Node's error, or undefined. */
+  function sessionError(err) {
+    const code = err?.code ?? err?.cause?.code;
+    if (typeof code !== 'string' || !code.startsWith('ERR_SSL_')) return undefined;
+    return sslError(code, err.detail ?? err.cause?.detail);
   }
 
   // --- _tls_wrap.js: TLSSocket --------------------------------------------
@@ -818,6 +946,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       const tlsOptions = this._tlsOptions;
       const optionsNow = () => this[kConnectOptions];
       let ca;
+      let own;
       this[kStartTls](socket, {
         lazy: true,
         dial: () => {
@@ -825,15 +954,27 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
           const context = tlsOptions.secureContext ?? options.secureContext;
           ca = options.ca ? (Array.isArray(options.ca) ? options.ca : [options.ca]) : context?.context?.[kCa];
           this[kStore] = caCertificates(ca);
+          this[kOwnLeaf] = context?.context?.[kOwnCert]?.leaf;
+          own = clientCredentials(context?.context);
           const servername = options.servername || tlsOptions.servername || options.host || socket._host;
-          return { host: options.host ?? socket._host, tls: kernelRequest({ ...options, ALPNProtocols: tlsOptions.ALPNProtocols }, servername, ca) };
+          const tls = kernelRequest({ ...options, ALPNProtocols: tlsOptions.ALPNProtocols }, servername, ca);
+          return { host: options.host ?? socket._host, tls: { ...tls, ...kernelControlsOf(context, optionsNow()?.servername) } };
         },
         check: (session) => takeSession(this, session, optionsNow()),
         refusedSession: (err) => {
           this[kVerifyError] = err;
         },
-        refused: (err) => refusal(err, { what: 'tls.connect over a socket', options: optionsNow() ?? {}, ca, overSocket: true }),
-        secured: () => this.emit('secure'),
+        refused: (err) => refusal(err, { what: 'tls.connect over a socket', options: optionsNow() ?? {}, ca, own, overSocket: true }),
+        // A throwing listener (onConnectSecure's checkServerIdentity) is uncaught, as in Node.
+        secured: () => {
+          try {
+            this.emit('secure');
+          } catch (err) {
+            process.nextTick(() => {
+              throw err;
+            });
+          }
+        },
       });
     }
 
@@ -903,8 +1044,21 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     getPeerCertificate(detailed) {
       return this._secureEstablished ? peerCertificate(this, Boolean(detailed)) : null;
     }
+    // Node's: the certificate the context has, sent or not (the kernel's
+    // handshake, slicc-kernel 1.124.13, takes one).
     getCertificate() {
-      return this._secureEstablished ? {} : null;
+      if (!this._secureEstablished) return null;
+      const leaf = this[kTlsSession]?.path === 'kernel' ? this[kOwnLeaf] : undefined;
+      return leaf ? certificateObject(leaf, { Buffer, digest }) : {};
+    }
+    // The suite as Node's getCipher() says it, from the kernel's session.
+    getCipher() {
+      const cipher = this._secureEstablished ? this[kTlsSession]?.cipher : undefined;
+      return cipher ? { name: cipher.name, standardName: cipher.standardName, version: cipher.version } : null;
+    }
+    // A read or write the kernel's session fails (a fatal alert) as Node's error.
+    [kIoError](err) {
+      return this[kTlsSession]?.path === 'kernel' ? sessionError(err) : undefined;
     }
     getPeerX509Certificate() {
       return undefined;
@@ -923,7 +1077,6 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     }
   }
   for (const method of [
-    'getCipher',
     'getSharedSigalgs',
     'getEphemeralKeyInfo',
     'getFinished',
@@ -1042,6 +1195,11 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
   // The session's verdict is in (takeSession): 'secureConnect' follows 'secure'.
   function onConnectSecure() {
     const err = this[kVerifyError];
+    if (err && err === this[kThrown]) {
+      // Out of the 'secure' listener, so later ones don't run: uncaught, as in Node.
+      this[kVerifyError] = undefined;
+      throw err;
+    }
     if (err) {
       this[kVerifyError] = undefined;
       // Node's handle goes with it: no session to ask about from here.
@@ -1094,12 +1252,16 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     }
     const host = options.host ?? 'localhost';
     const port = Number(options.port ?? 443);
-    const servername = options.servername || (isIP(host) ? undefined : host);
+    // The name the kernel checks the certificate against; whether it's sent
+    // as the SNI is kernelControlsOf's (Node's rule).
+    const servername = options.servername || (isIP(host) && !kernelControls ? undefined : host);
     const ca = options.ca ? (Array.isArray(options.ca) ? options.ca : [options.ca]) : context?.context?.[kCa];
+    const own = clientCredentials(context?.context);
     const socket = new TLSSocket(undefined, { ALPNProtocols: options.ALPNProtocols, allowHalfOpen: options.allowHalfOpen });
     socket._tlsOptions.isServer = false;
     socket[kConnectOptions] = options;
     socket[kStore] = caCertificates(ca);
+    socket[kOwnLeaf] = context?.context?.[kOwnCert]?.leaf;
     if (cb) socket.once('secureConnect', cb);
     socket.once('connect', () => {
       process.nextTick(() => {
@@ -1112,8 +1274,10 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     // certificate to show and no protocol but HTTP: its own handshake first,
     // for a host the uplink routes (another port than 443, or a check the
     // transport can't make), then the transport (ENOTSUP: not the uplink's).
+    // A client certificate is the kernel's handshake's alone: no transport after it.
     const preferKernel =
-      kernelTls && (port !== 443 || options.rejectUnauthorized === false || options.checkServerIdentity !== checkServerIdentity);
+      kernelTls &&
+      (port !== 443 || options.rejectUnauthorized === false || options.checkServerIdentity !== checkServerIdentity || own !== undefined);
     const what = `tls.connect to ${host}:${port}`;
     Reflect.apply(net.Socket.prototype.connect, socket, [
       {
@@ -1121,13 +1285,13 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
         port,
         signal: options.signal,
         [kConnectTls]: {
-          tls: preferKernel ? { ...tls, path: 'kernel' } : tls,
-          ...(preferKernel ? { retry: tls } : {}),
+          tls: preferKernel ? { ...tls, ...kernelControlsOf(context, options.servername), path: 'kernel' } : tls,
+          ...(preferKernel && !own ? { retry: tls } : {}),
           check: (session) => takeSession(socket, session, options),
           refusedSession: (err) => {
             socket[kVerifyError] = err;
           },
-          refused: (err) => refusal(err, { what, options: { ...options, host, port }, ca }),
+          refused: (err) => refusal(err, { what, options: { ...options, host, port }, ca, own }),
         },
       },
     ]);

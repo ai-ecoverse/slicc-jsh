@@ -72,6 +72,9 @@ server.listen(0, '127.0.0.1', () => {
   // custom ca too (tls-kernel.test.mjs): those calls don't throw there.
   const transportTls = kernelAtLeast('1.116.0');
   const kernelTls = kernelAtLeast('1.124.0');
+  // From 1.124.13 the kernel takes a client certificate: key material is
+  // checked as Node checks it (tls-kernel.test.mjs).
+  const kernelCerts = kernelAtLeast('1.124.13');
   const overSocket = kernelTls ? 'no throw' : `ERR_NOT_SUPPORTED slicc-jsh: '${transportTls ? 'tls.connect over a socket' : 'tls.connect'}' is not supported yet (no TLS on ctx.net)`;
   it('a handshake throws ERR_NOT_SUPPORTED when it is called: connect, listen, a TLSSocket over a socket, key material', async () => {
     const r = await jsh.run([
@@ -114,10 +117,16 @@ t('https.createServer', () => https.createServer());
       'listening false',
       kernelTls ? 'TLSSocket over a socket no throw' : `TLSSocket over a socket ERR_NOT_SUPPORTED slicc-jsh: 'tls.TLSSocket over a socket' is not supported yet ${why}`,
       `TLSSocket connect ERR_NOT_SUPPORTED slicc-jsh: 'tls.TLSSocket.connect' is not supported yet ${why}`,
-      `createSecureContext cert ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'cert'' is not supported yet ${why}`,
-      `createSecureContext key ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'key'' is not supported yet ${why}`,
+      kernelCerts
+        ? 'createSecureContext cert ERR_OSSL_PEM_BAD_END_LINE error:04800066:PEM routines::bad end line'
+        : `createSecureContext cert ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'cert'' is not supported yet ${why}`,
+      kernelCerts
+        ? 'createSecureContext key ERR_OSSL_UNSUPPORTED error:1E08010C:DECODER routines::unsupported'
+        : `createSecureContext key ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'key'' is not supported yet ${why}`,
       kernelTls ? 'createSecureContext ca no throw' : `createSecureContext ca ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'ca'' is not supported yet ${why}`,
-      `createServer key ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'cert'' is not supported yet ${why}`,
+      kernelCerts
+        ? 'createServer key ERR_OSSL_PEM_NO_START_LINE error:0480006C:PEM routines::no start line'
+        : `createServer key ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'cert'' is not supported yet ${why}`,
       `createSecurePair ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecurePair' is not supported yet ${why}`,
       `https.createServer ERR_NOT_SUPPORTED slicc-jsh: 'https.createServer' is not supported yet ${why}`,
       '',

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createTcp, connect as tcp } from 'node:net';
+import { createPrivateKey } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer as createTlsServer } from 'node:tls';
@@ -24,6 +25,9 @@ const modules = fileURLToPath(new URL('../../node_modules', import.meta.url));
 // engine installed; a program's output is compared with host Node 22.22.0's,
 // the same program against the same server.
 const skip = !kernelAtLeast('1.124.0') && 'slicc-kernel before 1.124.0 has no TLS handshake of its own';
+// slicc-kernel 1.124.13 (ai-ecoverse/slicc-kernel#1004): a client
+// certificate, `sni: false`, and the cipher in the session.
+const skipControls = !kernelAtLeast('1.124.13') && 'slicc-kernel before 1.124.13 takes no client certificate';
 
 const UPLINK = '203.0.113.10';
 
@@ -75,6 +79,7 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
   let rsaPem;
   const mail = [];
   const connects = [];
+  let clientFiles;
 
   /** Run `source` as `file` in host Node 22 (against 127.0.0.1) and in jsh (against the uplink). */
   async function both(file, source, port, { address = false } = {}) {
@@ -141,12 +146,12 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
     servers.push(starttls);
     ports.starttls = await listen(starttls);
     // A minimal PostgreSQL server: SSLRequest, 'S', TLS, startup, one simple query.
-    const pgServer = (leafFor) =>
+    const pgServer = (leafFor, tlsExtra = {}) =>
       createTcp((sock) => {
         sock.once('data', (d) => {
           if (d.length !== 8 || d.readInt32BE(4) !== 80877103) return sock.destroy();
           sock.write('S');
-          const secure = new TLSSocket(sock, { isServer: true, key: leafFor.key, cert: leafFor.cert });
+          const secure = new TLSSocket(sock, { isServer: true, key: leafFor.key, cert: leafFor.cert, ...tlsExtra });
           secure.on('error', () => {});
           let buf = Buffer.alloc(0);
           let started = false;
@@ -185,7 +190,8 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
               if (type === 'X') return secure.end();
               if (type !== 'Q') continue;
               const sql = body.subarray(0, body.length - 1).toString();
-              const value = Buffer.from(`over ${secure.getProtocol()}: ${sql}`);
+              const as = tlsExtra.requestCert ? ` as ${secure.getPeerCertificate().subject?.CN}` : '';
+              const value = Buffer.from(`over ${secure.getProtocol()}${as}: ${sql}`);
               secure.write(Buffer.concat([
                 msg('T', Buffer.concat([int16(1), cstr('answer'), int32(0), int16(0), int32(25), int16(-1), int32(-1), int16(0)])),
                 msg('D', Buffer.concat([int16(1), int32(value.length), value])),
@@ -197,8 +203,9 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
         });
       });
     const dbLeaf = ca.server('db.test', { san: ['DNS:db.test', 'IP:127.0.0.1', `IP:${UPLINK}`] });
-    for (const [name, leafFor] of [['pg', dbLeaf], ['pgUntrusted', other.server('db.test')]]) {
-      const server = pgServer(leafFor);
+    const requireCert = { requestCert: true, rejectUnauthorized: true, ca: ca.pem };
+    for (const [name, leafFor, tlsExtra] of [['pg', dbLeaf], ['pgUntrusted', other.server('db.test')], ['pgMtls', dbLeaf, requireCert]]) {
+      const server = pgServer(leafFor, tlsExtra);
       servers.push(server);
       ports[name] = await listen(server);
     }
@@ -257,14 +264,50 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
     });
     servers.push(proxy);
     ports.proxy = await listen(proxy);
+    // Client certificates and SNI: servers that say whose certificate they
+    // got and the server name they were sent.
+    const named = ca.server('secure.test', { san: ['DNS:secure.test', 'IP:127.0.0.1', `IP:${UPLINK}`] });
+    const client = ca.server('client.test', { eku: ['1.3.6.1.5.5.7.3.2'] });
+    const encrypted = createPrivateKey(client.key).export({ type: 'pkcs8', format: 'pem', cipher: 'aes-256-cbc', passphrase: 'pw' });
+    clientFiles = { 'client.pem': client.cert, 'client.key': client.key, 'client-enc.key': encrypted, 'other.key': named.key };
+    for (const [file, data] of Object.entries(clientFiles)) writeFileSync(join(dir, file), data);
+    const telling = (s) => s.end(`client=${s.getPeerCertificate().subject?.CN ?? 'none'} sni=${s.servername}`);
+    const tellingServer = async (name, options) => {
+      const server = createTlsServer({ key: named.key, cert: named.cert, ...options }, telling);
+      server.on('tlsClientError', () => {});
+      servers.push(server);
+      ports[name] = await listen(server);
+    };
+    await tellingServer('mtls', requireCert);
+    await tellingServer('mtls12', { ...requireCert, maxVersion: 'TLSv1.2' });
+    await tellingServer('sni', {});
+    // The server's choice of suite, so both clients get the same one.
+    await tellingServer('cipher13', { ciphers: 'TLS_AES_128_GCM_SHA256', honorCipherOrder: true });
+    await tellingServer('cipher12', { ciphers: 'ECDHE-ECDSA-AES256-GCM-SHA384', honorCipherOrder: true, maxVersion: 'TLSv1.2' });
+    const starttlsSni = createTcp((sock) => {
+      sock.once('data', () => {
+        sock.write('OK\r\n');
+        const secure = new TLSSocket(sock, { isServer: true, key: named.key, cert: named.cert, SNICallback: (n, cb) => cb(null) });
+        secure.on('error', () => {});
+        secure.on('secure', () => telling(secure));
+      });
+    });
+    servers.push(starttlsSni);
+    ports.starttlsSni = await listen(starttlsSni);
+    const mtlsHttps = createHttpsServer({ key: named.key, cert: named.cert, ...requireCert }, (req, res) => {
+      res.end(`client=${req.socket.getPeerCertificate().subject?.CN} sni=${req.socket.servername} ${req.url}`);
+    });
+    servers.push(mtlsHttps);
+    ports.mtlsHttps = await listen(mtlsHttps);
     for (const port of Object.values(ports)) peers[`${UPLINK}:${port}`] = pipeTo(port);
     const { fakeUplink } = await import('@ai-ecoverse/slicc-kernel/testing');
-    jsh = await withJsh({ uplink: fakeUplink({ routes: { prefixes: [], exit: true }, peers }), tlsEngine: true });
+    jsh = await withJsh({ uplink: fakeUplink({ names: { 'secure.test': [UPLINK] }, routes: { prefixes: [], exit: true }, peers }), tlsEngine: true });
     for (const name of ['pg', 'nodemailer', 'https-proxy-agent']) {
       for (const [path, data] of devPackageTree(name)) await jsh.kernel.writeFile(`/os${path}`, data);
     }
     await jsh.kernel.writeFile('/os/ca.pem', ca.pem);
     await jsh.kernel.writeFile('/os/rsa.pem', rsaPem);
+    for (const [file, data] of Object.entries(clientFiles)) await jsh.kernel.writeFile(`/os/${file}`, data);
   });
   after(async () => {
     await jsh?.close();
@@ -585,5 +628,285 @@ const send = (label, options, body) => new Promise((resolve) => {
     assert.match(shim.stdout, /^no agent, wrong name error ERR_TLS_CERT_ALTNAME_INVALID Hostname\/IP does not match certificate's altnames: Host: other\.test\. /m);
     assert.match(shim.stdout, /^check other\.test secure\.test\nno agent, wrong name, own check refuses error MINE not mine$/m);
     assert.match(shim.stdout, /^check other\.test secure\.test\nno agent, wrong name, own check takes it 200 /m);
+  });
+
+  // What a server's alert is still called in jsh until the kernel names the
+  // alert (agreed for ai-ecoverse/slicc-kernel#1004): Node's code, and jsh's.
+  const ALERTS = [
+    ['ERR_SSL_TLSV13_ALERT_CERTIFICATE_REQUIRED', 'ERR_SSL_FATAL_ALERT'],
+    ['ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE', 'ERR_SSL_HANDSHAKE_FAILURE'],
+  ];
+  /** jsh's output with each alert code as Node's, after checking jsh said it. */
+  function asNodeAlerts(host, shim) {
+    let out = shim.stdout;
+    for (const [node, ours] of ALERTS) {
+      assert.equal(out.split(ours).length, host.stdout.split(node).length, `${ours} where Node says ${node}`);
+      out = out.replaceAll(ours, node);
+    }
+    return out;
+  }
+
+  it('client certificates (kernel 1.124.13): mTLS on TLS 1.3 and 1.2, an encrypted key, getCertificate, and a server that requires one', { skip: skipControls }, async () => {
+    const { host, shim } = await both(
+      'mtls.js',
+      `const tls = require('tls');
+const fs = require('fs');
+const [host, portsJson, dir] = process.argv.slice(2);
+const ports = JSON.parse(portsJson);
+const ca = fs.readFileSync(dir + '/ca.pem');
+const cert = fs.readFileSync(dir + '/client.pem');
+const key = fs.readFileSync(dir + '/client.key', 'utf8');
+const encrypted = fs.readFileSync(dir + '/client-enc.key');
+const go = (label, opts) => new Promise((resolve) => {
+  const s = tls.connect({ host, servername: 'secure.test', ca, ...opts }, () => {
+    const c = s.getCertificate();
+    console.log(label, 'secureConnect', s.authorized, s.getProtocol(), Object.keys(c).join(), c.subject && c.subject.CN, c.issuer && c.issuer.CN, c.ext_key_usage, c.raw && c.raw.length, c.fingerprint256 === (c.raw && require('crypto').createHash('sha256').update(c.raw).digest('hex').toUpperCase().match(/../g).join(':')));
+  });
+  s.setEncoding('utf8');
+  s.on('data', (d) => console.log(label, 'data', d));
+  // Node's message starts with its thread's id: the code, and what the error has.
+  s.on('error', (e) => console.log(label, 'error', e.name, e.code, e.library, e.reason === e.code.slice(8).toLowerCase().replaceAll('_', ' '), Object.keys(e).join()));
+  s.on('close', () => resolve());
+});
+(async () => {
+  await go('TLS 1.3', { port: ports.mtls, cert, key });
+  await go('TLS 1.2', { port: ports.mtls12, cert, key });
+  await go('encrypted key', { port: ports.mtls, cert, key: encrypted, passphrase: 'pw' });
+  await go('key as { pem, passphrase }', { port: ports.mtls, cert, key: [{ pem: encrypted, passphrase: 'pw' }] });
+  await go('secureContext', { port: ports.mtls, ca: undefined, secureContext: tls.createSecureContext({ ca, cert, key }) });
+  await go('not asked for', { port: ports.sni, cert, key });
+  await go('none, TLS 1.3', { port: ports.mtls });
+  await go('none, TLS 1.2', { port: ports.mtls12 });
+  await go('a certificate without its key', { port: ports.mtls, cert });
+  await go('a key without its certificate', { port: ports.mtls12, key });
+})();
+`,
+      ports
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.equal(asNodeAlerts(host, shim), host.stdout);
+    assert.equal(shim.stderr, '');
+    assert.match(shim.stdout, /^TLS 1\.3 data client=client\.test sni=secure\.test$/m);
+    assert.match(shim.stdout, /^TLS 1\.2 data client=client\.test sni=secure\.test$/m);
+  });
+
+  it("bad key material: Node's codes, messages and properties for a wrong or missing passphrase, a key that isn't one, another certificate's key, a certificate that isn't one", { skip: skipControls }, async () => {
+    // Node throws these from tls.connect (createSecureContext); jsh throws
+    // what it can see without the key (it isn't one, the certificate isn't
+    // one), and the rest is the kernel's at connect, on 'error'.
+    const { host, shim } = await both(
+      'badkey.js',
+      `const tls = require('tls');
+const fs = require('fs');
+const [host, portsJson, dir] = process.argv.slice(2);
+const ports = JSON.parse(portsJson);
+const ca = fs.readFileSync(dir + '/ca.pem');
+const cert = fs.readFileSync(dir + '/client.pem', 'utf8');
+const key = fs.readFileSync(dir + '/client.key');
+const encrypted = fs.readFileSync(dir + '/client-enc.key', 'utf8');
+const show = (label, e) => console.log(label, e.name, e.code, e.message, JSON.stringify(Object.entries(e)));
+const go = (label, opts) => new Promise((resolve) => {
+  let s;
+  try {
+    s = tls.connect({ host, port: ports.mtls, servername: 'secure.test', ca, ...opts }, () => console.log(label, 'secureConnect'));
+  } catch (e) {
+    show(label, e);
+    return resolve();
+  }
+  s.on('connect', () => console.log(label, 'connect'));
+  s.on('error', (e) => show(label, e));
+  s.on('close', () => resolve());
+});
+(async () => {
+  await go('wrong passphrase', { cert, key: encrypted, passphrase: 'not it' });
+  await go('no passphrase', { cert, key: encrypted });
+  await go('not a key', { cert, key: 'garbage' });
+  await go('a certificate as the key', { cert, key: cert });
+  await go("another certificate's key", { cert, key: fs.readFileSync(dir + '/other.key') });
+  await go('not a certificate', { cert: 'nope', key });
+  for (const [label, o] of [['context, not a key', { cert, key: Buffer.from('garbage') }], ['context, not a certificate', { cert: Buffer.from('nope'), key }], ['context, key type', { key: 42 }], ['context, passphrase type', { key, passphrase: 7 }]]) {
+    try {
+      tls.createSecureContext(o);
+      console.log(label, 'made');
+    } catch (e) {
+      show(label, e);
+    }
+  }
+})();
+`,
+      ports
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.equal(shim.stdout, host.stdout);
+    assert.equal(shim.stderr, '');
+    // pfx is the kernel's ENOTSUP: no PKCS#12 in the engine.
+    const pfx = await jsh.run(['node', '-e', "try { require('tls').connect({ host: '203.0.113.10', port: 1, pfx: Buffer.from('x') }) } catch (e) { console.log(e.code, e.message) }"]);
+    assert.equal(pfx.stdout, "ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'pfx'' is not supported yet (no TLS on ctx.net)\n");
+  });
+
+  it('SNI as Node sends it (only a servername tls.connect is given), getCipher, and checkServerIdentity on the leaf', { skip: skipControls }, async () => {
+    const { host, shim } = await both(
+      'sni.js',
+      `const tls = require('tls');
+const net = require('net');
+const fs = require('fs');
+const [host, portsJson, dir] = process.argv.slice(2);
+const ports = JSON.parse(portsJson);
+const ca = fs.readFileSync(dir + '/ca.pem');
+// Node resolves secure.test with this; jsh through the kernel (the uplink's name).
+const lookup = (name, o, cb) => (o && o.all ? cb(null, [{ address: host, family: 4 }]) : cb(null, host, 4));
+const go = (label, opts) => new Promise((resolve) => {
+  const s = tls.connect({ ca, ...opts }, () => console.log(label, 'secureConnect', s.authorized, s.authorizationError, JSON.stringify(s.servername), JSON.stringify(s.getCipher())));
+  s.setEncoding('utf8');
+  s.on('data', (d) => console.log(label, 'data', d));
+  s.on('error', (e) => console.log(label, 'error', e.code, e.message));
+  s.on('close', () => resolve());
+});
+const upgraded = (label, upgrade) => new Promise((resolve) => {
+  const plain = net.connect(ports.starttlsSni, host, () => plain.write('STARTTLS\\r\\n'));
+  plain.once('data', () => {
+    const s = upgrade(plain);
+    s.setEncoding('utf8');
+    s.on('data', (d) => console.log(label, 'data', d, JSON.stringify(s.servername)));
+    s.on('error', (e) => console.log(label, 'error', e.code));
+    s.on('close', () => resolve());
+  });
+});
+const own = (h, c) => {
+  console.log('check', h, c.subject.CN, c.issuerCertificate.subject.CN, c.serialNumber === leafSerial, Buffer.isBuffer(c.raw));
+};
+let leafSerial;
+(async () => {
+  await go('a hostname', { host: 'secure.test', port: ports.sni, lookup });
+  await go('an IP', { host, port: ports.sni });
+  await go('servername', { host, port: ports.sni, servername: 'secure.test' });
+  await go("servername ''", { host: 'secure.test', port: ports.sni, servername: '', lookup });
+  await go('TLS 1.3 suite', { host, port: ports.cipher13, servername: 'secure.test' });
+  await go('TLS 1.2 suite', { host, port: ports.cipher12, servername: 'secure.test' });
+  await upgraded('over a socket, servername', (socket) => tls.connect({ socket, servername: 'secure.test', ca }));
+  await upgraded('over a socket, host', (socket) => tls.connect({ socket, host: 'secure.test', ca }));
+  await upgraded('a TLSSocket with a servername', (socket) => {
+    const s = new tls.TLSSocket(socket, { servername: 'secure.test' });
+    s.write('x');
+    return s;
+  });
+  await new Promise((resolve) => {
+    const s = tls.connect({ host, port: ports.sni, servername: 'secure.test', ca }, () => {
+      leafSerial = s.getPeerCertificate().serialNumber;
+      s.destroy();
+    });
+    s.on('close', resolve);
+  });
+  await go('own check, the leaf', { host, port: ports.sni, servername: 'secure.test', checkServerIdentity: (h, c) => own(h, c) });
+  await go('own check, by host', { host: 'secure.test', port: ports.sni, lookup, checkServerIdentity: (h, c) => own(h, c) });
+  await go('a secureContext of its own', { host, port: ports.sni, servername: 'secure.test', ca: undefined, secureContext: tls.createSecureContext({ ca }) });
+  await go('own check returns an error', { host, port: ports.sni, servername: 'secure.test', checkServerIdentity: (h, c) => (own(h, c), new Error('not this one')) });
+  await go('own check returns an error, rejectUnauthorized false', { host, port: ports.sni, servername: 'secure.test', rejectUnauthorized: false, checkServerIdentity: (h, c) => (own(h, c), Object.assign(new Error('not this one'), { code: 'MINE' })) });
+  await go("Node's check, rejectUnauthorized false, a wrong name", { host, port: ports.sni, servername: 'other.test', rejectUnauthorized: false });
+  process.on('uncaughtException', (e) => {
+    console.log('uncaught', e.message);
+    process.exit(0);
+  });
+  await upgraded('over a socket, own check throws', (socket) => {
+    const s = tls.connect({ socket, servername: 'secure.test', ca, checkServerIdentity: (h, c) => { own(h, c); throw new Error('thrown over a socket'); } });
+    s.on('secure', () => console.log('secure listener ran'));
+    return s;
+  });
+  console.log('not reached');
+})();
+`,
+      ports
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.equal(shim.stdout, host.stdout);
+    assert.equal(shim.stderr, '');
+    assert.equal(shim.status, 0);
+    assert.match(shim.stdout, /^a hostname data client=none sni=false$/m);
+    assert.match(shim.stdout, /^servername data client=none sni=secure\.test$/m);
+    assert.match(shim.stdout, /^TLS 1\.2 suite secureConnect true null "secure\.test" \{"name":"ECDHE-ECDSA-AES256-GCM-SHA384","standardName":"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384","version":"TLSv1\.2"\}$/m);
+    assert.match(shim.stdout, /^uncaught thrown over a socket$/m);
+    assert.doesNotMatch(shim.stdout, /secure listener ran/);
+    // The same throw from a tls.connect of its own: later 'secure' listeners don't run.
+    const thrown = await both(
+      'throws.js',
+      `const tls = require('tls');
+const fs = require('fs');
+const [host, portsJson, dir] = process.argv.slice(2);
+const ports = JSON.parse(portsJson);
+process.on('uncaughtException', (e) => {
+  console.log('uncaught', e.message);
+  process.exit(0);
+});
+const s = tls.connect({ host, port: ports.sni, servername: 'secure.test', ca: fs.readFileSync(dir + '/ca.pem'), checkServerIdentity: (h, c) => { console.log('check', h, c.subject.CN); throw new Error('thrown'); } }, () => console.log('secureConnect'));
+s.on('secure', () => console.log('secure listener ran'));
+s.on('error', (e) => console.log('error', e.message));
+`,
+      ports
+    );
+    assert.equal(thrown.host.status, 0, thrown.host.stderr);
+    assert.equal(thrown.shim.stdout, thrown.host.stdout);
+    assert.equal(thrown.shim.stdout, 'check secure.test secure.test\nuncaught thrown\n');
+  });
+
+  it('client certificates in the real pg (sslcert, sslkey) and in https.request, with an agent and without', { skip: skipControls }, async () => {
+    const { host, shim } = await both(
+      'mtls-clients.js',
+      `const [host, portsJson, dir, mods] = process.argv.slice(2);
+const ports = JSON.parse(portsJson);
+const fs = require('fs');
+const https = require('https');
+const { Client } = require(mods + '/pg');
+const ca = fs.readFileSync(dir + '/ca.pem');
+const cert = fs.readFileSync(dir + '/client.pem');
+const key = fs.readFileSync(dir + '/client.key');
+const pg = async (label, url) => {
+  const c = new Client({ connectionString: url });
+  try {
+    await c.connect();
+    const r = await c.query('select 1');
+    console.log(label, JSON.stringify(r.rows), c.connection.stream.getCertificate().subject.CN);
+    await c.end();
+  } catch (e) {
+    console.log(label, 'error', e.code);
+  }
+};
+const get = (label, options) => new Promise((resolve) => {
+  const req = https.request({ host, port: ports.mtlsHttps, servername: 'secure.test', ca, ...options }, (res) => {
+    const socket = res.socket;
+    let b = '';
+    res.setEncoding('utf8');
+    res.on('data', (c) => (b += c));
+    res.on('end', () => {
+      console.log(label, res.statusCode, b, socket.getCertificate().subject.CN);
+      resolve();
+    });
+  });
+  req.on('error', (e) => {
+    console.log(label, 'error', e.code);
+    resolve();
+  });
+  req.end();
+});
+(async () => {
+  const base = 'postgres://alice@' + host + ':' + ports.pgMtls + '/db?sslmode=verify-full&sslrootcert=' + dir + '/ca.pem';
+  await pg('pg, sslcert and sslkey', base + '&sslcert=' + dir + '/client.pem&sslkey=' + dir + '/client.key');
+  await pg('pg, no certificate', 'postgres://alice@' + host + ':' + ports.pgMtls + '/db');
+  const agent = new https.Agent({ keepAlive: true, cert, key });
+  await get('agent', { path: '/agent', agent });
+  await get('agent again', { path: '/again', agent });
+  await get('request options', { path: '/request', cert, key, agent: false });
+  await get('globalAgent', { path: '/global', cert, key });
+  await get('secureContext only', { path: '/context', ca: undefined, secureContext: require('tls').createSecureContext({ ca, cert, key }) });
+  console.log('free', Object.keys(agent.freeSockets).length);
+  agent.destroy();
+})();
+`,
+      ports
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.equal(asNodeAlerts(host, shim), host.stdout);
+    assert.equal(shim.stderr, '');
+    assert.match(shim.stdout, /^pg, sslcert and sslkey \[\{"answer":"over TLSv1\.3 as client\.test: select 1"\}\] client\.test$/m);
+    assert.match(shim.stdout, /^agent 200 client=client\.test sni=secure\.test \/agent client\.test$/m);
   });
 });
