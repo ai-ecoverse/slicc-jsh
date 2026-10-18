@@ -108,8 +108,9 @@ check_integrity() {
   b64=${body%==}
   case $1 in sha512-*) ;; *) b64=/ ;; esac
   case $b64 in *[!A-Za-z0-9+/]*) b64= ;; esac
-  [ ${#body} -eq 88 ] && [ ${#b64} -eq 86 ] ||
+  if [ ${#body} -ne 88 ] || [ ${#b64} -ne 86 ]; then
     die "--integrity is not a sha512 SRI (sha512- and 88 base64 characters): $1"
+  fi
 }
 
 # The major version of a node binary, or nothing if it does not run.
