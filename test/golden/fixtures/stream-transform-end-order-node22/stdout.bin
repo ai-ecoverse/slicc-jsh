@@ -1,0 +1,7 @@
+async push(null): data a, cb a, data b, end, cb b, error ERR_STREAM_PUSH_AFTER_EOF, close, cb c
+sync push(null): data a, cb a, data b, end, cb b, error ERR_STREAM_PUSH_AFTER_EOF, close, cb c
+async push(null), no data: end, cb a, cb b
+async, cb(null, value) after push(null): error ERR_STREAM_PUSH_AFTER_EOF, close, cb a
+async push(null) past highWaterMark: data xxxxxxxx, end, cb a
+async, error after push(null): cb a EBOOM, error EBOOM, close
+pipeline: cb 1, sink 1, cb 2, sink 2, end
