@@ -70,6 +70,44 @@ function osslError(code) {
   return Object.assign(err, { library, reason, code });
 }
 
+// OpenSSL 3.0's reason for each TLS alert a peer sends (SSL_R_*: 1000 plus
+// the alert's number), as Node 22.22.0's OpenSSL words them.
+const ALERT_REASONS = {
+  10: 'ssl/tls alert unexpected message',
+  20: 'ssl/tls alert bad record mac',
+  21: 'tlsv1 alert decryption failed',
+  22: 'tlsv1 alert record overflow',
+  30: 'ssl/tls alert decompression failure',
+  40: 'ssl/tls alert handshake failure',
+  41: 'ssl/tls alert no certificate',
+  42: 'ssl/tls alert bad certificate',
+  43: 'ssl/tls alert unsupported certificate',
+  44: 'ssl/tls alert certificate revoked',
+  45: 'ssl/tls alert certificate expired',
+  46: 'ssl/tls alert certificate unknown',
+  47: 'ssl/tls alert illegal parameter',
+  48: 'tlsv1 alert unknown ca',
+  49: 'tlsv1 alert access denied',
+  50: 'tlsv1 alert decode error',
+  51: 'tlsv1 alert decrypt error',
+  60: 'tlsv1 alert export restriction',
+  70: 'tlsv1 alert protocol version',
+  71: 'tlsv1 alert insufficient security',
+  80: 'tlsv1 alert internal error',
+  86: 'tlsv1 alert inappropriate fallback',
+  90: 'tlsv1 alert user cancelled',
+  100: 'tlsv1 alert no renegotiation',
+  109: 'tlsv13 alert missing extension',
+  110: 'tlsv1 unsupported extension',
+  111: 'tlsv1 certificate unobtainable',
+  112: 'tlsv1 unrecognized name',
+  113: 'tlsv1 bad certificate status response',
+  114: 'tlsv1 bad certificate hash value',
+  115: 'tlsv1 alert unknown psk identity',
+  116: 'tlsv13 alert certificate required',
+  120: 'tlsv1 alert no application protocol',
+};
+
 // OpenSSL 3.0's X509_verify_cert_error_string for the codes a check gives.
 const VERIFY_MESSAGES = {
   UNABLE_TO_GET_ISSUER_CERT: 'unable to get issuer certificate',
@@ -80,7 +118,7 @@ const VERIFY_MESSAGES = {
   CERT_HAS_EXPIRED: 'certificate has expired',
   CERT_NOT_YET_VALID: 'certificate is not yet valid',
   CERT_REVOKED: 'certificate revoked',
-  INVALID_PURPOSE: 'unsupported certificate purpose',
+  INVALID_PURPOSE: 'unsuitable certificate purpose',
   CERT_SIGNATURE_FAILURE: 'certificate signature failure',
 };
 
@@ -752,6 +790,20 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
    */
   function verifyError(socket, session, options) {
     const chain = peerChain(socket);
+    const hostname = options.servername || options.host || options.socket?._host || 'localhost';
+    // slicc-kernel 1.125.2 (ai-ecoverse/slicc-kernel#1057): the session says
+    // the chain's verdict apart from the name (chainError, in Node's words)
+    // and the name's (hostnameMatches). The name is then checkServerIdentity's.
+    if (session.hostnameMatches !== undefined) {
+      const code = session.chainError;
+      if (code) return Object.assign(new Error(VERIFY_MESSAGES[code] ?? code), { code });
+      if (chain) return options.checkServerIdentity(hostname, peerCertificate(socket, true));
+      // A chain jsh can't read: the kernel's check of the name.
+      return session.hostnameMatches === false
+        ? nodeError(Error, 'ERR_TLS_CERT_ALTNAME_INVALID', "Hostname/IP does not match certificate's altnames")
+        : undefined;
+    }
+    // Before 1.125.2, one verdict for both: jsh tells them apart.
     let code = session.authorizationError;
     // A chain jsh can't read: the kernel's verdict, the name's included.
     if (!chain && session.peerCertificates?.length) {
@@ -767,7 +819,6 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     if (code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' && chain) code = untrusted(chain);
     if (code) return Object.assign(new Error(VERIFY_MESSAGES[code] ?? code), { code });
     if (!chain) return undefined;
-    const hostname = options.servername || options.host || options.socket?._host || 'localhost';
     return options.checkServerIdentity(hostname, peerCertificate(socket, true));
   }
 
@@ -875,7 +926,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     if (typeof code === 'string' && Object.hasOwn(VERIFY_MESSAGES, code)) {
       return Object.assign(new Error(VERIFY_MESSAGES[code]), { code });
     }
-    if (typeof code === 'string' && code.startsWith('ERR_SSL_')) return sslError(code, err.detail ?? err.message);
+    if (typeof code === 'string' && code.startsWith('ERR_SSL_')) return sslError(code, err.detail ?? err.message, err.alert ?? err.cause?.alert);
     if (typeof code === 'string' && code.startsWith('ERR_')) {
       return Object.assign(new Error(err.detail ?? err.message), { code });
     }
@@ -885,10 +936,19 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
   /**
    * The kernel's TLS failure (ERR_SSL_HANDSHAKE_FAILURE, ERR_SSL_FATAL_ALERT)
    * shaped as Node's OpenSSL errors: `library`, `reason` (whose words the
-   * code is), `code`. Which alert the server sent the kernel doesn't say
-   * yet, where Node's code names it (ERR_SSL_TLSV13_ALERT_CERTIFICATE_REQUIRED).
+   * code is), `code`. For the server's alert (its number in `alert`, or the
+   * detail's ` (alert n)`, slicc-kernel 1.125.2), OpenSSL's reason names it,
+   * as Node's does: ERR_SSL_TLSV13_ALERT_CERTIFICATE_REQUIRED. Node's message
+   * also has its thread and source position, which jsh can't give.
    */
-  function sslError(code, detail) {
+  function sslError(code, detail, alert) {
+    const n = Number.isInteger(alert) ? alert : Number(/ \(alert (\d+)\)$/.exec(String(detail ?? ''))?.[1]);
+    if (Object.hasOwn(ALERT_REASONS, n)) {
+      const reason = ALERT_REASONS[n];
+      const id = (0x0a000000 + 1000 + n).toString(16).toUpperCase().padStart(8, '0');
+      const err = new Error(`error:${id}:SSL routines::${reason}:SSL alert number ${n}`);
+      return Object.assign(err, { library: 'SSL routines', reason, code: `ERR_SSL_${reason.toUpperCase().replaceAll(' ', '_')}` });
+    }
     const err = new Error(String(detail ?? code).replace(/^ERR_SSL_[A-Z_]+: /, ''));
     const reason = code.slice('ERR_SSL_'.length).toLowerCase().replaceAll('_', ' ');
     return Object.assign(err, { library: 'SSL routines', reason, code });
@@ -898,7 +958,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
   function sessionError(err) {
     const code = err?.code ?? err?.cause?.code;
     if (typeof code !== 'string' || !code.startsWith('ERR_SSL_')) return undefined;
-    return sslError(code, err.detail ?? err.cause?.detail);
+    return sslError(code, err.detail ?? err.cause?.detail, err.alert ?? err.cause?.alert);
   }
 
   // --- _tls_wrap.js: TLSSocket --------------------------------------------

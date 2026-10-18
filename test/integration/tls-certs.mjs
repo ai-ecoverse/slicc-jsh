@@ -91,7 +91,9 @@ function certificate(o) {
     exts.push(extension('2.5.29.15', true, bits(Buffer.of(0x06), 1)));
   } else {
     if (o.issuerSpki) exts.push(extension('2.5.29.35', false, seq(tlv(0x80, keyId(o.issuerSpki)))));
-    exts.push(extension('2.5.29.15', true, bits(Buffer.of(0x80), 7)));
+    // keyUsage: digitalSignature, or [byte, unused bits] as asked.
+    const [ku, unused] = o.keyUsage ?? [0x80, 7];
+    exts.push(extension('2.5.29.15', true, bits(Buffer.of(ku), unused)));
     exts.push(extension('2.5.29.37', false, seq(...(o.eku ?? ['1.3.6.1.5.5.7.3.1']).map(oid))));
     const sans = o.san ?? [ipBytes(o.host) ? `IP:${o.host}` : `DNS:${o.host}`];
     exts.push(extension('2.5.29.17', false, seq(...sans.map(generalName))));
@@ -149,7 +151,7 @@ export function makeCa(cn = 'slicc-jsh test CA', { rsa = false } = {}) {
   return {
     der,
     pem: pem(der),
-    server(host, { notBefore = new Date(now - 3600_000), notAfter = new Date(now + 7 * DAY), san, eku, subject: names, aia, rsa: leafRsa = false } = {}) {
+    server(host, { notBefore = new Date(now - 3600_000), notAfter = new Date(now + 7 * DAY), san, eku, keyUsage, subject: names, aia, rsa: leafRsa = false } = {}) {
       const leafKeys = pair(leafRsa);
       const leaf = certificate({
         issuer: subject,
@@ -161,6 +163,7 @@ export function makeCa(cn = 'slicc-jsh test CA', { rsa = false } = {}) {
         host,
         san,
         eku,
+        keyUsage,
         aia,
         key: privateKey,
         rsa,

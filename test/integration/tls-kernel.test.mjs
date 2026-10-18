@@ -28,6 +28,9 @@ const skip = !kernelAtLeast('1.124.0') && 'slicc-kernel before 1.124.0 has no TL
 // slicc-kernel 1.124.13 (ai-ecoverse/slicc-kernel#1004): a client
 // certificate, `sni: false`, and the cipher in the session.
 const skipControls = !kernelAtLeast('1.124.13') && 'slicc-kernel before 1.124.13 takes no client certificate';
+// slicc-kernel 1.125.2 (ai-ecoverse/slicc-kernel#1057): a server's alert has
+// its number, and the chain's verdict comes apart from the name's.
+const skipAlerts = !kernelAtLeast('1.125.2') && 'slicc-kernel before 1.125.2 names no alert';
 
 const UPLINK = '203.0.113.10';
 
@@ -145,6 +148,14 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
     rsaPem = rsa.pem;
     await tlsServer('rsa', rsa.server('secure.test', { rsa: true }));
     await tlsServer('tls12', { ...plainLeaf, maxVersion: 'TLSv1.2' });
+    // Self-issued (its issuer's name is its own) but signed by another key,
+    // as a CA's rollover certificate is: not self-signed.
+    const rollover = makeCa('secure.test').server('secure.test');
+    await tlsServer('selfIssued', { key: rollover.key, cert: rollover.leafOnly });
+    // A certificate for clients only, with another name.
+    await tlsServer('clientOnlyWrongName', ca.server('other.test', { eku: ['1.3.6.1.5.5.7.3.2'] }));
+    // A key usage no TLS server may have (keyCertSign only), with another name.
+    await tlsServer('badUsageWrongName', ca.server('other.test', { keyUsage: [0x04, 2] }));
     // A server that hangs up before the handshake.
     const hangup = createTcp((sock) => sock.end());
     servers.push(hangup);
@@ -442,6 +453,38 @@ const go = (label, opts) => new Promise((resolve) => {
     assert.match(shim.stdout, /^own check takes a wrong name secureConnect true null TLSv1\.3 other\.test /m);
   });
 
+  it("the chain's verdict is the kernel's (kernel 1.125.2): a self-issued certificate that isn't self-signed, and with another name a client-only certificate or a key usage no server may have", { skip: skipAlerts }, async () => {
+    const { host, shim } = await both(
+      'chain.js',
+      `const tls = require('tls');
+const fs = require('fs');
+const [host, portsJson, dir] = process.argv.slice(2);
+const ports = JSON.parse(portsJson);
+const ca = fs.readFileSync(dir + '/ca.pem');
+const go = (label, opts) => new Promise((resolve) => {
+  const s = tls.connect({ host, servername: 'secure.test', ca, ...opts }, () => {
+    console.log(label, 'secureConnect', s.authorized, s.authorizationError);
+    s.end();
+  });
+  s.on('error', (e) => console.log(label, 'error', e.code, e.message, e.reason));
+  s.on('close', () => resolve());
+});
+(async () => {
+  await go('self-issued', { port: ports.selfIssued });
+  await go('self-issued, rejectUnauthorized false', { port: ports.selfIssued, rejectUnauthorized: false });
+  await go('client only, another name', { port: ports.clientOnlyWrongName });
+  await go('client only, another name, rejectUnauthorized false', { port: ports.clientOnlyWrongName, rejectUnauthorized: false });
+  await go('key usage, another name', { port: ports.badUsageWrongName });
+  await go('key usage, another name, rejectUnauthorized false', { port: ports.badUsageWrongName, rejectUnauthorized: false });
+})();
+`,
+      ports
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.equal(shim.stdout, host.stdout);
+    assert.equal(shim.stderr, '');
+  });
+
   it('STARTTLS: tls.connect({ socket }) and new tls.TLSSocket(socket) upgrade a plain connection in place', async () => {
     const { host, shim } = await both(
       'starttls.js',
@@ -646,23 +689,7 @@ const send = (label, options, body) => new Promise((resolve) => {
     assert.match(shim.stdout, /^check other\.test secure\.test\nno agent, wrong name, own check takes it 200 /m);
   });
 
-  // What a server's alert is still called in jsh until the kernel names the
-  // alert (agreed for ai-ecoverse/slicc-kernel#1004): Node's code, and jsh's.
-  const ALERTS = [
-    ['ERR_SSL_TLSV13_ALERT_CERTIFICATE_REQUIRED', 'ERR_SSL_FATAL_ALERT'],
-    ['ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE', 'ERR_SSL_HANDSHAKE_FAILURE'],
-  ];
-  /** jsh's output with each alert code as Node's, after checking jsh said it. */
-  function asNodeAlerts(host, shim) {
-    let out = shim.stdout;
-    for (const [node, ours] of ALERTS) {
-      assert.equal(out.split(ours).length, host.stdout.split(node).length, `${ours} where Node says ${node}`);
-      out = out.replaceAll(ours, node);
-    }
-    return out;
-  }
-
-  it('client certificates (kernel 1.124.13): mTLS on TLS 1.3 and 1.2, an encrypted key, getCertificate, and a server that requires one', { skip: skipControls }, async () => {
+  it('client certificates (kernel 1.124.13): mTLS on TLS 1.3 and 1.2, an encrypted key, getCertificate, and a server that requires one', { skip: skipAlerts }, async () => {
     const { host, shim } = await both(
       'mtls.js',
       `const tls = require('tls');
@@ -700,7 +727,7 @@ const go = (label, opts) => new Promise((resolve) => {
       ports
     );
     assert.equal(host.status, 0, host.stderr);
-    assert.equal(asNodeAlerts(host, shim), host.stdout);
+    assert.equal(shim.stdout, host.stdout);
     assert.equal(shim.stderr, '');
     assert.match(shim.stdout, /^TLS 1\.3 data client=client\.test sni=secure\.test$/m);
     assert.match(shim.stdout, /^TLS 1\.2 data client=client\.test sni=secure\.test$/m);
@@ -864,7 +891,7 @@ s.on('error', (e) => console.log('error', e.message));
     assert.equal(thrown.shim.stdout, 'check secure.test secure.test\nuncaught thrown\n');
   });
 
-  it('client certificates in the real pg (sslcert, sslkey) and in https.request, with an agent and without', { skip: skipControls }, async () => {
+  it('client certificates in the real pg (sslcert, sslkey) and in https.request, with an agent and without', { skip: skipAlerts }, async () => {
     const { host, shim } = await both(
       'mtls-clients.js',
       `const [host, portsJson, dir, mods] = process.argv.slice(2);
@@ -945,7 +972,7 @@ const get = (label, options) => new Promise((resolve) => {
       ports
     );
     assert.equal(host.status, 0, host.stderr);
-    assert.equal(asNodeAlerts(host, shim), host.stdout);
+    assert.equal(shim.stdout, host.stdout);
     assert.match(shim.stdout, /^not a certificate threw ERR_OSSL_PEM_NO_START_LINE /m);
     assert.equal(shim.stderr, '');
     assert.match(shim.stdout, /^pg, sslcert and sslkey \[\{"answer":"over TLSv1\.3 as client\.test: select 1"\}\] client\.test$/m);
