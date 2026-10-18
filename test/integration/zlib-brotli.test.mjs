@@ -91,6 +91,31 @@ server.close();
     ]);
   });
 
+  // In Node the write is already on the thread pool when reset() is called,
+  // so the reset nearly always comes after it (Node 22 races: a reset during
+  // the work can also land first, or trip an assertion at exit). jsh decodes
+  // at write(), so it always comes after.
+  it('reset() right after an async write comes after that write', async () => {
+    await jsh.kernel.writeFile('/os/first.br', brotliCompressSync('first.'));
+    await jsh.kernel.writeFile('/os/second.br', brotliCompressSync('second.'));
+    await jsh.kernel.writeFile(
+      '/os/reset.cjs',
+      `const fs = require('fs');
+const zlib = require('zlib');
+const d = zlib.createBrotliDecompress();
+const out = [];
+d.on('data', (c) => out.push(c));
+d.on('error', (e) => console.log('error', e.code));
+d.write(fs.readFileSync('/os/first.br'));
+d.reset();
+d.end(fs.readFileSync('/os/second.br'), () => console.log(Buffer.concat(out).toString()));
+`
+    );
+    const r = await jsh.run(['node', 'reset.cjs']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.stdout, 'first.second.\n');
+  });
+
   it('the real axios asks for br and decodes a br response', async () => {
     assert.equal(version('axios'), '1.20.0');
     await jsh.kernel.writeFile(
