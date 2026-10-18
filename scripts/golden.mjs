@@ -104,11 +104,49 @@ function withoutColorEnv(env) {
 
 const MAX_BUFFER = 4 * 1024 * 1024;
 
+// A run fails when it stops making progress, not at a set time: QUIET_MS
+// with no output from it, or MAX_MS in all, for one that keeps printing and
+// never ends. A loaded runner makes a run slower; it doesn't make it quiet.
+// (The longest quiet stretch of a fixture today is 4.2 s, http-server-timeouts-close.)
+const QUIET_MS = 30_000;
+const MAX_MS = 300_000;
+
+/** Watches a run: `seen(chunk)` on its output; `fail(error)` once, on no progress. */
+function watchdog(label, fail) {
+  const start = Date.now();
+  let last = start;
+  let tail = '';
+  let failed = false;
+  const stop = () => {
+    clearInterval(quiet);
+    clearTimeout(outer);
+  };
+  const give = (message) => {
+    if (failed) return;
+    failed = true;
+    stop();
+    const error = new Error(`${label}: ${message} after ${Math.round((Date.now() - start) / 1000)} s; ${tail ? `it last printed ${JSON.stringify(tail)}` : 'it printed nothing'}`);
+    error.code = 'ETIMEDOUT';
+    fail(error);
+  };
+  const quiet = setInterval(() => {
+    if (Date.now() - last >= QUIET_MS) give(`no output for ${QUIET_MS / 1000} s`);
+  }, 1000);
+  const outer = setTimeout(() => give(`still running`), MAX_MS);
+  return {
+    seen(chunk) {
+      last = Date.now();
+      tail = (tail + String(chunk)).slice(-120);
+    },
+    stop,
+  };
+}
+
 // spawnSync's semantics without blocking the other fixtures: stdin is a pipe
-// with case.json `stdin` (else closed at once), and a timeout (SIGTERM, then
-// ETIMEDOUT) or more than MAX_BUFFER on stdout or stderr throws, so a hung
-// run is never recorded or compared as a golden.
-function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
+// with case.json `stdin` (else closed at once), and no progress (SIGTERM,
+// then ETIMEDOUT) or more than MAX_BUFFER on stdout or stderr throws, so a
+// hung run is never recorded or compared as a golden.
+function runNode22(argv, { cwd, stdin, env = {} } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(node22Bin(), argv, {
       // As under npx: Node's own messages name it `node`.
@@ -121,8 +159,14 @@ function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
     const out = { stdout: [], stderr: [] };
     let size = 0;
     let overflow = false;
+    let stuck = null;
+    const watch = watchdog(`host ${argv.join(' ')}`, (error) => {
+      stuck = error;
+      child.kill();
+    });
     for (const name of ['stdout', 'stderr']) {
       child[name].on('data', (chunk) => {
+        watch.seen(chunk);
         size += chunk.length;
         if (size > MAX_BUFFER && !overflow) {
           overflow = true;
@@ -131,23 +175,14 @@ function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
         out[name].push(chunk);
       });
     }
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, timeoutMs);
     child.on('error', (error) => {
-      clearTimeout(timer);
+      watch.stop();
       reject(error);
     });
     child.on('close', (status) => {
-      clearTimeout(timer);
+      watch.stop();
       if (overflow) return reject(new Error(`${argv.join(' ')}: output over ${MAX_BUFFER} bytes`));
-      if (timedOut) {
-        const error = new Error(`${argv.join(' ')}: timed out after ${timeoutMs} ms`);
-        error.code = 'ETIMEDOUT';
-        return reject(error);
-      }
+      if (stuck) return reject(stuck);
       resolve({
         status: status ?? 1,
         stdout: Buffer.concat(out.stdout),
@@ -159,7 +194,7 @@ function runNode22(argv, { cwd, stdin, env = {}, timeoutMs = 30_000 } = {}) {
   });
 }
 
-async function runShim(argv, { files = [], env = {}, stdin, timeoutMs = 30_000 } = {}) {
+async function runShim(argv, { files = [], env = {}, stdin } = {}) {
   const kernel = await createNodeKernel();
   const base = '/node_modules/@ai-ecoverse/slicc-jsh';
   try {
@@ -169,13 +204,16 @@ async function runShim(argv, { files = [], env = {}, stdin, timeoutMs = 30_000 }
     for (const { path, data } of files) {
       await kernel.writeFile(path, data);
     }
-    const work = kernel.run(['node', ...argv], { cwd: '/os', env: { ...env }, ...(stdin !== undefined ? { stdin } : {}) });
-    const result = await Promise.race([
-      work,
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`shim timeout after ${timeoutMs}ms`)), timeoutMs)
-      ),
-    ]);
+    let watch;
+    const stuck = new Promise((_, reject) => (watch = watchdog('shim', reject)));
+    const work = kernel.run(['node', ...argv], {
+      cwd: '/os',
+      env: { ...env },
+      ...(stdin !== undefined ? { stdin } : {}),
+      onStdout: watch.seen,
+      onStderr: watch.seen,
+    });
+    const result = await Promise.race([work, stuck]).finally(watch.stop);
     return {
       status: result.status,
       stdout: Buffer.from(result.stdout),
