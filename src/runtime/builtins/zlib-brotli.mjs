@@ -4,7 +4,8 @@
  * Brotli decoder in src/brotli (Google's C decoder ported to JavaScript;
  * dist/vendor/brotli.cjs, evaluated on first use). BrotliHandle stands in
  * for the native binding.BrotliDecoder (src/node_zlib.cc): an async write
- * runs, as on Node's thread pool, after the current turn of the loop.
+ * decodes at once, as Node's thread pool starts on it, and calls back after
+ * the current turn of the loop.
  */
 import { ZLIB_CONSTANTS } from './zlib-constants.mjs';
 import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, nativeError, nodeError, validateFunction, validateNumber } from '../node-errors.mjs';
@@ -140,8 +141,12 @@ export function createBrotli({ Buffer, getStream, process, util, setImmediate, l
       this.state = null;
     }
 
+    // The work starts at once, as on Node's thread pool, and its result
+    // comes back after this turn of the loop: a reset() or close() right
+    // after write() comes after this write, as it nearly always does in Node.
     write(flush, input, inOff, inLen, out, outOff, outLen) {
       this.start(flush, input, inOff, inLen, out, outOff, outLen);
+      this.doWork();
       setImmediate(() => this.afterWork());
     }
 
@@ -179,7 +184,6 @@ export function createBrotli({ Buffer, getStream, process, util, setImmediate, l
 
     afterWork() {
       this.writeInProgress = false;
-      this.doWork();
       if (!this.checkError()) return;
       this.updateWriteResult();
       this.writeCallback.call(this);
