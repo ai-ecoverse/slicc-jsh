@@ -4,8 +4,15 @@
 // never ends is read event by event and aborted; the server sees the client
 // go ('close'); a POST answered with a stream; a body cut short is 'aborted'.
 const http = require('http');
-const t0 = Date.now();
-const when = () => (Date.now() - t0 < 600 ? 'early' : 'late');
+// /slow ends only when the client says so, once it has the head and the
+// first chunk: 'early' is before the server's end(), whatever the load.
+let endSlow = null;
+let slowEnded = false;
+const when = () => (slowEnded ? 'late' : 'early');
+// The server's 'close' for the SSE response, which the client waits for
+// after its abort.
+let sseGone;
+const sseClosed = new Promise((resolve) => (sseGone = resolve));
 const srv = http.createServer((req, res) => {
   let body = '';
   req.on('data', (c) => (body += c));
@@ -13,7 +20,11 @@ const srv = http.createServer((req, res) => {
     if (req.url === '/slow') {
       res.writeHead(200, { 'content-type': 'text/plain' });
       res.write('first;');
-      setTimeout(() => res.end('last'), 800);
+      slowEnded = false;
+      endSlow = () => {
+        slowEnded = true;
+        res.end('last');
+      };
       return;
     }
     if (req.url === '/sse') {
@@ -32,6 +43,7 @@ const srv = http.createServer((req, res) => {
       res.on('close', () => {
         clearInterval(tick);
         console.log('server: the SSE client went away');
+        sseGone();
       });
       return;
     }
@@ -78,12 +90,16 @@ srv.listen(0, '127.0.0.1', async () => {
     http.get(`${base}/slow`, (r) => {
       console.log('http.get: response', when(), r.headers['transfer-encoding']);
       r.setEncoding('utf8');
-      r.on('data', (d) => console.log('http.get: data', JSON.stringify(d), when()));
+      r.on('data', (d) => {
+        console.log('http.get: data', JSON.stringify(d), when());
+        if (!slowEnded) endSlow();
+      });
       r.on('end', resolve);
     })
   );
   const slow = await fetch(`${base}/slow`);
   console.log('fetch: headers', slow.status);
+  endSlow();
   console.log('fetch: body', JSON.stringify(await slow.text()));
   // An EventSource-style client: fetch and a reader loop.
   const ac = new AbortController();
@@ -109,7 +125,7 @@ srv.listen(0, '127.0.0.1', async () => {
   } catch (e) {
     console.log('sse: read after abort', e.name);
   }
-  await new Promise((r) => setTimeout(r, 100));
+  await sseClosed;
   const post = await fetch(`${base}/echo-stream`, { method: 'POST', body: 'hello' });
   console.log('post: headers', post.status, post.headers.get('content-type'));
   for await (const chunk of post.body.pipeThrough(new TextDecoderStream())) {
