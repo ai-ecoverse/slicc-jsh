@@ -10,10 +10,10 @@ export default async function* jsonl(source) {
       continue;
     }
     if (event.type !== 'test:pass' && event.type !== 'test:fail') continue;
-    if (d.details?.type === 'suite') continue;
+    const skipped = d.skip !== undefined && d.skip !== false;
+    if (d.details?.type === 'suite' && !(skipped && event.type === 'test:pass')) continue;
     const parents = (stacks.get(d.file) ?? []).slice(0, d.nesting);
     const error = d.details?.error;
-    const skipped = d.skip !== undefined && d.skip !== false;
     yield `${JSON.stringify({
       file: d.file ?? null,
       name: [...parents, d.name].join(' › '),
