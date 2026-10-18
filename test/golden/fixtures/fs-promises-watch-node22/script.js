@@ -23,8 +23,10 @@ setTimeout(() => {
 async function main() {
   console.log('same function:', fsp.watch === fs.promises.watch);
 
-  // Events, until an AbortSignal ends it.
+  // Events, until an AbortSignal ends it, even after a listener that stops
+  // the abort event's propagation.
   const ac = new AbortController();
+  ac.signal.addEventListener('abort', (e) => e.stopImmediatePropagation());
   const it = fsp.watch(dir, { signal: ac.signal });
   console.log('iterator:', typeof it.next, typeof it[Symbol.asyncIterator]);
   const changes = (async () => {

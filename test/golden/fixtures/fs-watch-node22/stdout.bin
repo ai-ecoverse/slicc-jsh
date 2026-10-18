@@ -41,6 +41,10 @@ ERR_INVALID_ARG_VALUE The argument 'path' must be a string, Uint8Array, or URL w
 ERR_INVALID_ARG_TYPE The "options" argument must be one of type string or object. Received type number (42) undefined undefined undefined undefined
 ENOENT ENOENT: no such file or directory, watch '<dir>/missing' -2 watch <dir>/missing <dir>/missing
 ERR_INVALID_URL_SCHEME The URL must be of scheme file undefined undefined undefined undefined
+no error
+no error
+no error
+no error
 aborted: close
 pre-aborted: close
 exit while watching

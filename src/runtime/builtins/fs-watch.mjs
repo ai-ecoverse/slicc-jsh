@@ -33,6 +33,23 @@ import {
 const kFSWatchStart = Symbol('kFSWatchStart');
 const kEmptyObject = Object.freeze({ __proto__: null });
 
+/**
+ * Node's abort listeners for watchers resist stopImmediatePropagation()
+ * (kResistStopPropagation); the platform's AbortSignal has no such option,
+ * but a signal that follows it (AbortSignal.any) aborts whatever its
+ * listeners do. Returns the listener's removal.
+ */
+function onAbort(signal, listener) {
+  let target = signal;
+  try {
+    target = AbortSignal.any([signal]);
+  } catch {
+    /* not the platform's AbortSignal: its own listeners it is */
+  }
+  target.addEventListener('abort', listener, { once: true });
+  return () => target.removeEventListener('abort', listener);
+}
+
 const ERR_FS_WATCH_QUEUE_OVERFLOW = (max) =>
   nodeError(Error, 'ERR_FS_WATCH_QUEUE_OVERFLOW', `fs.watch() queued more than ${max} events`);
 
@@ -361,14 +378,14 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
               });
             }
           : (resolve, reject) => {
-              const onAbort = () => {
+              const aborted = () => {
                 this.close();
                 reject(new AbortError(undefined, { cause: signal.reason }));
               };
-              if (signal.aborted) return onAbort();
-              signal.addEventListener('abort', onAbort, { once: true });
+              if (signal.aborted) return aborted();
+              const off = onAbort(signal, aborted);
               this.once('change', (eventType, filename) => {
-                signal.removeEventListener('abort', onAbort);
+                off();
                 resolve({ __proto__: null, value: { eventType, filename } });
               });
             };
@@ -405,9 +422,8 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
       if (options.signal.aborted) {
         process.nextTick(() => watcher.close());
       } else {
-        const onAbort = () => watcher.close();
-        options.signal.addEventListener('abort', onAbort);
-        watcher.once('close', () => options.signal.removeEventListener('abort', onAbort));
+        const off = onAbort(options.signal, () => watcher.close());
+        watcher.once('close', off);
       }
     }
     return watcher;
@@ -434,8 +450,9 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
       handle.close();
       resolve();
     };
+    let off;
     try {
-      signal?.addEventListener('abort', oncancel, { once: true });
+      if (signal) off = onAbort(signal, oncancel);
       handle.onchange = (status, eventType, name) => {
         if (status < 0) {
           handle.close();
@@ -471,7 +488,7 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
       if (signal?.aborted) throw new AbortError(undefined, { cause: signal?.reason });
     } finally {
       handle.close();
-      signal?.removeEventListener('abort', oncancel);
+      off?.();
     }
   }
 

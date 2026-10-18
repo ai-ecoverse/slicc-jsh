@@ -153,7 +153,7 @@ describe('fs.watch in the kernel', needs, () => {
     assert.equal(await read('/tmp/reref.log'), 'watching\nwake\n');
   });
 
-  it('a listener that throws reaches uncaughtException, and the watcher goes on', async () => {
+  it('a listener that throws reaches uncaughtException, and the events after it still come', async () => {
     await mkdir('/tmp/throws');
     await program('/tmp/throws.js', [
       "const fs = require('fs');",
@@ -161,18 +161,20 @@ describe('fs.watch in the kernel', needs, () => {
       "process.on('uncaughtException', (e) => log('caught ' + e.message));",
       "const w = fs.watch('/tmp/throws', (type, name) => {",
       "  if (name === 'last') return w.close();",
+      '  log(`${type} ${name}`);',
       "  if (type === 'rename') throw new Error('at ' + name);",
       '});',
       "log('watching');",
     ]);
     const run = start(['node', '/tmp/throws.js']);
     await lines(run, '/tmp/throws.log', 1);
-    await jsh.kernel.writeFile('/tmp/throws/first', '');
-    await lines(run, '/tmp/throws.log', 2);
+    // A new file's 'rename' and 'change': the 'change' comes after the throw.
+    await jsh.kernel.writeFile('/tmp/throws/first', 'x');
+    await lines(run, '/tmp/throws.log', 4);
     await jsh.kernel.writeFile('/tmp/throws/last', '');
     const r = await run;
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(await read('/tmp/throws.log'), 'watching\ncaught at first\n');
+    assert.equal(await read('/tmp/throws.log'), 'watching\nrename first\ncaught at first\nchange first\n');
   });
 
   it("promises.watch: more outside changes than maxQueue while the program waits: 'error' throws, 'ignore' keeps maxQueue and warns", async () => {

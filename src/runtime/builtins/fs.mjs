@@ -2715,7 +2715,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
             if (options == null || typeof options === 'function') return {};
             if (typeof options === 'string') options = { encoding: options };
             else if (typeof options !== 'object') throw ERR_INVALID_ARG_TYPE('options', ['string', 'Object'], options);
-            if (options.encoding !== 'buffer') checkEncoding(options.encoding);
+            // Node's assertEncoding: a falsy encoding is the default.
+            if (options.encoding && options.encoding !== 'buffer') checkEncoding(options.encoding);
             if (options.signal !== undefined) validateAbortSignal(options.signal, 'options.signal');
             return options;
           },

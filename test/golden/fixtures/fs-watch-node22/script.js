@@ -94,12 +94,16 @@ function errors() {
   show(() => fs.watch(at('x\0y'), 42));
   show(() => fs.watch(require('url').pathToFileURL(at('missing'))));
   show(() => fs.watch(new URL('http://host/')));
+  // A falsy encoding is the default.
+  for (const encoding of ['', false, 0, null]) show(() => fs.watch(dir, { encoding }).close());
   signals();
 }
 
-// An AbortSignal closes the watcher; an aborted one closes it on the next tick.
+// An AbortSignal closes the watcher, even after a listener that stops the
+// abort event's propagation; an aborted one closes it on the next tick.
 function signals() {
   const ac = new AbortController();
+  ac.signal.addEventListener('abort', (e) => e.stopImmediatePropagation());
   const w = fs.watch(dir, { signal: ac.signal });
   w.on('close', () => {
     console.log('aborted: close');
