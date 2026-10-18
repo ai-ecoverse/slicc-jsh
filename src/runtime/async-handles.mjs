@@ -89,7 +89,7 @@ function macrotask() {
  * does not keep the program alive: the loop ends once nothing is ref'd, after
  * the short grace above.
  */
-export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, weakPending, onTickError } = {}) {
+export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, weakPending, onTickError, onFinalDrain } = {}) {
   for (;;) {
     // A long tick / promise-job chain: go on with it (Node runs it to the end).
     while (await checkpoint(nextTick, onTickError)) {
@@ -115,6 +115,21 @@ export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, w
       }
       if (shouldStop?.()) return;
       if (handles.refCount > 0 || !weakPending()) continue;
+    }
+    // Node drains every microtask before it finds its loop empty: a long
+    // chain of promise jobs (more turns than a checkpoint counts) has its
+    // end before the program does. A task of the platform's comes only
+    // once the microtask queue is empty.
+    // (What a signal would run waits: in Node the loop ends with it pending.)
+    {
+      const ran = nextTick.ran;
+      onFinalDrain?.(true);
+      await macrotask();
+      await checkpoint(nextTick, onTickError);
+      const goesOn = !shouldStop?.() && (handles.refCount > 0 || nextTick.ran !== ran);
+      onFinalDrain?.(false, goesOn);
+      if (shouldStop?.()) return;
+      if (goesOn) continue;
     }
     if (onBeforeExit) {
       onBeforeExit();

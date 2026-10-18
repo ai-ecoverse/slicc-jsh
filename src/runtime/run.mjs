@@ -497,12 +497,25 @@ export async function runNode(ctx, options = {}) {
   // Like Node's signal handles it doesn't keep the loop alive: a signal
   // still pending when nothing else is left goes unhandled, as there.
   let loopEnded = false;
-  process._dispatchSignal = (fn) =>
+  // While the loop makes sure no promise job is left before it ends
+  // (drainLoop's final drain), a signal's handler waits: it runs if the
+  // program goes on, and never if it ends.
+  let finalDrain = false;
+  const heldSignals = [];
+  const dispatchSignal = (fn) =>
     timers
       .setImmediate(() => {
-        if (!loopEnded) fn();
+        if (finalDrain) heldSignals.push(fn);
+        else if (!loopEnded) fn();
       })
       .unref();
+  process._dispatchSignal = dispatchSignal;
+  const onFinalDrain = (on, goesOn) => {
+    finalDrain = on;
+    if (on) return;
+    const held = heldSignals.splice(0);
+    if (goesOn) for (const fn of held) dispatchSignal(fn);
+  };
 
   // Pre-#297 fallback: host process may still exist before we overwrite globalThis.
   const hostProcess = globalThis.process;
@@ -1113,6 +1126,7 @@ export async function runNode(ctx, options = {}) {
       shouldStop: () => getDidExit() || exitStatus !== undefined,
       weakPending: () => entry?.pending === true,
       onTickError: (err) => exceptionHandler(err),
+      onFinalDrain,
     });
     loopEnded = true;
 

@@ -1,0 +1,13 @@
+{
+  "description": "with nothing pending but promise jobs, the program runs them all before it finds its loop empty: a chain of 2000 then()s, 500 nested awaits and a Promise.all end before 'beforeExit' (eslint's lint results are such a chain after its last file read)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
