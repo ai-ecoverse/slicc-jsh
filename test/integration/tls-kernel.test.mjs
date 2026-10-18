@@ -899,12 +899,23 @@ const get = (label, options) => new Promise((resolve) => {
   await get('secureContext only', { path: '/context', ca: undefined, secureContext: require('tls').createSecureContext({ ca, cert, key }) });
   console.log('free', Object.keys(agent.freeSockets).length);
   agent.destroy();
+  // Thrown from https.get itself, as Node's agent connects inside it.
+  for (const [label, o] of [['not a certificate', { cert: 'x', key: 'y' }], ['not a key', { cert, key: 'garbage' }], ['not a key, an agent', { cert, key: 'garbage', agent: new https.Agent() }]]) {
+    try {
+      const req = https.get({ host, port: ports.mtlsHttps, servername: 'secure.test', ca, ...o }, () => console.log(label, 'response'));
+      req.on('error', (e) => console.log(label, 'error event', e.code));
+      console.log(label, 'returned');
+    } catch (e) {
+      console.log(label, 'threw', e.code, e.message);
+    }
+  }
 })();
 `,
       ports
     );
     assert.equal(host.status, 0, host.stderr);
     assert.equal(asNodeAlerts(host, shim), host.stdout);
+    assert.match(shim.stdout, /^not a certificate threw ERR_OSSL_PEM_NO_START_LINE /m);
     assert.equal(shim.stderr, '');
     assert.match(shim.stdout, /^pg, sslcert and sslkey \[\{"answer":"over TLSv1\.3 as client\.test: select 1"\}\] client\.test$/m);
     assert.match(shim.stdout, /^agent 200 client=client\.test sni=secure\.test \/agent client\.test$/m);
