@@ -71,6 +71,7 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
   const servers = [];
   const peers = {};
   const ports = {};
+  const sunk = [];
   let rsaPem;
   const mail = [];
   const connects = [];
@@ -113,6 +114,10 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
     await tlsServer('selfSigned', selfSigned('secure.test'));
     await tlsServer('expired', ca.server('secure.test', { notBefore: new Date(Date.now() - 3 * day), notAfter: new Date(Date.now() - day) }));
     await tlsServer('wrongName', ca.server('other.test'));
+    const sink = createTlsServer(ca.server('other.test'), (sock) => sock.on('data', (d) => sunk.push(String(d))));
+    sink.on('tlsClientError', () => {});
+    servers.push(sink);
+    ports.sink = await listen(sink);
     await tlsServer('leafOnly', { key: plainLeaf.key, cert: plainLeaf.leafOnly });
     const rsa = makeCa('RSA CA', { rsa: true });
     writeFileSync(join(dir, 'rsa.pem'), rsa.pem);
@@ -299,6 +304,37 @@ s.on('error', (e) => console.log('error', e.code, e.message));
     assert.equal(shim.stderr, '');
   });
 
+  it('a peer jsh refuses gets none of what the program wrote before the handshake: a wrong name, an untrusted chain, a checkServerIdentity that refuses', async () => {
+    sunk.length = 0;
+    const { host, shim } = await both(
+      'refused-gets-nothing.js',
+      `const tls = require('tls');
+const fs = require('fs');
+const [host, portsJson, dir] = process.argv.slice(2);
+const ports = JSON.parse(portsJson);
+const ca = fs.readFileSync(dir + '/ca.pem');
+const go = (label, opts) => new Promise((resolve) => {
+  const s = tls.connect({ host, port: ports.sink, servername: 'secure.test', ca, ...opts }, () => console.log(label, 'secureConnect'));
+  s.write('sealed-placeholder ' + label + ' from ' + host + '\\n');
+  s.on('error', (e) => console.log(label, 'error', e.code));
+  s.on('close', () => resolve());
+});
+(async () => {
+  await go('wrong name', {});
+  await go('untrusted', { ca: undefined });
+  await go('own check refuses', { servername: 'other.test', checkServerIdentity: () => Object.assign(new Error('not mine'), { code: 'MINE' }) });
+})();
+`,
+      ports,
+      { address: true }
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.equal(shim.stdout, host.stdout);
+    assert.equal(shim.stderr, '');
+    assert.equal(shim.stdout, 'wrong name error ERR_TLS_CERT_ALTNAME_INVALID\nuntrusted error SELF_SIGNED_CERT_IN_CHAIN\nown check refuses error MINE\n');
+    assert.deepEqual(sunk, []);
+  });
+
   it("verification is Node's: the chain's error in OpenSSL's words, checkServerIdentity on the certificate, rejectUnauthorized: false, TLS 1.2, an RSA key, the issuer from the ca", async () => {
     const { host, shim } = await both(
       'verify.js',
@@ -327,6 +363,7 @@ const go = (label, opts) => new Promise((resolve) => {
   await go('untrusted, rejectUnauthorized false', { port: ports.untrusted, rejectUnauthorized: false });
   await go('wrong name, rejectUnauthorized false', { port: ports.wrongName, rejectUnauthorized: false });
   await go('own check refuses', { port: ports.echo, checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN, typeof c.issuerCertificate), Object.assign(new Error('not mine'), { code: 'MINE' })) });
+  await go('own check refuses a wrong name', { port: ports.wrongName, checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN), Object.assign(new Error('not mine'), { code: 'MINE' })) });
   await go('own check takes a wrong name', { port: ports.wrongName, checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN), undefined) });
   await go('leaf only, issuer from the ca', { port: ports.leafOnly });
   await go('TLS 1.2', { port: ports.tls12 });
@@ -341,6 +378,9 @@ const go = (label, opts) => new Promise((resolve) => {
     assert.equal(host.status, 0, host.stderr);
     assert.equal(shim.stdout, host.stdout);
     assert.equal(shim.stderr, '');
+    assert.match(shim.stdout, /^wrong name error Error ERR_TLS_CERT_ALTNAME_INVALID Hostname\/IP does not match certificate's altnames: /m);
+    assert.match(shim.stdout, /^check secure\.test other\.test\nown check refuses a wrong name error Error MINE not mine /m);
+    assert.match(shim.stdout, /^own check takes a wrong name secureConnect true null TLSv1\.3 other\.test /m);
   });
 
   it('STARTTLS: tls.connect({ socket }) and new tls.TLSSocket(socket) upgrade a plain connection in place', async () => {
@@ -529,6 +569,8 @@ const send = (label, options, body) => new Promise((resolve) => {
   await send('host header names the server', { path: '/c', agent, headers: { Host: 'secure.test' } });
   await send('no agent, a ca', { path: '/d', ca, servername: 'secure.test' });
   await send('no agent, wrong name', { path: '/e', ca, servername: 'other.test' });
+  await send('no agent, wrong name, own check refuses', { path: '/e', ca, servername: 'other.test', checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN), Object.assign(new Error('not mine'), { code: 'MINE' })) });
+  await send('no agent, wrong name, own check takes it', { path: '/e', ca, servername: 'other.test', checkServerIdentity: (h, c) => (console.log('check', h, c.subject.CN), undefined) });
   await send('agent: false, a ca', { path: '/f', ca, servername: 'secure.test', agent: false });
   console.log('free', Object.keys(agent.freeSockets).length);
   agent.destroy();
@@ -540,5 +582,8 @@ const send = (label, options, body) => new Promise((resolve) => {
     assert.equal(host.status, 0, host.stderr);
     assert.equal(shim.stdout, host.stdout);
     assert.equal(shim.stderr, '');
+    assert.match(shim.stdout, /^no agent, wrong name error ERR_TLS_CERT_ALTNAME_INVALID Hostname\/IP does not match certificate's altnames: Host: other\.test\. /m);
+    assert.match(shim.stdout, /^check other\.test secure\.test\nno agent, wrong name, own check refuses error MINE not mine$/m);
+    assert.match(shim.stdout, /^check other\.test secure\.test\nno agent, wrong name, own check takes it 200 /m);
   });
 });
