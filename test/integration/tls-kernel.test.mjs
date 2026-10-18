@@ -31,6 +31,22 @@ const skipControls = !kernelAtLeast('1.124.13') && 'slicc-kernel before 1.124.13
 
 const UPLINK = '203.0.113.10';
 
+// A key encrypted with the passphrase 'pw', fixed rather than made per run.
+// OpenSSL decrypts it with the passphrase given, or an empty one. For about
+// one random salt and IV in 500 the result passes the padding check, and
+// Node then says DECODER unsupported, not bad decrypt (the kernel's engine
+// says bad decrypt for both). Host Node 22.22.0 gives bad decrypt for this
+// key with no passphrase, '' and 'not it'.
+const LOCKED_KEY = `-----BEGIN ENCRYPTED PRIVATE KEY-----
+MIH0MF8GCSqGSIb3DQEFDTBSMDEGCSqGSIb3DQEFDDAkBBBdGALvtdtyJoUW4sQG
+GNpGAgIIADAMBggqhkiG9w0CCQUAMB0GCWCGSAFlAwQBKgQQia1ICps8rs6+YP9I
+nvzsjgSBkEn5S9P+PPJ2DEoWI7JNhcsorOtIExRSMQHtNdwXjuXoZUYORxUM410H
+jqYg9sVv8YGiZmPAca5C4lrtFgOGZu9WsjZc+BH/HA/DWkgpJCOEFlMTvwngfBuR
+x1XCyVqYRlbvEBtYrlpIsIgGiaUShbBxfqBpqfBT5gq9o38SX6Ivw4ESgdoYn4Xn
+QQB/lzaXfQ==
+-----END ENCRYPTED PRIVATE KEY-----
+`;
+
 /** An uplink peer that pipes the program's bytes to a server on the host. */
 function pipeTo(port) {
   return (peer) => {
@@ -269,7 +285,7 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
     const named = ca.server('secure.test', { san: ['DNS:secure.test', 'IP:127.0.0.1', `IP:${UPLINK}`] });
     const client = ca.server('client.test', { eku: ['1.3.6.1.5.5.7.3.2'] });
     const encrypted = createPrivateKey(client.key).export({ type: 'pkcs8', format: 'pem', cipher: 'aes-256-cbc', passphrase: 'pw' });
-    clientFiles = { 'client.pem': client.cert, 'client.key': client.key, 'client-enc.key': encrypted, 'other.key': named.key };
+    clientFiles = { 'client.pem': client.cert, 'client.key': client.key, 'client-enc.key': encrypted, 'locked.key': LOCKED_KEY, 'other.key': named.key };
     for (const [file, data] of Object.entries(clientFiles)) writeFileSync(join(dir, file), data);
     const telling = (s) => s.end(`client=${s.getPeerCertificate().subject?.CN ?? 'none'} sni=${s.servername}`);
     const tellingServer = async (name, options) => {
@@ -703,7 +719,7 @@ const ports = JSON.parse(portsJson);
 const ca = fs.readFileSync(dir + '/ca.pem');
 const cert = fs.readFileSync(dir + '/client.pem', 'utf8');
 const key = fs.readFileSync(dir + '/client.key');
-const encrypted = fs.readFileSync(dir + '/client-enc.key', 'utf8');
+const locked = fs.readFileSync(dir + '/locked.key', 'utf8');
 const show = (label, e) => console.log(label, e.name, e.code, e.message, JSON.stringify(Object.entries(e)));
 const go = (label, opts) => new Promise((resolve) => {
   let s;
@@ -718,8 +734,8 @@ const go = (label, opts) => new Promise((resolve) => {
   s.on('close', () => resolve());
 });
 (async () => {
-  await go('wrong passphrase', { cert, key: encrypted, passphrase: 'not it' });
-  await go('no passphrase', { cert, key: encrypted });
+  await go('wrong passphrase', { cert, key: locked, passphrase: 'not it' });
+  await go('no passphrase', { cert, key: locked });
   await go('not a key', { cert, key: 'garbage' });
   await go('a certificate as the key', { cert, key: cert });
   await go("another certificate's key", { cert, key: fs.readFileSync(dir + '/other.key') });
