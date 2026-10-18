@@ -2675,8 +2675,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     path,
     handles,
     timers,
-    stat: (target, bigint) => statView(syncFs.stat(target), bigint),
-    zeroStats,
+    stat: (target) => syncFs.stat(target),
+    view: (st, bigint) => (st ? statView(st, bigint) : zeroStats(bigint)),
     errno: (code) => ERRNO[code] ?? ERRNO.EIO,
   });
   fsModule.watchFile = function watchFile(filename, options, listener) {

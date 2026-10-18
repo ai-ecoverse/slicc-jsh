@@ -1,0 +1,6 @@
+{
+  "description": "fs.watchFile edges: a listener that changes the Stats it gets doesn't change what the next poll compares with; an interval above the timers' 2147483647 ms limit (up to Node's uint32) waits, not 1 ms",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

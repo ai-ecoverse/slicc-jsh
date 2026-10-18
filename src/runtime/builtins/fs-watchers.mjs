@@ -21,11 +21,14 @@ const SAME = ['ctimeMs', 'mtimeMs', 'birthtimeMs', 'size', 'mode', 'uid', 'gid',
 
 /**
  * @param {object} o
- * @param {(path: string, bigint: boolean) => object} o.stat Stats for a path; throws with `code`
- * @param {(bigint: boolean) => object} o.zeroStats Stats with every field 0 (a missing file)
+ * @param {(path: string) => object} o.stat the kernel's stat of a path; throws with `code`
+ * @param {(st: object | null, bigint: boolean) => object} o.view new Stats for a kernel stat, or all 0 for null (a missing file)
  * @param {(code: string) => number} o.errno the negative libuv errno for a code
  */
-export function createStatWatchers({ process, path, handles, timers, stat, zeroStats, errno }) {
+// The longest delay a timer takes; a longer interval waits in steps.
+const MAX_DELAY = 2147483647;
+
+export function createStatWatchers({ process, path, handles, timers, stat, view, errno }) {
   /** The binding's StatWatcher handle: the poll, counted as a ref'd handle while it runs. */
   class PollHandle {
     #path = '';
@@ -36,12 +39,13 @@ export function createStatWatchers({ process, path, handles, timers, stat, zeroS
     #closed = false;
     #refed = true;
     #busy = 0;
-    #last;
+    // The last stat, as the kernel gave it (null: none yet). Listeners get
+    // Stats made from it afresh, so one that changes them changes nothing here.
+    #last = null;
     #entry = { kind: 'StatWatcher' };
 
     constructor(bigint) {
       this.#bigint = bigint;
-      this.#last = zeroStats(bigint);
     }
 
     start(target, interval) {
@@ -55,7 +59,8 @@ export function createStatWatchers({ process, path, handles, timers, stat, zeroS
     }
 
     #schedule(delay) {
-      this.#timer = timers.setTimeout(() => this.#poll(), delay);
+      const step = Math.min(delay, MAX_DELAY);
+      this.#timer = timers.setTimeout(() => (delay > step ? this.#schedule(delay - step) : this.#poll()), step);
       this.#timer.unref?.();
     }
 
@@ -65,7 +70,7 @@ export function createStatWatchers({ process, path, handles, timers, stat, zeroS
       let curr;
       let status = 0;
       try {
-        curr = stat(this.#path, this.#bigint);
+        curr = stat(this.#path);
       } catch (err) {
         status = errno(err?.code);
       }
@@ -75,16 +80,21 @@ export function createStatWatchers({ process, path, handles, timers, stat, zeroS
       if (status !== 0) {
         if (this.#busy !== status) {
           this.#busy = status;
-          this.onchange(status, zeroStats(this.#bigint), this.#last);
+          this.onchange(status, view(null, this.#bigint), view(this.#last, this.#bigint));
         }
         return;
       }
       const prev = this.#last;
-      const changed = this.#busy < 0 || SAME.some((k) => prev[k] !== curr[k]);
-      const report = this.#busy !== 0 && changed;
+      let report = false;
+      if (this.#busy < 0) report = true;
+      else if (this.#busy !== 0) {
+        const a = view(prev, false);
+        const b = view(curr, false);
+        report = SAME.some((k) => a[k] !== b[k]);
+      }
       this.#last = curr;
       this.#busy = 1;
-      if (report) this.onchange(0, curr, prev);
+      if (report) this.onchange(0, view(curr, this.#bigint), view(prev, this.#bigint));
     }
 
     ref() {
