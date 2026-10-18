@@ -220,9 +220,13 @@ describe('fs.watch in the kernel', needs, () => {
       ['ignore', 'first t, change t, rename f1, ABORT_ERR 9 fs.watch maxQueue exceeded'],
     ]) {
       await mkdir(`/tmp/flood-${overflow}`);
-      const run = jsh.run(['node', '--no-warnings', '/tmp/flood.mjs', overflow], { cwd: '/tmp' });
+      const run = start(['node', '--no-warnings', '/tmp/flood.mjs', overflow]);
+      // Fails at once if the program ends first (without fs.watch, at its start).
       const marked = async (name) => {
-        while ((await read(`/os/flood-${overflow}.${name}`)) === null) await new Promise((resolve) => setTimeout(resolve, 10));
+        while ((await read(`/os/flood-${overflow}.${name}`)) === null) {
+          if (run.ended) assert.fail(`the program ended (${run.ended.status}): ${run.ended.stderr}`);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
       };
       await marked('ready');
       await jsh.kernel.writeFile(`/tmp/flood-${overflow}/t`, 't');
