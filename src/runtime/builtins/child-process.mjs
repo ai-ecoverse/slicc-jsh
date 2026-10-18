@@ -626,7 +626,12 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       const feed = (async () => {
         const writer = kernelChild.stdin.getWriter();
         try {
-          const data = files[0].readRest();
+          let data;
+          try {
+            data = files[0].readRest();
+          } finally {
+            files[0].release?.();
+          }
           if (data.length) await writer.write(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
           await writer.close();
         } catch {
@@ -634,6 +639,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         }
       })();
       trackPromise(handles, feed);
+    } else {
+      files[0]?.release?.();
     }
     for (const [i, web] of [
       [1, kernelChild.stdout],
@@ -733,8 +740,12 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
 
     // A device goes to the child as its kernel descriptor (it streams, as in
     // Node); spawn() held it open, and it is let go once the child has it.
-    const direct = files.map((f) => (f?.release ? f.kernelFd : null));
+    const direct = files.map((f) => (f?.release && f.kernelFd != null ? f.kernelFd : null));
     const served = files.map((f, i) => (direct[i] != null ? null : f));
+    // A file served here (stdin fed from its kernel descriptor) is let go
+    // once it has been read, in connectStdio; a device once the child has it.
+    const releaseDirect = () => files.forEach((f, i) => direct[i] != null && f?.release?.());
+    const releaseServedOutput = () => served.forEach((f, i) => i > 0 && f?.release?.());
     const request = {
       argv,
       cwd,
@@ -826,7 +837,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         failed(err);
         return;
       }
-      releaseAll();
+      releaseDirect();
+      releaseServedOutput();
       child._bindKernel(kernelChild);
       process.nextTick(() => run(kernelChild));
       return;
@@ -837,7 +849,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     inflightSpawns.add(spawnPromise);
     const settled = () => inflightSpawns.delete(spawnPromise);
     spawnPromise.then(settled, settled);
-    spawnPromise.then(releaseAll, releaseAll);
+    spawnPromise.then(() => {
+      releaseDirect();
+      releaseServedOutput();
+    }, releaseAll);
     spawnPromise.then((kernelChild) => {
       child._bindKernel(kernelChild);
       run(kernelChild);

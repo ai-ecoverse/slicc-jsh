@@ -8,6 +8,7 @@ import { UV_ERRORS } from '../node-bindings.mjs';
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
+  ERR_OUT_OF_RANGE,
   validateBoolean,
   validateInt32,
   validateInteger,
@@ -499,6 +500,75 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
     }
   }
   const isDevicePath = (target) => devicePathOf(target) !== null;
+
+  /**
+   * A kernel descriptor on a regular file opened read-only, so readSync reads
+   * just the range asked for (fd-pread) instead of the whole file each time,
+   * with the stat of the file it opened. null where the kernel has none to
+   * give (a directory: EISDIR): the fd then reads by its path. A refusal
+   * (EACCES, EMFILE, …) is the open's.
+   */
+  function openReadOnly(target, pathArg) {
+    if (typeof ctx.sync?.open !== 'function') return null;
+    let file;
+    try {
+      file = ctx.sync.open(target, { read: true });
+    } catch (err) {
+      if (OPEN_REFUSALS.has(err?.code)) throw nodeFsError(err.code, 'open', pathArg, err);
+      return null;
+    }
+    try {
+      return { file, opened: syncFs.stat(target) };
+    } catch {
+      file.close();
+      return null;
+    }
+  }
+
+  /** The bytes from an fd's position to its end; the position moves there. */
+  function readRestOf(ent) {
+    if (ent.file) {
+      const rest = ent.file.read(ent.pos, Math.max(0, ent.file.size() - ent.pos));
+      ent.pos += rest.length;
+      return rest;
+    }
+    const bytes = syncFs.readFile(ent.path);
+    const rest = bytes.subarray(Math.min(ent.pos, bytes.length));
+    ent.pos += rest.length;
+    return rest;
+  }
+
+  /**
+   * An fd's stat: of the file it has open, which its path may no longer name
+   * (unlinked, or replaced: Linux's fstat then has nlink 0).
+   */
+  function statOfFd(ent) {
+    if (!ent.file) return syncFs.stat(ent.path);
+    const was = ent.opened;
+    let st = null;
+    try {
+      st = syncFs.stat(ent.path);
+    } catch {
+      st = null;
+    }
+    if (st && st.ino === was.ino && st.dev === was.dev) return st;
+    return { ...was, size: ent.file.size(), nlink: 0 };
+  }
+
+  /** Node's readSync position: null, -1 or -1n is the fd's own (null here); else a number. */
+  function readPosition(position, length) {
+    if (position == null) return null;
+    if (typeof position === 'number') {
+      validateInteger(position, 'position', -1);
+      return position === -1 ? null : position;
+    }
+    if (typeof position === 'bigint') {
+      const max = 2n ** 63n - 1n - BigInt(length);
+      if (!(position >= -1n && position <= max)) throw ERR_OUT_OF_RANGE('position', `>= -1 && <= ${max}`, position);
+      return position === -1n ? null : Number(position);
+    }
+    throw ERR_INVALID_ARG_TYPE('position', ['integer', 'bigint'], position);
+  }
 
   /** writeFileSync / appendFileSync of a device: open, write, close, as Node's do. */
   function writeThroughDescriptor(p, bytes, flag) {
@@ -1073,10 +1143,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         const ent = fdTable.get(p);
         if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
         try {
-          const bytes = syncFs.readFile(ent.path);
-          const rest = bytes.subarray(Math.min(ent.pos, bytes.length));
-          ent.pos += rest.length;
-          return decodeAs(rest, encoding);
+          return decodeAs(readRestOf(ent), encoding);
         } catch (err) {
           throw nodeFsError(err?.code || 'EIO', 'read', undefined, err);
         }
@@ -1411,6 +1478,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           pos = 0;
         }
       }
+      const ranged = fl.writable ? null : openReadOnly(target, pathArg);
       const fd = nextFd++;
       fdTable.set(fd, {
         path: target,
@@ -1419,17 +1487,20 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         pos,
         readable: fl.readable || fl.raw === 'r',
         writable: fl.writable,
+        file: ranged?.file ?? null,
+        opened: ranged?.opened ?? null,
       });
       return fd;
     },
     readSync(fd, buffer, offset, length, position) {
       validatedFd(fd);
-      const { bufOffset, length: len, position: filePosition } = parseReadSyncArgs(
+      const { bufOffset, length: len, position: rawPosition } = parseReadSyncArgs(
         buffer,
         offset,
         length,
         position
       );
+      const filePosition = readPosition(rawPosition, len);
       if (fd === 0) {
         const data = readStdinSync(null);
         const src = data instanceof Uint8Array ? data : encoder.encode(String(data));
@@ -1447,6 +1518,19 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
           return n;
         } catch (err) {
           throw nodeFsError(err?.code || 'EIO', 'read', undefined, err);
+        }
+      }
+      if (ent.file) {
+        try {
+          // Node: with no position, read at the fd's own and move it.
+          const pos = filePosition ?? ent.pos;
+          const chunk = len > 0 ? ent.file.read(pos, len) : new Uint8Array(0);
+          const n = Math.min(len, chunk.length);
+          if (n) buffer.set(chunk.subarray(0, n), bufOffset);
+          if (filePosition == null) ent.pos = pos + n;
+          return n;
+        } catch (err) {
+          throw nodeFsError(err?.code || 'EIO', 'read', ent.path, err);
         }
       }
       try {
@@ -1490,7 +1574,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       const ent = fdTable.get(fd);
       if (!ent) throw nodeFsError('EBADF', 'fstat', undefined);
       try {
-        return statView(syncFs.stat(ent.path), options?.bigint === true);
+        return statView(statOfFd(ent), options?.bigint === true);
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'fstat', ent.path, err);
       }
@@ -1521,14 +1605,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       const ent = fdTable.get(fd);
       fdTable.delete(fd);
       ent.closed = true;
-      // A device a child is still being given (child_process hold()) keeps
+      // A file a child is still being given (child_process hold()) keeps
       // its kernel descriptor until that is done, as a dup'd fd would.
       if (ent.holds > 0) return;
-      try {
-        ent.device?.close();
-      } catch {
-        /* closed */
-      }
+      closeKernelFile(ent);
     },
     symlinkSync(target, p) {
       try {
@@ -2074,9 +2154,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
         ensureOpen('appendFile');
         syncApi.appendFileSync(entPath(), data, options);
       },
-      async stat() {
+      async stat(options) {
         ensureOpen('stat');
-        return syncApi.statSync(entPath());
+        return syncApi.fstatSync(fd, options);
       },
       async truncate(len = 0) {
         ensureOpen('truncate');
@@ -2340,34 +2420,38 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
    * a dup'd descriptor. It shares the fd's position while the fd is open and
    * outlives a closeSync() of it. null when jsh has no such fd.
    */
+  /** Close the kernel descriptor behind a jsh fd, if it has one. */
+  function closeKernelFile(ent) {
+    try {
+      (ent.device ?? ent.file)?.close();
+    } catch {
+      /* closed */
+    }
+  }
+
   function openFileOf(fd) {
     const ent = fdTable.get(fd);
     if (!ent) return null;
+    /**
+     * Keep the fd's kernel descriptor open past a closeSync() of the jsh fd
+     * until the returned release() (child_process: until the child has it).
+     */
+    const hold = () => {
+      ent.holds = (ent.holds ?? 0) + 1;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        ent.holds -= 1;
+        if (ent.holds === 0 && ent.closed) closeKernelFile(ent);
+      };
+    };
     if (ent.device) {
       // A device: its kernel descriptor (kernelFd) can be a child's stdio as
       // it is; fed and drained here, it streams, up to the kernel's 64 MiB.
       return {
         kernelFd: ent.device.fd,
-        /**
-         * Keep kernelFd open past a closeSync() of the jsh fd until the
-         * returned release() (child_process: until the child has it).
-         */
-        hold() {
-          ent.holds = (ent.holds ?? 0) + 1;
-          let released = false;
-          return () => {
-            if (released) return;
-            released = true;
-            ent.holds -= 1;
-            if (ent.holds === 0 && ent.closed) {
-              try {
-                ent.device.close();
-              } catch {
-                /* closed */
-              }
-            }
-          };
-        },
+        hold,
         write(bytes) {
           let off = 0;
           while (bytes?.length && off < bytes.length) off += ent.device.write(0, bytes.subarray(off)) || bytes.length - off;
@@ -2393,15 +2477,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
       };
     }
     return {
+      ...(ent.file ? { hold } : {}),
       write(bytes) {
         if (bytes?.length) writeBytesAtPath(ent, bytes, null);
       },
       /** The rest of the file from the position on (the position moves to its end). */
       readRest() {
-        const bytes = syncFs.readFile(ent.path);
-        const rest = bytes.subarray(Math.min(ent.pos, bytes.length));
-        ent.pos += rest.length;
-        return rest;
+        return readRestOf(ent);
       },
     };
   }
@@ -2590,6 +2672,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream }) {
 const isURL = (self) => Boolean(self?.href && self.protocol && self.auth === undefined && self.path === undefined);
 
 /** Functions whose first two arguments are paths (the rest: the first). */
+// What ctx.sync.open refuses for the open itself (else the fd reads by its path).
+const OPEN_REFUSALS = new Set(['EACCES', 'EPERM', 'EMFILE', 'ENFILE']);
 const VALID_FLAGS = new Set(['r', 'rs', 'sr', 'r+', 'rs+', 'sr+', 'w', 'wx', 'xw', 'w+', 'wx+', 'xw+', 'a', 'ax', 'xa', 'as', 'sa', 'a+', 'ax+', 'xa+', 'as+', 'sa+']);
 const TWO_PATHS = new Set(['rename', 'link', 'symlink', 'copyFile', 'cp']);
 /** What Node's errors call those paths. */
