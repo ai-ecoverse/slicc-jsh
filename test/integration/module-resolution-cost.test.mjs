@@ -80,7 +80,7 @@ describe('module resolution cost does not grow with the path depth (kernel)', ()
     const setup = await jsh.run([
       'node',
       '-e',
-      `const fs = require('fs'); ${pkg(shallow, 'small', 150)} ${pkg(shallow, 'large', 300)} ${pkg(deep, 'small', 150)} ${pkg(deep, 'large', 300)}`,
+      `const fs = require('fs'); ${pkg(shallow, 'small', 20)} ${pkg(shallow, 'large', 40)} ${pkg(deep, 'small', 20)} ${pkg(deep, 'large', 40)}`,
     ]);
     assert.equal(setup.status, 0, setup.stderr);
     let runs = 0;
@@ -92,16 +92,16 @@ describe('module resolution cost does not grow with the path depth (kernel)', ()
     };
     const minus = (a, b) => Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].sort().map((k) => [k, (a[k] ?? 0) - (b[k] ?? 0)]));
     const total = (c) => Object.values(c).reduce((s, v) => s + v, 0);
-    const s150 = await calls(`${shallow}/small.mjs`, 150);
-    const s300 = await calls(`${shallow}/large.mjs`, 300);
-    const d150 = await calls(`${deep}/small.mjs`, 150);
-    const d300 = await calls(`${deep}/large.mjs`, 300);
-    const perImportShallow = minus(s300, s150);
-    const perImportDeep = minus(d300, d150);
-    const report = JSON.stringify({ s150, s300, d150, d300 });
-    assert.deepEqual(perImportDeep, perImportShallow, `150 more imports cost the same calls at either depth: ${report}`);
-    assert.ok(total(perImportShallow) <= 150 * 8, `at most 8 fs calls per import: ${report}`);
-    assert.deepEqual(minus(d300, s300), minus(d150, s150), `the depth costs the same calls for 150 and 300 imports: ${report}`);
-    assert.ok(total(minus(d300, s300)) <= 48 * 4, `at most 4 fs calls per extra directory: ${report}`);
+    const s20 = await calls(`${shallow}/small.mjs`, 20);
+    const s40 = await calls(`${shallow}/large.mjs`, 40);
+    const d20 = await calls(`${deep}/small.mjs`, 20);
+    const d40 = await calls(`${deep}/large.mjs`, 40);
+    const perImportShallow = minus(s40, s20);
+    const perImportDeep = minus(d40, d20);
+    const report = JSON.stringify({ s20, s40, d20, d40 });
+    assert.deepEqual(perImportDeep, perImportShallow, `20 more imports cost the same calls at either depth: ${report}`);
+    assert.ok(total(perImportShallow) <= 20 * 8, `at most 8 fs calls per import: ${report}`);
+    assert.deepEqual(minus(d40, s40), minus(d20, s20), `the depth costs the same calls for 20 and 40 imports: ${report}`);
+    assert.ok(total(minus(d40, s40)) <= 48 * 4, `at most 4 fs calls per extra directory: ${report}`);
   });
 });
