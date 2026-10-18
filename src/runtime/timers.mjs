@@ -24,6 +24,24 @@ export function createTimers(
   // phase): the immediates pending when the turn ended. While any of them
   // is still to run, a timeout that became due during the turn waits.
   const check = new Set();
+  // The timeouts hold() keeps waiting, each on a retry of its own. The
+  // first to find the hold over runs them all, in the order of Node's
+  // timers phase, not in the order the platform runs their retries (the
+  // turn's own steps come between those). Node keeps a list per delay, in
+  // the order the timers were set; it takes the lists by when their first
+  // timer is due (on a tie, the older list first), and runs each list's due
+  // timers before the next list's.
+  const held = new Set();
+  const nodeOrder = (timers) => {
+    const lists = new Map();
+    for (const t of timers) {
+      const list = lists.get(t.delay) ?? { due: Infinity, seq: Infinity };
+      lists.set(t.delay, { due: Math.min(list.due, t.due), seq: Math.min(list.seq, t.seq) });
+    }
+    const of = (t) => lists.get(t.delay);
+    return timers.sort((x, y) => of(x).due - of(y).due || of(x).seq - of(y).seq || x.seq - y.seq);
+  };
+  let made = 0;
   const nativeSetTimeout = globalThis.setTimeout.bind(globalThis);
   const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
   const nativeSetInterval = globalThis.setInterval.bind(globalThis);
@@ -110,12 +128,8 @@ export function createTimers(
       state.retry = null;
       fire();
     };
-    const fire = () => {
-      if (stopped) return;
-      if (hold(state.due)) {
-        state.retry ??= nativeSetTimeout(retry, 0);
-        return;
-      }
+    const run = () => {
+      held.delete(state);
       if (state.retry) {
         nativeClearTimeout(state.retry);
         state.retry = null;
@@ -124,11 +138,30 @@ export function createTimers(
         byId.delete(state.id);
         handles.delete(state);
       } else {
-        // As Node reschedules an interval: from when its callback starts.
+        // As Node reschedules an interval: from when its callback starts,
+        // at the end of its delay's list.
         state.due = Date.now() + state.delay;
+        state.seq = made++;
       }
       runMethod(handle, '_onTimeout', args, domain, frame);
     };
+    const fire = () => {
+      if (stopped) return;
+      if (hold(state.due)) {
+        held.add(state);
+        state.retry ??= nativeSetTimeout(retry, 0);
+        return;
+      }
+      if (held.size === 0) return run();
+      held.add(state);
+      for (const next of nodeOrder([...held])) {
+        if (stopped) return;
+        // One an earlier callback cleared, or a later turn holds, waits.
+        if (held.has(next) && (next === state || !hold(next.due))) next.run();
+      }
+    };
+    state.run = run;
+    state.seq = made++;
     // Node's delay: a number from 1 up (anything else is 1).
     state.delay = delay >= 1 && delay <= 2147483647 ? Number(delay) : 1;
     state.due = Date.now() + state.delay;
@@ -186,6 +219,7 @@ export function createTimers(
       byId.delete(id);
       handles.delete(state);
       check.delete(state);
+      held.delete(state);
       if (state.retry) nativeClearTimeout(state.retry);
     }
     nativeClear(id);
@@ -233,6 +267,7 @@ export function createTimers(
         handles.delete(state);
       }
       byId.clear();
+      held.clear();
       handles.notify();
     },
     /** The program is ending: clear its timers; later ones bypass the table. */
