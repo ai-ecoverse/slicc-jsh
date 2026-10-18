@@ -406,20 +406,30 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     const channel = channelOn({ ctx, handles, serialization, fd });
     let closed;
     let ended = false;
+    // The channel's end of file, or the parent's own close of it.
+    let gone;
+    const endOrGone = new Promise((resolve) => {
+      gone = resolve;
+    });
+    const closeChannel = channel.close;
+    channel.close = function close() {
+      gone();
+      return Reflect.apply(closeChannel, this, arguments);
+    };
     // Node's 'close' also waits for the channel's end (its _closesNeeded):
     // never, when the parent disconnected first.
     child._ipcClosed = new Promise((resolve) => {
       closed = () => {
         ended = true;
+        gone();
         resolve();
       };
     });
     // Linux closes an exiting child's descriptors before its parent can
     // reap it, so Node sees the channel's end ('disconnect') before 'exit'.
-    // The kernel answers this process's calls in order: once a call made
-    // after the exit is answered, the read pending on the channel has had
-    // its end of file, if it was coming.
-    child._ipcSettle = () => (ended || !child.channel ? null : ctx.fdStatus(fd).catch(() => {}));
+    // The child is gone, so its end of the channel closes: 'exit' waits for
+    // that end of file (or for the parent's own close).
+    child._ipcSettle = () => (ended || !child.channel ? null : endOrGone);
     const deprecate = process._builtin?.('util')?.deprecate ?? ((fn) => fn);
     setupChannel({ target: child, channel, serializationMode, serialization, process, deprecate, maybeClose: () => closed() });
   }
