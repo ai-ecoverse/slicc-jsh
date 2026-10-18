@@ -1,7 +1,11 @@
 // fs.watch with `recursive`, as Node 22 has it on Linux: its own JS watcher
 // (lib/internal/fs/recursive_watch.js), a watch on each file and directory
-// of the tree. The program makes each change itself and waits 100 ms before
-// the next.
+// of the tree. The program makes each change itself. A step ends when its
+// events are in, not after a set time: each step expects one event, and
+// then makes a sentinel directory ('.s1', ...) at the top and waits for it.
+// The sentinel comes after the step's events in Node, whose watches share one
+// inotify queue; jsh's are separate kernel watches, ordered only one by one,
+// so there the expected event is what the step waits for.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -12,7 +16,23 @@ const hide = (s) => String(s).split(dir).join('<dir>');
 fs.mkdirSync(at('old'));
 fs.writeFileSync(at('old', 'o.txt'), 'o');
 
-const w = fs.watch(dir, { recursive: true }, (type, name) => console.log('event:', type, name));
+let waiting = null;
+const settle = () => {
+  if (!waiting || !waiting.sentinel || waiting.events < 1) return;
+  const { then } = waiting;
+  waiting = null;
+  then();
+};
+let sentinels = 0;
+const w = fs.watch(dir, { recursive: true }, (type, name) => {
+  if (name.startsWith('.s')) {
+    if (waiting?.name === name) waiting.sentinel = true;
+  } else {
+    console.log('event:', type, name);
+    if (waiting) waiting.events++;
+  }
+  settle();
+});
 console.log('constructor:', w.constructor.name, 'ref/unref:', w.ref(), w.unref());
 
 const steps = [
@@ -27,24 +47,30 @@ const steps = [
   ['change deeper', () => fs.appendFileSync(at('sub', 'deep', 'd.txt'), 'e')],
   ['unlink', () => fs.unlinkSync(at('sub', 'a.txt'))],
   ['create at the top', () => fs.writeFileSync(at('top.txt'), 't')],
-  [
-    'close',
-    () => {
-      w.close();
-      fs.writeFileSync(at('after-close.txt'), 'x');
-    },
-  ],
 ];
 w.on('close', () => console.log('close'));
+// A step whose events never come says which, rather than timing out silently.
+setTimeout(() => {
+  console.log('stuck in', steps[n - 1]?.[0] ?? 'the first step');
+  process.exit(1);
+}, 10000).unref();
 let n = 0;
 const next = () => {
   const step = steps[n++];
-  if (!step) return errors();
+  if (!step) return close();
   console.log(`-- ${step[0]}`);
+  waiting = { name: `.s${sentinels}`, sentinel: false, events: 0, then: next };
   step[1]();
-  setTimeout(next, 100);
+  fs.mkdirSync(at(`.s${sentinels++}`));
 };
-setTimeout(next, 100);
+next();
+
+function close() {
+  console.log('-- close');
+  w.close();
+  fs.writeFileSync(at('after-close.txt'), 'x');
+  errors();
+}
 
 function errors() {
   const show = (f) => {

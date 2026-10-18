@@ -29,41 +29,48 @@ async function main() {
   ac.signal.addEventListener('abort', (e) => e.stopImmediatePropagation());
   const it = fsp.watch(dir, { signal: ac.signal });
   console.log('iterator:', typeof it.next, typeof it[Symbol.asyncIterator]);
-  const changes = (async () => {
-    setTimeout(() => fs.writeFileSync(at('a.txt'), 'a'), 50);
-    setTimeout(() => fs.appendFileSync(at('a.txt'), 'b'), 150);
-    setTimeout(() => fs.renameSync(at('a.txt'), at('b.txt')), 250);
-  })();
+  // Each change comes when the one before it is in, not after a set time;
+  // the first once the loop below has started the watch.
+  setImmediate(() => fs.writeFileSync(at('a.txt'), 'a'));
+  let changed = 0;
   try {
-    // Aborted at the last event, not on a timer: under load events can come late.
     for await (const { eventType, filename } of it) {
       console.log('event:', eventType, filename);
-      if (filename === 'b.txt') ac.abort();
+      if (eventType === 'change' && ++changed === 1) fs.appendFileSync(at('a.txt'), 'b');
+      else if (eventType === 'change' && changed === 2) fs.renameSync(at('a.txt'), at('b.txt'));
+      else if (filename === 'b.txt') ac.abort();
     }
   } catch (e) {
     show(e);
   }
-  await changes;
 
   // Another encoding, and `break` ends it.
   section = 'hex';
-  setTimeout(() => fs.unlinkSync(at('b.txt')), 50);
+  setImmediate(() => fs.unlinkSync(at('b.txt')));
   for await (const e of fsp.watch(dir, { encoding: 'hex' })) {
     console.log('hex event:', e.eventType, e.filename, Object.keys(e).join(','));
     break;
   }
 
   // More events than maxQueue before the iterator reads them: after the
-  // first event, the program pauses while it makes more. Each case has a
-  // directory of its own: two watches of one directory share libuv's.
+  // first event, the program waits, with no next() pending, while it makes
+  // more. Each case has a directory of its own: two watches of one directory
+  // share libuv's.
   section = 'overflow error';
   fs.mkdirSync(at('e'));
   const flooded = fsp.watch(at('e'), { maxQueue: 2, overflow: 'error' });
   const firstFlooded = flooded.next();
   fs.writeFileSync(at('e', 't.txt'), 't');
   console.log('first:', (await firstFlooded).value.filename);
+  // Another watcher of the directory says when the last change is in. In
+  // Node it shares the iterator's inotify watch and hears each event after
+  // it; jsh's are separate kernel watches, so there a moment more.
+  const lastIn = new Promise((resolve) => {
+    const seen = fs.watch(at('e'), (type, name) => name === 'e.txt' && type === 'change' && (seen.close(), resolve()));
+  });
   for (const name of ['c', 'd', 'e']) fs.writeFileSync(at('e', `${name}.txt`), name);
-  await later(100);
+  await lastIn;
+  await later(50);
   try {
     const e = (await flooded.next()).value;
     console.log('not this:', e.eventType, e.filename);
@@ -81,13 +88,15 @@ async function main() {
   fs.writeFileSync(at('i', 'u.txt'), 'u');
   console.log('first:', (await firstKept).value.filename);
   for (const name of ['v', 'w']) fs.writeFileSync(at('i', `${name}.txt`), name);
-  await later(100);
-  setTimeout(() => stop.abort(), 100);
+  // In once the three it can't keep have been warned about.
+  while (warnings.length < 3) await later(10);
   try {
-    for (;;) {
+    for (let i = 0; i < 2; i++) {
       const e = (await kept.next()).value;
       console.log('kept:', e.eventType, e.filename);
     }
+    stop.abort();
+    await kept.next();
   } catch (e) {
     show(e);
   }
@@ -99,7 +108,8 @@ async function main() {
   section = 'recursive';
   fs.mkdirSync(at('sub'));
   const rec = new AbortController();
-  setTimeout(() => fs.writeFileSync(at('sub', 's.txt'), 's'), 50);
+  // Once the loop's next() is waiting: Linux's recursive iterator drops events in between.
+  setImmediate(() => fs.writeFileSync(at('sub', 's.txt'), 's'));
   try {
     for await (const e of fsp.watch(dir, { recursive: true, signal: rec.signal })) {
       console.log('recursive:', e.eventType, e.filename);

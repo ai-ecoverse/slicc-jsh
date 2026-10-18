@@ -1,8 +1,12 @@
 // fs.watch as Node 22 reports it on Linux (inotify). The program makes each
-// change itself, after fs.watch has returned, and waits 100 ms before the
-// next, so each change's events are read on their own. Each watcher's events
-// are printed together after each step: the order between two watchers is
-// the kernel's, not part of what fs.watch promises.
+// change itself, after fs.watch has returned. A step ends when its events
+// are in, not after a set time: each step makes a sentinel directory
+// ('.s1', '.s2', ...) in the watched directory, and a watcher's events come
+// in order, so once the directory watch has the sentinel, the step's own
+// events are in. The file watches see only the steps that touch their file,
+// and those wait for the events they expect. Each watcher's events are
+// printed together after each step: the order between two watchers is the
+// kernel's, not part of what fs.watch promises.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -15,14 +19,36 @@ const watching = () => process.getActiveResourcesInfo().filter((r) => r === 'FSE
 fs.writeFileSync(at('f.txt'), 'f');
 fs.mkdirSync(at('nested'));
 
-// The changes come straight after the call: the watch is in place when it returns.
 const seen = { dir: [], file: [], hex: [] };
 const flush = () => {
   for (const [who, events] of Object.entries(seen)) {
     if (events.length) console.log(`${who}:`, events.splice(0).join(', '));
   }
 };
-const dw = fs.watch(dir, (type, name) => seen.dir.push(`${type} ${name}`));
+// The step waiting for its events: the sentinel's name, and how many events each file watch expects.
+let waiting = null;
+const settle = () => {
+  if (!waiting || !waiting.sentinel || seen.file.length < waiting.file || seen.hex.length < waiting.hex) return;
+  const { then } = waiting;
+  waiting = null;
+  then();
+};
+let sentinels = 0;
+/** Ends a step: its sentinel, then `then` once that and `expect`'s file events are in. */
+const endStep = (expect, then) => {
+  const name = `.s${sentinels++}`;
+  waiting = { name, sentinel: false, file: expect.file ?? 0, hex: expect.hex ?? 0, then };
+  fs.mkdirSync(at(name));
+};
+
+// The changes come straight after the call: the watch is in place when it returns.
+const dw = fs.watch(dir, (type, name) => {
+  if (name.startsWith('.s')) {
+    if (waiting?.name === name) waiting.sentinel = true;
+    return settle();
+  }
+  seen.dir.push(`${type} ${name}`);
+});
 fs.writeFileSync(at('a.txt'), 'a');
 console.log('FSWatcher:', dw.constructor.name, dw instanceof EventEmitter, 'exported:', 'FSWatcher' in fs);
 console.log('prototype:', Object.getOwnPropertyNames(Object.getPrototypeOf(dw)).sort().join(','));
@@ -30,8 +56,14 @@ console.log('ref/unref return it:', dw.unref() === dw, dw.ref() === dw, 'start()
 console.log('active:', watching());
 
 const fw = fs.watch(at('f.txt'), { encoding: 'buffer' });
-fw.on('change', (type, name) => seen.file.push(`${type} ${Buffer.isBuffer(name)} ${name}`));
-const hw = fs.watch(at('f.txt'), 'hex', (type, name) => seen.hex.push(`${type} ${name}`));
+fw.on('change', (type, name) => {
+  seen.file.push(`${type} ${Buffer.isBuffer(name)} ${name}`);
+  settle();
+});
+const hw = fs.watch(at('f.txt'), 'hex', (type, name) => {
+  seen.hex.push(`${type} ${name}`);
+  settle();
+});
 console.log('active:', watching());
 
 const steps = [
@@ -43,34 +75,42 @@ const steps = [
   ['nested write (not reported)', () => fs.writeFileSync(at('nested/n.txt'), 'n')],
   ['unlink', () => fs.unlinkSync(at('b.txt'))],
   ['rmdir', () => fs.rmdirSync(at('sub'))],
-  ['append to the watched file', () => fs.appendFileSync(at('f.txt'), 'g')],
-  ['unlink the watched file', () => fs.unlinkSync(at('f.txt'))],
-  [
-    'close',
-    () => {
-      hw.close();
-      fw.close();
-      fw.close();
-      fs.writeFileSync(at('after-close.txt'), 'x');
-      dw.close();
-    },
-  ],
+  ['append to the watched file', () => fs.appendFileSync(at('f.txt'), 'g'), { file: 1, hex: 1 }],
+  // inotify: the link count, the delete, the end of the watch.
+  ['unlink the watched file', () => fs.unlinkSync(at('f.txt')), { file: 3, hex: 3 }],
 ];
 dw.on('close', () => {
+  flush();
   console.log('dir: close');
   errors();
 });
 fw.on('close', () => console.log('file: close'));
+// A step whose events never come says which, rather than timing out silently.
+setTimeout(() => {
+  console.log('stuck in', steps[n - 1]?.[0] ?? 'the first step');
+  process.exit(1);
+}, 10000).unref();
 let n = 0;
 const next = () => {
   flush();
   const step = steps[n++];
-  if (!step) return;
+  if (!step) return close();
   console.log(`-- ${step[0]}`);
   step[1]();
-  setTimeout(next, 100);
+  endStep(step[2] ?? {}, next);
 };
-setTimeout(next, 100);
+// The first step waits for the create made right after fs.watch.
+endStep({}, next);
+
+function close() {
+  console.log('-- close');
+  hw.close();
+  fw.close();
+  fw.close();
+  // Closed before anything is read: not reported.
+  fs.writeFileSync(at('after-close.txt'), 'x');
+  dw.close();
+}
 
 function errors() {
   const show = (f) => {
