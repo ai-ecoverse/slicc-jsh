@@ -48,14 +48,19 @@ async function main() {
     break;
   }
 
-  // More events than maxQueue before the iterator reads them: the first
-  // next() starts the watch, and the changes come before anything is read.
+  // More events than maxQueue before the iterator reads them: after the
+  // first event, the program pauses while it makes more. Each case has a
+  // directory of its own: two watches of one directory share libuv's.
   section = 'overflow error';
-  const flooded = fsp.watch(dir, { maxQueue: 2, overflow: 'error' });
+  fs.mkdirSync(at('e'));
+  const flooded = fsp.watch(at('e'), { maxQueue: 2, overflow: 'error' });
   const firstFlooded = flooded.next();
-  for (const name of ['c', 'd', 'e']) fs.writeFileSync(at(`${name}.txt`), name);
+  fs.writeFileSync(at('e', 't.txt'), 't');
+  console.log('first:', (await firstFlooded).value.filename);
+  for (const name of ['c', 'd', 'e']) fs.writeFileSync(at('e', `${name}.txt`), name);
+  await later(100);
   try {
-    const e = (await firstFlooded).value;
+    const e = (await flooded.next()).value;
     console.log('not this:', e.eventType, e.filename);
   } catch (e) {
     show(e);
@@ -64,17 +69,20 @@ async function main() {
   const warnings = [];
   const onWarning = (w) => warnings.push(w.message);
   process.on('warning', onWarning);
+  fs.mkdirSync(at('i'));
   const stop = new AbortController();
-  const kept = fsp.watch(dir, { maxQueue: 2, signal: stop.signal });
+  const kept = fsp.watch(at('i'), { maxQueue: 2, signal: stop.signal });
   const firstKept = kept.next();
-  for (const name of ['c', 'd', 'e']) fs.unlinkSync(at(`${name}.txt`));
-  setTimeout(() => stop.abort(), 200);
+  fs.writeFileSync(at('i', 'u.txt'), 'u');
+  console.log('first:', (await firstKept).value.filename);
+  for (const name of ['v', 'w']) fs.writeFileSync(at('i', `${name}.txt`), name);
+  await later(100);
+  setTimeout(() => stop.abort(), 100);
   try {
-    let e = (await firstKept).value;
-    console.log('kept:', e.eventType, e.filename);
-    e = (await kept.next()).value;
-    console.log('kept:', e.eventType, e.filename);
-    await kept.next();
+    for (;;) {
+      const e = (await kept.next()).value;
+      console.log('kept:', e.eventType, e.filename);
+    }
   } catch (e) {
     show(e);
   }

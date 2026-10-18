@@ -126,12 +126,17 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
       });
     }
 
+    // One event a turn: Node's callback for each runs its ticks and promise
+    // jobs before the next (MakeCallback), so an iterator reads one at a time.
     #deliver() {
-      this.#flush = false;
-      while (this.#queue.length && !this.#closed) {
-        const { eventType, filename } = this.#queue.shift();
-        this.onchange(0, eventType, encode(filename, this.#encoding));
+      if (this.#closed || !this.#queue.length) {
+        this.#flush = false;
+        return;
       }
+      const { eventType, filename } = this.#queue.shift();
+      if (this.#queue.length) timers.setImmediate(() => this.#deliver()).unref?.();
+      else this.#flush = false;
+      this.onchange(0, eventType, encode(filename, this.#encoding));
     }
 
     ref() {
@@ -418,7 +423,8 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
     validateInteger(maxQueue, 'options.maxQueue');
     validateOneOf(overflow, 'options.overflow', ['ignore', 'error']);
     validateAbortSignal(signal, 'options.signal');
-    if (encoding && !isEncoding(encoding)) throw ERR_INVALID_ARG_VALUE('encoding', encoding, 'is invalid encoding');
+    // Node 22 passes these the other way round: "The argument 'nope' is invalid encoding. Received 'encoding'".
+    if (encoding && !isEncoding(encoding)) throw ERR_INVALID_ARG_VALUE(encoding, 'encoding', 'is invalid encoding');
     if (signal?.aborted) throw new AbortError(undefined, { cause: signal.reason });
 
     const handle = new FSEvent();

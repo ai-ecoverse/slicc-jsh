@@ -175,41 +175,51 @@ describe('fs.watch in the kernel', needs, () => {
     assert.equal(await read('/tmp/throws.log'), 'watching\ncaught at first\n');
   });
 
-  it("promises.watch: more outside changes than maxQueue while the program is busy: 'error' throws, 'ignore' keeps maxQueue and warns", async () => {
+  it("promises.watch: more outside changes than maxQueue while the program waits: 'error' throws, 'ignore' keeps maxQueue and warns", async () => {
     await program('/tmp/flood.mjs', [
       "import fs from 'node:fs';",
       "import { watch } from 'node:fs/promises';",
-      "const overflow = process.argv[2];",
-      "const ready = (s) => fs.writeFileSync(`/os/flood-${overflow}.ready`, s);",
-      "const warnings = [];",
+      'const overflow = process.argv[2];',
+      'const mark = (name) => fs.writeFileSync(`/os/flood-${overflow}.${name}`, "");',
+      'const warnings = [];',
       "process.on('warning', (w) => warnings.push(w.message));",
       'const ac = new AbortController();',
-      "const it = watch(`/tmp/flood-${overflow}`, { maxQueue: 2, overflow, signal: ac.signal });",
+      'const it = watch(`/tmp/flood-${overflow}`, { maxQueue: 2, overflow, signal: ac.signal });',
       // The first next() starts the watch.
       'const first = it.next();',
-      "ready('yes');",
-      // Busy until the test has made its changes: they queue meanwhile.
-      "while (!fs.existsSync(`/os/flood-${overflow}.go`)) { const t = Date.now(); while (Date.now() - t < 5); }",
-      'const out = [];',
+      "mark('ready');",
+      'const out = [`first ${(await first).value.filename}`];',
+      // No next() waiting until the test has made its changes: they queue
+      // meanwhile, as in Node, where the iterator reads them as they come
+      // whenever a next() is waiting.
+      "mark('got');",
+      "while (!fs.existsSync(`/os/flood-${overflow}.go`)) await new Promise((resolve) => setTimeout(resolve, 10));",
+      // The events made before the go mark come in meanwhile.
+      'await new Promise((resolve) => setTimeout(resolve, 200));',
       'try {',
-      "  for (const { value } of [await first, await it.next()]) out.push(`${value.eventType} ${value.filename}`);",
+      '  for (const { value } of [await it.next(), await it.next()]) out.push(`${value.eventType} ${value.filename}`);',
       '  setTimeout(() => ac.abort(), 100);',
       '  await it.next();',
       '} catch (e) {',
       '  out.push(e.code);',
       '}',
-      "console.log(out.join(' '), warnings.length, warnings[0]);",
+      "console.log(out.join(', '), warnings.length, warnings[0]);",
     ]);
     for (const [overflow, expected] of [
-      ['error', 'ERR_FS_WATCH_QUEUE_OVERFLOW 0 undefined'],
-      // The other eight events are dropped, with a warning each.
-      ['ignore', 'rename f1 change f1 ABORT_ERR 8 fs.watch maxQueue exceeded'],
+      ['error', 'first t, ERR_FS_WATCH_QUEUE_OVERFLOW 0 undefined'],
+      // t's 'change' and f1's 'rename' are kept; the other nine events are dropped, with a warning each.
+      ['ignore', 'first t, change t, rename f1, ABORT_ERR 9 fs.watch maxQueue exceeded'],
     ]) {
       await mkdir(`/tmp/flood-${overflow}`);
       const run = jsh.run(['node', '--no-warnings', '/tmp/flood.mjs', overflow], { cwd: '/tmp' });
-      while ((await read(`/os/flood-${overflow}.ready`)) === null) await new Promise((resolve) => setTimeout(resolve, 10));
+      const marked = async (name) => {
+        while ((await read(`/os/flood-${overflow}.${name}`)) === null) await new Promise((resolve) => setTimeout(resolve, 10));
+      };
+      await marked('ready');
+      await jsh.kernel.writeFile(`/tmp/flood-${overflow}/t`, 't');
+      await marked('got');
       // Five new files: a 'rename' and a 'change' each.
-      for (let i = 1; i <= 5; i++) await jsh.kernel.writeFile(`/tmp/flood-${overflow}/f${i}`, '');
+      for (let i = 1; i <= 5; i++) await jsh.kernel.writeFile(`/tmp/flood-${overflow}/f${i}`, 'f');
       // Not next to the watched directory: an embedder's write there ends the
       // watch on slicc-kernel 1.125.0 (reported to the kernel lane).
       await jsh.kernel.writeFile(`/os/flood-${overflow}.go`, '');
@@ -283,13 +293,16 @@ describe('chokidar 5 in the kernel (usePolling: false)', needs, () => {
     assert.equal(stop.status, 0, stop.stderr);
     const r = await run;
     assert.equal(r.status, 0, r.stderr);
-    const log = (await read('/os/chokidar.log')).split('\n').filter(Boolean);
-    assert.equal(log.at(-1), 'closed');
-    assert.deepEqual(log.slice(0, -1).sort(), [
+    const log = new Set((await read('/os/chokidar.log')).split('\n').filter(Boolean));
+    // A new file's write may also come as a 'change', after its 'add'.
+    log.delete('change /os/project/src/new.js');
+    log.delete('change /os/project/lib/stop');
+    assert.deepEqual([...log].sort(), [
       'add /os/project/lib/stop',
       'add /os/project/src/new.js',
       'addDir /os/project/lib',
       'change /os/project/src/index.js',
+      'closed',
       'ready true false',
       'unlink /os/project/src/new.js',
     ]);

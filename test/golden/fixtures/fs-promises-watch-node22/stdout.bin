@@ -7,11 +7,13 @@ event: rename a.txt
 event: rename b.txt
 AbortError ABORT_ERR The operation was aborted  
 hex event: rename 622e747874 eventType,filename
+first: t.txt
 Error ERR_FS_WATCH_QUEUE_OVERFLOW fs.watch() queued more than 2 events  
-kept: rename c.txt
-kept: rename d.txt
+first: u.txt
+kept: change u.txt
+kept: rename v.txt
 AbortError ABORT_ERR The operation was aborted  
-warnings: 1 fs.watch maxQueue exceeded
+warnings: 3 fs.watch maxQueue exceeded
 recursive: rename sub/s.txt
 AbortError ABORT_ERR The operation was aborted  
 Error ENOENT ENOENT: no such file or directory, watch '<dir>/missing' watch <dir>/missing
@@ -20,6 +22,6 @@ TypeError ERR_INVALID_ARG_TYPE The "path" argument must be of type string or an 
 TypeError ERR_INVALID_ARG_TYPE The "options" argument must be of type object. Received type string ('utf8')  
 TypeError ERR_INVALID_ARG_VALUE The property 'options.overflow' must be one of: 'ignore', 'error'. Received 'throw'  
 RangeError ERR_OUT_OF_RANGE The value of "options.maxQueue" is out of range. It must be an integer. Received 1.5  
-TypeError ERR_INVALID_ARG_VALUE The argument 'encoding' is invalid encoding. Received 'nope'  
-TypeError ERR_INVALID_ARG_VALUE The argument 'encoding' is invalid encoding. Received 'buffer'  
+TypeError ERR_INVALID_ARG_VALUE The argument 'nope' is invalid encoding. Received 'encoding'  
+TypeError ERR_INVALID_ARG_VALUE The argument 'buffer' is invalid encoding. Received 'encoding'  
 AbortError ABORT_ERR The operation was aborted  
