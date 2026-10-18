@@ -31,7 +31,11 @@ const settle = () => {
   if (!waiting || !waiting.sentinel || seen.file.length < waiting.file || seen.hex.length < waiting.hex) return;
   const { then } = waiting;
   waiting = null;
-  then();
+  // On a turn of its own, not inside the event's callback: there libuv is
+  // still going through its watchers, and a watcher closed or started then
+  // isn't yet (a recursive watcher, too, watches a new file only after it
+  // has reported it).
+  setImmediate(then);
 };
 let sentinels = 0;
 /** Ends a step: its sentinel, then `then` once that and `expect`'s file events are in. */

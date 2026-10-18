@@ -21,7 +21,11 @@ const settle = () => {
   if (!waiting || !waiting.sentinel || waiting.events < 1) return;
   const { then } = waiting;
   waiting = null;
-  then();
+  // On a turn of its own, not inside the event's callback: there libuv is
+  // still going through its watchers, and a watcher closed or started then
+  // isn't yet (a recursive watcher, too, watches a new file only after it
+  // has reported it).
+  setImmediate(then);
 };
 let sentinels = 0;
 const w = fs.watch(dir, { recursive: true }, (type, name) => {
