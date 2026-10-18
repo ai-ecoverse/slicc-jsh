@@ -11,7 +11,7 @@ import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
 import { createNodeKernel as createKernel186 } from 'kernel-cert-186/node';
 import { WebSocketServer } from 'ws';
 import { openLoopbackWebSocket } from '../../src/runtime/web/websocket-loopback.mjs';
-import { packageFiles } from './helpers.mjs';
+import { kernelAtLeast, packageFiles } from './helpers.mjs';
 
 async function withCdp(answer, createKernel = createNodeKernel) {
   const opened = [];
@@ -46,11 +46,13 @@ const echo = ({ id, method }) => [
 // Both paths a loopback WebSocket can take: the kernel's own ctx.websocket
 // (slicc-kernel 1.106.3 and later, the devDependency) and jsh's RFC 6455
 // client over the kernel's sockets (older kernels; 1.86.0 here). Node's
-// answers are the same on both.
-for (const [path, createKernel] of [
-  ['ctx.websocket, slicc-kernel 1.106.3+', createNodeKernel],
-  ["jsh's own client, slicc-kernel 1.86.0", createKernel186],
-]) describe(`WebSocket to the kernel loopback (${path})`, () => {
+// answers are the same on both. The first is the tree's kernel, which on a
+// cert lane can be older than 1.106.3: then jsh takes its own client there
+// too, which the second block already covers.
+for (const [path, createKernel, kernelWs, skip] of [
+  ['ctx.websocket, slicc-kernel 1.106.3+', createNodeKernel, true, !kernelAtLeast('1.106.3') && 'the installed slicc-kernel is before 1.106.3: no ctx.websocket to the loopback'],
+  ["jsh's own client, slicc-kernel 1.86.0", createKernel186, false, false],
+]) describe(`WebSocket to the kernel loopback (${path})`, { skip }, () => {
   it('reaches the CDP facade at SLICC_CDP_URL: commands, a 70 kB answer, events, a clean close', async () => {
     const { kernel, opened, run, close } = await withCdp(echo, createKernel);
     try {
@@ -138,7 +140,7 @@ ws.onerror = (e) => console.log('error', e.error.cause.code, e.error.cause.messa
         status: 0,
         // The cause's message is the kernel's or jsh's (Node's ErrorEvent
         // has no cause): the kernel names the status text too.
-        stdout: `error EPROTO the server answered the upgrade with 503${createKernel === createNodeKernel ? ' Service Unavailable' : ''}\n`,
+        stdout: `error EPROTO the server answered the upgrade with 503${kernelWs ? ' Service Unavailable' : ''}\n`,
         stderr: '',
       });
     } finally {
