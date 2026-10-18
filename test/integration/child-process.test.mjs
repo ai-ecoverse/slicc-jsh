@@ -330,7 +330,7 @@ console.log(out.join(' '));
         // No /bin/sh in this kernel (no wasm-bash), so execSync is ENOENT too.
         // With the channel (ai-ecoverse/slicc-kernel#1093), fork starts a node
         // child (which can't find 'x': that's its own error).
-        `spawnSync:ENOENT execSync:ENOENT execFileSync:ENOENT fork:${kernelAtLeast('1.126.0') ? 'ok' : 'ERR_NOT_SUPPORTED'}`
+        `spawnSync:ENOENT execSync:ENOENT execFileSync:ENOENT fork:${kernelAtLeast('1.125.11') ? 'ok' : 'ERR_NOT_SUPPORTED'}`
       );
     } finally {
       close();

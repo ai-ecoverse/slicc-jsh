@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { devPackageTree, kernelAtLeast, kernelVersion, lockedPackageTree, withJsh } from './helpers.mjs';
 
 // fork and its IPC channel: socketpairs and spawn's fds (ai-ecoverse/slicc-kernel#1093).
-const IPC_KERNEL = '1.126.0';
+const IPC_KERNEL = '1.125.11';
 // Node's own, as unrs-resolver loads node:wasi: once per process jest runs.
 const WASI_WARNING =
   /^\(node:\d+\) ExperimentalWarning: WASI is an experimental feature and might change at any time\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\n/;
