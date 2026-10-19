@@ -1,0 +1,18 @@
+{
+  "description": "child_process.fork: both ends send about 1 MiB in a synchronous loop before either reads, in 'json' and 'advanced'; each end's sends queue what the socket doesn't take (slicc-kernel 1.126.0's non-blocking writes and select), and every message arrives once, in order",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.126.0",
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    },
+    {
+      "path": "/os/child.js",
+      "from": "child.js"
+    }
+  ]
+}

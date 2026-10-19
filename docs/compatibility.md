@@ -222,6 +222,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - In the child: `process.send`, `process.connected`, `process.disconnect`, `process.channel`, `'message'` and `'disconnect'`. The channel keeps the child alive only while it has `'message'` or `'disconnect'` listeners.
 - Messages whose `cmd` starts with `NODE_` are `'internalMessage'`s. `fork`'s and `spawn`'s IPC errors are Node's: `ERR_CHILD_PROCESS_IPC_REQUIRED`, `ERR_IPC_ONE_PIPE`, `ERR_IPC_SYNC_FORK`, `ERR_IPC_CHANNEL_CLOSED`, `ERR_IPC_DISCONNECTED`, and the `options.serialization` check.
 - An exiting child's `'disconnect'` comes before its `'exit'`, as Linux closes its descriptors before the parent reaps it.
+- A send is written as libuv writes it: what the socket takes at once, and the rest queued and written as it has room, so both ends can send more than a socket holds before either reads (slicc-kernel 1.126.0's non-blocking writes, [slicc-kernel#1124](https://github.com/ai-ecoverse/slicc-kernel/issues/1124); golden `fork-ipc-both-ways-node22`). On older kernels a send of up to 16 KiB with nothing queued before it waits for room, so two ends that both send that much before reading wait on each other.
 - Not as in Node: a handle can't be sent (`send(message, socket)`): the kernel has no descriptor passing, so the send fails with `ERR_NOT_SUPPORTED`. A write still queued when the channel closes is written out first (Node drops it). Stdio slots past fd 2 other than `'ipc'` are still not passed.
 
 ## `net`, `http` and `https`
