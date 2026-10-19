@@ -1,0 +1,7 @@
+{
+  "description": "vm.compileFunction: its filename and lineOffset name the compiled function's frames, on the code's own lines, with and without parsingContext, as jest 30's test files need",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true
+}

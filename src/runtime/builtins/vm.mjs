@@ -490,15 +490,26 @@ export function createVm({
    */
   function compileFunction(code, params = [], options = {}) {
     validateString(code, 'code');
-    // eslint-disable-next-line no-new-func
-    const fn = new Function(...params, code);
-    if (options?.parsingContext === undefined) return fn;
+    // The function's frames are its filename's, on the code's own lines (jest
+    // compiles every test file this way): the code starts a line of its own,
+    // the third, as a CommonJS module's body does (the stack's lines are 2
+    // less), past lineOffset more.
+    const filename = options?.filename;
+    const lines = '\n'.repeat(Math.max(0, options?.lineOffset | 0));
+    // Node's default filename is '', its frames `<anonymous>`.
+    const sourceURL = `\n//# sourceURL=${typeof filename === 'string' && filename !== '' ? filename : '<anonymous>'}`;
+    if (options?.parsingContext === undefined) {
+      // eslint-disable-next-line no-new-func
+      const fn = new Function(...params, `${lines}${code}\n${sourceURL}`);
+      // Node's compiled function has no name.
+      return Object.defineProperty(fn, 'name', { value: '' });
+    }
     const ctx = options.parsingContext;
     if (ctx === null || typeof ctx !== 'object' || !contexts.has(ctx)) {
       throw ERR_INVALID_ARG_TYPE('options.parsingContext', 'Context', ctx);
     }
     const state = scopeOf(ctx);
-    const source = `(function (${params.join(', ')}) {\n${code}\n})`;
+    const source = `(function (${params.join(', ')}) {\n\n${lines}${code}\n})${sourceURL}`;
     const suffix = runnerSuffix(source);
     const saved = state.reserved;
     state.reserved = reservedFor(suffix);

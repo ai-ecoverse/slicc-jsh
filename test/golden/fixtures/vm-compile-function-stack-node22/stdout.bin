@@ -1,0 +1,6 @@
+plain 2 (anonymous) at <anonymous>:2:11 <- at Object.<anonymous> (script.js:16:22)
+filename 2 (anonymous) at /proj/a.test.js:2:11 <- at Object.<anonymous> (script.js:16:22)
+lineOffset 2 (anonymous) at /proj/b.test.js:12:11 <- at Object.<anonymous> (script.js:16:22)
+parsingContext 2 (anonymous) at /proj/c.test.js:2:11 <- at Object.<anonymous> (script.js:16:22)
+both 2 (anonymous) at /proj/d.test.js:5:11 <- at Object.<anonymous> (script.js:16:22)
+thrown nested at /proj/e.test.js:1:16 <- at /proj/e.test.js:1:43
