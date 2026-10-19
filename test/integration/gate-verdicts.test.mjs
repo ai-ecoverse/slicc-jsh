@@ -525,6 +525,8 @@ describe("a gate's silence is never a pass: cert-review's required check", () =>
     ["a fork's not behaviour (no record job)", { FORK: 'true', BEHAVIOUR: 'false', WHY: 'not behaviour: no change', VERDICT: '' }, 0],
     ['behaviour, certified', { BEHAVIOUR: 'true', READY: 'true', VERDICT: 'certified' }, 0],
     ['behaviour, the record job silent', { BEHAVIOUR: 'true', READY: 'true', VERDICT: '' }, 1],
+    ['behaviour on a draft, even with a certified verdict', { BEHAVIOUR: 'true', READY: 'false', VERDICT: 'certified' }, 1],
+    ['behaviour with no ready value', { BEHAVIOUR: 'true', READY: '', VERDICT: 'certified' }, 1],
     ['a merge group, the group check passed', { EVENT: 'merge_group', SCOPE: '', BEHAVIOUR: '', GROUP: 'success' }, 0],
     ['a merge group, the group check skipped', { EVENT: 'merge_group', SCOPE: '', BEHAVIOUR: '', GROUP: 'skipped' }, 1],
   ];
@@ -534,6 +536,15 @@ describe("a gate's silence is never a pass: cert-review's required check", () =>
       assert.equal(r.code, code, r.out);
     });
   }
+  it('a draft is red with its reason, and readiness is the draft flag, never a label', () => {
+    const r = verdict({ BEHAVIOUR: 'true', WHY: 'behaviour: src/a.ts', READY: 'false', VERDICT: '' });
+    assert.equal(r.code, 1, r.out);
+    assert.match(r.out, /cert-review: draft, not reviewed::this pull request changes shipped behaviour \(behaviour: src\/a\.ts\) and is a draft/);
+    assert.match(text['cert-review.yml'], /READY: \$\{\{ github\.event_name == 'pull_request' && github\.event\.pull_request\.draft == false \}\}/);
+    assert.doesNotMatch(text['cert-review.yml'], /merge-ok/);
+    assert.match(text['ci.yml'], /types: \[opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled\]/);
+    assert.match(text['ci.yml'], /group: \$\{\{ github\.workflow \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}\n {2}cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
+  });
 });
 
 const EVIDENCE_CHECK = (() => {
