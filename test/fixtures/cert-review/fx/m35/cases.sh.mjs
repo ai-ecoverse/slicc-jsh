@@ -13,7 +13,7 @@ export default [
   { name: 'repl-i-pipe', cmd: 'printf "21*2\\n.exit\\n" | node -i 2>&1 | tr -d "\\r"; echo "rc=${PIPESTATUS[1]}"' },
   { name: 'repl-input-type', cmd: 'printf "1\\n" | node -i --input-type=module 2>&1 | head -2; echo "rc=${PIPESTATUS[1]}"' },
   { name: 'repl-module-builtins', cmd: 'node -p "require(\'repl\').builtinModules.length > 30 && typeof require(\'repl\').start"' },
-  { name: 'cli-r', cmd: 'node -r ./cli.js -e 1; echo "rc=$?"; node --require ./cli.js -e 1 | head -1; node --import ./vm2.mjs -e 1 | head -1' },
+  { name: 'cli-r', cmd: 'node -r ./cli.js -e 1; echo "rc=$?"; node --require ./cli.js -e 1 > /tmp/m35-r.out; head -1 /tmp/m35-r.out; node --import ./vm2.mjs -e 1 > /tmp/m35-i.out; head -1 /tmp/m35-i.out' },
   { name: 'cli-v8-opts', cmd: 'node --stack-trace-limit=2 -e "console.log(1)"; echo "rc=$?"; node --max-old-space-size=100 -e "console.log(2)"; echo "rc=$?"' },
   { name: 'require-repl', cmd: 'node -e "const r = require(\'node:repl\'); console.log(typeof r.start, typeof r.REPLServer)"; echo "rc=$?"' },
 ];

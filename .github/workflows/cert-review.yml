@@ -350,14 +350,13 @@ jobs:
           else
             npm run browser
           fi
-      - name: Browser suite on the head
+      - name: Browser suite on the head, and on the base's dist for the browser tests the delta touches
         if: matrix.part == 'browser'
         run: |
           set -euo pipefail
-          $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree tag 2>&1 | tee "$RUNNER_TEMP/suites.out"
-          grep -Eq "^suites [^ ]+ browser: [1-9][0-9]* run\\(s\\) in runs-browser\\.json$" "$RUNNER_TEMP/suites.out" \
-            || jq -se 'any(.[]; length > 0)' "$WORK"/suites/*/runs-browser.json > /dev/null 2>&1 \
-            || { echo "::error title=browser suite: no verdict::suites.mjs exited 0 without its verdict line or its runs-browser.json: a gate's silence is not a pass"; exit 1; }
+          $(command -v setsid > /dev/null && echo setsid --wait) node scripts/cert-review/suites.mjs --work "$WORK" --kernel "${{ matrix.kernel }}" --touched "$RUNNER_TEMP/touched.txt" --only browser --tree both 2>&1 | tee "$RUNNER_TEMP/suites.out"
+          grep -Eq "^suites [^ ]+ \\([^)]*\\) browser\\.json: regression [0-9]+, fixed [0-9]+, both-fail [0-9]+, fail-new-only [0-9]+$" "$RUNNER_TEMP/suites.out" \
+            || { echo "::error title=browser suite: no verdict::suites.mjs exited 0 without its browser.json verdict line: a gate's silence is not a pass"; exit 1; }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         id: bench-artifact
         if: always()
