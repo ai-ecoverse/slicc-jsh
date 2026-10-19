@@ -11,6 +11,7 @@ a b
 ü
 A=1
 B=two
+__proto__=p
 /sandbox
 hello from data.txt
 start returned 44

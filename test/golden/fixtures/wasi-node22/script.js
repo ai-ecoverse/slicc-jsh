@@ -25,7 +25,8 @@ for (const options of [undefined, {}, { version: 'preview2' }, { version: 'previ
 const wasi = new WASI({
   version: 'preview1',
   args: ['prog', 'a b', 'ü'],
-  env: { A: '1', B: 'two', C: undefined },
+  // An own __proto__ (JSON.parse makes one) is a variable like any other.
+  env: { A: '1', B: 'two', C: undefined, ...JSON.parse('{"__proto__":"p"}') },
   preopens: { '/sandbox': sandbox },
 });
 const imports = wasi.getImportObject();

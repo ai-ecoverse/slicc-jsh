@@ -35,12 +35,13 @@ export function createWasiBinding({ ctx, process }) {
   }
 
   function WASI(args, env, preopens, stdio) {
-    const environment = {};
+    // Null prototypes: a variable or a preopen may be named __proto__.
+    const environment = { __proto__: null };
     for (const pair of env) {
       const eq = pair.indexOf('=');
       environment[pair.slice(0, eq)] = pair.slice(eq + 1);
     }
-    const dirs = {};
+    const dirs = { __proto__: null };
     for (let i = 0; i < preopens.length; i += 2) dirs[preopens[i]] = preopens[i + 1];
     // returnOnExit: lib/wasi.js does it (its own proc_exit); without it,
     // Node's proc_exit ends the process at once, with no 'exit' event.
