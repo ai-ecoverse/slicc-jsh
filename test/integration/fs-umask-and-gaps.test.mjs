@@ -47,14 +47,16 @@ describe('modules and globals jsh leaves out (kernel)', () => {
   });
   after(() => jsh?.close());
 
-  it("require('wasi') and 'dgram' are builtins jsh doesn't support: ERR_NOT_SUPPORTED", async () => {
+  // wasi: on slicc-kernel 1.133.0's WASI host it loads (test/integration/wasi.test.mjs).
+  it("require('dgram') is a builtin jsh doesn't support: ERR_NOT_SUPPORTED; 'wasi' too, before slicc-kernel 1.133.0", async () => {
     const r = await jsh.run([
       'node',
       '-e',
       "const m = require('module'); for (const id of ['wasi', 'node:wasi', 'dgram', 'node:dgram']) { try { require(id); console.log(id, 'loaded'); } catch (e) { console.log(id, m.isBuiltin(id), e.code); } }",
     ]);
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout, 'wasi true ERR_NOT_SUPPORTED\nnode:wasi true ERR_NOT_SUPPORTED\ndgram true ERR_NOT_SUPPORTED\nnode:dgram true ERR_NOT_SUPPORTED\n');
+    const wasi = kernelAtLeast('1.133.0') ? 'wasi loaded\nnode:wasi loaded\n' : 'wasi true ERR_NOT_SUPPORTED\nnode:wasi true ERR_NOT_SUPPORTED\n';
+    assert.equal(r.stdout, `${wasi}dgram true ERR_NOT_SUPPORTED\nnode:dgram true ERR_NOT_SUPPORTED\n`);
   });
 
   it('fs has no lchmod, as Node on Linux; promises.lchmod is ERR_METHOD_NOT_IMPLEMENTED', async () => {

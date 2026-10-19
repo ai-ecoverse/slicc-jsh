@@ -1,0 +1,9 @@
+{
+  "description": "node:wasi: Node's own lib/wasi.js on the kernel's WASI host (ctx.sync.wasi.create): the options' checks, the preview1 imports, a program's args, environment, preopen, file read, stderr and proc_exit's code from start(), start twice, the unstable import name, initialize on a reactor, the _start and _initialize and memory checks, and proc_exit without returnOnExit ending the program with no 'exit' event",
+  "argv": [
+    "--no-warnings",
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.133.0"
+}

@@ -5,6 +5,7 @@
  * files need at run time (process, a builtin, the options) is looked up on
  * the program's `process` when they ask.
  */
+import { createWasiBinding } from './wasi-binding.mjs';
 import { stripVTControlCharacters } from 'node-inspect-extracted';
 import nodeInspect from 'node-inspect-extracted';
 import { loadVendorCjs } from './vendor-load.mjs';
@@ -30,6 +31,8 @@ const PACKAGE_ROOT = '/node_modules/@ai-ecoverse/slicc-jsh';
 // The program's process (handed in by process.mjs; Node's own files see it as
 // their free \`process\` once run.mjs installs it as the global).
 let programProcess;
+// The program's ctx, for internalBinding('wasi').
+let programCtx;
 const proc = () => programProcess ?? globalThis.process;
 
 /** internal/options getOptionValue, over process.execArgv (`--x=v` or `--x v`). */
@@ -284,6 +287,7 @@ export function patchReplServer(REPLServer) {
 
 export function loadNodeLib({ ctx, process } = {}) {
   if (process) programProcess = process;
+  if (ctx) programCtx = ctx;
   return loadVendorCjs({
     ctx,
     packageRoot: PACKAGE_ROOT,
@@ -329,6 +333,9 @@ export function loadNodeLib({ ctx, process } = {}) {
         kValidateObjectAllowFunction: errors.kValidateObjectAllowFunction,
         validateString: errors.validateString,
         validateUint32: errors.validateUint32,
+        validateUndefined(value, name) {
+          if (value !== undefined) throw errors.ERR_INVALID_ARG_TYPE(name, 'undefined', value);
+        },
       },
       'internal/util': {
         kEmptyObject: Object.freeze({ __proto__: null }),
@@ -512,7 +519,8 @@ export function loadNodeLib({ ctx, process } = {}) {
       buffer: lazy(() => (typeof proc()._builtinLoader === 'function' ? builtin('buffer') : { Buffer: proc()._Buffer })),
       'internal/url': lazy(() => (urlInternals ??= createUrlInternals({ nodePath: builtin('path'), Buffer: builtin('buffer').Buffer }))),
       '__jsh/internal-binding': {
-        internalBinding,
+        // 'wasi' is the program's kernel's (its ctx); the rest are the runtime's.
+        internalBinding: (name) => (name === 'wasi' ? createWasiBinding({ ctx: programCtx, process: proc() }) : internalBinding(name)),
         // The program's process, whoever is the global yet.
         process: new Proxy(
           {},

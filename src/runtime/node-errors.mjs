@@ -312,6 +312,7 @@ export function errorCodes() {
     ERR_OUT_OF_RANGE,
     ERR_INVALID_CURSOR_POS,
     ERR_USE_AFTER_CLOSE,
+    ERR_WASI_ALREADY_STARTED: () => nodeError(Error, 'ERR_WASI_ALREADY_STARTED', 'WASI instance has already started'),
     ERR_INVALID_THIS: (type) => nodeError(TypeError, 'ERR_INVALID_THIS', `Value of "this" must be of type ${type}`),
     ERR_UNHANDLED_ERROR: (err = undefined) =>
       nodeError(Error, 'ERR_UNHANDLED_ERROR', err === undefined ? 'Unhandled error.' : `Unhandled error. (${err})`),
