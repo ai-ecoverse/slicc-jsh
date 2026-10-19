@@ -141,7 +141,7 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           N: ${{ github.event.pull_request.number }}
           FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-          READY: ${{ contains(github.event.pull_request.labels.*.name, 'merge-ok') }}
+          READY: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
         run: |
           set -euo pipefail
           candidate=$GITHUB_SHA
@@ -768,7 +768,7 @@ jobs:
             exit 0
           fi
           if [ "$READY" != true ]; then
-            echo "::error title=cert-review waits for merge-ok::this pull request changes shipped behaviour ($WHY); the certifying review runs once it is labelled merge-ok, and again on each later push"
+            echo "::error title=cert-review: draft, not reviewed::this pull request changes shipped behaviour ($WHY) and is a draft; mark it ready for review and the certifying review runs, and again on each later push"
             exit 1
           fi
           [ "$VERDICT" = certified ] || { echo "::error::cert-review: $VERDICT (see the record and the pull request comment)"; exit 1; }
