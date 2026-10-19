@@ -53,6 +53,14 @@ export function createTimers(
   // the process on a timer) or the unwinding script's: they go straight to
   // the platform, untracked, so stopping can never cancel the kernel's.
   let stopped = false;
+  // While the loop makes sure no promise job is left before it ends (its
+  // final drain), no timer or immediate runs: those that come due wait, and
+  // run only if the program goes on (thaw()). Node's loop ends with an
+  // unref'd one never run.
+  let frozen = false;
+  // What came due meanwhile: fire → its due time (an immediate's is Infinity:
+  // the check phase comes after the timers').
+  const due = new Map();
   // process.domain where lib/domain.js is loaded (it defines the property).
   const currentDomain = () => globalThis.process?.domain ?? undefined;
   const domainActive = () => globalThis.process?.domain ?? undefined;
@@ -147,6 +155,10 @@ export function createTimers(
     };
     const fire = () => {
       if (stopped) return;
+      if (frozen) {
+        if (!due.has(fire)) due.set(fire, state.due);
+        return;
+      }
       if (hold(state.due)) {
         held.add(state);
         state.retry ??= nativeSetTimeout(retry, 0);
@@ -188,6 +200,10 @@ export function createTimers(
 
     const fire = () => {
       if (stopped) return;
+      if (frozen) {
+        due.set(fire, Infinity);
+        return;
+      }
       if (held && holdImmediate()) {
         state.retry = nativeSetTimeout(fire, 0);
         return;
@@ -269,6 +285,18 @@ export function createTimers(
       byId.clear();
       held.clear();
       handles.notify();
+    },
+    /** @internal The loop's final drain: no timer or immediate runs. */
+    freeze() {
+      frozen = true;
+    },
+    /** @internal The program goes on: what came due runs. */
+    thaw() {
+      frozen = false;
+      // In Node's order: the timers by when they came due, then the immediates.
+      const fires = [...due].sort((a, b) => a[1] - b[1]).map(([fire]) => fire);
+      due.clear();
+      for (const fire of fires) nativeSetTimeout(fire, 0);
     },
     /** The program is ending: clear its timers; later ones bypass the table. */
     stop() {

@@ -1,0 +1,13 @@
+{
+  "description": "with only unref'd timers and promise jobs left, the jobs all run, then 'beforeExit' and 'exit', and the unref'd timeout, immediate and interval never run (the loop's final drain doesn't let them)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

@@ -92,6 +92,7 @@
     "chokidar": "5.0.0",
     "cjs-module-lexer": "2.3.0",
     "esbuild": "0.28.2",
+    "eslint": "9.39.5",
     "got": "16.1.0",
     "http-proxy-agent": "9.1.0",
     "https-proxy-agent": "9.1.0",

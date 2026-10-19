@@ -204,6 +204,9 @@ function trackPlatformAsync(handles) {
   };
 }
 
+// The platform's setTimeout, for the turns after the program's loop ended.
+const platformSetTimeout = globalThis.setTimeout.bind(globalThis);
+
 /**
  * Run the node CLI against a JsProgramContext. Resolves with an exit status.
  *
@@ -1113,6 +1116,8 @@ export async function runNode(ctx, options = {}) {
       shouldStop: () => getDidExit() || exitStatus !== undefined,
       weakPending: () => entry?.pending === true,
       onTickError: (err) => exceptionHandler(err),
+      freeze: () => timers.freeze(),
+      thaw: () => timers.thaw(),
     });
     loopEnded = true;
 
@@ -1127,10 +1132,12 @@ export async function runNode(ctx, options = {}) {
     // #297: unhandled rejections are reported on a later turn. Keep ctx hooks
     // registered through a few macrotasks so the kernel does not see an empty
     // listener set and print its default `node: …` line.
+    // (The platform's turns: the loop has ended, and the program's timers
+    // stay as its final drain left them, unrun.)
     for (let i = 0; i < 3; i++) {
       if (exitStatus !== undefined || getDidExit()) break;
       await new Promise((resolve) => {
-        timers.setTimeout(resolve, 0);
+        platformSetTimeout(resolve, 0);
       });
       flushTicks();
     }
