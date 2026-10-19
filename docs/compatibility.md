@@ -605,7 +605,7 @@ How ports cross between threads:
 The real piscina 5 (in each of its `atomics` modes) and tinypool 1 run on it, and so does eslint 9's `--concurrency`.
 
 Not as in Node:
-- `resourceLimits` is reported but not enforced. A worker that runs out of memory ends with `ERR_WORKER_OUT_OF_MEMORY`.
+- `resourceLimits` is reported but not enforced. A worker that runs out of memory ends with `ERR_WORKER_OUT_OF_MEMORY`. A worker whose thread crashes below the program (the kernel's exit code 257) ends with an `'error'`, `ERR_WORKER_CRASHED`, which is jsh's own (Node has no such end), and `'exit'` 1. A `terminate()` is never an error.
 - `env: SHARE_ENV` gives the worker a copy of the environment, not a shared one.
 - `postMessageToThread`, `getHeapSnapshot` and `BroadcastChannel` between threads aren't there yet. A worker's `performance.eventLoopUtilization()` is zeros.
 

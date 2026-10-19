@@ -195,6 +195,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
   class Worker extends EventEmitter {
     #thread = null;
     #exited = false;
+    #terminated = false;
     #exitCode;
     #exitWaiters = [];
     #pending = [];
@@ -338,7 +339,13 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
         if (code === ctx.thread.NO_MEMORY) {
           this.emit('error', nodeError(Error, 'ERR_WORKER_OUT_OF_MEMORY', 'Worker terminated due to reaching memory limit: JS heap out of memory'));
           this.#end(1);
-        } else this.#end(code === ctx.thread.CRASHED ? 1 : code);
+        } else if (code === ctx.thread.CRASHED) {
+          // Below the program (the kernel prints nothing): Node has no such
+          // end, so the error is jsh's own. A thread ending as terminate()
+          // asked is no error.
+          if (!this.#terminated) this.emit('error', nodeError(Error, 'ERR_WORKER_CRASHED', "slicc-jsh: the worker's thread crashed"));
+          this.#end(1);
+        } else this.#end(code);
       });
     }
 
@@ -377,6 +384,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       }
       // Once it has exited: undefined, as Node's.
       if (this.#exited) return Promise.resolve(undefined);
+      this.#terminated = true;
       const done = new Promise((resolve) => this.#exitWaiters.push(resolve));
       if (this.#thread) this.#thread.terminate().catch(() => {});
       else this.once('online', () => this.#thread?.terminate().catch(() => {}));

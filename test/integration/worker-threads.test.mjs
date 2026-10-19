@@ -82,3 +82,67 @@ module.exports.textLength = ({ text }) => text.length;
     assert.deepEqual(lines, ['true [2,3,4,5] 2', 'false [2,3,4,5] 2']);
   });
 });
+
+// A thread can crash below the program (exit code 257): no program can make
+// that happen, so `crashnode` is jsh's own bundle run on the kernel's ctx
+// with ctx.thread.spawn wrapped: its threads are real, but the kernel says
+// 257 when one ends, and globalThis.__crashThread ends the last one, as the
+// kernel ends a thread that crashed.
+describe('a worker whose thread crashes (kernel)', { skip: !kernelAtLeast(THREADS_KERNEL) }, () => {
+  let jsh;
+  before(async () => {
+    jsh = await withJsh();
+    const bundle = readFileSync(join(root, 'dist/node.mjs'), 'utf8').replace(/export \{\s*main as default\s*\};\s*$/, '');
+    await jsh.kernel.writeFile(
+      '/node_modules/crashnode/package.json',
+      JSON.stringify({ name: 'crashnode', version: '1.0.0', type: 'module', slicc: { commands: { crashnode: { abi: 'js', module: 'index.mjs' } } } })
+    );
+    await jsh.kernel.writeFile(
+      '/node_modules/crashnode/index.mjs',
+      `${bundle}
+export default function crashnode(ctx) {
+  if (ctx.thread.tid) return main(ctx);
+  const real = ctx.thread;
+  const thread = Object.freeze({
+    tid: real.tid,
+    port: real.port,
+    data: real.data,
+    NO_MEMORY: real.NO_MEMORY,
+    CRASHED: real.CRASHED,
+    spawn: async (options) => {
+      const t = await real.spawn(options);
+      globalThis.__crashThread = () => t.terminate();
+      return { tid: t.tid, port: t.port, terminate: () => t.terminate(), exited: t.exited.then(() => real.CRASHED) };
+    },
+  });
+  return main(new Proxy({}, { get: (_, key) => (key === 'thread' ? thread : ctx[key]), has: (_, key) => key in ctx }));
+}
+`
+    );
+  });
+  after(() => jsh?.close());
+
+  const run = async (onMessage) => {
+    await jsh.kernel.writeFile(
+      '/os/crash.js',
+      `const { Worker } = require('worker_threads');
+const w = new Worker('require("worker_threads").parentPort.postMessage("up"); setInterval(() => {}, 1000);', { eval: true });
+w.on('message', (m) => { console.log('message', m); ${onMessage} });
+w.on('error', (e) => console.log('error', e.code, e.message));
+w.on('exit', (code) => console.log('exit', code));
+`
+    );
+    const r = await jsh.run(['crashnode', 'crash.js']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    return r.stdout;
+  };
+
+  it("a crash is an 'error', ERR_WORKER_CRASHED, then 'exit' 1", async () => {
+    assert.equal(await run('globalThis.__crashThread();'), "message up\nerror ERR_WORKER_CRASHED slicc-jsh: the worker's thread crashed\nexit 1\n");
+  });
+
+  it("terminate() is no error, whatever code the kernel gives the thread", async () => {
+    assert.equal(await run('w.terminate();'), 'message up\nexit 1\n');
+  });
+});
