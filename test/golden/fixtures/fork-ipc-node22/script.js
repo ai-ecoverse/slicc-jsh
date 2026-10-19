@@ -148,6 +148,10 @@ test('a channel without listeners lets the child end', async () => {
   await events(cp, 'no listener:');
 });
 
+test('a child that sends and exits at once', async () => {
+  for (const serialization of ['json', 'advanced']) await events(fork(child, ['send-exit'], { serialization }), `send then exit (${serialization}):`);
+});
+
 test('exit code and kill', async () => {
   const cp = fork(child, ['exit-code']);
   await events(cp, 'exit code:');

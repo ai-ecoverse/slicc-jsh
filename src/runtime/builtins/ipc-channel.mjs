@@ -22,6 +22,12 @@ const kPendingMessages = Symbol('kPendingMessages');
 const kChannelHandle = Symbol('kChannelHandle');
 const INTERNAL_PREFIX = 'NODE_';
 const READ_SIZE = 64 * 1024;
+// libuv tries a write at once (uv_try_write) and queues what doesn't fit:
+// Node's channel writes are mostly done when send() returns. Here a small
+// write with nothing queued before it is written at once (the kernel's
+// socket buffer is 64 KiB, so it waits only on a peer that has stopped
+// reading); a bigger one, or one behind others, goes in the queue.
+const WRITE_AT_ONCE = 16 * 1024;
 
 const ERR_IPC_CHANNEL_CLOSED = () => nodeError(Error, 'ERR_IPC_CHANNEL_CLOSED', 'Channel closed');
 const ERR_IPC_DISCONNECTED = () => nodeError(Error, 'ERR_IPC_DISCONNECTED', 'IPC channel is already disconnected');
@@ -45,7 +51,7 @@ export function isInternal(message) {
  * unref, close. A pending read doesn't keep the program alive by itself;
  * ref() does (Control counts the channel's users, as in Node).
  */
-export function createChannelHandle({ ctx, handles, streamBaseState, constants, fd }) {
+export function createChannelHandle({ ctx, handles, streamBaseState, constants, fd, exitFlush }) {
   const { kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync } = constants;
   const encoder = new TextEncoder();
   const handle = { kind: 'PipeWrap' };
@@ -120,17 +126,46 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
   };
 
   const shut = () => {
+    exitFlush?.delete(flushSync);
     ctx.close(fd).catch(() => {});
   };
 
   function queueWrite(req, bytes) {
-    if (closed) return -32; // UV_EPIPE
+    if (closed && !writing) return -32; // UV_EPIPE
+    if (!writing && writes.length === 0 && bytes.length <= WRITE_AT_ONCE && typeof ctx.sync?.write === 'function') {
+      try {
+        ctx.sync.write(fd, bytes);
+      } catch (err) {
+        return err?.code === 'EPIPE' ? -32 : -5; // UV_EPIPE, UV_EIO
+      }
+      streamBaseState[kLastWriteWasAsync] = 0;
+      return 0;
+    }
     writes.push({ req, bytes });
     channel.writeQueueSize += bytes.length;
     streamBaseState[kLastWriteWasAsync] = 1;
     if (!writing) drain();
     return 0;
   }
+
+  // The program ends (process.exit(), or its loop is done): what is still
+  // queued is written now, unless a write is in flight (written now, it
+  // could pass that one; it is lost then, as a write libuv couldn't do at
+  // once is when Node exits).
+  const flushSync = () => {
+    if (writing) return;
+    const left = writes.splice(0);
+    for (const { req, bytes } of left) {
+      channel.writeQueueSize -= bytes.length;
+      try {
+        ctx.sync.write(fd, bytes);
+        req.oncomplete?.(0);
+      } catch {
+        req.oncomplete?.(-32);
+      }
+    }
+  };
+  exitFlush?.add(flushSync);
 
   async function drain() {
     writing = true;
@@ -218,7 +253,7 @@ export function setupChannel({ target, channel, serializationMode, serialization
   target._pendingMessage = null;
 
   const { initMessageChannel, parseChannelMessages, writeChannelMessage } = serialization[serializationMode];
-  const { streamBaseState, kReadBytesOrError, kArrayBufferOffset } = serialization.streamWrap;
+  const { streamBaseState, kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync } = serialization.streamWrap;
 
   initMessageChannel(channel);
   channel.pendingHandle = null;
@@ -294,13 +329,18 @@ export function setupChannel({ target, channel, serializationMode, serialization
 
     const req = {};
     const err = writeChannelMessage(channel, req, message, null);
+    const wasAsyncWrite = streamBaseState[kLastWriteWasAsync];
 
     if (err === 0) {
-      req.oncomplete = () => {
-        control.unrefCounted();
-        if (typeof callback === 'function') callback(null);
-      };
-      control.refCounted();
+      if (wasAsyncWrite) {
+        req.oncomplete = () => {
+          control.unrefCounted();
+          if (typeof callback === 'function') callback(null);
+        };
+        control.refCounted();
+      } else if (typeof callback === 'function') {
+        process.nextTick(callback, null);
+      }
     } else if (!options?.swallowErrors) {
       const ex = nodeError(Error, 'EPIPE', 'write EPIPE');
       ex.errno = -32;
@@ -366,7 +406,7 @@ export function setupChannel({ target, channel, serializationMode, serialization
 }
 
 /** A channel handle on `fd`, with the serialization module's stream_wrap state. */
-export function channelOn({ ctx, handles, serialization, fd }) {
+export function channelOn({ ctx, handles, serialization, fd, process }) {
   const { streamBaseState, kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync } = serialization.streamWrap;
   return createChannelHandle({
     ctx,
@@ -374,6 +414,7 @@ export function channelOn({ ctx, handles, serialization, fd }) {
     streamBaseState,
     constants: { kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync },
     fd,
+    exitFlush: process ? (process._exitFlush ??= new Set()) : undefined,
   });
 }
 
@@ -393,7 +434,7 @@ export function setupChildChannel({ ctx, process, handles }) {
   const serializationMode = process.env.NODE_CHANNEL_SERIALIZATION_MODE || 'json';
   delete process.env.NODE_CHANNEL_SERIALIZATION_MODE;
   const serialization = process._nodeLib().childProcessSerialization;
-  const channel = channelOn({ ctx, handles, serialization, fd });
+  const channel = channelOn({ ctx, handles, serialization, fd, process });
   channel.unref();
   const deprecate = process._builtin?.('util')?.deprecate ?? ((fn) => fn);
   const control = setupChannel({ target: process, channel, serializationMode, serialization, process, deprecate });

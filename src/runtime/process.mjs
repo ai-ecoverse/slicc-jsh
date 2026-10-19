@@ -844,6 +844,7 @@ const Process = { process: class extends EventEmitter {
       code = numericExitCode(this._assignedExitCode);
     }
     this._recordExit(code);
+    this._flushAtExit();
     this._silenced = true;
     try {
       this._onHardExit?.(code);
@@ -863,6 +864,7 @@ const Process = { process: class extends EventEmitter {
     code = Number(code) | 0;
     this._exiting = true;
     this._recordExit(code);
+    this._flushAtExit();
     this._silenced = true;
     try {
       this._onHardExit?.(code);
@@ -905,6 +907,17 @@ const Process = { process: class extends EventEmitter {
     return this._reallyExit(r?.status ?? 0);
   }
 
+  /** What must be written before the program ends (IPC channels' queued writes). */
+  _flushAtExit() {
+    for (const flush of this._exitFlush ?? []) {
+      try {
+        flush();
+      } catch {
+        /* best effort */
+      }
+    }
+  }
+
   _recordExit(code) {
     this._didExit = true;
     this._forcedExitCode = code;
@@ -937,7 +950,7 @@ const OWN_INTERNALS = ['_getActiveHandles', '_getActiveRequests', '_rawDebug'];
  * and `for … in`. Declared up front, so a later assignment stays hidden too.
  */
 const JSH_INTERNALS = [
-  '_assignedExitCode', '_broadcastChannel', '_ports', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
+  '_assignedExitCode', '_broadcastChannel', '_ports', '_exitFlush', '_Buffer', '_builtinLoader', '_cpuPrev', '_credCache', '_ctx', '_cwd', '_didExit',
   '_dispatchSignal', '_evalCode', '_exitError', '_forcedExitCode', '_handles', '_nodeLib', '_onExit',
   '_onHardExit', '_options', '_reportSignal', '_reportSignalWrite', '_signalDeath', '_signalReady', '_signals', '_silenced', '_startedAt', '_stderrWrite',
   '_stdio', '_stdoutWrite', '_umask', '_kumask', '_uncaughtCapture', '_writeStderr', '_writeStdout',
@@ -1066,6 +1079,7 @@ export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles
           /* ignore */
         }
       }
+      process._flushAtExit();
       if (process._didExit) return numericExitCode(process._forcedExitCode);
       return numericExitCode(process._assignedExitCode ?? code);
     },

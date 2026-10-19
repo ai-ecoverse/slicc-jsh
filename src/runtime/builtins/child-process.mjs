@@ -393,6 +393,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
 
   // Spawns on a kernel without ctx.sync.spawn (before 1.87.0), until they settle.
   const inflightSpawns = new Set();
+  // The program's setImmediate, as it is when child_process loads: a
+  // child's 'exit' can come after a fatal error took the globals down.
+  const programImmediate = globalThis.setImmediate;
+  const later = (fn) => (typeof programImmediate === 'function' ? programImmediate(fn) : queueMicrotask(fn));
 
   // An IPC channel: a socketpair, one end passed to the child at fd >= 3
   // (ai-ecoverse/slicc-kernel#1093). Without it, as before: no fork, and
@@ -403,7 +407,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
   /** The parent's end of a channel: Node's setupChannel on the kernel fd. */
   function setupIpc(child, fd, serializationMode) {
     const serialization = process._nodeLib().childProcessSerialization;
-    const channel = channelOn({ ctx, handles, serialization, fd });
+    const channel = channelOn({ ctx, handles, serialization, fd, process });
     let closed;
     let ended = false;
     // The channel's end of file, or the parent's own close of it.
@@ -909,7 +913,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
           const settling = child._ipcSettle?.();
           if (!settling) return finish(child, code, signal);
           // After the channel's end of file and its 'disconnect' tick.
-          trackPromise(handles, settling).then(() => setImmediate(() => finish(child, code, signal)));
+          trackPromise(handles, settling).then(() => later(() => finish(child, code, signal)));
         },
         (err) => {
           if (isExitError(err)) return;

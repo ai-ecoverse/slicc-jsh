@@ -75,6 +75,11 @@ if (mode === 'echo') {
 } else if (mode === 'no-listener') {
   // No listener: the channel doesn't keep the child.
   setTimeout(() => console.log('child: done without listeners'), 10);
+} else if (mode === 'send-exit') {
+  // Sent, then gone at once: what it sent still comes, before 'exit'.
+  process.send('first');
+  process.send({ second: [1, 2] });
+  process.exit(5);
 } else if (mode === 'exit-code') {
   process.send('about to exit');
   process.exitCode = 7;
