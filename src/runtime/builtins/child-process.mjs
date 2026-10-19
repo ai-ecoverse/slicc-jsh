@@ -985,8 +985,11 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       try {
         kernelChild = ctx.sync.spawn(request);
       } catch (err) {
-        closePair(true);
+        // Node sets the channel up even so: send() is there, and its write
+        // fails (EPIPE), the child's end being closed.
+        closePair(false);
         releaseAll();
+        if (pair) setupIpc(child, pair[0], ipc.serialization);
         failed(err);
         return;
       }
