@@ -1,0 +1,14 @@
+plain 2 (anonymous) at <anonymous>:2:11 <- at Object.<anonymous> (script.js:16:22)
+filename 2 (anonymous) at /proj/a.test.js:2:11 <- at Object.<anonymous> (script.js:16:22)
+lineOffset 2 (anonymous) at /proj/b.test.js:12:11 <- at Object.<anonymous> (script.js:16:22)
+parsingContext 2 (anonymous) at /proj/c.test.js:2:11 <- at Object.<anonymous> (script.js:16:22)
+both 2 (anonymous) at /proj/d.test.js:5:11 <- at Object.<anonymous> (script.js:16:22)
+thrown nested at /proj/e.test.js:1:16 <- at /proj/e.test.js:1:43
+filename type TypeError ERR_INVALID_ARG_TYPE The "options.filename" property must be of type string. Received type number (1)
+lineOffset type TypeError ERR_INVALID_ARG_TYPE The "options.lineOffset" property must be of type number. Received type string ('10')
+lineOffset range RangeError ERR_OUT_OF_RANGE The value of "options.lineOffset" is out of range. It must be >= -2147483648 && <= 2147483647. Received 2147483648
+columnOffset type TypeError ERR_INVALID_ARG_TYPE The "options.columnOffset" property must be of type number. Received type string ('1')
+a line break in the filename compiled undefined
+a body that closes the function SyntaxError
+in a context SyntaxError
+escaped undefined
