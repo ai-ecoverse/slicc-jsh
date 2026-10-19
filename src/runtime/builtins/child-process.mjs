@@ -1027,7 +1027,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     }
     argv = Array.isArray(argv) ? argv.map(String) : [];
     opts = opts && typeof opts === 'object' ? opts : {};
-    file = String(file);
+    // normalizeSpawnArguments: fork's execPath is this file too.
+    validateString(file, 'file');
+    validateArgumentNullCheck(file, 'file');
+    if (file.length === 0) throw ERR_INVALID_ARG_VALUE('file', file, 'cannot be empty');
     if (opts.detached != null) validateBoolean(opts.detached, 'options.detached');
     if (opts.argv0 != null) {
       validateString(opts.argv0, 'options.argv0');
@@ -1086,6 +1089,17 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         setStdio();
         child.spawnfile = file;
         child.spawnargs = [typeof opts.argv0 === 'string' ? opts.argv0 : file, ...argv];
+        // Node sets the channel up even so (its child's end closed).
+        const ipc = opts[kIpc];
+        if (ipc && ipcSupported) {
+          try {
+            const pair = ctx.sync.socketpair();
+            ctx.sync.close(pair[1]);
+            setupIpc(child, pair[0], ipc.serialization);
+          } catch {
+            /* no channel: as on an older kernel */
+          }
+        }
         failSpawnEnoent(child, process, handles, file, argv, closeLater);
         return child;
       }

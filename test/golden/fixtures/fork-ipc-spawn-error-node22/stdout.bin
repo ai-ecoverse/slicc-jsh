@@ -1,2 +1,6 @@
+execPath 42 ERR_INVALID_ARG_TYPE The "file" argument must be of type string. Received type number (42)
+execPath {} ERR_INVALID_ARG_TYPE The "file" argument must be of type string. Received an instance of Object
+execPath true ERR_INVALID_ARG_TYPE The "file" argument must be of type string. Received type boolean (true)
 fork: connected true send function channel object pid undefined | send returns true | error ENOENT spawn /nonexistent/node /nonexistent/node | send callback | close -2 null | disconnect connected false
+fork, missing cwd: connected true send function channel object pid undefined | send returns true | error ENOENT spawn <execPath> <execPath> | send callback | close -2 null | disconnect connected false
 spawn ipc: connected true send function channel object pid undefined | send returns true | error ENOENT spawn /nonexistent/prog /nonexistent/prog | send callback | close -2 null | disconnect connected false
