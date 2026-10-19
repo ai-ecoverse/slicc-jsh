@@ -33,6 +33,9 @@ child: parent disconnected
 --- a channel without listeners lets the child end
 child: done without listeners
 no listener: disconnect | exit 0 null | close 0 null
+--- a child that sends and exits at once
+send then exit (json): message "first" | message {"second":[1,2]} | disconnect | exit 5 null | close 5 null
+send then exit (advanced): message "first" | message {"second":[1,2]} | disconnect | exit 5 null | close 5 null
 --- exit code and kill
 exit code: message "about to exit" | disconnect | exit 7 null | close 7 null
 killed: message "ready" | disconnect | exit null SIGTERM | close null SIGTERM
