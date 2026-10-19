@@ -48,9 +48,11 @@ export async function withJsh(options = {}) {
     : useNodeTransport
       ? { transport: nodeTransport(transportOptions) }
       : undefined;
-  const kernel = await createNodeKernel(
-    network || options.uplink ? { network: { ...network, ...(options.uplink ? { uplink: options.uplink } : {}) } } : {}
-  );
+  // `sealed`: the embedder's vault hook (createKernel({ sealed })).
+  const kernel = await createNodeKernel({
+    ...(network || options.uplink ? { network: { ...network, ...(options.uplink ? { uplink: options.uplink } : {}) } } : {}),
+    ...(options.sealed ? { sealed: options.sealed } : {}),
+  });
   // `tlsEngine`: the kernel's own TLS client (slicc-kernel 1.124.0) needs
   // @ai-ecoverse/wasm-tls-engine installed, as a command's package is.
   if (options.tlsEngine) {
