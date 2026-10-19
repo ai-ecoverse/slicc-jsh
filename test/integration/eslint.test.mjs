@@ -8,7 +8,7 @@ import { devPackageTree, withJsh } from './helpers.mjs';
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
 
-// The real eslint 9 lints a project in the kernel. After its last file read
+// The real eslint 10 lints a project in the kernel. After its last file read
 // nothing is pending but promise jobs, which must all run before the
 // program finds its loop empty, or it ends without printing its results.
 describe('eslint (kernel)', () => {
@@ -25,7 +25,7 @@ describe('eslint (kernel)', () => {
   after(() => jsh?.close());
 
   it('lints a directory and prints its results: errors, warnings and the summary, with exit status 1', async () => {
-    assert.equal(version('eslint'), '9.39.5');
+    assert.equal(version('eslint'), '10.12.0');
     const r = await jsh.run(['node', '/node_modules/eslint/bin/eslint.js', '.'], { cwd: '/os/ep' });
     assert.equal(r.status, 1, r.stderr);
     assert.equal(r.stderr, '');
