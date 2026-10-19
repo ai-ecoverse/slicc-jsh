@@ -548,8 +548,17 @@ Either way the value reads back the same.
 
 | Module | What `require` does |
 |---|---|
-| `dgram`, `wasi` | throws `ERR_NOT_SUPPORTED` |
+| `dgram` | throws `ERR_NOT_SUPPORTED` |
+| `wasi` | throws `ERR_NOT_SUPPORTED` before slicc-kernel 1.133.0 (see below) |
 | `test`, `sqlite`, `sea` | throws `ERR_UNKNOWN_BUILTIN_MODULE` |
+
+**`wasi`** is Node 22.22.0's own `lib/wasi.js` on slicc-kernel 1.133.0 and later. Its binding is the kernel's WASI host (`ctx.sync.wasi.create`, [slicc-kernel#1111](https://github.com/ai-ecoverse/slicc-kernel/issues/1111)): an in-process preview1 instance with its own guest fd table, as Node's uvwasi is (golden `wasi-node22`). That covers:
+- the options and their errors, the 46 preview1 imports, `getImportObject` for `preview1` and `unstable`;
+- `start` and `initialize` with their checks, and `proc_exit`, which `start` returns with `returnOnExit` and which otherwise ends the program at once, with no `'exit'` event;
+- preopens, which are kernel paths;
+- napi-rs's `wasm32-wasi` fallbacks (unrs-resolver, rolldown, swc) need this.
+
+Not as in Node: the stdio fds are the program's kernel fds. 0, 1, 2 and a device that `fs` opened work, but a file that `fs` opened has no kernel fd (`fs` reads and writes it by its path), so it can't be `stdin`, `stdout` or `stderr`: `new WASI` throws `ERR_NOT_SUPPORTED`. Before 1.133.0, `require('wasi')` throws `ERR_NOT_SUPPORTED`, as before.
 
 **`cluster`** is Node 22.22.0's primary: `isPrimary`, `workers` (none), `settings`, `setupPrimary`/`setupMaster` with its `'setup'` event, `schedulingPolicy`, `disconnect`, and the `Worker` class. That's enough for prom-client's `AggregatorRegistry`. A worker would be a `child_process.fork` with an IPC channel, which jsh doesn't have, so `cluster.fork()` throws `ERR_NOT_SUPPORTED` when it's called (golden `cluster-trace-events-node22`).
 

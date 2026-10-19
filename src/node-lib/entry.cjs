@@ -66,6 +66,10 @@ module.exports = {
   get sys() {
     return require('sys');
   },
+  /** require('wasi'): lib/wasi.js, on internalBinding('wasi') (src/runtime/wasi-binding.mjs). */
+  get wasi() {
+    return require('wasi');
+  },
   get diagnosticsChannel() {
     return require('diagnostics_channel');
   },

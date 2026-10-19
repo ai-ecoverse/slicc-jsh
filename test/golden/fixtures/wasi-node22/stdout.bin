@@ -1,0 +1,25 @@
+new WASI  ERR_INVALID_ARG_TYPE The "options.version" property must be of type string. Received undefined
+new WASI {} ERR_INVALID_ARG_TYPE The "options.version" property must be of type string. Received undefined
+new WASI {"version":"preview2"} ERR_INVALID_ARG_VALUE The property 'options.version' unsupported WASI version. Received 'preview2'
+new WASI {"version":"preview1","args":"x"} ERR_INVALID_ARG_TYPE The "options.args" property must be an instance of Array. Received type string ('x')
+new WASI {"version":"preview1","stdout":-1} ERR_OUT_OF_RANGE The value of "options.stdout" is out of range. It must be >= 0 && <= 2147483647. Received -1
+import object wasi_snapshot_preview1
+wasiImport args_get,args_sizes_get,clock_res_get,clock_time_get,environ_get,environ_sizes_get,fd_advise,fd_allocate,fd_close,fd_datasync,fd_fdstat_get,fd_fdstat_set_flags,fd_fdstat_set_rights,fd_filestat_get,fd_filestat_set_size,fd_filestat_set_times,fd_pread,fd_prestat_dir_name,fd_prestat_get,fd_pwrite,fd_read,fd_readdir,fd_renumber,fd_seek,fd_sync,fd_tell,fd_write,path_create_directory,path_filestat_get,path_filestat_set_times,path_link,path_open,path_readlink,path_remove_directory,path_rename,path_symlink,path_unlink_file,poll_oneoff,proc_exit,proc_raise,random_get,sched_yield,sock_accept,sock_recv,sock_send,sock_shutdown
+same true
+prog
+a b
+ü
+A=1
+B=two
+/sandbox
+hello from data.txt
+start returned 44
+start again ERR_WASI_ALREADY_STARTED WASI instance has already started
+unstable import object wasi_unstable
+initialize  1
+start a reactor ERR_INVALID_ARG_TYPE The "instance.exports._start" property must be of type function. Received undefined
+initialize a command ERR_INVALID_ARG_TYPE The "instance.exports._start" property must be undefined. Received function 13
+no memory ERR_INVALID_ARG_TYPE "instance.exports.memory" property must be a WebAssembly.Memory object
+last
+/sandbox
+hello from data.txt

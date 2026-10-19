@@ -1,3 +1,4 @@
+import { wasiSupported } from '../wasi-binding.mjs';
 import { createAssert, createAssertStrict } from '../builtins/assert.mjs';
 import { createChildProcess } from '../builtins/child-process.mjs';
 import { createEvents } from '../builtins/events.mjs';
@@ -77,13 +78,13 @@ const BUILTIN_LIST = [
   'util/types',
   'v8',
   'vm',
+  'wasi',
   'worker_threads',
   'zlib',
 ];
 
 const NOT_YET = [
   'dgram',
-  'wasi',
 ];
 
 function notSupported(id) {
@@ -342,6 +343,9 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     },
     domain: () => process._nodeLib().domain,
     sys: () => process._nodeLib().sys,
+    // Node's own lib/wasi.js, on the kernel's WASI host (slicc-kernel 1.133.0);
+    // older kernels have none, as before.
+    wasi: () => (wasiSupported(ctx) ? process._nodeLib().wasi : notSupported('wasi')),
     diagnostics_channel: () => process._nodeLib().diagnosticsChannel,
     'stream/consumers': () => process._nodeLib().streamConsumers,
     perf_hooks: () => (perfHooks ??= createPerfHooks()),
