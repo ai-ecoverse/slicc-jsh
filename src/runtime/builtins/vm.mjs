@@ -32,6 +32,7 @@ import {
   kValidateObjectAllowFunction,
   nodeError,
   validateFunction,
+  validateInt32,
   validateObject,
   validateString,
 } from '../node-errors.mjs';
@@ -490,14 +491,24 @@ export function createVm({
    */
   function compileFunction(code, params = [], options = {}) {
     validateString(code, 'code');
+    const { filename = '', lineOffset = 0, columnOffset = 0 } = options ?? {};
+    validateString(filename, 'options.filename');
+    validateInt32(lineOffset, 'options.lineOffset');
+    validateInt32(columnOffset, 'options.columnOffset');
+    // The code and its parameters must make a function on their own (V8's
+    // SyntaxError otherwise): nothing in them closes the wrapper below.
+    // eslint-disable-next-line no-new-func
+    new Function(...params, code);
     // The function's frames are its filename's, on the code's own lines (jest
     // compiles every test file this way): the code starts a line of its own,
     // the third, as a CommonJS module's body does (the stack's lines are 2
-    // less), past lineOffset more.
-    const filename = options?.filename;
-    const lines = '\n'.repeat(Math.max(0, options?.lineOffset | 0));
-    // Node's default filename is '', its frames `<anonymous>`.
-    const sourceURL = `\n//# sourceURL=${typeof filename === 'string' && filename !== '' ? filename : '<anonymous>'}`;
+    // less), past lineOffset more. A negative lineOffset counts as 0, as for
+    // vm.Script: lines can only be added before the code.
+    const lines = '\n'.repeat(Math.max(0, lineOffset));
+    // Node's default filename is '', its frames `<anonymous>`. The name is a
+    // comment's text, so a line terminator in it would end the comment: it
+    // reads as a space there.
+    const sourceURL = `\n//# sourceURL=${filename !== '' ? filename.replace(/[\n\r\u2028\u2029]/g, ' ') : '<anonymous>'}`;
     if (options?.parsingContext === undefined) {
       // eslint-disable-next-line no-new-func
       const fn = new Function(...params, `${lines}${code}\n${sourceURL}`);

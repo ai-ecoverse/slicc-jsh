@@ -23,3 +23,23 @@ try {
 } catch (e) {
   console.log('thrown', e.message, top(e.stack));
 }
+
+// Node's checks of the options, and code that would close the function.
+// (V8's message for code that closes the function depends on how it was
+// compiled; that it is a SyntaxError, and that nothing ran, doesn't.)
+const check = (label, run, nameOnly) => {
+  try {
+    const fn = run();
+    console.log(label, 'compiled', JSON.stringify(fn()));
+  } catch (e) {
+    console.log(label, e.name, ...(nameOnly ? [] : [e.code, e.message]));
+  }
+};
+check('filename type', () => vm.compileFunction('', [], { filename: 1 }));
+check('lineOffset type', () => vm.compileFunction('', [], { lineOffset: '10' }));
+check('lineOffset range', () => vm.compileFunction('', [], { lineOffset: 2147483648 }));
+check('columnOffset type', () => vm.compileFunction('', [], { columnOffset: '1' }));
+check('a line break in the filename', () => vm.compileFunction('', [], { filename: 'x\nreturn 42' }));
+check('a body that closes the function', () => vm.compileFunction('}); globalThis.escaped = 1; ({', []), true);
+check('in a context', () => vm.compileFunction('}); globalThis.escaped = 1; ({', [], { parsingContext: vm.createContext({}) }), true);
+console.log('escaped', typeof globalThis.escaped);
