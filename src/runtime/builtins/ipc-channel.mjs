@@ -163,26 +163,37 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
     writes.push({ req, bytes });
     channel.writeQueueSize += bytes.length;
     streamBaseState[kLastWriteWasAsync] = 1;
-    if (!writing) drain();
+    // On a later turn: the caller (setupChannel's _send) gives the request
+    // its oncomplete once this returns, and a drain that finished at once
+    // would call it before.
+    if (!writing) {
+      writing = true;
+      queueMicrotask(drain);
+    }
     return 0;
   }
 
   // The program ends (process.exit(), or its loop is done): what is still
   // queued is written now, unless a write is in flight (written now, it
   // could pass that one; it is lost then, as a write libuv couldn't do at
-  // once is when Node exits). A try-write drain only waits between its
-  // writes, so what it has left is written here.
+  // once is when Node exits). A try-write drain has no write in flight
+  // (each is done at once; it only waits between them, or for its turn), so
+  // what it has left is written here, as far as the socket takes it: the
+  // peer may be waiting for this program to end before it reads, so the rest
+  // is lost, as Node loses it.
   const flushSync = () => {
-    if (writing && !waiting) return;
+    if (writing && !tryWrite) return;
     waiting?.abort();
     waiting = null;
     const left = writes.splice(0);
     for (const { req, bytes } of left) {
       channel.writeQueueSize -= bytes.length;
       try {
-        ctx.sync.write(fd, bytes);
+        if (!tryWrite) ctx.sync.write(fd, bytes);
+        else if (ctx.sync.write(fd, bytes, NONBLOCK) < bytes.length) return;
         req.oncomplete?.(0);
       } catch {
+        if (tryWrite) return;
         req.oncomplete?.(-32);
       }
     }
