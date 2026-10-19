@@ -23,11 +23,15 @@ const kChannelHandle = Symbol('kChannelHandle');
 const INTERNAL_PREFIX = 'NODE_';
 const READ_SIZE = 64 * 1024;
 // libuv tries a write at once (uv_try_write) and queues what doesn't fit:
-// Node's channel writes are mostly done when send() returns. Here a small
-// write with nothing queued before it is written at once (the kernel's
-// socket buffer is 64 KiB, so it waits only on a peer that has stopped
-// reading); a bigger one, or one behind others, goes in the queue.
+// Node's channel writes are mostly done when send() returns. On a kernel
+// with non-blocking writes and select (slicc-kernel 1.126.0) a write with
+// nothing queued before it is tried at once, the rest is queued and written
+// as the socket takes it. Before that, a small write with nothing queued is
+// written at once, waiting on a peer that has stopped reading (the kernel's
+// socket buffer is 64 KiB); a bigger one, or one behind others, is queued.
 const WRITE_AT_ONCE = 16 * 1024;
+const NONBLOCK = Object.freeze({ nonblock: true });
+const uvWriteError = (err) => (err?.code === 'EPIPE' ? -32 : -5); // UV_EPIPE, UV_EIO
 
 const ERR_IPC_CHANNEL_CLOSED = () => nodeError(Error, 'ERR_IPC_CHANNEL_CLOSED', 'Channel closed');
 const ERR_IPC_DISCONNECTED = () => nodeError(Error, 'ERR_IPC_DISCONNECTED', 'IPC channel is already disconnected');
@@ -60,6 +64,9 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
   let reading = false;
   const writes = [];
   let writing = false;
+  // Waiting for the socket to take more (try-write), aborted at exit.
+  let waiting = null;
+  const tryWrite = typeof ctx.select === 'function' && typeof ctx.sync?.write === 'function';
   handles.add(handle);
 
   const channel = {
@@ -132,11 +139,23 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
 
   function queueWrite(req, bytes) {
     if (closed && !writing) return -32; // UV_EPIPE
-    if (!writing && writes.length === 0 && bytes.length <= WRITE_AT_ONCE && typeof ctx.sync?.write === 'function') {
+    if (tryWrite && !writing && writes.length === 0) {
+      let taken = 0;
+      try {
+        taken = ctx.sync.write(fd, bytes, NONBLOCK);
+      } catch (err) {
+        if (err?.code !== 'EAGAIN') return uvWriteError(err);
+      }
+      if (taken === bytes.length) {
+        streamBaseState[kLastWriteWasAsync] = 0;
+        return 0;
+      }
+      bytes = bytes.subarray(taken);
+    } else if (!tryWrite && !writing && writes.length === 0 && bytes.length <= WRITE_AT_ONCE && typeof ctx.sync?.write === 'function') {
       try {
         ctx.sync.write(fd, bytes);
       } catch (err) {
-        return err?.code === 'EPIPE' ? -32 : -5; // UV_EPIPE, UV_EIO
+        return uvWriteError(err);
       }
       streamBaseState[kLastWriteWasAsync] = 0;
       return 0;
@@ -151,9 +170,12 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
   // The program ends (process.exit(), or its loop is done): what is still
   // queued is written now, unless a write is in flight (written now, it
   // could pass that one; it is lost then, as a write libuv couldn't do at
-  // once is when Node exits).
+  // once is when Node exits). A try-write drain only waits between its
+  // writes, so what it has left is written here.
   const flushSync = () => {
-    if (writing) return;
+    if (writing && !waiting) return;
+    waiting?.abort();
+    waiting = null;
     const left = writes.splice(0);
     for (const { req, bytes } of left) {
       channel.writeQueueSize -= bytes.length;
@@ -169,20 +191,55 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
 
   async function drain() {
     writing = true;
+    if (tryWrite) await drainTrying();
+    else await drainWaiting();
+    writing = false;
+    if (closed) shut();
+    handles.notify?.();
+  }
+
+  // Each write takes what the socket has room for; between them, select
+  // waits for room. flushSync can take the queue over while it waits.
+  async function drainTrying() {
+    while (writes.length) {
+      const write = writes[0];
+      let status = 0;
+      try {
+        const taken = ctx.sync.write(fd, write.bytes, NONBLOCK);
+        write.bytes = write.bytes.subarray(taken);
+        channel.writeQueueSize -= taken;
+      } catch (err) {
+        if (err?.code !== 'EAGAIN') status = uvWriteError(err);
+      }
+      if (status === 0 && write.bytes.length > 0) {
+        waiting = new AbortController();
+        try {
+          await ctx.select({ write: [fd] }, { signal: waiting.signal });
+        } catch {
+          /* aborted: flushSync has the queue */
+        }
+        waiting = null;
+        if (writes[0] !== write) return;
+        continue;
+      }
+      writes.shift();
+      channel.writeQueueSize -= write.bytes.length;
+      write.req.oncomplete?.(status);
+    }
+  }
+
+  async function drainWaiting() {
     while (writes.length) {
       const { req, bytes } = writes.shift();
       let status = 0;
       try {
         await ctx.write(fd, bytes);
       } catch (err) {
-        status = err?.code === 'EPIPE' ? -32 : -5; // UV_EPIPE, UV_EIO
+        status = uvWriteError(err);
       }
       channel.writeQueueSize -= bytes.length;
       req.oncomplete?.(status);
     }
-    writing = false;
-    if (closed) shut();
-    handles.notify?.();
   }
 
   return channel;
