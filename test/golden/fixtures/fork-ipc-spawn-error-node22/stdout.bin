@@ -1,0 +1,2 @@
+fork: connected true send function channel object pid undefined | send returns true | error ENOENT spawn /nonexistent/node /nonexistent/node | send callback | close -2 null | disconnect connected false
+spawn ipc: connected true send function channel object pid undefined | send returns true | error ENOENT spawn /nonexistent/prog /nonexistent/prog | send callback | close -2 null | disconnect connected false

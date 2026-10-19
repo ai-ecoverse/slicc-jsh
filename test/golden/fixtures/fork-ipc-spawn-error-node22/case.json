@@ -1,0 +1,14 @@
+{
+  "description": "child_process.fork and an 'ipc' spawn whose program doesn't exist: the channel is set up as in Node, so send() returns true, 'error' comes, then the send's callback, then 'close' and 'disconnect' (in either order in Node)",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.125.11",
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
