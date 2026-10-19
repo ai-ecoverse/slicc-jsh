@@ -4,7 +4,7 @@
     "script.js"
   ],
   "shim": true,
-  "kernel": "1.127.0",
+  "kernel": "1.130.0",
   "files": [
     { "path": "/os/script.js", "from": "script.js" },
     { "path": "/os/w.js", "from": "w.js" },

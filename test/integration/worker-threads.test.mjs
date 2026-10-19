@@ -8,7 +8,7 @@ import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
 // Workers on the kernel's JS threads (ai-ecoverse/slicc-kernel#1094).
-const THREADS_KERNEL = '1.127.0';
+const THREADS_KERNEL = '1.130.0';
 
 // The real piscina and tinypool run tasks on worker threads. Their workers
 // sleep on a counter in shared memory (Atomics.wait) and drain their port
