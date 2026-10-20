@@ -13,6 +13,9 @@ its port: still here
 a transfer list with a locked stream: DataCloneError
 a port and a stream together: a function port and a ReadableStream
 data holding a mark key: fake is [15], real is function
+posting itself: DataCloneError Transfer list contains source port
+then: still connected
+a port inside a class instance: a port, labelled boxed
 a stream posted before the worker started: a stream posted early
 an Error whose cause is a port: TypeError with a port, its cause a port
 a getter that throws once: first read | reads: 1

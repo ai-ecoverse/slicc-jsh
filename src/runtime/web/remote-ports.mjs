@@ -124,7 +124,23 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       return out;
     }
     const proto = Object.getPrototypeOf(value);
-    if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) return value;
+    if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
+      // Another object: structured clone makes it a plain one of its own
+      // enumerable properties, so a port among them is swapped in such a
+      // copy. Without one, it goes as it is (binary data, dates and regexps
+      // are never walked).
+      if (ArrayBuffer.isView(value) || isArrayBuffer(value) || value instanceof Date || value instanceof RegExp) return value;
+      const copy = {};
+      seen.set(value, copy);
+      let swappedAny = false;
+      for (const key of Object.keys(value)) {
+        copy[key] = mapPorts(value[key], swap, seen);
+        if (copy[key] !== value[key]) swappedAny = true;
+      }
+      if (swappedAny) return copy;
+      seen.set(value, value);
+      return value;
+    }
     const out = Array.isArray(value) ? new Array(value.length) : {};
     seen.set(value, out);
     for (const key of Object.keys(value)) out[key] = mapPorts(value[key], swap, seen);
@@ -243,6 +259,9 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       post(message, transfer) {
         const seq = nextSend;
         const list = transferListOf(transfer);
+        // A port can't send itself (Node's DataCloneError), checked before
+        // anything leaves: exported, it would cut its own link.
+        if (list.includes(port)) throw new DOMException('Transfer list contains source port', 'DataCloneError');
         // Nothing to transfer but ArrayBuffers: the mailbox, the buffers'
         // bytes copied and theirs detached (a move, as a program sees it).
         if (writer && list.every(isArrayBuffer)) {

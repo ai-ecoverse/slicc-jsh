@@ -15,7 +15,9 @@
 // DataCloneError that leaves the ports in it usable, a fake port (a forged
 // tag) too, or a locked stream; a port and a stream travel
 // together; data that holds a port mark's key is left as it is; and a stream
-// posted, with its transfer, before the worker has started gets there.
+// posted, with its transfer, before the worker has started gets there; a
+// port can't send itself, and is still connected after trying; and a port
+// inside a class instance arrives as a port.
 const { Worker, MessageChannel } = require('worker_threads');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
 (async () => {
@@ -33,7 +35,7 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   }
 
   const echo = new Worker(
-    "const { parentPort } = require('worker_threads'); parentPort.on('message', (m) => parentPort.postMessage(m && typeof m === 'object' && 'fake' in m ? 'fake is ' + (typeof m.fake?.postMessage === 'function' ? 'a port' : JSON.stringify(Object.keys(m.fake).map((k) => k.length))) + ', real is ' + typeof m.real?.postMessage : m && typeof m === 'object' && 'together' in m ? 'a ' + typeof m.alongside?.postMessage + ' port and a ' + m.together?.constructor?.name : m?.err instanceof Error ? m.err.constructor.name + ' ' + m.err.message + ', its cause a ' + (typeof m.err.cause?.postMessage === 'function' ? 'port' : 'non-port') : m instanceof Map ? 'a Map with a ' + (typeof m.get('port')?.postMessage === 'function' ? 'port' : 'no port') : typeof m === 'string' ? m : 'an object'));",
+    "const { parentPort } = require('worker_threads'); parentPort.on('message', (m) => parentPort.postMessage(m && typeof m === 'object' && m.label === 'boxed' ? 'a ' + (typeof m.port?.postMessage === 'function' ? 'port' : 'non-port ' + JSON.stringify(m.port)) + ', labelled ' + m.label : m && typeof m === 'object' && 'fake' in m ? 'fake is ' + (typeof m.fake?.postMessage === 'function' ? 'a port' : JSON.stringify(Object.keys(m.fake).map((k) => k.length))) + ', real is ' + typeof m.real?.postMessage : m && typeof m === 'object' && 'together' in m ? 'a ' + typeof m.alongside?.postMessage + ' port and a ' + m.together?.constructor?.name : m?.err instanceof Error ? m.err.constructor.name + ' ' + m.err.message + ', its cause a ' + (typeof m.err.cause?.postMessage === 'function' ? 'port' : 'non-port') : m instanceof Map ? 'a Map with a ' + (typeof m.get('port')?.postMessage === 'function' ? 'port' : 'no port') : typeof m === 'string' ? m : 'an object'));",
     { eval: true }
   );
   await once(echo, 'online');
@@ -117,6 +119,24 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   const { port1: realPort } = new MessageChannel();
   echo.postMessage({ fake: { [MARK]: 0 }, real: realPort }, [realPort]);
   console.log('data holding a mark key:', await next());
+
+  const selfSender = new Worker(
+    "const { parentPort } = require('worker_threads'); try { parentPort.postMessage({ port: parentPort }, [parentPort]); parentPort.postMessage('posted'); } catch (e) { parentPort.postMessage('posting itself: ' + e.name + ' ' + e.message); } parentPort.postMessage('still connected');",
+    { eval: true }
+  );
+  console.log(await once(selfSender, 'message'));
+  console.log('then:', await once(selfSender, 'message'));
+  await selfSender.terminate();
+
+  class Box {
+    constructor(port) {
+      this.port = port;
+      this.label = 'boxed';
+    }
+  }
+  const { port1: boxed } = new MessageChannel();
+  echo.postMessage(new Box(boxed), [boxed]);
+  console.log('a port inside a class instance:', await next());
 
   const reader = new Worker(
     "const { parentPort } = require('worker_threads'); parentPort.once('message', async ({ stream }) => { let text = ''; for await (const chunk of stream) text += chunk; parentPort.postMessage(text); });",

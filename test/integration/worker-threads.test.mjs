@@ -92,7 +92,7 @@ describe('a worker whose thread crashes (kernel)', { skip: !kernelAtLeast(THREAD
   let jsh;
   before(async () => {
     jsh = await withJsh();
-    const bundle = readFileSync(join(root, 'dist/node.mjs'), 'utf8').replace(/export \{\s*main as default\s*\};\s*$/, '');
+    const bundle = readFileSync(join(root, 'dist/node.mjs'), 'utf8').replace(/export\s*\{\s*main as default\s*\};?\s*$/, '');
     await jsh.kernel.writeFile(
       '/node_modules/crashnode/package.json',
       JSON.stringify({ name: 'crashnode', version: '1.0.0', type: 'module', slicc: { commands: { crashnode: { abi: 'js', module: 'index.mjs' } } } })
