@@ -1,6 +1,8 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { withJsh } from './helpers.mjs';
+import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+
+const needs = kernelAtLeast('1.126.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.sync.tty.setRaw (1.126.0): a key typed at the prompt can beat raw mode` };
 
 // readline on a kernel terminal (openTerminal): raw mode, line editing,
 // history, completion, ^C and ^D. The readline-node22 golden pins the bytes
@@ -26,9 +28,8 @@ describe('readline on a terminal (kernel)', () => {
     // whole, so a sequence split across chunks goes too).
     const plain = () => out.replace(/\x1b\[[0-9;]*m/g, '');
     for (const [after, key] of keys) {
-      for (let i = 0; i < 200 && !after.test(plain()); i++) await new Promise((r) => setTimeout(r, 25));
-      // The kernel applies raw mode a moment after setRawMode returns.
-      await new Promise((r) => setTimeout(r, 150));
+      const seen = async () => (typeof after === 'function' ? after() : after.test(plain()));
+      for (let i = 0; i < 200 && !(await seen()); i++) await new Promise((r) => setTimeout(r, 25));
       term.write(key);
     }
     const status = await Promise.race([term.exited, new Promise((r) => setTimeout(() => r('timeout'), 20000))]);
@@ -36,13 +37,16 @@ describe('readline on a terminal (kernel)', () => {
     return { out: plain(), status };
   }
 
+  const tabsSeen = (n) => async () => Number(decoder.decode(await jsh.kernel.readFile('/os/rl-tabs').catch(() => new Uint8Array()))) >= n;
+
   const repl = [
     "const readline = require('readline');",
+    'let tabs = 0;',
     'const rl = readline.createInterface({',
     '  input: process.stdin,',
     '  output: process.stdout,',
     "  prompt: 'jsh> ',",
-    "  completer: (line) => [['help', 'hello'].filter((c) => c.startsWith(line)), line],",
+    "  completer: (line) => { require('fs').writeFileSync('/os/rl-tabs', String(++tabs)); return [['help', 'hello'].filter((c) => c.startsWith(line)), line]; },",
     '});',
     "console.log('terminal', rl.terminal, process.stdin.isRaw);",
     'rl.prompt();',
@@ -52,7 +56,7 @@ describe('readline on a terminal (kernel)', () => {
     '',
   ].join('\n');
 
-  it('edits, recalls history, completes, and closes on ^C', async () => {
+  it('edits, recalls history, completes, and closes on ^C', needs, async () => {
     const { out, status } = await session(repl, [
       [/jsh> /, 'hello\r'],
       [/got \[hello\]/, 'ab\x1b[Dc\r'], // left arrow: c goes before the cursor's char
@@ -61,7 +65,7 @@ describe('readline on a terminal (kernel)', () => {
       // the tabs on their own.
       [/got \[hello\][\s\S]*got \[hello\]/, 'hel'],
       [/hel$/, '\t'],
-      [/hel$/, '\t'], // two candidates: listed
+      [tabsSeen(1), '\t'], // two candidates: listed
       [/help\s+hello/, 'p\r'],
       [/got \[help\]/, '\x03'], // ^C: readline's SIGINT, not the process's
     ]);
@@ -76,13 +80,13 @@ describe('readline on a terminal (kernel)', () => {
     assert.match(out, /closed \["help","hello","abc","hello"\] false/);
   });
 
-  it('closes on ^D at an empty line', async () => {
+  it('closes on ^D at an empty line', needs, async () => {
     const { out, status } = await session(repl, [[/jsh> /, 'x\x7f\x04']]);
     assert.equal(status, 0, out);
     assert.match(out, /closed \[\] false/);
   });
 
-  it('readline/promises question() on the terminal', async () => {
+  it('readline/promises question() on the terminal', needs, async () => {
     const { out, status } = await session(
       [
         "const { createInterface } = require('readline/promises');",

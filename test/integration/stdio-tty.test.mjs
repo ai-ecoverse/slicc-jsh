@@ -1,6 +1,8 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { withJsh } from './helpers.mjs';
+import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+
+const needs = kernelAtLeast('1.126.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.sync.tty.setRaw (1.126.0): a key typed right after setRawMode can beat raw mode` };
 
 // process.stdin/stdout on a kernel terminal (kernel.openTerminal): tty.ReadStream
 // and tty.WriteStream. Off a terminal, the stdio-* and tty-pure goldens compare
@@ -72,14 +74,13 @@ describe('stdio on a terminal (kernel)', () => {
     assert.match(out, /^raw false$/m);
   });
 
-  it('setRawMode delivers each key at once; cursorTo/clearLine write escapes', async () => {
+  it('setRawMode is in force when it returns: the next key comes at once, unechoed; cursorTo/clearLine write escapes', needs, async () => {
     const { out, status } = await onTerminal(
       [
         'process.stdin.setRawMode(true);',
         "console.log('raw', process.stdin.isRaw);",
         "process.stdout.cursorTo(4); process.stdout.clearLine(1); process.stdout.write('|\\n');",
-        // The kernel applies raw mode asynchronously (Node: synchronously).
-        "setTimeout(() => console.log('ready'), 300);",
+        "console.log('ready');",
         "process.stdin.once('data', (d) => {",
         "  console.log('key', JSON.stringify(d.toString()));",
         '  process.stdin.setRawMode(false);',

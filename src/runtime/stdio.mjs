@@ -286,7 +286,10 @@ export function createStdio({ ctx, process, Buffer, handles, info = {} }) {
     TtyReadStream.prototype._write = notWritable;
     TtyReadStream.prototype.setRawMode = function setRawMode(flag) {
       flag = !!flag;
-      trackPromise(handles, Promise.resolve(ctx.tty.setRaw(this.fd, flag))).catch((err) => this.emit('error', err));
+      // slicc-kernel 1.126.0+: ctx.sync.tty.setRaw is in force when it
+      // returns, as Node's; before it, the kernel applies the mode a moment later.
+      if (typeof ctx.sync?.tty?.setRaw === 'function') ctx.sync.tty.setRaw(this.fd, flag);
+      else trackPromise(handles, Promise.resolve(ctx.tty.setRaw(this.fd, flag))).catch((err) => this.emit('error', err));
       this.isRaw = flag;
       return this;
     };

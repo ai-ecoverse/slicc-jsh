@@ -1,6 +1,8 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { withJsh } from './helpers.mjs';
+import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+
+const needs = kernelAtLeast('1.126.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.sync.tty.setRaw (1.126.0): a key typed at the prompt can beat raw mode` };
 
 // `node` with no script on a kernel terminal: Node's REPL (lib/repl.js).
 // The repl-piped-node22 golden pins what it prints against Node 22.22.0
@@ -26,8 +28,6 @@ describe('the REPL on a terminal (kernel)', () => {
     });
     for (const [after, key] of keys) {
       for (let i = 0; i < 200 && !after.test(plainOf(out)); i++) await new Promise((r) => setTimeout(r, 25));
-      // The kernel applies raw mode a moment after setRawMode returns.
-      await new Promise((r) => setTimeout(r, 150));
       term.write(key);
     }
     const status = await Promise.race([term.exited, new Promise((r) => setTimeout(() => r('timeout'), 20000))]);
@@ -35,7 +35,7 @@ describe('the REPL on a terminal (kernel)', () => {
     return { raw: out, out: plainOf(out), status };
   }
 
-  it('prompts, prints results (coloured), takes multi-line input, ends on .exit', async () => {
+  it('prompts, prints results (coloured), takes multi-line input, ends on .exit', needs, async () => {
     const { raw, out, status } = await session([
       [/> $/, '1 + 2\r'],
       [/\n3\r\n> $/, 'function f() {\r'],
@@ -53,7 +53,7 @@ describe('the REPL on a terminal (kernel)', () => {
     assert.match(raw, /\x1b\[32m's'\x1b\[39m/);
   });
 
-  it('^C clears the line; on an empty one it warns, and a second ends it; ^D ends it too', async () => {
+  it('^C clears the line; on an empty one it warns, and a second ends it; ^D ends it too', needs, async () => {
     const first = await session([
       [/> $/, '1 +'],
       [/1 \+$/, '\x03'],
@@ -66,7 +66,7 @@ describe('the REPL on a terminal (kernel)', () => {
     assert.equal(second.status, 0);
   });
 
-  it('reports errors as Uncaught (also a timer’s and a rejection’s) and goes on', async () => {
+  it('reports errors as Uncaught (also a timer’s and a rejection’s) and goes on', needs, async () => {
     const { out, status } = await session([
       [/> $/, 'throw new Error("tty")\r'],
       [/Uncaught Error: tty\r\n> $/, 'setTimeout(() => { throw new Error("async") }, 10); 1\r'],
@@ -79,7 +79,7 @@ describe('the REPL on a terminal (kernel)', () => {
     assert.match(out, /foo bar\r\n {4}\^\^\^\r\n\r\nUncaught SyntaxError/);
   });
 
-  it('completes on Tab and keeps history in ~/.node_repl_history, recalled next time', async () => {
+  it('completes on Tab and keeps history in ~/.node_repl_history, recalled next time', needs, async () => {
     await jsh.kernel.writeFile('/os/home-h/.keep', '');
     const home = '/os/home-h';
     const { out, status } = await session(
