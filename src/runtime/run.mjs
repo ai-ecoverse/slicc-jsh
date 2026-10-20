@@ -213,15 +213,6 @@ function trackPlatformAsync(handles) {
 // The platform's setTimeout, for the turns after the program's loop ended.
 const platformSetTimeout = globalThis.setTimeout.bind(globalThis);
 
-/** A data: URL's text (a worker's module given as one). */
-function dataUrlText(url) {
-  const comma = url.indexOf(',');
-  const head = url.slice(5, comma);
-  const body = url.slice(comma + 1);
-  if (/;base64$/i.test(head)) return new TextDecoder().decode(Uint8Array.from(atob(body), (c) => c.charCodeAt(0)));
-  return decodeURIComponent(body);
-}
-
 /**
  * A worker's command line, as Node gives a Worker's thread: its execArgv
  * (the Worker's option, else its parent's), its script (or its eval code, or
@@ -231,7 +222,9 @@ function dataUrlText(url) {
 function workerCommandLine(data) {
   const argv = ['node', ...(data.execArgv ?? [])];
   if (data.eval !== undefined) argv.push('-e', data.eval, '--', ...data.argv);
-  else if (data.url !== undefined) argv.push('--input-type=module', '-e', dataUrlText(data.url), '--', ...data.argv);
+  // A data: URL's module runs as itself (its import.meta.url, its stack's
+  // name), as Node's worker runs it.
+  else if (data.url !== undefined) argv.push('--input-type=module', '-e', `import ${JSON.stringify(data.url)};`, '--', ...data.argv);
   else argv.push(data.file, ...data.argv);
   const parsed = parseNodeArgv(argv);
   if (parsed.mode === 'eval') parsed.processArgv = [parsed.processArgv[0], '[worker eval]', ...data.argv];

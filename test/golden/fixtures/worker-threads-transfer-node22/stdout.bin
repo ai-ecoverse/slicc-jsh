@@ -1,0 +1,8 @@
+an argv element that throws: argv boom
+a duplicate ArrayBuffer: DataCloneError Transfer list contains duplicate ArrayBuffer | its byteLength: 8
+the worker got: after the duplicate
+a post that cannot be cloned: DataCloneError
+its port still works: hello
+a port inside a Map: a Map with a port
+a data: URL worker, import.meta.url: data:text/javascript,import%20%7B%2
+the program ends

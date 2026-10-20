@@ -145,4 +145,21 @@ w.on('exit', (code) => console.log('exit', code));
   it("terminate() is no error, whatever code the kernel gives the thread", async () => {
     assert.equal(await run('w.terminate();'), 'message up\nexit 1\n');
   });
+
+  it("with no 'error' listener, the crash is the program's uncaught exception, and the worker still ends", async () => {
+    await jsh.kernel.writeFile(
+      '/os/crash-unheard.js',
+      `const { Worker } = require('worker_threads');
+process.on('uncaughtException', (e) => console.log('uncaught', e.code));
+const w = new Worker('require("worker_threads").parentPort.postMessage("up"); setInterval(() => {}, 1000);', { eval: true });
+w.on('message', (m) => { console.log('message', m); globalThis.__crashThread(); });
+w.on('exit', (code) => console.log('exit', code));
+process.on('exit', () => console.log('the program ends'));
+`
+    );
+    const r = await jsh.run(['crashnode', 'crash-unheard.js']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, 'message up\nuncaught ERR_WORKER_CRASHED\nexit 1\nthe program ends\n');
+  });
 });

@@ -46,24 +46,37 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
   const transferListOf = (transfer) =>
     transfer === undefined || transfer === null ? [] : Array.isArray(transfer) ? transfer : [...(transfer?.transfer ?? [])];
 
-  // Swap the jsh ports in a value's plain objects and arrays (what a message
-  // is made of) for marks, and back.
-  function swapPorts(value, map, seen = new Set()) {
-    if (value === null || typeof value !== 'object' || seen.has(value)) return value;
-    if (map.has(value)) return map.get(value);
-    if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
-    seen.add(value);
-    for (const key of Object.keys(value)) value[key] = swapPorts(value[key], map, seen);
-    return value;
+  // A copy of a value with each of its jsh ports swapped (`swap(port)`) for
+  // a mark, or the other way, through what structured clone goes into:
+  // plain objects, arrays, Maps (keys too) and Sets. Shared and circular
+  // parts stay shared. The value itself is left as it was.
+  function mapPorts(value, swap, seen = new Map()) {
+    if (value === null || typeof value !== 'object') return value;
+    const swapped = swap(value);
+    if (swapped !== undefined) return swapped;
+    if (seen.has(value)) return seen.get(value);
+    if (value instanceof Map) {
+      const out = new Map();
+      seen.set(value, out);
+      for (const [k, v] of value) out.set(mapPorts(k, swap, seen), mapPorts(v, swap, seen));
+      return out;
+    }
+    if (value instanceof Set) {
+      const out = new Set();
+      seen.set(value, out);
+      for (const v of value) out.add(mapPorts(v, swap, seen));
+      return out;
+    }
+    const proto = Object.getPrototypeOf(value);
+    if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) return value;
+    const out = Array.isArray(value) ? new Array(value.length) : {};
+    seen.set(value, out);
+    for (const key of Object.keys(value)) out[key] = mapPorts(value[key], swap, seen);
+    return out;
   }
-  function restorePorts(value, list, seen = new Set()) {
-    if (value === null || typeof value !== 'object' || seen.has(value)) return value;
-    if (kPortMark in value && typeof value[kPortMark] === 'number') return list[value[kPortMark]];
-    if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
-    seen.add(value);
-    for (const key of Object.keys(value)) value[key] = restorePorts(value[key], list, seen);
-    return value;
-  }
+  const swapPorts = (value, marks) => mapPorts(value, (v) => marks.get(v));
+  const restorePorts = (value, list) =>
+    mapPorts(value, (v) => (kPortMark in v && typeof v[kPortMark] === 'number' ? list[v[kPortMark]] : undefined));
 
   /**
    * `message` and its transfer list as the platform can clone them: the
@@ -80,13 +93,12 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     if (jshPorts.length === 0) return fn({ data: message, ports: [] }, rest);
     const marks = new Map(jshPorts.map((port, i) => [port, { [kPortMark]: i }]));
     const marked = swapPorts(message, marks);
+    // What can't be cloned (a function) fails here, before any port is
+    // exported: they stay this side's, usable, as in Node.
+    structuredClone(marked);
     const natives = [];
-    try {
-      const envelopes = jshPorts.map((port) => exportPort(port, natives));
-      return fn({ data: marked, ports: envelopes }, [...natives, ...rest]);
-    } finally {
-      swapPorts(marked, new Map([...marks].map(([port, mark]) => [mark, port])));
-    }
+    const envelopes = jshPorts.map((port) => exportPort(port, natives));
+    return fn({ data: marked, ports: envelopes }, [...natives, ...rest]);
   }
 
   function receive(message) {
@@ -168,6 +180,9 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
         // Nothing to transfer but ArrayBuffers: the mailbox, the buffers'
         // bytes copied and theirs detached (a move, as a program sees it).
         if (writer && list.every(isArrayBuffer)) {
+          // V8's checks of a transfer list, before the message is out.
+          if (new Set(list).size !== list.length) throw new DOMException('Transfer list contains duplicate ArrayBuffer', 'DataCloneError');
+          if (list.some((b) => b.detached)) throw new DOMException('Cannot transfer object of unsupported type.', 'DataCloneError');
           let bytes;
           try {
             bytes = serdes().serialize(message);

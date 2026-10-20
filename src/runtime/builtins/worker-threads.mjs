@@ -266,7 +266,6 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       if (!options.stdout) this.stdout.on('data', (chunk) => process.stdout.write(chunk));
       if (!options.stderr) this.stderr.on('data', (chunk) => process.stderr.write(chunk));
 
-      handles.add(this.#handle);
       // The parent port's mailboxes (../web/mailbox.mjs), one per direction.
       const [here, there] = remote.mailboxPair(1 << 20);
       this.#box = here;
@@ -288,6 +287,8 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       };
       // workerData and its transferList go as a port's message does. One
       // that can't (a DataCloneError) leaves no Worker, nor its handle.
+      // The handle once nothing before it can throw: on a throw it goes too.
+      handles.add(this.#handle);
       try {
         remote.pack(options.workerData, options.transferList, (packed, transfer) => {
           // As Node, which clones it in the constructor: what can't be
@@ -322,8 +323,12 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
         (err) => {
           const error = nodeError(Error, 'ERR_WORKER_INIT_FAILED', `Worker initialization failure: ${err?.message ?? err}`);
           process.nextTick(() => {
-            this.emit('error', error);
-            this.#end(1);
+            // Ended even when nothing listens for 'error' (the emit throws).
+            try {
+              this.emit('error', error);
+            } finally {
+              this.#end(1);
+            }
           });
         }
       );
@@ -350,15 +355,22 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       thread.exited.then((code) => {
         if (said !== undefined) return;
         // The thread ended without a word: terminate() (1), out of memory or a crash.
+        // (The worker ends even when nothing listens for 'error'.)
         if (code === ctx.thread.NO_MEMORY) {
-          this.emit('error', nodeError(Error, 'ERR_WORKER_OUT_OF_MEMORY', 'Worker terminated due to reaching memory limit: JS heap out of memory'));
-          this.#end(1);
+          try {
+            this.emit('error', nodeError(Error, 'ERR_WORKER_OUT_OF_MEMORY', 'Worker terminated due to reaching memory limit: JS heap out of memory'));
+          } finally {
+            this.#end(1);
+          }
         } else if (code === ctx.thread.CRASHED) {
           // Below the program (the kernel prints nothing): Node has no such
           // end, so the error is jsh's own. A thread ending as terminate()
           // asked is no error.
-          if (!this.#terminated) this.emit('error', nodeError(Error, 'ERR_WORKER_CRASHED', "slicc-jsh: the worker's thread crashed"));
-          this.#end(1);
+          try {
+            if (!this.#terminated) this.emit('error', nodeError(Error, 'ERR_WORKER_CRASHED', "slicc-jsh: the worker's thread crashed"));
+          } finally {
+            this.#end(1);
+          }
         } else this.#end(code);
       });
     }

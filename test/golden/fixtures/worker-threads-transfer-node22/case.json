@@ -1,0 +1,8 @@
+{
+  "description": "worker_threads' cloning and transfers: an argv element that throws throws from the constructor; a duplicate ArrayBuffer in a transfer list is a DataCloneError with the buffer whole and nothing sent; a post that can't be cloned leaves its transfer list's ports usable; a port inside a Map arrives as a port; a data: URL worker runs as that URL",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.130.0"
+}
