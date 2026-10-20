@@ -326,6 +326,7 @@ const registry = (() => {
     };
     writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta));
     writeFileSync(join(dir, 'attestations.json'), JSON.stringify(attestations));
+    writeFileSync(join(dir, 'dist-tags.json'), JSON.stringify({ latest: '1.2.3' }));
     const mock = join(dir, 'fetch.mjs');
     writeFileSync(
       mock,
@@ -333,7 +334,7 @@ const registry = (() => {
 const dir = ${JSON.stringify(dir)};
 globalThis.fetch = async (url) => {
   const u = String(url);
-  const file = u.includes('/attestations/') ? 'attestations.json' : u.endsWith('.tgz') ? 'pkg.tgz' : 'meta.json';
+  const file = u.includes('/attestations/') ? 'attestations.json' : u.endsWith('.tgz') ? 'pkg.tgz' : u.endsWith('/dist-tags') ? 'dist-tags.json' : 'meta.json';
   return new Response(readFileSync(\`\${dir}/\${file}\`));
 };
 `
@@ -344,12 +345,10 @@ globalThis.fetch = async (url) => {
 })();
 
 const realPublished = () => {
-  const { meta, imports } = registry();
+  const { imports } = registry();
   const rules = [
-    ['dist-tags.latest', '1.2.3'],
     ['audit signatures', 'audited 1 package in 0s; 1 package has a verified registry signature; 1 package has a verified attestation'],
     ['install', ''],
-    ['--json', JSON.stringify(meta)],
     ['git/ref/tags/v1.2.3', `{"object":{"type":"commit","sha":"${SHA}"}}`],
     ['compare/main...', '{"status":"identical"}'],
   ];
