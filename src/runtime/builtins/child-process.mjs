@@ -674,6 +674,16 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     return null;
   }
 
+  // Node's 'close' comes after the child's stdio streams close, so their last
+  // 'data' and 'end' come first; one nobody reads is resumed (flushStdio).
+  function streamClosed(stream) {
+    if (!stream?._sliccPump || stream.destroyed || stream.closed) return undefined;
+    return new Promise((resolve) => {
+      stream.once('close', resolve);
+      if (!stream._readableState?.readableListening) stream.resume();
+    });
+  }
+
   function finish(child, code, signal) {
     if (child._closing) return;
     child._markClosing();
@@ -685,7 +695,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       handles.notify?.();
       return;
     }
-    const after = child._stdioPumps ?? Promise.resolve();
+    const after = (child._stdioPumps ?? Promise.resolve()).then(() => Promise.all([child.stdout, child.stderr].map(streamClosed)));
     trackPromise(handles, after);
     after.finally(() => {
       const closeErr = safeEmit(child, 'close', code, signal);
