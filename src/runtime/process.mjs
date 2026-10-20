@@ -2,6 +2,7 @@ import { EventEmitter } from './builtins/events.mjs';
 import { SIGNALS } from './signals.mjs';
 import { assignProcessExitCode, hardExitError, NodeExitError, numericExitCode } from './exit.mjs';
 import { createStdio } from './stdio.mjs';
+import { bufferBytes } from './buffer.mjs';
 import { loadNodeLib } from './node-lib.mjs';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, nodeError, validateUint32 } from './node-errors.mjs';
 
@@ -421,8 +422,26 @@ const Process = { process: class extends EventEmitter {
     return (now - this._startedAt) / 1000;
   }
 
+  /**
+   * Only what is measured; 0 where nothing here can measure a field (Node's
+   * way with a figure the platform lacks, as os.loadavg() on Windows), never
+   * an estimate. The kernel's ctx.memory(), where it has one, measures the
+   * program's own isolate; without it a process worker has no heap figures
+   * (Chromium's performance.memory is the window's only), and `arrayBuffers`
+   * counts the Buffers jsh allocated, a lower bound `external` includes.
+   */
   memoryUsage() {
-    return { rss: 0, heapTotal: 0, heapUsed: 0, external: 0, arrayBuffers: 0 };
+    const measured = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
+    let k = {};
+    try {
+      k = (typeof this._ctx.memory === 'function' && this._ctx.memory()) || {};
+    } catch {}
+    const perf = globalThis.performance?.memory;
+    const heapUsed = measured(k.heapUsed) ?? measured(perf?.usedJSHeapSize) ?? 0;
+    const heapTotal = Math.max(measured(k.heapTotal) ?? measured(perf?.totalJSHeapSize) ?? 0, heapUsed);
+    const arrayBuffers = measured(k.arrayBuffers) ?? bufferBytes(this._Buffer);
+    const external = Math.max(measured(k.external) ?? 0, arrayBuffers);
+    return { rss: measured(k.rss) ?? 0, heapTotal, heapUsed, external, arrayBuffers };
   }
 
   availableMemory() {
