@@ -53,7 +53,7 @@
   "scripts": {
     "build": "node scripts/build.mjs && node scripts/build-host.mjs",
     "prepack": "npm run build && node scripts/strip-own-scripts.mjs",
-    "prepare": "npm run build && slicc-install-hooks",
+    "prepare": "npm run build && { [ ! -e .git ] || lefthook install; }",
     "lint": "node scripts/lint.mjs",
     "test": "npm run test:golden && npm run test:jsh && npm run test:integration",
     "test:golden": "node --max-old-space-size=512 scripts/golden.mjs check",
