@@ -72,3 +72,22 @@ describe("cert-review's self-guard", () => {
     ]);
   });
 });
+
+describe('the light jobs run on the light pool, forks hosted', () => {
+  const light =
+    "runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || vars.CERT_LIGHT_RUNNER || vars.CERT_RUNNER || 'ubuntu-latest' }}";
+  for (const name of ['guard', 'merge-group', 'verdict']) {
+    it(`cert-review's ${name} job: vars.CERT_LIGHT_RUNNER, else vars.CERT_RUNNER, and ubuntu-latest for a fork's pull request`, () => {
+      assert.ok(job(name).includes(`\n    ${light}\n`), job(name).split('\n').find((l) => l.includes('runs-on')));
+    });
+  }
+  it("ci's install job: Linux on the decider's light output, macOS hosted", () => {
+    const ci = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
+    assert.match(ci, /\n {6}light: \$\{\{ steps\.pick\.outputs\.light \}\}\n/);
+    assert.match(ci, /\n {10}LIGHT: \$\{\{ vars\.CERT_LIGHT_RUNNER \|\| vars\.CERT_RUNNER \|\| 'ubuntu-latest' \}\}\n/);
+    assert.match(ci, /const light = runner === hosted \|\| process\.env\.FORCED \? runner : process\.env\.LIGHT;/);
+    const install = ci.slice(ci.indexOf('\n  install:\n'), ci.indexOf('\n  browser:\n'));
+    assert.match(install, /\n {4}needs: runner\n {4}runs-on: \$\{\{ matrix\.os == 'ubuntu-latest' && needs\.runner\.outputs\.light \|\| matrix\.os \}\}\n/);
+    assert.doesNotMatch(install, /sudo/);
+  });
+});
