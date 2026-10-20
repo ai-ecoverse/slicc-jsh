@@ -29,6 +29,7 @@ NODE_OPTIONS from an env without -> {"preloaded":0,"other":false}
 an env with NODE_OPTIONS --title=x -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid NODE_OPTIONS env variable: --title= is not allowed in NODE_OPTIONS
 an env with NODE_OPTIONS --bogus -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid NODE_OPTIONS env variable: --bogus is not allowed in NODE_OPTIONS
 an env with NODE_OPTIONS --max-old-space-size=64 -> ok
+threadId before exit is positive: true in its exit: -1
 environment data with a function -> DataCloneError 25 () => {} could not be cloned.
 a data: string -> TypeError ERR_WORKER_PATH The worker script or module filename must be an absolute path or a relative path starting with './' or '../'. Wrap data: URLs with `new URL`. Received "data:text/javascript,0"
 a file:// string -> TypeError ERR_WORKER_PATH The worker script or module filename must be an absolute path or a relative path starting with './' or '../'. Wrap file:// URLs with `new URL`. Received "file:///nowhere.js"
@@ -57,6 +58,7 @@ a post (this thread) with an unlisted port -> DataCloneError 25 Object that need
 a post with one port listed and one not -> DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
 a Worker with a closed port -> DataCloneError 25 MessagePort in transfer list is already detached
 a post with a closed port -> DataCloneError 25 MessagePort in transfer list is already detached
+ports in a Map, as a Map key and in a Set, in this thread: function function function true
 a post (other thread) with an unlisted stream -> DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
 a Worker with an unlisted stream -> DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
 a Blob through a port in this thread: 5

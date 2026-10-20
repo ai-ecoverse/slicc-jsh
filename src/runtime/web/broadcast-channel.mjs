@@ -178,21 +178,35 @@ export function createPorts({
     const nonce = newPortNonce();
     const marks = new Map(ports.map((port, i) => [port, portMark(nonce, i)]));
     const seen = new Set();
+    // Into what structured clone goes into: plain objects, arrays, and Maps
+    // (keys too) and Sets, refilled in their order.
+    const into = (value, fn) => {
+      if (value instanceof Map) {
+        const entries = [...value].map(([k, v]) => [fn(k), fn(v)]);
+        value.clear();
+        for (const [k, v] of entries) value.set(k, v);
+      } else if (value instanceof Set) {
+        const items = [...value].map(fn);
+        value.clear();
+        for (const item of items) value.add(item);
+      } else if (Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype) {
+        for (const key of Object.keys(value)) value[key] = fn(value[key]);
+      }
+      return value;
+    };
     const swap = (value, map) => {
       if (value === null || typeof value !== 'object' || seen.has(value)) return value;
       if (map.has(value)) return map.get(value);
-      if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
       seen.add(value);
-      for (const key of Object.keys(value)) value[key] = swap(value[key], map);
-      return value;
+      return into(value, (v) => swap(v, map));
     };
+    const restored = new Set();
     const restore = (value) => {
-      if (value === null || typeof value !== 'object') return value;
+      if (value === null || typeof value !== 'object' || restored.has(value)) return value;
       const at = markIndex(value, nonce);
       if (at >= 0) return ports[at];
-      if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
-      for (const key of Object.keys(value)) value[key] = restore(value[key]);
-      return value;
+      restored.add(value);
+      return into(value, restore);
     };
     if (ports.length === 0) return { data: structuredClone(message, rest.length ? { transfer: rest } : undefined), ports };
     const undo = new Map([...marks].map(([port, mark]) => [mark, port]));

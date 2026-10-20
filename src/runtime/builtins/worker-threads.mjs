@@ -207,6 +207,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     // The parent port's native port (its peer goes to the thread).
     #native;
     #name = '';
+    #threadId;
 
     constructor(filename, options = {}) {
       super();
@@ -244,7 +245,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       }
       this.#name = options.name ?? '';
       this.#limits = limitsOf(options.resourceLimits);
-      this.threadId = ids ? Atomics.add(ids, 0, 1) + 1 : 1;
+      this.#threadId = ids ? Atomics.add(ids, 0, 1) + 1 : 1;
 
       // The parent's end of the worker's port; its messages are the worker's 'message's.
       const publicPort = ports.makePort();
@@ -296,7 +297,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
         nodeOptionsGiven,
         shareEnv,
         cwd: process.cwd(),
-        threadId: this.threadId,
+        threadId: this.#threadId,
         name: options.name ?? '',
         stdin: !!options.stdin,
         resourceLimits: this.#limits,
@@ -458,6 +459,11 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
 
     get resourceLimits() {
       return this.#exited ? {} : { ...this.#limits };
+    }
+
+    // -1 once it has exited (from its 'exit' on), as Node's.
+    get threadId() {
+      return this.#exited ? -1 : this.#threadId;
     }
 
     get threadName() {

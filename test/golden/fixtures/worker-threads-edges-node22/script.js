@@ -15,11 +15,14 @@
 const { Worker, MessageChannel } = require('worker_threads');
 const path = require('path');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
+// A worker's exit, even one that came already: Node emits 'exit' right after
+// the last messages it drains, before a listener added on their turn.
+const exitOf = (w) => (w.threadId === -1 ? Promise.resolve() : once(w, 'exit'));
 (async () => {
   process.chdir(path.join(__dirname, 'sub'));
   const w1 = new Worker("require('worker_threads').parentPort.postMessage(require('path').basename(process.cwd()))", { eval: true });
   console.log('cwd in a worker made after chdir:', await once(w1, 'message'));
-  await once(w1, 'exit');
+  await exitOf(w1);
 
   try {
     new Worker('0', { eval: true, workerData: () => {} });
@@ -63,14 +66,14 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
     execArgv: [{ toString: () => '--no-warnings' }],
   });
   console.log('a non-string execArgv entry, coerced:', await once(coerced, 'message'));
-  await once(coerced, 'exit');
+  await exitOf(coerced);
 
   // -e, -p, --check and -i in a worker's execArgv are inert: it runs its
   // own file, and keeps them in process.execArgv.
   for (const execArgv of [['-e', 'console.log("the eval ran")'], ['-p', '1 + 1'], ['--check'], ['-i']]) {
     const w = new Worker(path.join(__dirname, 'w.js'), { execArgv });
     console.log(JSON.stringify(execArgv), '->', await once(w, 'message'));
-    await once(w, 'exit');
+    await exitOf(w);
   }
   // A parent run with -e passes its execArgv on: the worker still runs w.js.
   const { execFileSync } = require('child_process');
@@ -83,7 +86,7 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
 
   const named = new Worker("require('worker_threads').parentPort.postMessage(require('worker_threads').threadName)", { eval: true, name: 'example' });
   console.log('threadName:', JSON.stringify(named.threadName), 'inside:', JSON.stringify(await once(named, 'message')));
-  await once(named, 'exit');
+  await exitOf(named);
   console.log('threadName once it has exited:', JSON.stringify(named.threadName));
 
   const { port1: back, port2: there } = new MessageChannel();
@@ -119,7 +122,7 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   console.log('a listener after the close heard:', heard.join(', '), 'then close');
   const { port1: lent, port2: kept } = new MessageChannel();
   const poster = new Worker("const { workerData } = require('worker_threads'); workerData.postMessage('from a worker'); workerData.close();", { eval: true, workerData: lent, transferList: [lent] });
-  await once(poster, 'exit');
+  await exitOf(poster);
   const fromWorker = await new Promise((resolve) => {
     const poll = () => {
       const got = receiveMessageOnPort(kept);
