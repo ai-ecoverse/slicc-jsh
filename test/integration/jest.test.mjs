@@ -78,7 +78,8 @@ test.each([[1, 1, 2], [2, 3, 5]])('%i + %i', (a, b, c) => expect(a + b).toBe(c))
     // The failure's diff, and its source frame from source-map-support's call sites.
     assert.ok(r.stderr.includes('-   "a": 2,\n    +   "a": 1,'), r.stderr);
     assert.ok(r.stderr.includes('    > 2 |   expect({ a: 1 }).toEqual({ a: 2 });'), r.stderr);
-    assert.match(r.stderr, /^ {6}at (Object\.)?toEqual \(fail\.test\.js:2:20\)$/m);
+    // As Node prints it: the matcher's receiver, a plain object (golden stack-receiver-node22).
+    assert.match(r.stderr, /^ {6}at Object\.toEqual \(fail\.test\.js:2:20\)$/m);
     assert.match(r.stderr, /^Tests: {7}1 failed, 6 passed, 7 total$/m);
     assert.match(r.stderr, /^Test Suites: 1 failed, 2 passed, 3 total$/m);
   });

@@ -295,7 +295,9 @@ function wrapRaw(frame) {
     /^[a-z]/.test(fn) &&
     typeName === 'Object'
   ) {
-    if (method) fn = `Object.${method}`;
+    // V8's AppendMethodCall: a function named otherwise than the property
+    // it was called through is `Object.fn [as method]`.
+    if (method) fn = fn === method ? `Object.${method}` : `Object.${fn} [as ${method}]`;
   }
   if (fn === 'boom') fn = 'Object.boom';
 
@@ -314,11 +316,12 @@ function wrapRaw(frame) {
     getFunctionName: () => {
       if (anonymous || fn === 'Object.<anonymous>') return null;
       if (isToplevel && !ctor) return null;
-      if (fn?.startsWith('Object.') && !ctor) return fn.slice(7);
       const as = fn && /^[^.[]+\.([^ ]+) \[as /.exec(fn);
       if (as) return as[1];
-      // Timeout._onTimeout: CallSite function name stays null; method carries it.
-      if (fn && method && typeName && fn === `${typeName}.${method}`) return null;
+      if (fn?.startsWith('Object.') && !ctor) return fn.slice(7);
+      // Timeout._onTimeout: an anonymous function's name stays null, the
+      // method carries it; a named one's (a class method's) is its own.
+      if (fn && method && typeName && fn === `${typeName}.${method}`) return userName || null;
       return fn;
     },
     getMethodName: () => method,
