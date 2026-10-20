@@ -795,7 +795,9 @@ export async function runNode(ctx, options = {}) {
     const limit = process._options.findLast?.((a) => a.startsWith('--stack-trace-limit='));
     if (limit) Error.stackTraceLimit = Number(limit.slice(20));
     // node -r / --require: loaded first, in order, as Node's preload modules.
-    if (typeof options.main !== 'function') {
+    // Not in --watch's own process: watch_mode passes them to the child,
+    // which runs them (as Node's watcher runs none).
+    if (typeof options.main !== 'function' && parsed.mode !== 'watch') {
       for (const request of parsed.preload ?? []) {
         try {
           cjs.preload(request);

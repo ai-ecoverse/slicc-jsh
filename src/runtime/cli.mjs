@@ -72,7 +72,7 @@ export function inputTypeOf(execArgv = []) {
  * allows there. Answers the words jsh applies (in CLI form, before the
  * command line's), or Node's error.
  */
-export function parseNodeOptions(text, argv0 = 'node') {
+export function parseNodeOptions(text, argv0 = 'node', { watch = false } = {}) {
   const words = [];
   let inString = false;
   let fresh = true;
@@ -132,15 +132,17 @@ export function parseNodeOptions(text, argv0 = 'node') {
     const word = apply[i];
     const name = word.split('=')[0];
     const valued = !word.includes('=') && ENV_VALUED.has(ENV_ALIASES[name]?.length === 1 ? ENV_ALIASES[name][0] : name);
-    if (jshKnows(word)) known.push(word, ...(valued ? [apply[i + 1]] : []));
+    if (jshKnows(word, watch)) known.push(word, ...(valued ? [apply[i + 1]] : []));
     if (valued) i++;
   }
   return { args: known };
 }
 
 /** An option jsh's command line takes (see parseNodeArgv). */
-function jshKnows(word) {
+function jshKnows(word, watch = false) {
   const name = word.split('=')[0];
+  // The watch options, where the kernel can watch (as on the command line).
+  if (watch && /^--(no-)?watch(-path|-kill-signal|-preserve-output)?$/.test(name)) return true;
   return (
     booleanToggle(name) !== null ||
     VALUED_FLAGS.includes(name) ||
@@ -161,10 +163,11 @@ function jshKnows(word) {
 export function parseNodeArgv(argv, { nodeOptions, watch = false } = {}) {
   const argv0 = argv[0] ?? 'node';
   if (typeof nodeOptions === 'string' && nodeOptions !== '') {
-    const env = parseNodeOptions(nodeOptions, argv0);
+    const env = parseNodeOptions(nodeOptions, argv0, { watch });
     if (env.error) return env;
     if (env.args.length > 0) {
-      const fromEnv = parseCommandLine([argv0, ...env.args]);
+      // (Watch mode from NODE_OPTIONS alone has no file there: Node's error.)
+      const fromEnv = parseCommandLine([argv0, ...env.args], { watch });
       if (fromEnv.error) return fromEnv;
       const cli = parseCommandLine(argv, { watch });
       if (cli.error || cli.mode === 'version' || cli.mode === 'help') return cli;
@@ -358,11 +361,18 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
       i += 1;
       continue;
     }
-    if (watchable && (arg === '--watch' || arg === '--watch-preserve-output')) {
-      if (arg === '--watch') watch = true;
+    // Node's booleans: --watch, --watch=<anything> (watch mode, whatever the
+    // value, as in Node), --no-watch, and the same for
+    // --watch-preserve-output. The last of --watch and --no-watch wins.
+    const watchBoolean = watchable && /^--(no-)?watch(-preserve-output)?(=|$)/.exec(arg);
+    if (watchBoolean && !(watchBoolean[1] && arg.includes('='))) {
+      if (!watchBoolean[2]) watch = !watchBoolean[1];
       flags.push(arg);
       i += 1;
       continue;
+    }
+    if (watchable && /^--no-watch-(path|kill-signal)(=|$)/.test(arg)) {
+      return { error: `${argv0}: ${arg} is an invalid negation because it is not a boolean option`, status: 9 };
     }
     const watchValued = watchable && ['--watch-path', '--watch-kill-signal'].find((f) => arg === f || arg.startsWith(`${f}=`));
     if (watchValued) {
@@ -375,6 +385,8 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
         }
         flags.push(arg, args[i + 1]);
         i += 2;
+      } else if (arg === `${watchValued}=`) {
+        return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
       } else {
         flags.push(arg);
         i += 1;

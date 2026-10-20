@@ -48,7 +48,10 @@ function getOptionValue(name) {
     const a = argv[i];
     if (a === name) values.push(VALUED.has(name) ? argv[++i] : true);
     else if (a.startsWith(`${name}=`)) values.push(a.slice(name.length + 1));
+    // A boolean's --no- form (--no-watch-preserve-output): the last one wins.
+    else if (!VALUED.has(name) && a === `--no-${name.slice(2)}`) values.push(false);
   }
+  if (!VALUED.has(name) && values.length && values[values.length - 1] === false) return false;
   if (name === '--disable-warning' || name === '--watch-path') return values.filter((v) => typeof v === 'string');
   if (VALUED.has(name)) return values.length ? String(values[values.length - 1]) : (DEFAULTS[name] ?? '');
   return values.length > 0;
