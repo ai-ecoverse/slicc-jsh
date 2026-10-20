@@ -1,11 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { withJsh } from './helpers.mjs';
-
-const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
+import { withJsh, wrapCommandMain } from './helpers.mjs';
 
 const COUNTED = `
 async function counted(ctx) {
@@ -42,7 +37,7 @@ async function counted(ctx) {
     },
   });
   try {
-    return await main(wrapped);
+    return await __main(wrapped);
   } finally {
     save();
   }
@@ -63,14 +58,11 @@ describe('module resolution cost does not grow with the path depth (kernel)', ()
   let jsh;
   before(async () => {
     jsh = await withJsh();
-    const node = readFileSync(join(root, 'dist/node.mjs'), 'utf8');
-    const tail = 'export {\n  main as default\n};\n';
-    assert.ok(node.endsWith(tail), "dist/node.mjs no longer ends with esbuild's `export { main as default }`");
     await jsh.kernel.writeFile(
       '/node_modules/counted-node/package.json',
       JSON.stringify({ name: 'counted-node', slicc: { commands: { 'counted-node': { abi: 'js', module: 'node.mjs' } } } })
     );
-    await jsh.kernel.writeFile('/node_modules/counted-node/node.mjs', node.slice(0, -tail.length) + COUNTED);
+    await jsh.kernel.writeFile('/node_modules/counted-node/node.mjs', wrapCommandMain('node', COUNTED));
   });
   after(() => jsh?.close());
 

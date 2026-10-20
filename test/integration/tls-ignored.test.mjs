@@ -1,11 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+import { kernelAtLeast, kernelVersion, withJsh, wrapCommandMain } from './helpers.mjs';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const skip = !kernelAtLeast('1.116.0') && `slicc-kernel ${kernelVersion} has no TLS on ctx.net: jsh never asks it for one`;
 
 const IGNORING = `
@@ -21,7 +17,7 @@ async function ignoring(ctx) {
       };
     },
   });
-  return main(new Proxy(ctx, { get: (t, k) => (k === 'net' ? net : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }));
+  return __main(new Proxy(ctx, { get: (t, k) => (k === 'net' ? net : typeof t[k] === 'function' ? t[k].bind(t) : t[k]) }));
 }
 export { ignoring as default };
 `;
@@ -63,14 +59,11 @@ describe('a kernel that ignores the TLS request: jsh sends nothing over the plai
   let jsh;
   before(async () => {
     jsh = await withJsh();
-    const node = readFileSync(join(root, 'dist/node.mjs'), 'utf8');
-    const tail = 'export {\n  main as default\n};\n';
-    assert.ok(node.endsWith(tail), "dist/node.mjs no longer ends with esbuild's `export { main as default }`");
     await jsh.kernel.writeFile(
       '/node_modules/tls-ignored-node/package.json',
       JSON.stringify({ name: 'tls-ignored-node', slicc: { commands: { 'tls-ignored-node': { abi: 'js', module: 'node.mjs' } } } })
     );
-    await jsh.kernel.writeFile('/node_modules/tls-ignored-node/node.mjs', node.slice(0, -tail.length) + IGNORING);
+    await jsh.kernel.writeFile('/node_modules/tls-ignored-node/node.mjs', wrapCommandMain('node', IGNORING));
     await jsh.kernel.writeFile('/os/tls-ignored.js', PROGRAM);
   });
   after(() => jsh?.close());

@@ -40,6 +40,10 @@ const stream = await esbuild.build({
   mainFields: ['main', 'module', 'browser'],
   logLevel: 'info',
   metafile: true,
+  // Embedded in dist/*.mjs as a string: keep it small. Whitespace only: a
+  // renamed class shows in V8's own messages (`Class constructor L …`).
+  minifyWhitespace: true,
+  legalComments: 'inline',
   // events is the runtime's (Node's own lib/events.js), so streams are
   // instances of require('events').
   external: ['events'],
@@ -123,6 +127,8 @@ const decoder = await esbuild.build({
   mainFields: ['main', 'module'],
   logLevel: 'info',
   metafile: true,
+  minifyWhitespace: true,
+  legalComments: 'inline',
   alias: { ...vendorBufferAlias },
   plugins: [
     {
@@ -451,6 +457,12 @@ const main = await esbuild.build({
   target: ['es2022'],
   logLevel: 'info',
   metafile: true,
+  // Every process and thread decodes and compiles the whole bundle (the
+  // kernel imports it from a data: URL), at ~20 ms a MB: keep it small.
+  // Whitespace only: V8 reports a class by its name in the source
+  // (`#<process>`, `Class constructor ZstdDecompress …`), so no renaming.
+  minifyWhitespace: true,
+  legalComments: 'inline',
 });
 
 // Keep the source tree small; dist bundles already inlined the map.
