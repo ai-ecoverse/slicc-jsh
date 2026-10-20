@@ -22,9 +22,10 @@ if (role === 'idle') {
     child = spawn(process.execPath, [self, 'idle'], { stdio: ['pipe', out, 'ignore'] });
     if (name === 'pipe-unref') child.stdout.unref();
   }
+  child.stdin.unref();
   child.unref();
   if (name === 'ref-again') child.ref();
-  console.log(name, typeof child.pid);
+  console.log(name, typeof child.pid, JSON.stringify(process.getActiveResourcesInfo()));
 } else {
   const names = ['ignore', 'pipe-unref', 'pipe-ref', 'fork', 'ref-again'];
   (async () => {

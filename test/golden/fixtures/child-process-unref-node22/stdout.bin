@@ -1,12 +1,12 @@
-ignore number
+ignore number []
 ignore exit 0
-pipe-unref number
+pipe-unref number []
 pipe-unref exit 0
-pipe-ref number
+pipe-ref number ["PipeWrap"]
 pipe-ref held
 pipe-ref exit 3
-fork number
+fork number []
 fork exit 0
-ref-again number
+ref-again number ["ProcessWrap"]
 ref-again held
 ref-again exit 3

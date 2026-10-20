@@ -657,17 +657,24 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       handles.delete(handle);
       return r;
     };
+    const hold = (on) => {
+      reading = on;
+      if (!on) handles.delete(handle);
+      else if (refed) handles.add(handle);
+    };
+    r._sliccHold = () => hold(true);
     r._sliccPump = async (webStream) => {
       if (!webStream) {
+        hold(false);
         if (!gone) r.push(null);
         return;
       }
       if (gone) {
+        hold(false);
         webStream.cancel().catch(() => {});
         return;
       }
-      reading = true;
-      if (refed) handles.add(handle);
+      hold(true);
       try {
         reader = webStream.getReader();
         for (;;) {
@@ -681,8 +688,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       } catch (err) {
         if (!gone) r.destroy(err);
       } finally {
-        reading = false;
-        handles.delete(handle);
+        hold(false);
       }
     };
     return r;
@@ -716,6 +722,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         else cb(err);
       },
     });
+    w.ref = () => w;
+    w.unref = () => w;
     w._sliccAttach = (webStream) => {
       if (!webStream) {
         for (const p of pending) p.cb?.(new Error('stdin not available'));
@@ -1019,6 +1027,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       releaseDirect();
       releaseServedOutput();
       child._bindKernel(kernelChild);
+      child.stdout?._sliccHold?.();
+      child.stderr?._sliccHold?.();
       if (pair) setupIpc(child, pair[0], ipc.serialization);
       process.nextTick(() => run(kernelChild));
       return;
