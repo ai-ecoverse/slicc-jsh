@@ -1,5 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto';
 import { createServer as createTcp, connect as tcp } from 'node:net';
 import { createServer as createHttpsServer } from 'node:https';
 import { TLSSocket } from 'node:tls';
@@ -15,8 +16,8 @@ import { makeCa } from './tls-certs.mjs';
 // whatever the program's rejectUnauthorized or checkServerIdentity. It does
 // so only after a STARTTLS upgrade, and only at a protocol's credential
 // position (an HTTP/1.1 Authorization header, SMTP AUTH PLAIN and LOGIN,
-// pg's cleartext PasswordMessage), so a verified server that echoes its input
-// can't hand the secret back.
+// pg's cleartext PasswordMessage, pg's SCRAM-SHA-256 client-final), so a
+// verified server that echoes its input can't hand the secret back.
 //
 // The test kernel's bundled roots are the test CA (the engine package's
 // roots.der), so its servers verify as a public server would, and its uplink
@@ -31,6 +32,7 @@ const SEALED = {
   http1: '1.127.0', // slicc-kernel#1130: an HTTP/1.1 request head's header, and the read scrub
   smtp: '1.129.0', // #1131: SMTP AUTH PLAIN and LOGIN's password, STARTTLS included
   pg: '1.131.0', // #1136: pg's cleartext PasswordMessage
+  scram: '1.134.0', // #1138: pg's SCRAM-SHA-256, the proof recomputed from the secret
 };
 const skipFor = (protocol) =>
   !(SEALED[protocol] && kernelAtLeast(SEALED[protocol])) && `slicc-kernel#1090 doesn't substitute in ${protocol} yet`;
@@ -43,9 +45,26 @@ const SECRET = 'jsh-1090-the-sealed-secret';
 const BINDINGS = [
   { host: 'api.test', protocol: 'http1', positions: ['header:authorization'] },
   { host: 'mail.test', protocol: 'smtp', positions: ['auth-plain', 'auth-login'] },
-  { host: 'db.test', protocol: 'pg', positions: ['password-cleartext'] },
+  { host: 'db.test', protocol: 'pg', positions: ['password-cleartext', 'scram-sha-256'] },
 ];
 const BOUND = { api: 'api.test', mail: 'mail.test', db: 'db.test' };
+
+const sha256 = (b) => createHash('sha256').update(b).digest();
+const hmac = (key, b) => createHmac('sha256', key).update(b).digest();
+const xor = (a, b) => Buffer.from(a.map((v, i) => v ^ b[i]));
+/** A SCRAM-SHA-256 verifier (RFC 5802 §3), as a server stores it. */
+function scramVerifier(password, salt, iterations) {
+  const salted = pbkdf2Sync(password, salt, iterations, 32, 'sha256');
+  return { storedKey: sha256(hmac(salted, 'Client Key')), serverKey: hmac(salted, 'Server Key') };
+}
+/** Whether `proof` is a client proof made from `verifier`'s password for `authMessage` (RFC 5802 §3). */
+const proves = (verifier, authMessage, proof) =>
+  proof.length === 32 && sha256(xor(proof, hmac(verifier.storedKey, authMessage))).equals(verifier.storedKey);
+/** The salt and iteration count of a SCRAM server-first message. */
+function saltOf(serverFirst) {
+  const attrs = Object.fromEntries(serverFirst.split(',').map((a) => [a[0], a.slice(2)]));
+  return [Buffer.from(attrs.s, 'base64'), Number(attrs.i)];
+}
 
 /**
  * The vault: PLACEHOLDER stands for SECRET, bound per BINDINGS. The kernel
@@ -62,7 +81,16 @@ function vault() {
     assert.equal(req.verified, true, 'the kernel asks only for a session it verified');
     asked.add(`${req.host} ${req.protocol} ${req.position}`);
     const bound = BINDINGS.some((b) => b.host === req.host && b.protocol === req.protocol && b.positions.includes(req.position));
-    return { values: bound && req.placeholders?.includes(PLACEHOLDER) ? { [PLACEHOLDER]: SECRET } : {} };
+    if (req.position === 'scram-sha-256') {
+    // pg SCRAM (slicc-kernel 1.134.0): no placeholders, but the three
+    // messages and the program's proof; the vault names the bound placeholder
+    // whose own proof matches it.
+    const { clientFirstBare, serverFirst, clientFinalBare, proof } = req.scram;
+    const authMessage = `${clientFirstBare},${serverFirst},${clientFinalBare.replace(/,p=[^,]*$/, '')}`;
+    const ours = proves(scramVerifier(PLACEHOLDER, ...saltOf(serverFirst)), authMessage, Buffer.from(proof, typeof proof === 'string' ? 'base64' : undefined));
+    return { values: bound && ours ? { [PLACEHOLDER]: SECRET } : {} };
+  }
+  return { values: bound && req.placeholders?.includes(PLACEHOLDER) ? { [PLACEHOLDER]: SECRET } : {} };
   };
   return { asked, hook };
 }
@@ -236,6 +264,121 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
       servers.push(server);
       ports[label] = await listen(server);
       route(name, ports[label]);
+    }
+
+    // pg with SCRAM-SHA-256 (RFC 5802, RFC 7677) as PostgreSQL does it: over
+    // TLS it offers SCRAM-SHA-256-PLUS too, and refuses a client that says
+    // `y` (it could bind but thinks the server can't) there, as a downgrade.
+    // It holds SECRET's verifier alone, checks the client's proof against it
+    // and proves itself with its own signature (R 12) before R 0; a proof that
+    // doesn't check gets 28P01. What it records is whose password the proof
+    // was made from: SECRET's, PLACEHOLDER's (it tries that verifier too) or
+    // neither. A user named `reflect` is refused in place of R 12 with the
+    // client-final quoted; one named `echo` is let in, and refused its query
+    // with the client-final quoted and the password it authenticated with.
+    const scramServer = (label, leaf) =>
+      createTcp((sock) => {
+        const int32 = (v) => { const b = Buffer.alloc(4); b.writeInt32BE(v); return b; };
+        const cstr = (t) => Buffer.from(`${t}\0`);
+        const msg = (type, body) => Buffer.concat([Buffer.from(type), int32(body.length + 4), body]);
+        const refuse = (s, text) => s.end(msg('E', Buffer.concat([cstr('SFATAL'), cstr('C28P01'), cstr(`M${text}`), Buffer.from('\0')])));
+        const speak = (s) => {
+          const tls = Boolean(s.encrypted);
+          const salt = randomBytes(16);
+          const iterations = 4096;
+          const verifier = scramVerifier(SECRET, salt, iterations);
+          let buf = Buffer.alloc(0);
+          let user;
+          let state = 'startup';
+          let gs2;
+          let clientFirstBare;
+          let serverFirst;
+          let nonce;
+          let authenticated;
+          let clientFinal;
+          s.on('data', (d) => {
+            buf = Buffer.concat([buf, d]);
+            for (;;) {
+              if (state === 'startup') {
+                if (buf.length < 4 || buf.length < buf.readInt32BE(0)) return;
+                const len = buf.readInt32BE(0);
+                const params = buf.subarray(8, len).toString().split('\0');
+                buf = buf.subarray(len);
+                user = params[params.indexOf('user') + 1];
+                const mechanisms = [...(tls ? ['SCRAM-SHA-256-PLUS'] : []), 'SCRAM-SHA-256'];
+                s.write(msg('R', Buffer.concat([int32(10), ...mechanisms.map(cstr), Buffer.from('\0')])));
+                state = 'initial';
+                continue;
+              }
+              if (buf.length < 5 || buf.length < 1 + buf.readInt32BE(1)) return;
+              const type = String.fromCharCode(buf[0]);
+              const len = buf.readInt32BE(1);
+              const body = buf.subarray(5, 1 + len);
+              buf = buf.subarray(1 + len);
+              if (state === 'initial' && type === 'p') {
+                // SASLInitialResponse: the mechanism, then the client-first.
+                const end = body.indexOf(0);
+                const mechanism = body.subarray(0, end).toString();
+                const clientFirst = body.subarray(end + 5).toString();
+                gs2 = clientFirst.slice(0, clientFirst.indexOf(',', clientFirst.indexOf(',') + 1) + 1);
+                clientFirstBare = clientFirst.slice(gs2.length);
+                if (mechanism !== 'SCRAM-SHA-256' || (gs2 === 'y,,' && tls) || !['n,,', 'y,,'].includes(gs2)) {
+                  got.push([label, `scram ${gs2} ${tls ? 'tls' : 'plain'}`, `refused ${mechanism}`]);
+                  return refuse(s, `SCRAM channel binding negotiation error for user "${user}"`);
+                }
+                nonce = `${/(?:^|,)r=([^,]*)/.exec(clientFirstBare)[1]}${randomBytes(18).toString('base64')}`;
+                serverFirst = `r=${nonce},s=${salt.toString('base64')},i=${iterations}`;
+                s.write(msg('R', Buffer.concat([int32(11), Buffer.from(serverFirst)])));
+                state = 'final';
+                continue;
+              }
+              if (state === 'final' && type === 'p') {
+                clientFinal = body.toString();
+                const withoutProof = clientFinal.replace(/,p=[^,]*$/, '');
+                const proof = Buffer.from(/,p=([^,]*)$/.exec(clientFinal)?.[1] ?? '', 'base64');
+                const authMessage = `${clientFirstBare},${serverFirst},${withoutProof}`;
+                const ok = withoutProof === `c=${Buffer.from(gs2).toString('base64')},r=${nonce}` && proves(verifier, authMessage, proof);
+                const from = ok ? SECRET : proves(scramVerifier(PLACEHOLDER, salt, iterations), authMessage, proof) ? PLACEHOLDER : 'neither';
+                got.push([label, `scram ${gs2} ${tls ? 'tls' : 'plain'}`, from]);
+                if (!ok) return refuse(s, `password authentication failed for user "${user}"`);
+                if (user === 'reflect') return refuse(s, `password authentication failed for user "${user}": you sent ${clientFinal}`);
+                authenticated = from;
+                const signature = hmac(verifier.serverKey, authMessage).toString('base64');
+                s.write(Buffer.concat([msg('R', Buffer.concat([int32(12), Buffer.from(`v=${signature}`)])), msg('R', int32(0)), msg('K', Buffer.concat([int32(1), int32(2)])), msg('Z', Buffer.from('I'))]));
+                state = 'ready';
+                continue;
+              }
+              if (type === 'X') return s.end();
+              if (state === 'ready' && type === 'Q') {
+                if (user === 'echo') {
+                  s.write(Buffer.concat([msg('E', Buffer.concat([cstr('SERROR'), cstr('C42501'), cstr(`Myou authenticated with ${authenticated}, sending ${clientFinal}`), Buffer.from('\0')])), msg('Z', Buffer.from('I'))]));
+                } else {
+                  s.write(Buffer.concat([msg('C', cstr('SELECT 0')), msg('Z', Buffer.from('I'))]));
+                }
+                continue;
+              }
+              return refuse(s, `unexpected ${type}`);
+            }
+          });
+        };
+        sock.once('data', (d) => {
+          if (d.length !== 8 || d.readInt32BE(4) !== 80877103) {
+            sock.unshift(d);
+            return speak(sock);
+          }
+          sock.write('S');
+          const secure = new TLSSocket(sock, { isServer: true, key: leaf.key, cert: leaf.cert });
+          secure.on('error', () => {});
+          speak(secure);
+        });
+      });
+    // Each reached as db.test, the bound host, at its own port: a server the
+    // kernel's roots trust, one another CA signed, one named something else.
+    for (const [label, leaf] of [['scram', dbLeaf], ['scramUntrusted', other.server(BOUND.db)], ['scramMismatch', ca.server('other.test')]]) {
+      const server = scramServer(label, leaf);
+      servers.push(server);
+      ports[label] = await listen(server);
+      peers[`${names[BOUND.db][0]}:${ports[label]}`] = pipeTo(ports[label]);
     }
 
     const { fakeUplink } = await import('@ai-ecoverse/slicc-kernel/testing');
@@ -433,5 +576,66 @@ const connect = async (label, user, host, port, query) => {
       ]
     );
     assert.deepEqual([...sealed.asked], ['db.test pg password-cleartext']);
+  });
+
+  it("pg's SCRAM-SHA-256 over sslmode=verify-full and require proves the secret where the kernel's roots trust the server, and the server's signature checks; with a root of its own, an untrusted chain, a wrong name or without TLS the proof is the placeholder's and authentication fails; a server quoting what it got gives the program none of it", { skip: skipFor('scram') }, async () => {
+    got.length = 0;
+    sealed.asked.clear();
+    const r = await run(
+      'pg-scram.js',
+      `const [portsJson, placeholder, mods] = process.argv.slice(2);
+const ports = JSON.parse(portsJson);
+const { Client } = require(mods + '/pg');
+const connect = async (label, user, port, query) => {
+  const c = new Client({ connectionString: 'postgres://' + user + ':' + placeholder + '@db.test:' + port + '/db?' + query });
+  c.on('error', () => {});
+  try {
+    // pg checks the server's signature (R 12) before it takes R 0.
+    await c.connect();
+    console.log(label, 'connected');
+    await c.query('SELECT 1').then(() => console.log(label, 'queried'), (e) => console.log(label, 'query error', e.code, e.message));
+    await c.end();
+  } catch (e) {
+    console.log(label, 'error', e.code, e.message);
+  }
+};
+(async () => {
+  await connect('verify-full', 'alice', ports.scram, 'sslmode=verify-full');
+  await connect('require (libpq)', 'alice', ports.scram, 'sslmode=require&uselibpqcompat=true');
+  await connect('verify-full, a root of its own', 'alice', ports.scram, 'sslmode=verify-full&sslrootcert=/os/ca.pem');
+  await connect('require (libpq), untrusted', 'alice', ports.scramUntrusted, 'sslmode=require&uselibpqcompat=true');
+  await connect('require (libpq), wrong name', 'alice', ports.scramMismatch, 'sslmode=require&uselibpqcompat=true');
+  await connect('disable', 'alice', ports.scram, 'sslmode=disable');
+  await connect('reflected', 'reflect', ports.scram, 'sslmode=verify-full');
+  await connect('echoed', 'echo', ports.scram, 'sslmode=verify-full');
+})();
+`
+    );
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /^verify-full queried$/m);
+    assert.match(r.stdout, /^require \(libpq\) queried$/m);
+    const lines = r.stdout.split('\n');
+    for (const label of ['verify-full, a root of its own', 'require (libpq), untrusted', 'require (libpq), wrong name', 'disable']) {
+      assert.ok(lines.includes(`${label} error 28P01 password authentication failed for user "alice"`), `${label}:\n${r.stdout}`);
+    }
+    // The server refusing the secret's proof ends the session: the kernel
+    // never passes on what answers a client-final it recomputed but R 12.
+    assert.match(r.stdout, /^reflected error ERR_SSL_PROTOCOL_ERROR /m);
+    // The scrub hands back what the server quotes as the placeholder.
+    assert.match(r.stdout, new RegExp(`^echoed query error 42501 you authenticated with ${PLACEHOLDER}, sending c=biws,`, 'm'));
+    assert.deepEqual(
+      got.map((g) => g.join(' ')),
+      [
+        `scram scram n,, tls ${SECRET}`,
+        `scram scram n,, tls ${SECRET}`,
+        `scram scram n,, tls ${PLACEHOLDER}`,
+        `scramUntrusted scram n,, tls ${PLACEHOLDER}`,
+        `scramMismatch scram n,, tls ${PLACEHOLDER}`,
+        `scram scram n,, plain ${PLACEHOLDER}`,
+        `scram scram n,, tls ${SECRET}`,
+        `scram scram n,, tls ${SECRET}`,
+      ]
+    );
+    assert.deepEqual([...sealed.asked], ['db.test pg scram-sha-256']);
   });
 });
