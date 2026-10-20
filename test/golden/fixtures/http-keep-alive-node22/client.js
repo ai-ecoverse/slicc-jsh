@@ -10,6 +10,11 @@ server.on('upgrade', (req, socket, head) => {
   socket.on('data', (d) => socket.write(`echo:${d}`));
   if (head.length) socket.write(`head:${head}`);
 });
+// The agents' free sockets the server is closing, once each has closed:
+// what a step after an idle timeout or closeIdleConnections() waits for
+// (#361), not a fixed delay the client may not have seen the FIN within.
+const freeClosed = (...agents) =>
+  Promise.all(agents.flatMap((a) => Object.values(a.freeSockets).flat()).map((s) => (s.closed ? null : new Promise((r) => s.once('close', r)))));
 const get = (path, opts = {}) =>
   new Promise((resolve) => {
     const req = http.get({ host: '127.0.0.1', port: server.address().port, path, ...opts }, (res) => {
@@ -35,13 +40,13 @@ server.listen(0, '127.0.0.1', async () => {
   server.keepAliveTimeout = 100;
   const c1 = conns;
   await get('/j', { agent: one });
-  await new Promise((r) => setTimeout(r, 300));
+  await freeClosed(one);
   console.log('after idle timeout free', Object.values(one.freeSockets).map((l) => l.length));
   console.log('after timeout', JSON.stringify(await get('/k', { agent: one })), 'new conns', conns - c1);
   server.keepAliveTimeout = 5000;
   await get('/l', { agent: one });
   server.closeIdleConnections();
-  await new Promise((r) => setTimeout(r, 100));
+  await freeClosed(one, http.globalAgent);
   console.log('after closeIdleConnections free', Object.values(one.freeSockets).map((l) => l.length));
   // upgrade
   await new Promise((resolve) => {

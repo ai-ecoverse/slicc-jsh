@@ -115,4 +115,32 @@ describe('http keep-alive (kernel)', () => {
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, 'options 800 800\npartial request: HTTP/1.1 408 Request Timeout within 3 s: true\nend slow done | close cb\n');
   });
+
+  it("#361: a request's 'error' with no listener ends the program (Node's unhandled 'error'), never a wait for a response that can't come", async () => {
+    await jsh.kernel.writeFile(
+      '/os/ka-dead.js',
+      [
+        "const http = require('http');",
+        "const server = http.createServer((req, res) => res.end('ok'));",
+        "server.listen(0, '127.0.0.1', () => {",
+        '  const agent = new http.Agent({ keepAlive: true });',
+        '  const port = server.address().port;',
+        "  http.get({ host: '127.0.0.1', port, path: '/1', agent }, (res) => {",
+        '    res.resume();',
+        "    res.on('end', () => setImmediate(() => { server.closeIdleConnections(); http.get({ host: '127.0.0.1', port, path: '/2', agent }, () => console.log('a response')); }));",
+        '  });',
+        '});',
+        '',
+      ].join('\n')
+    );
+    let bound;
+    const r = await Promise.race([
+      jsh.run(['node', 'ka-dead.js'], { cwd: '/os' }),
+      new Promise((resolve) => (bound = setTimeout(() => resolve({ status: 'still running after 60 s', stdout: '', stderr: '' }), 60_000))),
+    ]);
+    clearTimeout(bound);
+    assert.equal(r.status, 1, r.stderr);
+    assert.equal(r.stdout, '');
+    assert.match(r.stderr, /^Error: read ECONNRESET$/m);
+  });
 });

@@ -110,6 +110,32 @@ const METHODS = [
   'UNSUBSCRIBE',
 ];
 
+/**
+ * Node's 'error' on a request: with no listener it is the program's
+ * uncaught exception (Node's "Unhandled 'error' event"), never dropped, so
+ * a program waiting on the request ends instead of waiting forever.
+ */
+function emitError(emitter, err) {
+  try {
+    emitter.emit('error', err);
+  } catch (thrown) {
+    const trigger = globalThis.process?._triggerUncaught;
+    if (typeof trigger !== 'function') throw thrown;
+    trigger(thrown);
+  }
+}
+
+/**
+ * A write to a kept-alive socket the server has closed fails EPIPE in the
+ * kernel; Node's kernel takes the bytes and the peer's reset comes as
+ * `read ECONNRESET`, which is what Node's retry idiom checks
+ * (`req.reusedSocket && err.code === 'ECONNRESET'`).
+ */
+function resetOfReused(req, err) {
+  if (!req.reusedSocket || err?.code !== 'EPIPE') return err;
+  return Object.assign(new Error('read ECONNRESET'), { errno: -104, code: 'ECONNRESET', syscall: 'read' });
+}
+
 function headerObj(rawHeaders) {
   const out = Object.create(null);
   for (let i = 0; i < rawHeaders.length; i += 2) {
@@ -1087,7 +1113,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         return;
       }
       if (err) {
-        if (req.listenerCount?.('error')) req.emit('error', err);
+        emitError(req, err);
         return;
       }
       req.emit?.('socket', socket);
@@ -1175,7 +1201,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     /** Node ClientRequest.onSocket — Agent delivers the socket here. */
     onSocket(socket, err) {
       if (err) {
-        if (this.listenerCount('error')) this.emit('error', err);
+        emitError(this, err);
         return;
       }
       this.#attachSocket(socket);
@@ -1212,7 +1238,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
             if (done) return;
             done = true;
             if (err) {
-              if (this.listenerCount('error')) this.emit('error', err);
+              emitError(this, err);
               if (!this.destroyed) this.destroy();
               return;
             }
@@ -1259,8 +1285,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
       listen('error', (err) => {
         if (emitted) return;
         if (this.#viaFetchOnNoRoute(err)) return;
-        if (this.listenerCount('error')) this.emit('error', err);
-        else socket.destroy();
+        emitted = true;
+        if (!this.listenerCount('error')) socket.destroy();
+        emitError(this, resetOfReused(this, err));
         // Node: 'error', then the request's 'close'.
         if (!this.destroyed) this.destroy();
       });
@@ -1506,7 +1533,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
         if (!res && !this.destroyed && this.#connected && !this.#fetchMode) {
           emitted = true;
           const err = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
-          if (this.listenerCount('error')) this.emit('error', err);
+          emitError(this, err);
           this.destroy();
           quietClose();
           return;
@@ -1594,7 +1621,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
             // No network for fetch either: the connect's own error, as Node gives it.
             const code = err?.cause?.cause?.code ?? err?.cause?.code;
             const e = code === 'ENETUNREACH' && this.#noRouteError ? this.#noRouteError : err;
-            if (this.listenerCount('error')) this.emit('error', e);
+            emitError(this, e);
           }
         );
       if (handles) void trackPromise(handles, pending);
