@@ -50,6 +50,18 @@ describe('process.memoryUsage (kernel)', () => {
     assert.ok(m.after.external - m.before.external >= 64 * MiB);
   });
 
+  it('a Buffer whose memory was transferred away counts nothing', async () => {
+    const m = await json(`
+      const big = Buffer.alloc(${64 * MiB});
+      const held = process.memoryUsage().arrayBuffers;
+      const moved = structuredClone(big.buffer, { transfer: [big.buffer] });
+      console.log(JSON.stringify({ held, after: process.memoryUsage().arrayBuffers, detached: big.buffer.byteLength, moved: moved.byteLength }));
+    `);
+    assert.equal(m.detached, 0);
+    assert.equal(m.moved, 64 * MiB);
+    assert.ok(m.held - m.after >= 64 * MiB, `${m.held} -> ${m.after}`);
+  });
+
   it('heap figures are measured or both 0, never one without the other', async (t) => {
     const m = await json(`
       const before = process.memoryUsage();
