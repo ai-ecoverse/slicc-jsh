@@ -58,7 +58,7 @@ describe('remote ports', () => {
   // A port whose peer (in another thread) has closed: its link has closed
   // the native port under it. Passed on, it goes over a fresh one and
   // arrives closed, instead of the transfer failing on the closed one.
-  it('a port whose peer closed can still be passed on, and arrives closed', async () => {
+  it('a port whose peer closed can still be passed on, and arrives closed, with what came before the close', async () => {
     const ports = createPorts({ handles: createHandleTable(), schedule: (fn) => setImmediate(fn) });
     const remote = createRemotePorts({ ports, NativeMessageChannel: MessageChannel, serdes });
     const a = ports.makePort();
@@ -66,16 +66,19 @@ describe('remote ports', () => {
     const channel = new MessageChannel();
     const [here, there] = remote.mailboxPair(1 << 16);
     remote.link(a, channel.port1, undefined, here);
-    remote.link(b, channel.port2, undefined, there);
+    const linkB = remote.link(b, channel.port2, undefined, there);
     a.postMessage('q1');
     a.postMessage('q2');
     a.close();
     // Each turn of the loop, until b has taken the close.
-    while (!b._closeDue()) await new Promise((resolve) => setImmediate(resolve));
+    while (!linkB.transportClosed) await new Promise((resolve) => setImmediate(resolve));
     const natives = [];
     const envelope = remote.exportPort(b, natives);
     assert.equal(envelope.open, false);
     const moved = remote.importPort(structuredClone(envelope, { transfer: natives }));
+    // What came before the close goes with it, as in Node.
+    assert.deepEqual(ports.receiveMessageOnPort(moved), { message: 'q1' });
+    assert.deepEqual(ports.receiveMessageOnPort(moved), { message: 'q2' });
     assert.equal(ports.receiveMessageOnPort(moved), undefined);
     moved.close();
   });

@@ -346,9 +346,10 @@ export function createPorts({
     }
 
     start() {
-      if (this.#started || !this.#open) return;
+      // A closed one starts too while its close is due: what it holds comes first.
+      if (this.#started || (!this.#open && !this.#closeDue)) return;
       this.#started = true;
-      if (this.#queue.length > 0) wake(this);
+      if (this.#queue.length > 0 || this.#closeDue) wake(this);
     }
 
     close() {
@@ -359,10 +360,11 @@ export function createPorts({
         link.close();
         return;
       }
+      // What either side holds stays, for receiveMessageOnPort() or a
+      // later start(), as in Node.
       for (const port of [this, this.#peer].filter(Boolean)) {
         port.#open = false;
         port.#closeDue = true;
-        if (!port.#started) port.#queue.length = 0;
         wake(port);
       }
     }
@@ -410,7 +412,6 @@ export function createPorts({
       if (!this.#open) return;
       this.#open = false;
       this.#closeDue = true;
-      if (!this.#started) this.#queue.length = 0;
       wake(this);
     }
     /**
@@ -434,9 +435,9 @@ export function createPorts({
     _pending() {
       return this.#started ? this.#queue.length : 0;
     }
-    /** @internal Its 'close', once what came before it is delivered. */
+    /** @internal Its 'close', once what came before it is delivered (or taken). */
     _closeDue() {
-      return this.#closeDue && !(this.#started && this.#queue.length > 0);
+      return this.#closeDue && this.#queue.length === 0;
     }
     /** @internal */
     _dispatchClose() {
@@ -468,6 +469,8 @@ export function createPorts({
       // What its other thread wrote to it is here at once (its mailbox).
       this.#link?.pull?.();
       const entry = this.#queue.shift();
+      // The last one taken: a due close's turn comes.
+      if (this.#queue.length === 0 && this.#closeDue) wake(this);
       return entry === undefined ? undefined : { message: entry.data };
     }
 

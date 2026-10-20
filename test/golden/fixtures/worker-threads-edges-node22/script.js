@@ -8,7 +8,9 @@
 // as the worker sees it; and -e, -p, --check and -i in a worker's execArgv,
 // its own or its parent's, don't change what it runs; a worker that
 // transfers its parentPort away still prints, and its error and exit still
-// come; and a port whose worker unref'd it and exited closes here, so the
+// come; what a port that hasn't started holds outlasts a close (its own, its
+// other end's, a worker's), for receiveMessageOnPort() or a later listener;
+// and a port whose worker unref'd it and exited closes here, so the
 // program ends.
 const { Worker, MessageChannel } = require('worker_threads');
 const path = require('path');
@@ -98,6 +100,35 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   console.log('then:', (await moverError).message, '- exit', await moverExit, '- printed:', printed.trim());
   came.close();
   back.close();
+
+  const { receiveMessageOnPort } = require('worker_threads');
+  const peerClosed = new MessageChannel();
+  peerClosed.port1.postMessage('before its other end closed');
+  peerClosed.port1.close();
+  const selfClosed = new MessageChannel();
+  selfClosed.port1.postMessage('before it closed itself');
+  selfClosed.port2.close();
+  const later = new MessageChannel();
+  later.port1.postMessage('before a listener came');
+  later.port1.close();
+  await new Promise((resolve) => setImmediate(resolve));
+  console.log('kept:', receiveMessageOnPort(peerClosed.port2)?.message, '|', receiveMessageOnPort(selfClosed.port2)?.message);
+  const heard = [];
+  later.port2.on('message', (m) => heard.push(m));
+  await once(later.port2, 'close');
+  console.log('a listener after the close heard:', heard.join(', '), 'then close');
+  const { port1: lent, port2: kept } = new MessageChannel();
+  const poster = new Worker("const { workerData } = require('worker_threads'); workerData.postMessage('from a worker'); workerData.close();", { eval: true, workerData: lent, transferList: [lent] });
+  await once(poster, 'exit');
+  const fromWorker = await new Promise((resolve) => {
+    const poll = () => {
+      const got = receiveMessageOnPort(kept);
+      if (got) resolve(got.message);
+      else setImmediate(poll);
+    };
+    poll();
+  });
+  console.log('kept from a worker that closed it:', fromWorker);
 
   const { port1, port2 } = new MessageChannel();
   const unrefs = new Worker("require('worker_threads').parentPort.once('message', ({ port }) => { port.on('message', () => {}); port.unref(); port.postMessage('hi'); });", { eval: true });

@@ -13,6 +13,9 @@ threadName: "example" inside: "example"
 threadName once it has exited: null
 a worker moved its parentPort here: function
 then: its error still comes - exit 1 - printed: it still prints
+kept: before its other end closed | before it closed itself
+a listener after the close heard: before a listener came then close
+kept from a worker that closed it: from a worker
 a port its worker unrefs got: hi
 and closed when that worker exited
 the program ends
