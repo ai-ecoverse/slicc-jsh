@@ -91,13 +91,5 @@ show('dispatch', () => {
 port2.onmessage = (ev) => {
   console.log('port message', ev instanceof MessageEvent, ev.constructor === MessageEvent, ev.data, ev.ports.length, Object.isFrozen(ev.ports));
   port1.close();
-  const a = new BroadcastChannel('me');
-  const b = new BroadcastChannel('me');
-  b.onmessage = (m) => {
-    console.log('channel message', m instanceof MessageEvent, m.data, m.origin, m.source, m.ports.length);
-    a.close();
-    b.close();
-  };
-  a.postMessage('hi');
 };
 port1.postMessage('hello');

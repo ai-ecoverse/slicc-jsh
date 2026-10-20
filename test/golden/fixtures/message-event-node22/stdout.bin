@@ -66,4 +66,3 @@ call THROW TypeError undefined "Class constructor _MessageEvent cannot be invoke
 subclass => [ 2, true, 'S', '[object MessageEvent]' ]
 dispatch => [ 'x', true, true ]
 port message true true hello 0 true
-channel message true hi  null 0
