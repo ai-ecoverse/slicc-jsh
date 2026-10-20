@@ -98,6 +98,8 @@ export function workerContext(ctx, data) {
   });
   const wrapped = Object.create(ctx, {
     argv: { value: ['node'] },
+    // The parent's directory when it made the Worker (the process's, in Node).
+    cwd: { value: data.cwd ?? ctx.cwd },
     env: { value: { ...data.env } },
     sync: { value: sync },
     write: { value: async (fd, chunk) => (fd === 1 || fd === 2 ? out(fd, chunk) : ctx.write(fd, chunk)) },
@@ -202,6 +204,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     #limits;
     #handle = { kind: 'Worker' };
     #box;
+    #name = '';
 
     constructor(filename, options = {}) {
       super();
@@ -227,6 +230,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       if (options.name !== undefined && typeof options.name !== 'string') {
         throw ERR_INVALID_ARG_TYPE('options.name', 'string', options.name);
       }
+      this.#name = options.name ?? '';
       this.#limits = limitsOf(options.resourceLimits);
       this.threadId = ids ? Atomics.add(ids, 0, 1) + 1 : 1;
 
@@ -282,11 +286,21 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
         environmentData: [...environmentData],
         ids,
       };
-      // workerData and its transferList go as a port's message does.
-      remote.pack(options.workerData, options.transferList, (packed, transfer) => {
-        data.workerData = packed;
-        this.#spawn(data, transfer);
-      });
+      // workerData and its transferList go as a port's message does. One
+      // that can't (a DataCloneError) leaves no Worker, nor its handle.
+      try {
+        remote.pack(options.workerData, options.transferList, (packed, transfer) => {
+          // As Node, which clones it in the constructor: what can't be
+          // cloned (a function) is V8's DataCloneError now, not the
+          // thread's start failing later.
+          structuredClone(packed.data);
+          data.workerData = packed;
+          this.#spawn(data, transfer);
+        });
+      } catch (err) {
+        handles.delete(this.#handle);
+        throw err;
+      }
     }
 
     #spawn(data, transfer) {
@@ -404,7 +418,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     }
 
     get threadName() {
-      return this.#exited ? null : (this.name ?? '');
+      return this.#exited ? null : this.#name;
     }
 
     get performance() {

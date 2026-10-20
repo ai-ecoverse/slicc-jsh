@@ -160,8 +160,10 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       native,
       box,
       pull,
+      // A message's number is taken once it is sent: one that can't be
+      // (a DataCloneError) leaves no gap for the other side to wait on.
       post(message, transfer) {
-        const seq = nextSend++;
+        const seq = nextSend;
         const list = transferListOf(transfer);
         // Nothing to transfer but ArrayBuffers: the mailbox, the buffers'
         // bytes copied and theirs detached (a move, as a program sees it).
@@ -173,15 +175,20 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
             bytes = null;
           }
           if (bytes && writer.write(seq, bytes)) {
+            nextSend++;
             if (list.length) structuredClone(list, { transfer: list });
             return;
           }
         }
-        pack(message, transfer, (packed, natives) => native.postMessage({ t: 'm', seq, ...packed }, natives));
+        pack(message, transfer, (packed, natives) => {
+          native.postMessage({ t: 'm', seq, ...packed }, natives);
+          nextSend++;
+        });
       },
       // A message packed and cloned before (with its transfers), now sent.
       postPacked(packed, list) {
-        native.postMessage({ t: 'm', seq: nextSend++, ...packed }, list);
+        native.postMessage({ t: 'm', seq: nextSend, ...packed }, list);
+        nextSend++;
       },
       close() {
         try {
