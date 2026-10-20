@@ -1,4 +1,6 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createNodeKernel, nodeTransport } from '@ai-ecoverse/slicc-kernel/node';
@@ -140,6 +142,60 @@ export function devPackageTree(name) {
   };
   for (const dir of dirs) walk(dir, true);
   return out;
+}
+
+/**
+ * A package the lockfile pins but npm skipped here (an optional dependency
+ * for another platform, such as a napi-rs `wasm32-wasi` binding), with the
+ * packages it depends on, as [kernel path, bytes] pairs under /node_modules/.
+ * A package npm installed is taken from node_modules; a skipped one is
+ * `npm pack`ed at the lockfile's version (npm's cache, else the registry)
+ * and must match the lockfile's integrity.
+ */
+export function lockedPackageTree(name) {
+  const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8')).packages;
+  const out = [];
+  const seen = new Set();
+  const visit = (pkg) => {
+    if (seen.has(pkg)) return;
+    seen.add(pkg);
+    const entry = lock[`node_modules/${pkg}`];
+    if (!entry) throw new Error(`${pkg} is not in package-lock.json`);
+    let installed = false;
+    try {
+      installed = JSON.parse(readFileSync(join(root, 'node_modules', pkg, 'package.json'), 'utf8')).version === entry.version;
+    } catch {
+      /* skipped here */
+    }
+    if (installed) out.push(...devPackageFiles(pkg));
+    else out.push(...packedFiles(pkg, entry));
+    for (const dep of Object.keys(entry.dependencies ?? {})) visit(dep);
+  };
+  visit(name);
+  return out;
+}
+
+function packedFiles(pkg, entry) {
+  const dir = mkdtempSync(join(tmpdir(), 'jsh-locked-'));
+  try {
+    const [packed] = JSON.parse(
+      execFileSync('npm', ['pack', `${pkg}@${entry.version}`, '--json', '--pack-destination', dir], { cwd: dir, encoding: 'utf8' })
+    );
+    if (packed.integrity !== entry.integrity) throw new Error(`${pkg}@${entry.version}: integrity ${packed.integrity} is not the lockfile's ${entry.integrity}`);
+    execFileSync('tar', ['-xzf', join(dir, packed.filename), '-C', dir]);
+    const out = [];
+    const walk = (d) => {
+      for (const n of readdirSync(d)) {
+        const p = join(d, n);
+        if (statSync(p).isDirectory()) walk(p);
+        else out.push([`/node_modules/${pkg}/${relative(join(dir, 'package'), p).replaceAll('\\', '/')}`, readFileSync(p)]);
+      }
+    };
+    walk(join(dir, 'package'));
+    return out;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** withJsh plus /bin/sh (wasm-bash), for exec / execSync. */

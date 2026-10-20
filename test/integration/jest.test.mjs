@@ -3,20 +3,25 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageTree, withJsh } from './helpers.mjs';
+import { devPackageTree, kernelAtLeast, kernelVersion, lockedPackageTree, withJsh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
 
-// The real jest 29 runs a project's tests in the kernel. On its way it calls
+// The real jest 30 runs a project's tests in the kernel. On its way it calls
 // process.constructor without new (jest-util's createProcessObject), copies
-// Module's keys onto a subclass (jest-runtime), and clones call sites from
-// their prototype (source-map-support).
-describe('jest (kernel)', () => {
+// Module's keys onto a subclass (jest-runtime), clones call sites from their
+// prototype (source-map-support), and resolves modules with unrs-resolver.
+// That has no native binding for jsh (linux x64 has none installed), so it
+// loads its wasm32-wasi one on node:wasi (slicc-kernel 1.133.0), as on seven.
+// npm skips that binding for this platform: it comes from the lockfile.
+const WASI_KERNEL = '1.133.0';
+describe('jest (kernel)', { skip: !kernelAtLeast(WASI_KERNEL) && `slicc-kernel ${kernelVersion} has no WASI host (${WASI_KERNEL})` }, () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();
     for (const [path, data] of devPackageTree('jest')) await jsh.kernel.writeFile(path, data);
+    for (const [path, data] of lockedPackageTree('@unrs/resolver-binding-wasm32-wasi')) await jsh.kernel.writeFile(path, data);
     await jsh.kernel.writeFile('/os/proj/package.json', JSON.stringify({ name: 'proj', private: true, jest: { testEnvironment: 'node' } }));
     await jsh.kernel.writeFile(
       '/os/proj/sum.js',
@@ -52,12 +57,17 @@ test.each([[1, 1, 2], [2, 3, 5]])('%i + %i', (a, b, c) => expect(a + b).toBe(c))
   after(() => jsh?.close());
 
   it('runs a project in band: passing suites, and a failing one with its diff and source frame', async () => {
-    assert.equal(version('jest'), '29.7.0');
+    assert.equal(version('jest'), '30.5.2');
     const r = await jsh.run(['node', '/node_modules/jest/bin/jest.js', '--runInBand', '--no-cache', '--ci'], { cwd: '/os/proj' });
     assert.equal(r.status, 1, r.stderr);
-    // (A slow suite's line has its time.) No warning of jsh's own: Babel's
-    // circular requires are marked __esModule.
-    assert.doesNotMatch(r.stderr, /Warning/);
+    // Node's own warning as unrs-resolver loads node:wasi (host Node on a
+    // platform with no native binding prints it too), and none of jsh's
+    // own: Babel's circular requires are marked __esModule. (A slow suite's
+    // line has its time.)
+    const WASI_WARNING =
+      /^\(node:\d+\) ExperimentalWarning: WASI is an experimental feature and might change at any time\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\n/;
+    assert.match(r.stderr, WASI_WARNING);
+    assert.doesNotMatch(r.stderr.replace(WASI_WARNING, ''), /Warning/);
     assert.match(r.stderr, /^PASS \.\/sum\.test\.js( \([\d.]+ m?s\))?$/m);
     assert.match(r.stderr, /^PASS \.\/mock\.test\.js( \([\d.]+ m?s\))?$/m);
     assert.match(r.stderr, /^FAIL \.\/fail\.test\.js( \([\d.]+ m?s\))?$/m);
