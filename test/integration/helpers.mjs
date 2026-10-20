@@ -73,6 +73,18 @@ export async function withJsh(options = {}) {
 }
 
 /**
+ * dist/<name>.mjs for a test that wraps the command's main: the bundle without
+ * its default export, the main bound to `__main`, then `wrapper` (which
+ * exports its own default). The bundle is minified: its tail is not a fixed string.
+ */
+export function wrapCommandMain(name, wrapper) {
+  const bundle = readFileSync(join(root, 'dist', `${name}.mjs`), 'utf8');
+  const tail = /export\s*\{\s*([\w$]+) as default\s*\};?\s*$/.exec(bundle);
+  if (!tail) throw new Error(`dist/${name}.mjs no longer ends with esbuild's \`export { … as default }\``);
+  return `${bundle.slice(0, tail.index)}\nconst __main = ${tail[1]};\n${wrapper}`;
+}
+
+/**
  * Files of an installed devDependency (e.g. `@ai-ecoverse/wasm-bash`, which
  * gives the kernel `bash` and `/bin/sh`), as [kernel path, bytes] pairs under
  * /node_modules/<name>/ for kernel.writeFile.
