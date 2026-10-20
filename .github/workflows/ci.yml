@@ -305,9 +305,19 @@ jobs:
             npm run browser
           fi
       - name: Browser suite
+        # slicc-shared-web 2's harness runs Chrome headed, so it needs a
+        # display: Xvfb on :99 when the runner has none, as shared-web's
+        # pipeline starts it. Both the pool's image and hosted runners ship
+        # Xvfb.
         timeout-minutes: 10
         run: |
           set -euo pipefail
+          if [ -z "${DISPLAY:-}" ]; then
+            nohup Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp > "$RUNNER_TEMP/xvfb.log" 2>&1 &
+            for _ in $(seq 50); do [ -S /tmp/.X11-unix/X99 ] && break; sleep 0.2; done
+            [ -S /tmp/.X11-unix/X99 ] || { echo "::error title=browser: no display::Xvfb did not start on :99"; cat "$RUNNER_TEMP/xvfb.log"; exit 1; }
+            export DISPLAY=:99
+          fi
           npm run test:browser 2>&1 | tee "$RUNNER_TEMP/browser.out"
           { grep -Eq '^ℹ pass [1-9][0-9]*$' "$RUNNER_TEMP/browser.out" && grep -Eq '^ℹ fail 0$' "$RUNNER_TEMP/browser.out"; } || { echo "::error title=browser: no verdict::npm run test:browser exited 0 without its verdict line: a gate's silence is not a pass"; exit 1; }
       - uses: actions/upload-artifact@v7
