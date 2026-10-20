@@ -970,10 +970,39 @@ function assertAllocSize(size) {
   return Math.floor(size);
 }
 
+/** Buffer class → bytes of the live ArrayBuffers it allocated (see bufferBytes). */
+const allocated = new WeakMap();
+
+/**
+ * Bytes held by the ArrayBuffers this realm's Buffers allocated and that are
+ * still alive: process.memoryUsage()'s `arrayBuffers` when the kernel can't
+ * measure the heap. Views (Buffer.from(arrayBuffer), subarray) allocate
+ * nothing and count nothing, and neither do Buffers under 4 KiB or a plain
+ * `new Uint8Array(n)`, so this is a lower bound of Node's figure.
+ */
+export const bufferBytes = (Buffer) => allocated.get(Buffer)?.live ?? 0;
+
 export function createBuffer() {
+  const memory = { live: 0 };
+  const freed = new FinalizationRegistry((n) => {
+    memory.live -= n;
+  });
   class Buffer extends Uint8Array {
     /** No shared pool — matches kernel Node-entry (process workers share the allocator). */
     static poolSize = 0;
+
+    constructor(...args) {
+      super(...args);
+      // New memory only when made by length (alloc, allocUnsafe, from and
+      // concat copies, species of map/filter/slice). From 4 KiB: registering
+      // every small Buffer slows a tight allocation loop several times over,
+      // for bytes that barely move the figure.
+      if (typeof args[0] === 'number' && args[0] >= 4096) {
+        const n = this.buffer.byteLength;
+        memory.live += n;
+        freed.register(this.buffer, n);
+      }
+    }
 
     static from(value, encodingOrOffset, length) {
       if (typeof value === 'string') {
@@ -1440,6 +1469,7 @@ export function createBuffer() {
   }
   // The bundler may rename the class (Buffer2); its name is Node's.
   Object.defineProperty(Buffer, 'name', { value: 'Buffer', configurable: true });
+  allocated.set(Buffer, memory);
 
   return Buffer;
 }
