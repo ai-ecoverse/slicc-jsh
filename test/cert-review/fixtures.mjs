@@ -8,7 +8,6 @@ export const SKIP = {
 export const SKIP_CASES = {
   'm2g/wsecho.js': 'talks to the public wss://echo.websocket.org, so the remote end and the runner network are in the loop (#241); the committed websocket-loopback integration tests cover WebSocket',
   'm2h/wsecho.js': 'the same public echo server as m2g/wsecho.js (#241)',
-  'm36/probe/orphan-output': "an orphan's late echo races its parent's death, by timing; Node gives no order either (#253)",
 };
 
 export const NORMALIZE = [
