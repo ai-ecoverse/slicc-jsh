@@ -25,3 +25,4 @@ artifacts/
 !test/fixtures/cert-review/**/node_modules/
 !test/fixtures/cert-review/**/node_modules/**
 !test/fixtures/cert-review/**/*.tgz
+test/unit/
