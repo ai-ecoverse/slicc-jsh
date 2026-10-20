@@ -227,7 +227,9 @@ function workerCommandLine(data) {
   else if (data.url !== undefined) argv.push('--input-type=module', '-e', `import ${JSON.stringify(data.url)};`, '--', ...data.argv);
   else argv.push(data.file, ...data.argv);
   const parsed = parseNodeArgv(argv);
-  if (parsed.mode === 'eval') parsed.processArgv = [parsed.processArgv[0], '[worker eval]', ...data.argv];
+  // An eval worker's argv[1] is `[worker eval]`; a data: URL's has none.
+  if (data.eval !== undefined) parsed.processArgv = [parsed.processArgv[0], '[worker eval]', ...data.argv];
+  else if (data.url !== undefined) parsed.processArgv = [parsed.processArgv[0], ...data.argv];
   return parsed;
 }
 

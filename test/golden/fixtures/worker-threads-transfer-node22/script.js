@@ -3,8 +3,11 @@
 // program free to end); a duplicate ArrayBuffer in a transfer list is a
 // DataCloneError, the buffer still whole and the worker never getting the
 // message; a post that can't be cloned leaves the ports in its transfer
-// list usable; a port inside a Map arrives as a port; and a data: URL worker
-// runs as that URL.
+// list usable, as does one whose transfer list has a port and a duplicate
+// ArrayBuffer; a port inside a Map arrives as a port; a port forwarded on
+// from one worker to another gets every later message; workerData's getters
+// run once, in the constructor; and a data: URL worker runs as that URL,
+// with no [worker eval] in its argv.
 const { Worker, MessageChannel } = require('worker_threads');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
 (async () => {
@@ -45,14 +48,52 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   port1.close();
   port2.close();
 
+  const { port1: kept, port2: keptPeer } = new MessageChannel();
+  const dup = new ArrayBuffer(4);
+  try {
+    echo.postMessage({ kept }, [kept, dup, dup]);
+    console.log('posted');
+  } catch (e) {
+    console.log('a port and a duplicate ArrayBuffer:', e.name, e.message);
+  }
+  const hi = once(keptPeer, 'message');
+  kept.postMessage('hi');
+  console.log('that port still works:', await hi);
+  kept.close();
+  keptPeer.close();
+
   const { port1: inMap } = new MessageChannel();
   echo.postMessage(new Map([['port', inMap]]), [inMap]);
   console.log('a port inside a Map:', await next());
   await echo.terminate();
 
-  const src = "import { parentPort } from 'node:worker_threads'; parentPort.postMessage(import.meta.url.slice(0, 35));";
-  const fromUrl = new Worker(new URL('data:text/javascript,' + encodeURIComponent(src)));
-  console.log('a data: URL worker, import.meta.url:', await once(fromUrl, 'message'));
+  // A port goes to worker A, which hands it back; it goes on to worker B,
+  // which must get every message sent on its other end after that.
+  const a = new Worker("const { parentPort } = require('worker_threads'); parentPort.once('message', ({ port }) => { port.on('message', () => {}); parentPort.postMessage({ port }, [port]); });", { eval: true });
+  const b = new Worker("const { parentPort } = require('worker_threads'); parentPort.once('message', ({ port }) => { const got = []; port.on('message', (m) => { got.push(m); if (got.length === 3) { parentPort.postMessage(got.join(' ')); port.close(); } }); parentPort.postMessage('ready'); });", { eval: true });
+  const { port1: sender, port2: forwarded } = new MessageChannel();
+  a.postMessage({ port: forwarded }, [forwarded]);
+  const { port: back } = await once(a, 'message');
+  b.postMessage({ port: back }, [back]);
+  await once(b, 'message');
+  const all = once(b, 'message');
+  for (const m of ['m1', 'm2', 'm3']) sender.postMessage(m);
+  console.log('a port forwarded on to another worker got:', await all);
+  sender.close();
+  await a.terminate();
+  await b.terminate();
+
+  let reads = 0;
+  const getters = { get value() { reads += 1; return 'read ' + reads; } };
+  const g = new Worker("const { workerData, parentPort } = require('worker_threads'); parentPort.postMessage(workerData.value)", { eval: true, workerData: getters });
+  console.log('getter reads after the constructor:', reads);
+  console.log('the worker got:', await once(g, 'message'));
+  await once(g, 'exit');
+  console.log('getter reads in all:', reads);
+
+  const src = "import { parentPort } from 'node:worker_threads'; parentPort.postMessage(import.meta.url.slice(0, 35) + ' ' + JSON.stringify(process.argv.slice(1)));";
+  const fromUrl = new Worker(new URL('data:text/javascript,' + encodeURIComponent(src)), { argv: ['x', 'y'] });
+  console.log('a data: URL worker, import.meta.url and argv:', await once(fromUrl, 'message'));
   await once(fromUrl, 'exit');
 })();
 process.on('exit', () => console.log('the program ends'));

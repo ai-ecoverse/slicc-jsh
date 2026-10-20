@@ -20,6 +20,15 @@ import { EventEmitter } from './events.mjs';
 import { nodeError, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, validateObject } from '../node-errors.mjs';
 
 export const SHARE_ENV = Symbol.for('nodejs.worker_threads.SHARE_ENV');
+const arrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get;
+const isArrayBuffer = (value) => {
+  try {
+    Reflect.apply(arrayBufferByteLength, value, []);
+    return true;
+  } catch {
+    return false;
+  }
+};
 const kPublicPort = Symbol('kPublicPort');
 const kHandle = Symbol('kHandle');
 const WORKER_KIND = 'slicc-jsh worker';
@@ -293,10 +302,13 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
         remote.pack(options.workerData, options.transferList, (packed, transfer) => {
           // As Node, which clones it in the constructor: what can't be
           // cloned (a function) is V8's DataCloneError now, not the
-          // thread's start failing later.
-          structuredClone(packed.data);
-          data.workerData = packed;
-          this.#spawn(data, transfer);
+          // thread's start failing later, and its getters run once. The
+          // thread gets this clone, the transfer list's ArrayBuffers moved
+          // into it (the program's are detached, as in Node).
+          const buffers = transfer.filter(isArrayBuffer);
+          const cloned = structuredClone({ data: packed.data, buffers }, { transfer: buffers });
+          data.workerData = { ...packed, data: cloned.data };
+          this.#spawn(data, [...transfer.filter((x) => !isArrayBuffer(x)), ...cloned.buffers]);
         });
       } catch (err) {
         handles.delete(this.#handle);

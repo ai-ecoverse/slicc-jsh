@@ -40,6 +40,22 @@ const isArrayBuffer = (value) => {
 };
 const CHANNEL_MAILBOX = 256 * 1024;
 
+/**
+ * V8's checks of a transfer list, made before anything is sent or any port
+ * exported, with its errors: a duplicate, or an ArrayBuffer already gone.
+ */
+function checkTransferList(list) {
+  const seen = new Set();
+  for (const item of list) {
+    if (seen.has(item)) {
+      const kind = isArrayBuffer(item) ? 'ArrayBuffer' : 'MessagePort';
+      throw new DOMException(`Transfer list contains duplicate ${kind}`, 'DataCloneError');
+    }
+    seen.add(item);
+    if (isArrayBuffer(item) && item.detached) throw new DOMException('Cannot transfer object of unsupported type.', 'DataCloneError');
+  }
+}
+
 export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
   const { MessagePort, makePort, kPortMark } = ports;
 
@@ -90,6 +106,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     for (const port of jshPorts) {
       if (port._detached) throw new DOMException('MessagePort in transfer list is already detached', 'DataCloneError');
     }
+    checkTransferList(list);
     if (jshPorts.length === 0) return fn({ data: message, ports: [] }, rest);
     const marks = new Map(jshPorts.map((port, i) => [port, { [kPortMark]: i }]));
     const marked = swapPorts(message, marks);
@@ -181,8 +198,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
         // bytes copied and theirs detached (a move, as a program sees it).
         if (writer && list.every(isArrayBuffer)) {
           // V8's checks of a transfer list, before the message is out.
-          if (new Set(list).size !== list.length) throw new DOMException('Transfer list contains duplicate ArrayBuffer', 'DataCloneError');
-          if (list.some((b) => b.detached)) throw new DOMException('Cannot transfer object of unsupported type.', 'DataCloneError');
+          checkTransferList(list);
           let bytes;
           try {
             bytes = serdes().serialize(message);
@@ -212,6 +228,12 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
           /* the other thread is gone */
         }
         end();
+      },
+      // The port moved on to another thread, its native port and mailbox
+      // with it: this side stops reading them (the native port stays open).
+      release() {
+        ended = true;
+        native.onmessage = null;
       },
       // What a port that moves takes with it (all that has come, in its stash).
       state() {
@@ -250,7 +272,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     if (linked) {
       // Its other end is in another thread already: the native port and
       // the mailboxes go on.
-      linked.native.onmessage = null;
+      linked.release();
       native = linked.native;
       box = linked.box;
     } else {

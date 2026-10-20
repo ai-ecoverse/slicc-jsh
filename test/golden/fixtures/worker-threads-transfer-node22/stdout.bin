@@ -3,6 +3,12 @@ a duplicate ArrayBuffer: DataCloneError Transfer list contains duplicate ArrayBu
 the worker got: after the duplicate
 a post that cannot be cloned: DataCloneError
 its port still works: hello
+a port and a duplicate ArrayBuffer: DataCloneError Transfer list contains duplicate ArrayBuffer
+that port still works: hi
 a port inside a Map: a Map with a port
-a data: URL worker, import.meta.url: data:text/javascript,import%20%7B%2
+a port forwarded on to another worker got: m1 m2 m3
+getter reads after the constructor: 1
+the worker got: read 1
+getter reads in all: 1
+a data: URL worker, import.meta.url and argv: data:text/javascript,import%20%7B%2 ["x","y"]
 the program ends
