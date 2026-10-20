@@ -59,6 +59,6 @@ describe('release tag job: semantic-release failures are never green', () => {
     assert.match(y, /SEMANTIC_RELEASE: \$\{\{ steps\.semantic-release\.outcome \}\}\n\s+run: \|\n\s+set -euo pipefail\n\s+node scripts\/release-outcome\.mjs 2>&1 \| tee "\$RUNNER_TEMP\/outcome\.out"\n/);
     assert.match(y, /publish:[\s\S]*?if: always\(\) && github\.ref == 'refs\/heads\/main' && needs\.tag\.outputs\.tags != ''/);
     assert.match(y, /refuse to publish: HEAD is \$head, tag v\$version is \$tagged/);
-    assert.match(y, /alert:[\s\S]*needs\.tag\.result == 'failure' \|\| needs\.publish\.result == 'failure' \|\| needs\.verify\.result == 'failure'[\s\S]*gh issue create --title "release of/);
+    assert.match(y, /alert:\n[\s\S]*needs: \[tag, publish\]\n[\s\S]*\(needs\.tag\.result == 'failure' \|\| needs\.publish\.result == 'failure'\)\n[\s\S]*gh issue create --title "release of/);
   });
 });

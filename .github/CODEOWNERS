@@ -7,7 +7,6 @@
 /test/fixtures/cert-review/ @trieloff
 /.github/workflows/ci.yml @trieloff
 /.github/workflows/release.yml @trieloff
-/scripts/release-line.mjs @trieloff
 /scripts/release-body.mjs @trieloff
 /scripts/release-outcome.mjs @trieloff
 /.releaserc.json @trieloff
