@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -187,4 +187,27 @@ export async function progressRun(k, argv, opts, { quiet, outer }) {
   ]);
   clearInterval(watch);
   return r.status === 'TIMEOUT' ? { status: 'TIMEOUT', stdout: so, stderr: se, why: r.why } : r;
+}
+
+export function kernelFits(range, kernel) {
+  const m = /^>=\s*(\d+)\.(\d+)\.(\d+)$/.exec(String(range).trim());
+  if (!m) throw new Error(`engines.slicc-kernel ${range} is not >=x.y.z`);
+  const want = m.slice(1).map(Number);
+  const have = kernel.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (have[i] !== want[i]) return have[i] > want[i];
+  return true;
+}
+
+export function kernelPackage(base, sub, kernel) {
+  const dir = join(base, '@ai-ecoverse', sub);
+  const own = readJson(join(dir, 'package.json'));
+  const range = own.engines?.['slicc-kernel'];
+  if (!range || kernelFits(range, kernel)) return { dir, version: own.version };
+  const compat = join(base, `cert-compat-${sub}`);
+  const alt = existsSync(join(compat, 'package.json')) ? readJson(join(compat, 'package.json')) : null;
+  const altRange = alt?.engines?.['slicc-kernel'];
+  if (alt?.name === own.name && (!altRange || kernelFits(altRange, kernel))) return { dir: compat, version: alt.version, compat: true };
+  throw new Error(
+    `kernel ${kernel}: ${own.name}@${own.version} needs slicc-kernel ${range}, and no cert-compat-${sub} devDependency fits it${alt ? ` (${alt.name}@${alt.version} needs ${altRange})` : ''}`
+  );
 }

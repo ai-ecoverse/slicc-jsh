@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { KERNEL, NAME, SEMVER, archive, npmFlags, packFrom, packTree, readJson, relFiles, root, sh, sha, sri, untar } from './lib.mjs';
+import { KERNEL, NAME, SEMVER, archive, kernelPackage, npmFlags, packFrom, packTree, readJson, relFiles, root, sh, sha, sri, untar } from './lib.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -76,7 +76,7 @@ function stageKernel(pin) {
   return { ...pin, tgz, sha256: sha('sha256', tgz), plain, enforce: shimmed };
 }
 
-function shadowModules(base, kernelDir, dest) {
+function shadowModules(base, kernelDir, kernel, dest) {
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dest, { recursive: true });
   for (const name of readdirSync(base)) {
@@ -87,7 +87,9 @@ function shadowModules(base, kernelDir, dest) {
     mkdirSync(join(dest, name));
     for (const sub of readdirSync(join(base, name))) {
       if (sub === 'slicc-kernel') continue;
-      symlinkSync(join(base, name, sub), join(dest, name, sub));
+      const pick = kernelPackage(base, sub, kernel);
+      if (pick.compat) console.log(`stage: kernel ${kernel} gets ${name}/${sub}@${pick.version} (cert-compat-${sub}): the tree's own needs a newer kernel`);
+      symlinkSync(pick.dir, join(dest, name, sub));
     }
     symlinkSync(kernelDir, join(dest, name, 'slicc-kernel'));
   }
@@ -158,7 +160,7 @@ const wanted = values.kernels === 'all' ? null : values.kernels.split(',');
 const kernels = kernelPins(tag)
   .filter((k) => !wanted || k.names.some((n) => wanted.includes(n)))
   .map(stageKernel)
-  .map((k) => ({ ...k, modules: shadowModules(base, k.enforce, join(work, 'nm', k.id, 'node_modules')) }));
+  .map((k) => ({ ...k, modules: shadowModules(base, k.enforce, k.version, join(work, 'nm', k.id, 'node_modules')) }));
 if (!kernels.length) throw new Error(`no kernel matches --kernels ${values.kernels}`);
 
 for (const tree of [tag, neg]) symlinkSync(kernels[0].modules, join(tree, 'node_modules'));
