@@ -8,7 +8,7 @@
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createNodeKernel as createKernel120 } from 'kernel-cert-new/node';
+import { createNodeKernel as createKernel186 } from 'kernel-cert-186/node';
 import { devPackageFiles, kernelAtLeast, kernelVersion, packageFiles, withJsh } from './helpers.mjs';
 
 const decoder = new TextDecoder();
@@ -322,10 +322,10 @@ describe('chokidar 5 in the kernel (usePolling: false)', needs, () => {
   });
 });
 
-describe('fs.watch on an older kernel (1.120.2): not there, as documented', () => {
+describe('fs.watch on an older kernel (1.86.0): not there, as documented', () => {
   let kernel;
   before(async () => {
-    kernel = await createKernel120();
+    kernel = await createKernel186();
     for (const [rel, data] of packageFiles()) await kernel.writeFile(`/node_modules/@ai-ecoverse/slicc-jsh/${rel}`, data);
   });
   after(() => kernel?.terminate());
@@ -336,7 +336,7 @@ describe('fs.watch on an older kernel (1.120.2): not there, as documented', () =
       [
         "const fs = require('fs');",
         "console.log(typeof fs.watch, typeof fs.promises.watch, typeof require('fs/promises').watch, typeof fs.watchFile);",
-        "try { fs.watch('/tmp', () => {}); } catch (e) { console.log(e.name, e.message); }",
+        "try { fs.watch('/tmp', () => {}).close(); console.log('watching'); } catch (e) { console.log(e.name, e.message); }",
       ].join('\n')
     );
     const r = await kernel.run(['node', '/tmp/old.js'], { cwd: '/tmp' });
