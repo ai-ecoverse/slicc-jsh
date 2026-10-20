@@ -18,8 +18,30 @@
  */
 import { EventEmitter } from './events.mjs';
 import { nodeError, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, validateObject } from '../node-errors.mjs';
+import { parseNodeArgv } from '../cli.mjs';
 
 export const SHARE_ENV = Symbol.for('nodejs.worker_threads.SHARE_ENV');
+
+/**
+ * The flags in a Worker's execArgv that the worker's command line would
+ * refuse (Node checks them in the constructor): each as the CLI parses it,
+ * with the next word as its value when it takes one.
+ */
+function invalidExecArgv(execArgv) {
+  const invalid = [];
+  for (let i = 0; i < execArgv.length; i++) {
+    const flag = execArgv[i];
+    if (!flag.startsWith('-')) continue;
+    const alone = parseNodeArgv(['node', flag, '-e', '0']);
+    if (!alone.error) continue;
+    if (/requires an argument/.test(alone.error) && i + 1 < execArgv.length && !parseNodeArgv(['node', flag, execArgv[i + 1], '-e', '0']).error) {
+      i++;
+      continue;
+    }
+    invalid.push(flag);
+  }
+  return invalid;
+}
 const arrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get;
 const isArrayBuffer = (value) => {
   try {
@@ -230,6 +252,12 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       }
       if (options.execArgv !== undefined && !Array.isArray(options.execArgv)) {
         throw ERR_INVALID_ARG_TYPE('options.execArgv', 'Array', options.execArgv);
+      }
+      if (options.execArgv !== undefined) {
+        const invalid = invalidExecArgv(options.execArgv.map(String));
+        if (invalid.length) {
+          throw nodeError(Error, 'ERR_WORKER_INVALID_EXEC_ARGV', `Initiated Worker with invalid execArgv flags: ${invalid.join(', ')}`);
+        }
       }
       let env;
       const shareEnv = options.env === SHARE_ENV;

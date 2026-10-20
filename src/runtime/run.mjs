@@ -509,6 +509,11 @@ export async function runNode(ctx, options = {}) {
             return {
               serialize(value) {
                 const ser = new v8.Serializer();
+                // What it can't write is a DataCloneError (the native way
+                // takes it then), unlike a getter's own throw.
+                ser._getDataCloneError = function DataCloneError(message) {
+                  return new DOMException(message, 'DataCloneError');
+                };
                 ser.writeHeader();
                 ser.writeValue(value);
                 return ser.releaseBuffer();

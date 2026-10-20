@@ -83,6 +83,17 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       for (const v of value) out.add(mapPorts(v, swap, seen));
       return out;
     }
+    if (value instanceof Error) {
+      // Structured clone keeps an Error's message, stack and cause: a port in
+      // its cause is swapped in a copy of the same kind.
+      if (!Object.hasOwn(value, 'cause')) return value;
+      const out = new Error(value.message);
+      Object.setPrototypeOf(out, Object.getPrototypeOf(value));
+      seen.set(value, out);
+      if (Object.hasOwn(value, 'stack')) out.stack = value.stack;
+      out.cause = mapPorts(value.cause, swap, seen);
+      return out;
+    }
     const proto = Object.getPrototypeOf(value);
     if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) return value;
     const out = Array.isArray(value) ? new Array(value.length) : {};
@@ -202,12 +213,18 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
           let bytes;
           try {
             bytes = serdes().serialize(message);
-          } catch {
+          } catch (err) {
+            // What jsh's serializer can't write (a host object) goes the
+            // native way; anything else (a getter's own throw) is the post's.
+            if (err?.name !== 'DataCloneError') throw err;
             bytes = null;
           }
           if (bytes && writer.write(seq, bytes)) {
             nextSend++;
-            if (list.length) structuredClone(list, { transfer: list });
+            // A buffer the message's getters detached meanwhile is gone
+            // already: the rest move, and the post stands, as in Node.
+            const live = list.filter((b) => !b.detached);
+            if (live.length) structuredClone(live, { transfer: live });
             return;
           }
         }

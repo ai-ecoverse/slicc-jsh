@@ -6,11 +6,20 @@
 // list usable, as does one whose transfer list has a port and a duplicate
 // ArrayBuffer; a port inside a Map arrives as a port; a port forwarded on
 // from one worker to another gets every later message; workerData's getters
-// run once, in the constructor; and a data: URL worker runs as that URL,
-// with no [worker eval] in its argv.
+// run once, in the constructor; a data: URL worker runs as that URL, with
+// no [worker eval] in its argv; invalid execArgv flags throw from the
+// constructor; a port in an Error's cause arrives as a port; a getter that
+// throws makes the post throw, once, and sends nothing; and a getter that
+// detaches a listed buffer leaves the post standing.
 const { Worker, MessageChannel } = require('worker_threads');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
 (async () => {
+  try {
+    new Worker('0', { eval: true, execArgv: ['--no-warnings', '--bogus-one', '--bogus-two'] });
+    console.log('constructed');
+  } catch (e) {
+    console.log('invalid execArgv flags:', e.code, e.message);
+  }
   try {
     new Worker('0', { eval: true, argv: [{ toString() { throw new Error('argv boom'); } }] });
     console.log('constructed');
@@ -19,7 +28,7 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   }
 
   const echo = new Worker(
-    "const { parentPort } = require('worker_threads'); parentPort.on('message', (m) => parentPort.postMessage(m instanceof Map ? 'a Map with a ' + (typeof m.get('port')?.postMessage === 'function' ? 'port' : 'no port') : typeof m === 'string' ? m : 'an object'));",
+    "const { parentPort } = require('worker_threads'); parentPort.on('message', (m) => parentPort.postMessage(m?.err instanceof Error ? m.err.constructor.name + ' ' + m.err.message + ', its cause a ' + (typeof m.err.cause?.postMessage === 'function' ? 'port' : 'non-port') : m instanceof Map ? 'a Map with a ' + (typeof m.get('port')?.postMessage === 'function' ? 'port' : 'no port') : typeof m === 'string' ? m : 'an object'));",
     { eval: true }
   );
   await once(echo, 'online');
@@ -61,6 +70,31 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   console.log('that port still works:', await hi);
   kept.close();
   keptPeer.close();
+
+  const { port1: inCause } = new MessageChannel();
+  echo.postMessage({ err: new TypeError('with a port', { cause: inCause }) }, [inCause]);
+  console.log('an Error whose cause is a port:', await next());
+
+  let throwReads = 0;
+  const throwsOnce = { get v() { throwReads += 1; if (throwReads === 1) throw new Error('first read'); return 'later'; } };
+  try {
+    echo.postMessage(throwsOnce);
+    console.log('posted');
+  } catch (e) {
+    console.log('a getter that throws once:', e.message, '| reads:', throwReads);
+  }
+  echo.postMessage('after the throwing getter');
+  console.log('the worker got:', await next());
+
+  const listed = new ArrayBuffer(4);
+  const detaches = { get v() { structuredClone(listed, { transfer: [listed] }); return 1; } };
+  try {
+    echo.postMessage(detaches, [listed]);
+    console.log('a getter that detaches a listed buffer: posted');
+  } catch (e) {
+    console.log('a getter that detaches a listed buffer:', e.name, e.message);
+  }
+  console.log('the worker got:', await next());
 
   const { port1: inMap } = new MessageChannel();
   echo.postMessage(new Map([['port', inMap]]), [inMap]);

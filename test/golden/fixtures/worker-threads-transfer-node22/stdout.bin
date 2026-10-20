@@ -1,3 +1,4 @@
+invalid execArgv flags: ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --bogus-one, --bogus-two
 an argv element that throws: argv boom
 a duplicate ArrayBuffer: DataCloneError Transfer list contains duplicate ArrayBuffer | its byteLength: 8
 the worker got: after the duplicate
@@ -5,6 +6,11 @@ a post that cannot be cloned: DataCloneError
 its port still works: hello
 a port and a duplicate ArrayBuffer: DataCloneError Transfer list contains duplicate ArrayBuffer
 that port still works: hi
+an Error whose cause is a port: TypeError with a port, its cause a port
+a getter that throws once: first read | reads: 1
+the worker got: after the throwing getter
+a getter that detaches a listed buffer: posted
+the worker got: an object
 a port inside a Map: a Map with a port
 a port forwarded on to another worker got: m1 m2 m3
 getter reads after the constructor: 1
