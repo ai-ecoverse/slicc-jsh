@@ -253,8 +253,10 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       if (options.execArgv !== undefined && !Array.isArray(options.execArgv)) {
         throw ERR_INVALID_ARG_TYPE('options.execArgv', 'Array', options.execArgv);
       }
-      if (options.execArgv !== undefined) {
-        const invalid = invalidExecArgv(options.execArgv.map(String));
+      // As the thread will get them: strings (Node coerces them).
+      const execArgv = options.execArgv === undefined ? undefined : options.execArgv.map(String);
+      if (execArgv !== undefined) {
+        const invalid = invalidExecArgv(execArgv);
         if (invalid.length) {
           throw nodeError(Error, 'ERR_WORKER_INVALID_EXEC_ARGV', `Initiated Worker with invalid execArgv flags: ${invalid.join(', ')}`);
         }
@@ -311,7 +313,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
         kind: WORKER_KIND,
         ...entry,
         argv: (options.argv ?? []).map(String),
-        execArgv: options.execArgv ?? process.execArgv,
+        execArgv: execArgv ?? process.execArgv,
         env,
         shareEnv,
         cwd: process.cwd(),

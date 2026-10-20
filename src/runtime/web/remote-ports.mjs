@@ -192,9 +192,12 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     let expect = state.expect ?? 0;
     const stash = new Map(state.stash ?? []);
     let ended = false;
+    // The native port closed with it (its peer closed, or this side did).
+    let transportClosed = false;
 
     const end = () => {
       ended = true;
+      transportClosed = !onOther;
       if (!onOther) {
         native.onmessage = null;
         native.close();
@@ -288,6 +291,9 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
         ended = true;
         native.onmessage = null;
       },
+      get transportClosed() {
+        return transportClosed;
+      },
       // What a port that moves takes with it (all that has come, in its stash).
       state() {
         pull();
@@ -322,16 +328,20 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     const { queue, open } = port._detach();
     let native;
     let box;
-    if (linked) {
+    // A link whose peer closed has closed its native port too: the port
+    // goes over a fresh one, its other end closed, its messages with it.
+    const peerClosed = linked?.transportClosed ?? false;
+    if (linked && !peerClosed) {
       // Its other end is in another thread already: the native port and
       // the mailboxes go on.
       linked.release();
       native = linked.native;
       box = linked.box;
     } else {
+      linked?.release();
       const channel = new NativeMessageChannel();
       const [here, there] = mailboxPair(CHANNEL_MAILBOX);
-      if (peer && !peer._detached) link(peer, channel.port1, undefined, here);
+      if (!linked && peer && !peer._detached) link(peer, channel.port1, undefined, here);
       else channel.port1.close();
       native = channel.port2;
       box = there;
@@ -348,7 +358,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       box,
       state: state && { nextSend: state.nextSend, expect: state.expect, stash: state.stash.map(([seq, entry]) => [seq, exportEntry(entry)]) },
       queue: queue.map(exportEntry),
-      open: open && !state?.closing,
+      open: open && !state?.closing && !peerClosed,
     };
   }
 

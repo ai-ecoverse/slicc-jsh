@@ -3,6 +3,7 @@ workerData that cannot be cloned: DataCloneError () => {} could not be cloned.
 a transferList with a port moved to another thread: DataCloneError
 a post that cannot be cloned: DataCloneError
 the posts after it: one two
+a non-string execArgv entry, coerced: ["--no-warnings"]
 threadName: "example" inside: "example"
 threadName once it has exited: null
 the program ends

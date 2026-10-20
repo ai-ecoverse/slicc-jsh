@@ -230,6 +230,9 @@ function workerCommandLine(data) {
   // An eval worker's argv[1] is `[worker eval]`; a data: URL's has none.
   if (data.eval !== undefined) parsed.processArgv = [parsed.processArgv[0], '[worker eval]', ...data.argv];
   else if (data.url !== undefined) parsed.processArgv = [parsed.processArgv[0], ...data.argv];
+  // A worker's process.execArgv is its execArgv option alone, without the
+  // -e the eval and data: URL ways run it with.
+  if (!parsed.error) parsed.execArgv = [...(data.execArgv ?? [])];
   return parsed;
 }
 

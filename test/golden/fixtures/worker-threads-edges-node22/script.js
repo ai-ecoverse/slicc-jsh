@@ -4,7 +4,8 @@
 // DataCloneError from the constructor and leaves nothing to keep the program
 // alive; a post to a running worker that can't be cloned throws, and the
 // posts after it still come; and worker.threadName is the name given (null
-// once the worker has exited).
+// once the worker has exited); and a non-string execArgv entry is coerced,
+// as the worker sees it.
 const { Worker, MessageChannel } = require('worker_threads');
 const path = require('path');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
@@ -50,6 +51,13 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   await both;
   console.log('the posts after it:', got.join(' '));
   await echo.terminate();
+
+  const coerced = new Worker("require('worker_threads').parentPort.postMessage(JSON.stringify(process.execArgv))", {
+    eval: true,
+    execArgv: [{ toString: () => '--no-warnings' }],
+  });
+  console.log('a non-string execArgv entry, coerced:', await once(coerced, 'message'));
+  await once(coerced, 'exit');
 
   const named = new Worker("require('worker_threads').parentPort.postMessage(require('worker_threads').threadName)", { eval: true, name: 'example' });
   console.log('threadName:', JSON.stringify(named.threadName), 'inside:', JSON.stringify(await once(named, 'message')));
