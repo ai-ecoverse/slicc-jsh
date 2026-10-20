@@ -970,30 +970,26 @@ function assertAllocSize(size) {
   return Math.floor(size);
 }
 
-/** Buffer class → the ArrayBuffers it allocated (see bufferBytes). */
+/** Buffer class → the bytes its live allocations hold (see bufferBytes). */
 const allocated = new WeakMap();
 
 /**
  * Bytes held by the ArrayBuffers this realm's Buffers allocated that are
- * still alive and still theirs: process.memoryUsage()'s `arrayBuffers` when
- * the kernel can't measure the heap. One transferred away (structuredClone,
- * postMessage) is detached and counts nothing; its new owner isn't seen.
- * Views (Buffer.from(arrayBuffer), subarray) allocate nothing and count
- * nothing, and neither do Buffers under 4 KiB or a plain `new Uint8Array(n)`,
- * so this is a lower bound of Node's figure.
+ * still alive: process.memoryUsage()'s `arrayBuffers` when the kernel can't
+ * measure it. As on Node, memory transferred away still counts. Views
+ * (Buffer.from(arrayBuffer), subarray) allocate nothing and count nothing,
+ * and neither do Buffers under 4 KiB or a plain `new Uint8Array(n)`, so this
+ * is a lower bound of Node's figure.
  */
 export function bufferBytes(Buffer) {
-  let n = 0;
-  for (const ref of allocated.get(Buffer) ?? []) {
-    const ab = ref.deref();
-    if (ab && !ab.detached) n += ab.byteLength;
-  }
-  return n;
+  return allocated.get(Buffer)?.() ?? 0;
 }
 
-export function createBuffer() {
-  const live = new Set();
-  const freed = new FinalizationRegistry((ref) => live.delete(ref));
+export function createBuffer({ track = true } = {}) {
+  let held = 0;
+  const freed = new FinalizationRegistry((bytes) => {
+    held -= bytes;
+  });
   class Buffer extends Uint8Array {
     /** No shared pool — matches kernel Node-entry (process workers share the allocator). */
     static poolSize = 0;
@@ -1004,10 +1000,9 @@ export function createBuffer() {
       // concat copies, species of map/filter/slice). From 4 KiB: tracking
       // every small Buffer slows a tight allocation loop several times over,
       // for bytes that barely move the figure.
-      if (typeof args[0] === 'number' && args[0] >= 4096) {
-        const ref = new WeakRef(this.buffer);
-        live.add(ref);
-        freed.register(this.buffer, ref);
+      if (track && typeof args[0] === 'number' && args[0] >= 4096) {
+        held += this.buffer.byteLength;
+        freed.register(this.buffer, this.buffer.byteLength);
       }
     }
 
@@ -1476,7 +1471,7 @@ export function createBuffer() {
   }
   // The bundler may rename the class (Buffer2); its name is Node's.
   Object.defineProperty(Buffer, 'name', { value: 'Buffer', configurable: true });
-  allocated.set(Buffer, live);
+  allocated.set(Buffer, () => held);
 
   return Buffer;
 }

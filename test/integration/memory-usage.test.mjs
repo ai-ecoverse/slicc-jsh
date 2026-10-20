@@ -1,8 +1,8 @@
 /**
  * process.memoryUsage() reports what jsh measures and 0 for what nothing in
  * its process worker can measure (#397): `arrayBuffers` counts the live
- * Buffers jsh allocated, `external`
- * includes them, and `rss()` is `memoryUsage().rss`. Heap figures need the
+ * Buffers jsh allocated, `external` is at least `arrayBuffers`, and `rss()`
+ * is `memoryUsage().rss`. Heap figures need the
  * kernel's ctx.memory(); until a kernel has it they are 0 together, never
  * an estimate. The shape is host Node's.
  */
@@ -37,7 +37,7 @@ describe('process.memoryUsage (kernel)', () => {
     assert.equal(m.rss, m.m.rss);
   });
 
-  it('arrayBuffers and external grow by a Buffer jsh allocates, and views add nothing', async () => {
+  it('arrayBuffers grows by a Buffer jsh allocates, external includes it, and views add nothing', async () => {
     const m = await json(`
       const before = process.memoryUsage();
       const big = Buffer.alloc(${64 * MiB}, 1);
@@ -47,10 +47,10 @@ describe('process.memoryUsage (kernel)', () => {
     `);
     const grew = m.after.arrayBuffers - m.before.arrayBuffers;
     assert.ok(grew >= 64 * MiB && grew < 65 * MiB, `arrayBuffers grew by ${grew}`);
-    assert.ok(m.after.external - m.before.external >= 64 * MiB);
+    assert.ok(m.after.external >= m.after.arrayBuffers, `external ${m.after.external} < arrayBuffers ${m.after.arrayBuffers}`);
   });
 
-  it('a Buffer whose memory was transferred away counts nothing', async () => {
+  it('a Buffer whose memory was transferred away still counts, as on Node', async () => {
     const m = await json(`
       const big = Buffer.alloc(${64 * MiB});
       const held = process.memoryUsage().arrayBuffers;
@@ -59,7 +59,23 @@ describe('process.memoryUsage (kernel)', () => {
     `);
     assert.equal(m.detached, 0);
     assert.equal(m.moved, 64 * MiB);
-    assert.ok(m.held - m.after >= 64 * MiB, `${m.held} -> ${m.after}`);
+    assert.ok(Math.abs(m.held - m.after) < MiB, `${m.held} -> ${m.after}`);
+  });
+
+  it('Buffers a synchronous loop drops are freed during the loop, as on Node', async (t) => {
+    const m = await json(`
+      let peak = 0;
+      for (let i = 0; i < 32; i++) {
+        Buffer.alloc(${16 * MiB});
+        peak = Math.max(peak, process.memoryUsage().arrayBuffers);
+      }
+      console.log(JSON.stringify({ peak, heapTotal: process.memoryUsage().heapTotal }));
+    `);
+    if (m.heapTotal === 0) {
+      t.skip('this kernel measures no memory for a JS program (no ctx.memory)');
+      return;
+    }
+    assert.ok(m.peak < 256 * MiB, `peak arrayBuffers ${m.peak}`);
   });
 
   it('heap figures are measured or both 0, never one without the other', async (t) => {

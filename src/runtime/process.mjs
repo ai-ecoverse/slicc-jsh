@@ -432,10 +432,7 @@ const Process = { process: class extends EventEmitter {
    */
   memoryUsage() {
     const measured = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
-    let k = {};
-    try {
-      k = (typeof this._ctx.memory === 'function' && this._ctx.memory()) || {};
-    } catch {}
+    const k = kernelMemory(this._ctx);
     const perf = globalThis.performance?.memory;
     const heapUsed = measured(k.heapUsed) ?? measured(perf?.usedJSHeapSize) ?? 0;
     const heapTotal = Math.max(measured(k.heapTotal) ?? measured(perf?.totalJSHeapSize) ?? 0, heapUsed);
@@ -1062,6 +1059,14 @@ function bindOwnMethods(process) {
   }
   // As Node's: process.memoryUsage.rss().
   process.memoryUsage.rss = () => process.memoryUsage().rss;
+}
+
+export function kernelMemory(ctx) {
+  try {
+    return (typeof ctx.memory === 'function' && ctx.memory()) || {};
+  } catch {
+    return {};
+  }
 }
 
 export function createProcess({ ctx, argv, nextTick, onExit, onHardExit, handles, Buffer, stdio, ppid }) {
