@@ -711,6 +711,11 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
               fd: -1,
               proxy: { port: listener.port },
             });
+            if (reply.cancelled) {
+              // The channel to the primary went first: no listening, as in Node.
+              void listener.close();
+              return null;
+            }
             if (reply.errno) {
               void listener.close();
               const err = new Error(`listen ${reply.errno}: ${reply.message ?? 'address already in use'} ${host}:${port}`);
@@ -729,8 +734,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
         handles,
         listening
           .then((listener) => {
+            if (!listener) return;
             if (this.#closed) {
               void listener.close();
+              // Closed while the primary set it up: it gives the address back.
+              if (this.#clusterKey !== undefined) {
+                process?._clusterWorker?._closeServer(this.#clusterKey);
+                this.#clusterKey = undefined;
+              }
               return;
             }
             this.#listener = listener;

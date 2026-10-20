@@ -247,6 +247,8 @@ function createPrimary({ process, getChildProcess, getNet, canFork }) {
   function proxyHandle(key, message) {
     const net = getNet();
     const workers = [];
+    // Workers whose add() waits for the bind: one removed meanwhile is never added.
+    const pending = new Set();
     let next = 0;
     let state = 'listening';
     let failure;
@@ -280,7 +282,9 @@ function createPrimary({ process, getChildProcess, getNet, canFork }) {
     return {
       data: null,
       add(worker, proxy, cb) {
+        pending.add(worker);
         const settle = () => {
+          if (!pending.delete(worker)) return;
           if (state === 'failed') return cb(failure?.code ?? 'EADDRINUSE', { message: failure?.message });
           workers.push({ worker, port: proxy?.port });
           const address = server.address();
@@ -290,10 +294,11 @@ function createPrimary({ process, getChildProcess, getNet, canFork }) {
         else settle();
       },
       remove(worker) {
+        const waited = pending.delete(worker);
         const before = workers.length;
         for (let i = workers.length - 1; i >= 0; i--) if (workers[i].worker === worker) workers.splice(i, 1);
-        if (workers.length === before) return false;
-        if (workers.length > 0) return false;
+        if (!waited && workers.length === before) return false;
+        if (workers.length > 0 || pending.size > 0) return false;
         server.close();
         return true;
       },
@@ -341,6 +346,9 @@ function createChild({ process }) {
   cluster.isPrimary = false;
   cluster.worker = null;
   cluster.Worker = Worker;
+  // queryServer requests the primary hasn't answered: they end when the
+  // channel does (net closes the server's own listener, which never listens).
+  const queries = new Set();
 
   const send = (message, cb) => sendHelper(process, message, null, cb);
 
@@ -348,6 +356,7 @@ function createChild({ process }) {
     const worker = new Worker({ id: +process.env.NODE_UNIQUE_ID | 0, process, state: 'online' });
     cluster.worker = worker;
     process.once('disconnect', () => {
+      for (const cancel of [...queries]) cancel();
       worker.emit('disconnect');
       // The primary went, or some such: the worker ends at once.
       if (!worker.exitedAfterDisconnect) process.exit(0);
@@ -375,7 +384,14 @@ function createChild({ process }) {
     indexSet.set.add(index);
     const message = { act: 'queryServer', index, data: null, ...options };
     return new Promise((resolve) => {
+      const cancel = () => {
+        queries.delete(cancel);
+        removeIndexesKey(indexesKey, index);
+        resolve({ cancelled: true });
+      };
+      queries.add(cancel);
       send(message, (reply) => {
+        if (!queries.delete(cancel)) return;
         if (reply.errno) {
           removeIndexesKey(indexesKey, index);
           return resolve(reply);
@@ -396,6 +412,7 @@ function createChild({ process }) {
         });
         resolve(reply);
       });
+      if (!process.connected) cancel();
     });
   };
 

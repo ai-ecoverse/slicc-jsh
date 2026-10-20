@@ -62,4 +62,31 @@ console.log('workers', JSON.stringify(cluster.workers), Object.keys(cluster.sett
       '',
     ]);
   });
+
+  // A worker that is gone while the primary still binds the address it
+  // asked for: the primary neither adds it nor answers it, and its listener
+  // closes, so the primary ends. (Node answers it there, and the EPIPE is an
+  // unhandled 'error' on the Worker.) raw.js sends cluster's queryServer
+  // itself, then disconnects at once: the race, every time.
+  it('a worker gone while the primary binds its address: the primary closes it and ends', { skip: !kernelAtLeast(IPC_KERNEL) }, async () => {
+    await jsh.kernel.writeFile(
+      '/os/race/raw.js',
+      `process.send({ cmd: 'NODE_CLUSTER', act: 'online', seq: 0 });
+process.send({ cmd: 'NODE_CLUSTER', act: 'queryServer', index: 0, data: null, address: '127.0.0.1', port: 0, addressType: 4, fd: -1, proxy: { port: 1 }, seq: 1 });
+process.disconnect();
+`
+    );
+    await jsh.kernel.writeFile(
+      '/os/race/primary.js',
+      `const cluster = require('cluster');
+process.on('exit', () => console.log('primary ends'));
+cluster.setupPrimary({ exec: __dirname + '/raw.js' });
+cluster.fork().on('exit', (code, signal) => console.log('worker exit', code, signal));
+`
+    );
+    const r = await jsh.run(['node', 'primary.js'], { cwd: '/os/race' });
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, 'worker exit 0 null\nprimary ends\n');
+  });
 });
