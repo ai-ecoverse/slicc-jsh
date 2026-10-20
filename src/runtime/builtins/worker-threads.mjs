@@ -18,7 +18,7 @@
  */
 import { EventEmitter } from './events.mjs';
 import { nodeError, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, validateObject } from '../node-errors.mjs';
-import { parseNodeArgv } from '../cli.mjs';
+import { parseNodeArgv, withoutEntryOptions } from '../cli.mjs';
 
 export const SHARE_ENV = Symbol.for('nodejs.worker_threads.SHARE_ENV');
 
@@ -27,7 +27,9 @@ export const SHARE_ENV = Symbol.for('nodejs.worker_threads.SHARE_ENV');
  * refuse (Node checks them in the constructor): each as the CLI parses it,
  * with the next word as its value when it takes one.
  */
-function invalidExecArgv(execArgv) {
+export function invalidExecArgv(all) {
+  // -e, -p, --check and -i are inert in a worker (Node takes them).
+  const execArgv = withoutEntryOptions(all);
   const invalid = [];
   for (let i = 0; i < execArgv.length; i++) {
     const flag = execArgv[i];

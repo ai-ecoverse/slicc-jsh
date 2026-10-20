@@ -8,7 +8,7 @@ import nodeInspect from 'node-inspect-extracted';
 import { createBuffer } from './buffer.mjs';
 import { createUtil } from './builtins/util.mjs';
 import { createCjs } from './cjs/loader.mjs';
-import { inputTypeOf, parseNodeArgv } from './cli.mjs';
+import { inputTypeOf, parseNodeArgv, workerCommandLine } from './cli.mjs';
 import { nodeError } from './node-errors.mjs';
 import { createEsm } from './esm/loader.mjs';
 import { rewriteDynamicImports, shouldRunAsEsm } from './esm/transform.mjs';
@@ -213,28 +213,6 @@ function trackPlatformAsync(handles) {
 // The platform's setTimeout, for the turns after the program's loop ended.
 const platformSetTimeout = globalThis.setTimeout.bind(globalThis);
 
-/**
- * A worker's command line, as Node gives a Worker's thread: its execArgv
- * (the Worker's option, else its parent's), its script (or its eval code, or
- * a data: URL's module), then its argv. An eval worker's argv[1] is
- * `[worker eval]`.
- */
-function workerCommandLine(data) {
-  const argv = ['node', ...(data.execArgv ?? [])];
-  if (data.eval !== undefined) argv.push('-e', data.eval, '--', ...data.argv);
-  // A data: URL's module runs as itself (its import.meta.url, its stack's
-  // name), as Node's worker runs it.
-  else if (data.url !== undefined) argv.push('--input-type=module', '-e', `import ${JSON.stringify(data.url)};`, '--', ...data.argv);
-  else argv.push(data.file, ...data.argv);
-  const parsed = parseNodeArgv(argv);
-  // An eval worker's argv[1] is `[worker eval]`; a data: URL's has none.
-  if (data.eval !== undefined) parsed.processArgv = [parsed.processArgv[0], '[worker eval]', ...data.argv];
-  else if (data.url !== undefined) parsed.processArgv = [parsed.processArgv[0], ...data.argv];
-  // A worker's process.execArgv is its execArgv option alone, without the
-  // -e the eval and data: URL ways run it with.
-  if (!parsed.error) parsed.execArgv = [...(data.execArgv ?? [])];
-  return parsed;
-}
 
 /**
  * Run the node CLI against a JsProgramContext. Resolves with an exit status.

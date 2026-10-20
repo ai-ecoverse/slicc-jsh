@@ -5,7 +5,8 @@
 // alive; a post to a running worker that can't be cloned throws, and the
 // posts after it still come; and worker.threadName is the name given (null
 // once the worker has exited); and a non-string execArgv entry is coerced,
-// as the worker sees it.
+// as the worker sees it; and -e, -p, --check and -i in a worker's execArgv,
+// its own or its parent's, don't change what it runs.
 const { Worker, MessageChannel } = require('worker_threads');
 const path = require('path');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
@@ -58,6 +59,22 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   });
   console.log('a non-string execArgv entry, coerced:', await once(coerced, 'message'));
   await once(coerced, 'exit');
+
+  // -e, -p, --check and -i in a worker's execArgv are inert: it runs its
+  // own file, and keeps them in process.execArgv.
+  for (const execArgv of [['-e', 'console.log("the eval ran")'], ['-p', '1 + 1'], ['--check'], ['-i']]) {
+    const w = new Worker(path.join(__dirname, 'w.js'), { execArgv });
+    console.log(JSON.stringify(execArgv), '->', await once(w, 'message'));
+    await once(w, 'exit');
+  }
+  // A parent run with -e passes its execArgv on: the worker still runs w.js.
+  const { execFileSync } = require('child_process');
+  const fromEval = execFileSync(process.execPath, [
+    '-e',
+    "const w = new (require('worker_threads').Worker)(process.argv[1]); w.once('message', (m) => console.log(m.replace(/ its execArgv .*/, ' (its parent was -e)')));",
+    path.join(__dirname, 'w.js'),
+  ]);
+  console.log('a worker of a -e program:', String(fromEval).trim());
 
   const named = new Worker("require('worker_threads').parentPort.postMessage(require('worker_threads').threadName)", { eval: true, name: 'example' });
   console.log('threadName:', JSON.stringify(named.threadName), 'inside:', JSON.stringify(await once(named, 'message')));

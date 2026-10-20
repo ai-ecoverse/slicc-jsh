@@ -4,6 +4,11 @@ a transferList with a port moved to another thread: DataCloneError
 a post that cannot be cloned: DataCloneError
 the posts after it: one two
 a non-string execArgv entry, coerced: ["--no-warnings"]
+["-e","console.log(\"the eval ran\")"] -> w.js ran, its execArgv ["-e","console.log(\"the eval ran\")"]
+["-p","1 + 1"] -> w.js ran, its execArgv ["-p","1 + 1"]
+["--check"] -> w.js ran, its execArgv ["--check"]
+["-i"] -> w.js ran, its execArgv ["-i"]
+a worker of a -e program: w.js ran, (its parent was -e)
 threadName: "example" inside: "example"
 threadName once it has exited: null
 the program ends
