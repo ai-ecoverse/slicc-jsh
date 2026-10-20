@@ -1,0 +1,33 @@
+invalid execArgv flags: ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --bogus-one, --bogus-two
+an argv element that throws: argv boom
+a duplicate ArrayBuffer: DataCloneError Transfer list contains duplicate ArrayBuffer | its byteLength: 8
+the worker got: after the duplicate
+a post that cannot be cloned: DataCloneError
+its port still works: hello
+a port and a duplicate ArrayBuffer: DataCloneError Transfer list contains duplicate ArrayBuffer
+that port still works: hi
+a transfer list with [object Object]: DataCloneError Found invalid value in transferList.
+a transfer list with [object SharedArrayBuffer]: DataCloneError Found invalid value in transferList.
+a transfer list with a fake port: DataCloneError Found invalid value in transferList.
+its port: still here
+a transfer list with a locked stream: DataCloneError
+a port and a stream together: a function port and a ReadableStream
+data holding a mark key: fake is [15], real is function
+posting itself: DataCloneError Transfer list contains source port
+then: still connected
+a port inside a class instance: a port, labelled boxed
+a stream posted before the worker started: a stream posted early
+an Error whose cause is a port: TypeError with a port, its cause a port
+a getter that throws once: first read | reads: 1
+the worker got: after the throwing getter
+a getter that detaches a listed buffer: posted
+the worker got: an object
+a port inside a Map: a Map with a port
+a port forwarded on to another worker got: m1 m2 m3
+getter reads after the constructor: 1
+the worker got: read 1
+getter reads in all: 1
+a data: URL worker, import.meta.url and argv: data:text/javascript,import%20%7B%2 ["x","y"]
+a WebAssembly.Memory's buffer in a transfer list: DataCloneError
+the worker got first: the post after it
+the program ends

@@ -55,6 +55,50 @@ const VALUED_FLAGS = [
 const INPUT_TYPES = ['module', 'commonjs', 'module-typescript', 'commonjs-typescript'];
 
 /** --input-type's value from execArgv (`--input-type=x` or `--input-type x`), or undefined. */
+/**
+ * A Worker's execArgv without the options that choose what runs (-e, -p,
+ * --check, -i, with their values): Node keeps them in the worker's
+ * process.execArgv, inert, and runs the worker's own entry.
+ */
+export function withoutEntryOptions(execArgv = []) {
+  const out = [];
+  for (let i = 0; i < execArgv.length; i++) {
+    const arg = execArgv[i];
+    if (/^(-e|--eval|-p|--print|-pe|-ep)$/.test(arg)) {
+      i++;
+      continue;
+    }
+    if (/^(--eval|--print)=/.test(arg) || /^(-c|--check|-i|--interactive)$/.test(arg)) continue;
+    out.push(arg);
+  }
+  return out;
+}
+
+/**
+ * A worker's command line, as Node gives a Worker's thread: its execArgv
+ * (the Worker's option, else its parent's), its script (or its eval code, or
+ * a data: URL's module), then its argv. An eval worker's argv[1] is
+ * `[worker eval]`.
+ */
+export function workerCommandLine(data) {
+  // (Its execArgv's -e, -p, --check or -i, from its parent's for one, are
+  // left as they are in process.execArgv: they don't choose what it runs.)
+  const argv = ['node', ...withoutEntryOptions(data.execArgv)];
+  if (data.eval !== undefined) argv.push('-e', data.eval, '--', ...data.argv);
+  // A data: URL's module runs as itself (its import.meta.url, its stack's
+  // name), as Node's worker runs it.
+  else if (data.url !== undefined) argv.push('--input-type=module', '-e', `import ${JSON.stringify(data.url)};`, '--', ...data.argv);
+  else argv.push(data.file, ...data.argv);
+  const parsed = parseNodeArgv(argv);
+  // An eval worker's argv[1] is `[worker eval]`; a data: URL's has none.
+  if (data.eval !== undefined) parsed.processArgv = [parsed.processArgv[0], '[worker eval]', ...data.argv];
+  else if (data.url !== undefined) parsed.processArgv = [parsed.processArgv[0], ...data.argv];
+  // A worker's process.execArgv is its execArgv option alone, without the
+  // -e the eval and data: URL ways run it with.
+  if (!parsed.error) parsed.execArgv = [...(data.execArgv ?? [])];
+  return parsed;
+}
+
 export function inputTypeOf(execArgv = []) {
   let type;
   for (let i = 0; i < execArgv.length; i++) {

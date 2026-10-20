@@ -30,6 +30,15 @@ import { nodeError } from '../node-errors.mjs';
 const kInspect = Symbol.for('nodejs.util.inspect.custom');
 const kCreate = Symbol('MessagePort');
 const kPortMark = '\u0000slicc-jsh port';
+// A transferred port's mark is `<nonce>:<index>`, the nonce new for each
+// message: data that happens to hold the mark's key is left as it is.
+export const newPortNonce = () => globalThis.crypto?.randomUUID?.() ?? `${Math.random()}`.slice(2);
+export const portMark = (nonce, i) => ({ [kPortMark]: `${nonce}:${i}` });
+export function markIndex(value, nonce) {
+  const mark = value?.[kPortMark];
+  if (typeof nonce !== 'string' || typeof mark !== 'string' || !mark.startsWith(`${nonce}:`)) return -1;
+  return Number(mark.slice(nonce.length + 1));
+}
 
 export function createPorts({
   handles,
@@ -143,7 +152,8 @@ export function createPorts({
     const list = transfer === undefined || transfer === null ? [] : Array.isArray(transfer) ? transfer : (transfer?.transfer ?? []);
     const ports = [...list].filter((x) => x instanceof MessagePort);
     const rest = [...list].filter((x) => !(x instanceof MessagePort));
-    const marks = new Map(ports.map((port, i) => [port, { [kPortMark]: i }]));
+    const nonce = newPortNonce();
+    const marks = new Map(ports.map((port, i) => [port, portMark(nonce, i)]));
     const seen = new Set();
     const swap = (value, map) => {
       if (value === null || typeof value !== 'object' || seen.has(value)) return value;
@@ -155,7 +165,8 @@ export function createPorts({
     };
     const restore = (value) => {
       if (value === null || typeof value !== 'object') return value;
-      if (kPortMark in value) return ports[value[kPortMark]];
+      const at = markIndex(value, nonce);
+      if (at >= 0) return ports[at];
       if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
       for (const key of Object.keys(value)) value[key] = restore(value[key]);
       return value;
@@ -288,6 +299,11 @@ export function createPorts({
    */
   class MessagePort extends EventTarget {
     #peer = null;
+    // Its other end in another thread (./remote-ports.mjs): `post(message,
+    // transfer)` and `close()` go there instead of to #peer.
+    #link = null;
+    // Moved to another thread: it takes and delivers nothing more.
+    #detached = false;
     #open = true;
     #started = false;
     #refed = false;
@@ -318,6 +334,10 @@ export function createPorts({
       if (arguments.length === 0) {
         throw nodeError(TypeError, 'ERR_MISSING_ARGS', 'Not enough arguments to MessagePort.postMessage');
       }
+      if (this.#link) {
+        if (this.#open) this.#link.post(message, transfer);
+        return;
+      }
       const entry = cloneFor(message, transfer);
       const peer = this.#peer;
       if (!this.#open || !peer) return;
@@ -326,17 +346,25 @@ export function createPorts({
     }
 
     start() {
-      if (this.#started || !this.#open) return;
+      // A closed one starts too while its close is due: what it holds comes first.
+      if (this.#started || (!this.#open && !this.#closeDue)) return;
       this.#started = true;
-      if (this.#queue.length > 0) wake(this);
+      if (this.#queue.length > 0 || this.#closeDue) wake(this);
     }
 
     close() {
       if (!this.#open) return;
+      if (this.#link) {
+        const link = this.#link;
+        this._remoteClosed();
+        link.close();
+        return;
+      }
+      // What either side holds stays, for receiveMessageOnPort() or a
+      // later start(), as in Node.
       for (const port of [this, this.#peer].filter(Boolean)) {
         port.#open = false;
         port.#closeDue = true;
-        if (!port.#started) port.#queue.length = 0;
         wake(port);
       }
     }
@@ -360,17 +388,60 @@ export function createPorts({
       else handles?.delete(this.#handle);
     }
 
+    /** @internal The other end is now in another thread, reached by `link`. */
+    _attachLink(link) {
+      this.#link = link;
+      this.#peer = null;
+    }
+    /** @internal Its link to another thread, if its other end is there. */
+    _remote() {
+      return this.#link;
+    }
+    /** @internal This port's other end, when it is in this thread. */
+    _localPeer() {
+      return this.#link ? null : this.#peer;
+    }
+    /** @internal A message from the other thread. */
+    _enqueue(entry) {
+      if (!this.#open || this.#detached) return;
+      this.#queue.push(entry);
+      if (this.#started) wake(this);
+    }
+    /** @internal The other end closed (or went with its thread). */
+    _remoteClosed() {
+      if (!this.#open) return;
+      this.#open = false;
+      this.#closeDue = true;
+      wake(this);
+    }
+    /**
+     * @internal This port goes to another thread: what it holds (its queue,
+     * whether it is closed) goes with it, and it does nothing more here.
+     */
+    _detach() {
+      const queue = this.#queue.splice(0);
+      const link = this.#link;
+      const open = this.#open;
+      this.#detached = true;
+      this.#open = false;
+      this.#link = null;
+      this.#setRef(false);
+      return { queue, link, open };
+    }
+    get _detached() {
+      return this.#detached;
+    }
     /** @internal */
     _pending() {
       return this.#started ? this.#queue.length : 0;
     }
-    /** @internal */
+    /** @internal Its 'close', once what came before it is delivered (or taken). */
     _closeDue() {
-      return this.#closeDue;
+      return this.#closeDue && this.#queue.length === 0;
     }
     /** @internal */
     _dispatchClose() {
-      if (!this.#closeDue) return false;
+      if (!this._closeDue()) return false;
       this.#closeDue = false;
       this.#queue.length = 0;
       this.#setRef(false);
@@ -379,8 +450,11 @@ export function createPorts({
     }
     /** @internal */
     _deliverNext() {
+      if (this.#detached) return false;
       if (this.#started && this.#queue.length > 0) {
         const { data, ports } = this.#queue.shift();
+        // The last before a due close: the close's turn comes next.
+        if (this.#queue.length === 0 && this.#closeDue) wake(this);
         // The platform's MessageEvent takes only its own ports: these go on as `ports`.
         const event = new MessageEvent('message', { data });
         const list = Object.freeze([...ports]);
@@ -392,7 +466,11 @@ export function createPorts({
     }
     /** @internal worker_threads.receiveMessageOnPort */
     _receive() {
+      // What its other thread wrote to it is here at once (its mailbox).
+      this.#link?.pull?.();
       const entry = this.#queue.shift();
+      // The last one taken: a due close's turn comes.
+      if (this.#queue.length === 0 && this.#closeDue) wake(this);
       return entry === undefined ? undefined : { message: entry.data };
     }
 
@@ -514,7 +592,10 @@ export function createPorts({
     return port._receive();
   };
 
-  return { BroadcastChannel, MessageChannel, MessagePort, receiveMessageOnPort };
+  /** @internal An unpaired port, for one that comes from another thread. */
+  const makePort = () => new MessagePort(kCreate);
+
+  return { BroadcastChannel, MessageChannel, MessagePort, receiveMessageOnPort, makePort, kPortMark };
 }
 
 export function createBroadcastChannel(options) {

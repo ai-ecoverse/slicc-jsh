@@ -1,0 +1,8 @@
+{
+  "description": "worker_threads edges: a Worker made after process.chdir() starts there; one whose transferList can't be cloned throws and leaves no handle, so the program ends; a post to a worker that can't be cloned throws and later posts still come; worker.threadName is the given name, null once exited",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.130.0"
+}

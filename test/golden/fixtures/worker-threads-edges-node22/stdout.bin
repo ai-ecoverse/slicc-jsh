@@ -1,0 +1,21 @@
+cwd in a worker made after chdir: sub
+workerData that cannot be cloned: DataCloneError () => {} could not be cloned.
+a transferList with a port moved to another thread: DataCloneError
+a post that cannot be cloned: DataCloneError
+the posts after it: one two
+a non-string execArgv entry, coerced: ["--no-warnings"]
+["-e","console.log(\"the eval ran\")"] -> w.js ran, its execArgv ["-e","console.log(\"the eval ran\")"]
+["-p","1 + 1"] -> w.js ran, its execArgv ["-p","1 + 1"]
+["--check"] -> w.js ran, its execArgv ["--check"]
+["-i"] -> w.js ran, its execArgv ["-i"]
+a worker of a -e program: w.js ran, (its parent was -e)
+threadName: "example" inside: "example"
+threadName once it has exited: null
+a worker moved its parentPort here: function
+then: its error still comes - exit 1 - printed: it still prints
+kept: before its other end closed | before it closed itself
+a listener after the close heard: before a listener came then close
+kept from a worker that closed it: from a worker
+a port its worker unrefs got: hi
+and closed when that worker exited
+the program ends
