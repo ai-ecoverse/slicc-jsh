@@ -1,0 +1,18 @@
+{
+  "description": "child_process.fork and 'ipc' in spawn's stdio: messages both ways in 'json' and 'advanced', the child's process.send / connected / channel and NODE_CHANNEL_FD leaving its environment, disconnect from either end and the order of 'disconnect', 'exit' and 'close', send after disconnect, internal NODE_ messages, the liveness of a channel with and without 'message' listeners, silent and custom stdio, and fork's and spawn's IPC errors",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.125.11",
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    },
+    {
+      "path": "/os/child.js",
+      "from": "child.js"
+    }
+  ]
+}

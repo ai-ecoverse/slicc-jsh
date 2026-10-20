@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { withJsh } from './helpers.mjs';
+import { kernelAtLeast, withJsh } from './helpers.mjs';
 
 /** Run a node -e script that exercises child_process; return {status,stdout,stderr}. */
 async function cp(run, source) {
@@ -309,7 +309,7 @@ exec('true', { encoding: 'utf8', cwd: '/nonexistent-zz-exec-shell' }, (err, stdo
     }
   });
 
-  it('fork stays ERR_NOT_SUPPORTED; the sync forms run on ctx.sync.run', async () => {
+  it('fork is ERR_NOT_SUPPORTED without an IPC channel from the kernel; the sync forms run on ctx.sync.run', async () => {
     const { run, close } = await withJsh();
     try {
       const r = await cp(
@@ -328,7 +328,9 @@ console.log(out.join(' '));
       assert.equal(
         r.stdout.trim(),
         // No /bin/sh in this kernel (no wasm-bash), so execSync is ENOENT too.
-        'spawnSync:ENOENT execSync:ENOENT execFileSync:ENOENT fork:ERR_NOT_SUPPORTED'
+        // With the channel (ai-ecoverse/slicc-kernel#1093), fork starts a node
+        // child (which can't find 'x': that's its own error).
+        `spawnSync:ENOENT execSync:ENOENT execFileSync:ENOENT fork:${kernelAtLeast('1.125.11') ? 'ok' : 'ERR_NOT_SUPPORTED'}`
       );
     } finally {
       close();

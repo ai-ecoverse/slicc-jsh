@@ -1,0 +1,8 @@
+{
+  "description": "child_process.fork: a queued send's callback throws and the program takes it as uncaught; as in Node, the channel goes on and the sends after it are written and called back",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.126.0"
+}

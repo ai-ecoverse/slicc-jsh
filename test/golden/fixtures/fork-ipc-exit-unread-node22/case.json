@@ -1,0 +1,9 @@
+{
+  "description": "child_process 'ipc': a program exits with 4 MiB queued on a channel its peer never reads, the peer waiting for the program to end; as in Node, the exit doesn't wait for the queue, so both end",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.126.0",
+  "packages": ["@ai-ecoverse/wasm-bash"]
+}

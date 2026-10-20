@@ -130,7 +130,7 @@ Filed by the Kernel Coordinator as slicc-kernel#1093 (K1) and slicc-kernel#1094 
 3. Confirm, with a test on the kernel side, that `ctx.read`/`ctx.write`/`ctx.close` and their `ctx.sync` forms work on a socket fd:
    - `read` resolves with what's there and returns zero bytes at the peer's EOF;
    - a `read` that is pending when the fd is closed resolves (EOF or `EBADF`) and doesn't hang;
-   - `write` to a closed peer raises SIGPIPE, the kernel's default, as on Linux. Node ignores SIGPIPE, so jsh calls `ctx.signals.ignore('SIGPIPE')` and gets `EPIPE` (settled; slicc-kernel#1093 pins it with a test).
+   - `write` on a socket whose peer has closed gives `EPIPE` without SIGPIPE, as if `MSG_NOSIGNAL` were set, in every runtime. Pipes are where SIGPIPE applies, and jsh ignores SIGPIPE from the start anyway (settled; slicc-kernel#1093 pins it with a test).
 4. Nice to have, on the same shape: Node's extra `stdio` pipes (`stdio: ['pipe', 'pipe', 'pipe', 'pipe']`) need nothing more than `fds` plus `ctx.pipe()`. Exposing `fd-pipe` as `ctx.pipe()` / `ctx.sync.pipe()` would cover them.
 
 **K2 ([slicc-kernel#1094](https://github.com/ai-ecoverse/slicc-kernel/issues/1094)): JS threads, for `worker_threads.Worker`.** Needed by stage 2.

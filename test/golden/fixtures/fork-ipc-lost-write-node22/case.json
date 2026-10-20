@@ -1,0 +1,14 @@
+{
+  "description": "child_process.fork: a 4 MiB send the child never reads before it exits; as in Node, whose async channel write ignores its status, the send's callback gets null and no 'error' comes",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.125.11",
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
