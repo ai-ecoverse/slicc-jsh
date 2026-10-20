@@ -11,4 +11,6 @@ a non-string execArgv entry, coerced: ["--no-warnings"]
 a worker of a -e program: w.js ran, (its parent was -e)
 threadName: "example" inside: "example"
 threadName once it has exited: null
+a port its worker unrefs got: hi
+and closed when that worker exited
 the program ends

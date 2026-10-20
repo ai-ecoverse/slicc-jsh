@@ -68,6 +68,15 @@ export function mailboxWriter({ ring: sab, big }) {
     Atomics.notify(header, COUNT);
   };
   return {
+    /** Whether a record of `length` bytes would go in now (the writer's alone, so it still will). */
+    fits(length) {
+      const need = 8 + align(length);
+      if (need <= room()) return true;
+      if (!big || 12 > room() || length >= OVERFLOW) return false;
+      let start = Atomics.load(header, OW);
+      if (start !== 0 && Atomics.load(header, OR) === start) start = 0;
+      return start + align(length) <= OVERFLOW_MAX;
+    },
     /** Whether the record went in (false: neither ring nor overflow could take it). */
     write(seq, bytes) {
       const written = Atomics.load(header, W) >>> 0;

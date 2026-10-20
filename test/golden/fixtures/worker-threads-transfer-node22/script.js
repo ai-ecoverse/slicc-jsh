@@ -17,7 +17,8 @@
 // together; data that holds a port mark's key is left as it is; and a stream
 // posted, with its transfer, before the worker has started gets there; a
 // port can't send itself, and is still connected after trying; and a port
-// inside a class instance arrives as a port.
+// inside a class instance arrives as a port; and a WebAssembly.Memory's
+// buffer, which can't be transferred, fails a small post with nothing sent.
 const { Worker, MessageChannel } = require('worker_threads');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
 (async () => {
@@ -211,5 +212,18 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   const fromUrl = new Worker(new URL('data:text/javascript,' + encodeURIComponent(src)), { argv: ['x', 'y'] });
   console.log('a data: URL worker, import.meta.url and argv:', await once(fromUrl, 'message'));
   await once(fromUrl, 'exit');
+
+  const wasm = new MessageChannel();
+  const echoes = new Worker("require('worker_threads').parentPort.once('message', ({ port }) => port.on('message', (m) => { port.postMessage(typeof m === 'string' ? m : 'an object came'); port.close(); }));", { eval: true });
+  echoes.postMessage({ port: wasm.port2 }, [wasm.port2]);
+  try {
+    wasm.port1.postMessage({ small: 1 }, [new WebAssembly.Memory({ initial: 1 }).buffer]);
+    console.log('posted');
+  } catch (e) {
+    console.log("a WebAssembly.Memory's buffer in a transfer list:", e.name);
+  }
+  wasm.port1.postMessage('the post after it');
+  console.log('the worker got first:', await once(wasm.port1, 'message'));
+  await once(echoes, 'exit');
 })();
 process.on('exit', () => console.log('the program ends'));

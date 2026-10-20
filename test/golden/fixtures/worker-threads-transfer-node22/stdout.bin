@@ -28,4 +28,6 @@ getter reads after the constructor: 1
 the worker got: read 1
 getter reads in all: 1
 a data: URL worker, import.meta.url and argv: data:text/javascript,import%20%7B%2 ["x","y"]
+a WebAssembly.Memory's buffer in a transfer list: DataCloneError
+the worker got first: the post after it
 the program ends

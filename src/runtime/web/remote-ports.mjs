@@ -216,8 +216,17 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       transportClosed = !onOther;
       if (!onOther) {
         native.onmessage = null;
+        native.removeEventListener('close', nativeClosed);
         native.close();
       }
+    };
+    // The native port closed with no close record: its thread ended with
+    // the other end open (unref'd). What came is taken, then the port closes.
+    const nativeClosed = () => {
+      if (ended) return;
+      pull();
+      end();
+      port._remoteClosed();
     };
     // Hand the port what has come, in its numbers' order.
     const deliver = (seq, entry) => {
@@ -276,12 +285,15 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
             if (err?.name !== 'DataCloneError') throw err;
             bytes = null;
           }
-          if (bytes && writer.write(seq, bytes)) {
-            nextSend = (nextSend + 1) >>> 0;
+          if (bytes && writer.fits(bytes.length)) {
             // A buffer the message's getters detached meanwhile is gone
-            // already: the rest move, and the post stands, as in Node.
+            // already: the rest move, and the post stands, as in Node. They
+            // move before the record is out: one that can't (a
+            // WebAssembly.Memory's) fails the post with nothing sent.
             const live = list.filter((b) => !b.detached);
             if (live.length) structuredClone(live, { transfer: live });
+            writer.write(seq, bytes);
+            nextSend = (nextSend + 1) >>> 0;
             return;
           }
         }
@@ -309,6 +321,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       release() {
         ended = true;
         native.onmessage = null;
+        native.removeEventListener('close', nativeClosed);
       },
       get transportClosed() {
         return transportClosed;
@@ -331,6 +344,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
         deliver(message.seq, CLOSE);
       } else onOther?.(message);
     };
+    if (!onOther) native.addEventListener('close', nativeClosed);
     watch();
     return remote;
   }

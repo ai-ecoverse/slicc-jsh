@@ -6,7 +6,8 @@
 // posts after it still come; and worker.threadName is the name given (null
 // once the worker has exited); and a non-string execArgv entry is coerced,
 // as the worker sees it; and -e, -p, --check and -i in a worker's execArgv,
-// its own or its parent's, don't change what it runs.
+// its own or its parent's, don't change what it runs; and a port whose
+// worker unref'd it and exited closes here, so the program ends.
 const { Worker, MessageChannel } = require('worker_threads');
 const path = require('path');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
@@ -80,5 +81,14 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   console.log('threadName:', JSON.stringify(named.threadName), 'inside:', JSON.stringify(await once(named, 'message')));
   await once(named, 'exit');
   console.log('threadName once it has exited:', JSON.stringify(named.threadName));
+
+  const { port1, port2 } = new MessageChannel();
+  const unrefs = new Worker("require('worker_threads').parentPort.once('message', ({ port }) => { port.on('message', () => {}); port.unref(); port.postMessage('hi'); });", { eval: true });
+  const closed = once(port1, 'close');
+  const exited = once(unrefs, 'exit');
+  unrefs.postMessage({ port: port2 }, [port2]);
+  port1.on('message', (m) => console.log('a port its worker unrefs got:', m));
+  await Promise.all([closed, exited]);
+  console.log('and closed when that worker exited');
 })();
 process.on('exit', () => console.log('the program ends'));
