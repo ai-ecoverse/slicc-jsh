@@ -1,7 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, createHmac, pbkdf2Sync } from 'node:crypto';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createServer as createTcp, connect as tcp } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -30,6 +30,10 @@ const DB = 'db.test';
 const skip =
   (process.getuid?.() === 0 && 'PostgreSQL refuses to run as root') ||
   (!kernelAtLeast('1.136.4') && 'slicc-kernel before 1.136.4 has no sealed pg channel binding (slicc-kernel#1224)');
+
+// slicc-kernel#1278 (1.137.0): a program's own SCRAM exchange in a session
+// the kernel didn't verify passes through untouched, channel binding and all.
+const skipOwnBinding = !kernelAtLeast('1.137.0') && "slicc-kernel before 1.137.0 rewrites the program's own channel binding (slicc-kernel#1278)";
 
 const sha256 = (b) => createHash('sha256').update(b).digest();
 const hmac = (key, b) => createHmac('sha256', key).update(b).digest();
@@ -147,58 +151,74 @@ sasl.startSession = (mechanisms, ...rest) => {
 describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (slicc-kernel#1224)', { skip }, () => {
   let jsh;
   let sealed;
-  let postgres;
+  const postgres = [];
   let port;
+  let privPort;
   const scratch = mkdtempSync(join(tmpdir(), 'jsh-postgres-'));
   const ca = makeCa();
+  // A private CA the bundled roots lack, which the program passes as its
+  // sslrootcert.
+  const priv = makeCa('a private CA');
+
+  /** A PostgreSQL in scratch/`name` with `leaf`, holding alice's and own's verifiers. */
+  async function startPostgres(EmbeddedPostgres, name, leaf) {
+    const dir = join(scratch, name);
+    mkdirSync(dir);
+    writeFileSync(join(dir, 'server.crt'), leaf.cert);
+    writeFileSync(join(dir, 'server.key'), leaf.key);
+    chmodSync(join(dir, 'server.key'), 0o600);
+    const at = await freePort();
+    const log = [];
+    const pg = new EmbeddedPostgres({
+      databaseDir: join(dir, 'data'),
+      user: 'alice',
+      password: SECRET,
+      port: at,
+      persistent: false,
+      authMethod: 'scram-sha-256',
+      onLog: (m) => log.push(String(m)),
+      onError: (m) => log.push(String(m)),
+      postgresFlags: ['-c', 'ssl=on', '-c', `ssl_cert_file=${dir}/server.crt`, '-c', `ssl_key_file=${dir}/server.key`, '-c', 'listen_addresses=127.0.0.1', '-c', `unix_socket_directories=${dir}`],
+    });
+    postgres.push(pg);
+    try {
+      await pg.initialise();
+      await pg.start();
+    } catch (e) {
+      throw new Error(`PostgreSQL didn't start: ${e?.message ?? e}\n${log.join('')}`);
+    }
+    const admin = pg.getPgClient();
+    await admin.connect();
+    await admin.query(`CREATE ROLE own LOGIN PASSWORD '${OWN}'`);
+    await admin.end();
+    return at;
+  }
 
   before(async () => {
     hydrate();
     const { default: EmbeddedPostgres } = await import('embedded-postgres');
     // A leaf for both names, so a session to either verifies.
-    const leaf = ca.server(DB, { san: [`DNS:${DB}`, 'DNS:other-db.test'] });
-    writeFileSync(join(scratch, 'server.crt'), leaf.cert);
-    writeFileSync(join(scratch, 'server.key'), leaf.key);
-    chmodSync(join(scratch, 'server.key'), 0o600);
-    port = await freePort();
-    const log = [];
-    postgres = new EmbeddedPostgres({
-      databaseDir: join(scratch, 'data'),
-      user: 'alice',
-      password: SECRET,
-      port,
-      persistent: false,
-      authMethod: 'scram-sha-256',
-      onLog: (m) => log.push(String(m)),
-      onError: (m) => log.push(String(m)),
-      postgresFlags: ['-c', 'ssl=on', '-c', `ssl_cert_file=${scratch}/server.crt`, '-c', `ssl_key_file=${scratch}/server.key`, '-c', 'listen_addresses=127.0.0.1', '-c', `unix_socket_directories=${scratch}`],
-    });
-    try {
-      await postgres.initialise();
-      await postgres.start();
-    } catch (e) {
-      throw new Error(`PostgreSQL didn't start: ${e?.message ?? e}\n${log.join('')}`);
-    }
-    const admin = postgres.getPgClient();
-    await admin.connect();
-    await admin.query(`CREATE ROLE own LOGIN PASSWORD '${OWN}'`);
-    await admin.end();
+    port = await startPostgres(EmbeddedPostgres, 'public', ca.server(DB, { san: [`DNS:${DB}`, 'DNS:other-db.test'] }));
+    // db.test's leaf from the private CA, at a port of its own.
+    privPort = await startPostgres(EmbeddedPostgres, 'private', priv.server(DB));
 
     // db.test, the bound host, and other-db.test, a name the secret isn't
-    // bound to, both at PostgreSQL, whose leaf names both.
+    // bound to, both at PostgreSQL, whose leaf names both. The private
+    // PostgreSQL is db.test too, at its own port.
     const names = { [DB]: ['203.0.113.70'], 'other-db.test': ['203.0.113.71'] };
-    const peers = { [`203.0.113.70:${port}`]: pipeTo(port), [`203.0.113.71:${port}`]: pipeTo(port) };
+    const peers = { [`203.0.113.70:${port}`]: pipeTo(port), [`203.0.113.71:${port}`]: pipeTo(port), [`203.0.113.70:${privPort}`]: pipeTo(privPort) };
     const { fakeUplink } = await import('@ai-ecoverse/slicc-kernel/testing');
     sealed = vault();
     jsh = await withJsh({ uplink: fakeUplink({ names, routes: { prefixes: [], exit: true }, peers, exit: 'tailscale' }), tlsEngine: true, sealed: sealed.hook });
     for (const [path, data] of devPackageTree('pg')) await jsh.kernel.writeFile(`/os${path}`, data);
     await jsh.kernel.writeFile('/os/ca.pem', ca.pem);
+    await jsh.kernel.writeFile('/os/priv.pem', priv.pem);
     // The kernel's bundled roots: the test CA alone.
     await jsh.kernel.writeFile('/node_modules/@ai-ecoverse/wasm-tls-engine/dist/roots.der', ca.der);
   });
   after(async () => {
     await jsh?.close();
-    await postgres?.stop().catch(() => {});
+    for (const pg of postgres) await pg.stop().catch(() => {});
     rmSync(scratch, { recursive: true, force: true });
   });
 
@@ -215,6 +235,7 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
   const VERIFY = 'sslmode=verify-full';
   const REQUIRE = 'sslmode=require&uselibpqcompat=true';
   const OWN_ROOT = 'sslmode=verify-full&sslrootcert=/os/ca.pem';
+  const PRIV_ROOT = 'sslmode=verify-full&sslrootcert=/os/priv.pem';
   const plus = 'connected, ssl true, SCRAM-SHA-256-PLUS';
   const failed = 'error 28P01 password authentication failed for user "alice"';
 
@@ -236,8 +257,10 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
     assert.deepEqual(sealed.requests, Array(5).fill(`${DB} scram-sha-256 roots`));
   });
 
-  it("the placeholder where the kernel can't vouch for PostgreSQL or the secret isn't bound: verify-full with the program's own sslrootcert, a host the secret isn't bound to, and no TLS fail authentication; require fails closed", async () => {
+  it("the placeholder where the kernel can't vouch for PostgreSQL or the secret isn't bound: verify-full with the program's own sslrootcert, a host the secret isn't bound to, and no TLS fail authentication; require fails closed or, from 1.137.0, binds and fails", async () => {
     const out = await client([
+      { label: 'a private CA, prefer', port: privPort, query: PRIV_ROOT, channelBinding: 'prefer' },
+      { label: 'a private CA, require', port: privPort, query: PRIV_ROOT, channelBinding: 'require' },
       { label: 'own sslrootcert, prefer', query: OWN_ROOT, channelBinding: 'prefer' },
       { label: 'own sslrootcert, no binding', query: OWN_ROOT },
       { label: 'own sslrootcert, require', query: OWN_ROOT, channelBinding: 'require' },
@@ -246,9 +269,12 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
       { label: 'disable, prefer', query: 'sslmode=disable', channelBinding: 'prefer' },
     ]);
     assert.deepEqual(out, {
+      'a private CA, prefer': failed,
+      'a private CA, require': kernelAtLeast('1.137.0') ? failed : 'error undefined channel binding required, offered SCRAM-SHA-256',
       'own sslrootcert, prefer': failed,
       'own sslrootcert, no binding': failed,
-      'own sslrootcert, require': 'error undefined channel binding required, offered SCRAM-SHA-256',
+      // slicc-kernel#1278 (1.137.0) leaves the session alone, -PLUS and all.
+      'own sslrootcert, require': kernelAtLeast('1.137.0') ? failed : 'error undefined channel binding required, offered SCRAM-SHA-256',
       // Verified, so bound, but the vault has nothing for this host.
       'another host, prefer': failed,
       'another host, require': failed,
@@ -270,5 +296,21 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
       'require, require (libpq)': plus,
       'prefer, disable': 'connected, ssl false, SCRAM-SHA-256',
     });
+  });
+
+  // On 1.136.4 the kernel dropped -PLUS and rewrote the program's y,, to n,,
+  // in a session it didn't verify, so libpq's default channel_binding=prefer
+  // failed there with a password of the program's own. slicc-kernel#1278
+  // (1.137.0) passes that exchange through: PostgreSQL checks the binding.
+  it("a password of the program's own in a session the kernel didn't verify: a root of its own and a private CA through sslrootcert, prefer and require bind with SCRAM-SHA-256-PLUS and authenticate", { skip: skipOwnBinding }, async () => {
+    const own = { user: 'own', password: OWN };
+    const steps = ['prefer', 'require'].flatMap((channelBinding) => [
+      { label: `${channelBinding}, a root of its own`, query: OWN_ROOT, channelBinding, ...own },
+      { label: `${channelBinding}, a private CA`, port: privPort, query: PRIV_ROOT, channelBinding, ...own },
+    ]);
+    const out = await client(steps);
+    assert.deepEqual(out, Object.fromEntries(steps.map((s) => [s.label, plus])));
+    // The vault is asked for no value.
+    assert.deepEqual(sealed.requests, []);
   });
 });

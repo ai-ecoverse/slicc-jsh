@@ -50,6 +50,9 @@ const skipAnchors = !kernelAtLeast('1.136.0') && 'slicc-kernel before 1.136.0 ha
 // gets no binding. Its vault side, slicc-vault 1.15.1, isn't needed here:
 // the vault is this file's own hook.
 const skipBinding = !kernelAtLeast('1.136.4') && 'slicc-kernel before 1.136.4 has no sealed pg channel binding (slicc-kernel#1224)';
+// slicc-kernel#1278 (1.137.0): a program's own SCRAM exchange in a session
+// the kernel didn't verify passes through untouched, channel binding and all.
+const skipOwnBinding = !kernelAtLeast('1.137.0') && "slicc-kernel before 1.137.0 rewrites the program's own channel binding (slicc-kernel#1278)";
 
 // A placeholder as the vault makes them (fnox_proxy_<24 hex>).
 const PLACEHOLDER = 'fnox_proxy_0123456789abcdef01234567';
@@ -1043,7 +1046,9 @@ const connect = async (label, user, port, query) => {
   // didn't verify the server it drops -PLUS and sends n,, for a y,, (pg
   // refuses y,, after offering -PLUS), so the program's own proof, from the
   // placeholder over y,,, proves nothing; require fails closed in the program.
-  it("pg channel binding where the bundled roots verify the server: enableChannelBinding (libpq's channel_binding=prefer) and require bind to the server's leaf and authenticate with the secret; with a root of its own, an untrusted chain, a wrong name or without TLS, prefer fails and require fails closed", { skip: skipBinding }, async () => {
+  // From slicc-kernel#1278 (1.137.0) it leaves those sessions alone, -PLUS and
+  // all: the program binds with the placeholder's proof, which still fails.
+  it("pg channel binding where the bundled roots verify the server: enableChannelBinding (libpq's channel_binding=prefer) and require bind to the server's leaf and authenticate with the secret; with a root of its own, an untrusted chain, a wrong name or without TLS, the placeholder's proof fails, and require fails closed or, from 1.137.0, binds and fails", { skip: skipBinding }, async () => {
     sealed.anchor({});
     const verified = [['verify-full', 'scram', 'sslmode=verify-full'], ['require (libpq)', 'scram', REQUIRE]];
     const unverified = [
@@ -1056,6 +1061,7 @@ const connect = async (label, user, port, query) => {
     const out = await client(steps);
     const failed = 'error 28P01 password authentication failed for user "alice"';
     const closed = 'error undefined channel binding required, offered SCRAM-SHA-256';
+    const passThrough = kernelAtLeast('1.137.0');
     assert.deepEqual(out, {
       'prefer, verify-full': 'connected, queried',
       'prefer, require (libpq)': 'connected, queried',
@@ -1065,39 +1071,20 @@ const connect = async (label, user, port, query) => {
       'prefer, disable': failed,
       'require, verify-full': 'connected, queried',
       'require, require (libpq)': 'connected, queried',
-      'require, verify-full, a root of its own': closed,
-      'require, require (libpq), untrusted': closed,
-      'require, require (libpq), wrong name': closed,
+      'require, verify-full, a root of its own': passThrough ? failed : closed,
+      'require, require (libpq), untrusted': passThrough ? failed : closed,
+      'require, require (libpq), wrong name': passThrough ? failed : closed,
       'require, disable': closed,
     });
     // The server checked c= against its own leaf for each -PLUS.
     const bound = `scram scram p=tls-server-end-point,, tls ${SECRET}`;
-    assert.deepEqual(
-      got.map((g) => g.join(' ')),
-      [
-        bound,
-        bound,
-        'scram scram n,, tls neither',
-        'scramUntrusted scram n,, tls neither',
-        'scramMismatch scram n,, tls neither',
-        `scram scram y,, plain ${PLACEHOLDER}`,
-        bound,
-        bound,
-      ]
+    const untouched = ['scram', 'scramUntrusted', 'scramMismatch'].map((server) =>
+      passThrough ? `${server} scram p=tls-server-end-point,, tls ${PLACEHOLDER}` : `${server} scram n,, tls neither`
     );
-    assert.deepEqual(trail(), [
-      'anchors scram pg',
-      'materialize scram scram-sha-256 roots',
-      'anchors scram pg',
-      'materialize scram scram-sha-256 roots',
-      'anchors scram pg',
-      'anchors scramUntrusted pg',
-      'anchors scramMismatch pg',
-      'anchors scram pg',
-      'materialize scram scram-sha-256 roots',
-      'anchors scram pg',
-      'materialize scram scram-sha-256 roots',
-    ]);
+    assert.deepEqual(got.map((g) => g.join(' ')), [bound, bound, ...untouched, `scram scram y,, plain ${PLACEHOLDER}`, bound, bound, ...(passThrough ? untouched : [])]);
+    const asked = ['anchors scram pg', 'anchors scramUntrusted pg', 'anchors scramMismatch pg'];
+    const roots = ['anchors scram pg', 'materialize scram scram-sha-256 roots'];
+    assert.deepEqual(trail(), [...roots, ...roots, ...asked, ...roots, ...roots, ...(passThrough ? asked : [])]);
   });
 
   it("pg channel binding with a password of the program's own, where nothing has to change: bound to a server the bundled roots verify, and unbound without TLS, it authenticates", { skip: skipBinding }, async () => {
@@ -1112,19 +1099,27 @@ const connect = async (label, user, port, query) => {
     assert.deepEqual(got.map((g) => g.join(' ')), [`scram scram p=tls-server-end-point,, tls ${OWN}`, `scram scram p=tls-server-end-point,, tls ${OWN}`, `scram scram y,, plain ${OWN}`]);
   });
 
-  // On 1.136.4 the kernel drops -PLUS and rewrites the program's y,, to n,,
+  // On 1.136.4 the kernel dropped -PLUS and rewrote the program's y,, to n,,
   // in a session it didn't verify but a vault anchor still could (a root of
   // the program's own, an untrusted chain), so a program authenticating with
-  // its own password and libpq's default channel_binding=prefer fails there.
-  // Before it (1.136.2) the server refused the program's y,, as a downgrade.
-  it("pg channel binding with a password of the program's own in a session the kernel didn't verify: prefer still authenticates", { skip: skipBinding, todo: "slicc-kernel 1.136.4 rewrites the program's y,, to n,, and its proof fails" }, async () => {
+  // its own password and libpq's default channel_binding=prefer failed there.
+  // slicc-kernel#1278 (1.137.0) touches SCRAM only where a sealed value could
+  // be substituted, and passes the program's own exchange through untouched:
+  // it binds where the server offers -PLUS, as it would without the kernel.
+  it("pg channel binding with a password of the program's own in a session the kernel didn't verify: a root of its own, a private CA through sslrootcert and an untrusted chain, prefer and require bind and authenticate", { skip: skipOwnBinding }, async () => {
     sealed.anchor({});
-    const own = (port, query) => pg(port, query, { user: 'own', password: OWN, channelBinding: 'prefer' });
-    const out = await client([
-      { label: 'a root of its own', pg: own('scram', 'sslmode=verify-full&sslrootcert=/os/ca.pem') },
-      { label: 'untrusted', pg: own('scramUntrusted', REQUIRE) },
+    const own = (port, query, channelBinding) => pg(port, query, { user: 'own', password: OWN, channelBinding });
+    const steps = ['prefer', 'require'].flatMap((cb) => [
+      { label: `${cb}, a root of its own`, pg: own('scram', 'sslmode=verify-full&sslrootcert=/os/ca.pem', cb) },
+      { label: `${cb}, a private CA`, pg: own('privScram', VERIFY_PRIV, cb) },
+      { label: `${cb}, untrusted`, pg: own('scramUntrusted', REQUIRE, cb) },
     ]);
-    assert.deepEqual(out, { 'a root of its own': 'connected, queried', untrusted: 'connected, queried' });
+    const out = await client(steps);
+    assert.deepEqual(out, Object.fromEntries(steps.map((s) => [s.label, 'connected, queried'])));
+    const bound = ['scram', 'privScram', 'scramUntrusted'].map((server) => `${server} scram p=tls-server-end-point,, tls ${OWN}`);
+    assert.deepEqual(got.map((g) => g.join(' ')), [...bound, ...bound]);
+    // The vault is asked for anchors, and for no value.
+    assert.deepEqual(trail().filter((t) => t.startsWith('materialize')), []);
   });
 
   // slicc-kernel#1224 binds SCRAM-SHA-256-PLUS only in a session the bundled
