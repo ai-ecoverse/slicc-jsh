@@ -1,0 +1,15 @@
+extends:
+  - node_modules/@ai-ecoverse/slicc-shared-web/lefthook.yml
+
+pre-commit:
+  jobs:
+    - name: biome
+      skip: true
+    - name: typecheck
+      skip: true
+    - name: no comments
+      skip: true
+    - name: no unit tests in git
+      skip: true
+    - name: no unit tests in jsh git
+      run: 'found=$(git ls-files --cached | grep -E "^test/unit/|^src/.*\.(test|spec)\.[cm]?[jt]s$"); [ -z "$found" ] || { printf "Unit tests stay out of git; keep them in the gitignored test/unit/:\n%s\n" "$found" >&2; exit 1; }'
