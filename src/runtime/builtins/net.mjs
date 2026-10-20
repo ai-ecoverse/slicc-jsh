@@ -651,6 +651,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
     #acceptAbort;
     #connections = 0;
     #listenerClosed = false;
+    // In a cluster worker: the primary's key and address for this server.
+    #clusterKey;
+    #clusterAddress;
     listening = false;
     maxConnections = Infinity;
 
@@ -668,6 +671,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
 
     address() {
       if (!this.#listener) return null;
+      if (this.#clusterAddress) return { ...this.#clusterAddress };
       return {
         port: this.#listener.port,
         family: 'IPv4',
@@ -694,13 +698,50 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       this.#acceptAbort = new AbortController();
       const host = parsed.host ?? '127.0.0.1';
       const port = parsed.port ?? 0;
+      // A cluster worker's server (cluster.mjs): it listens on a loopback
+      // port of its own, and the primary listens where it asked, joining
+      // each connection to it.
+      const cluster = !parsed.exclusive && process?._clusterWorker;
+      const listening = cluster
+        ? ctx.net.listen({ port: 0, host: '127.0.0.1', backlog: parsed.backlog }).then(async (listener) => {
+            const reply = await cluster._getServer(this, {
+              address: parsed.host ?? null,
+              port,
+              addressType: 4,
+              fd: -1,
+              proxy: { port: listener.port },
+            });
+            if (reply.cancelled) {
+              // The channel to the primary went first: no listening, as in Node.
+              void listener.close();
+              return null;
+            }
+            if (reply.errno) {
+              void listener.close();
+              const err = new Error(`listen ${reply.errno}: ${reply.message ?? 'address already in use'} ${host}:${port}`);
+              err.code = reply.errno;
+              err.syscall = 'listen';
+              err.address = host;
+              err.port = port;
+              throw err;
+            }
+            this.#clusterKey = reply.key;
+            this.#clusterAddress = reply.sockname;
+            return listener;
+          })
+        : ctx.net.listen({ port, host, backlog: parsed.backlog });
       void trackPromise(
         handles,
-        ctx.net
-          .listen({ port, host, backlog: parsed.backlog })
+        listening
           .then((listener) => {
+            if (!listener) return;
             if (this.#closed) {
               void listener.close();
+              // Closed while the primary set it up: it gives the address back.
+              if (this.#clusterKey !== undefined) {
+                process?._clusterWorker?._closeServer(this.#clusterKey);
+                this.#clusterKey = undefined;
+              }
               return;
             }
             this.#listener = listener;
@@ -722,7 +763,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
             void this.#acceptLoop();
           })
           .catch((err) => {
-            this.emit('error', errnoError(err, 'listen'));
+            this.emit('error', err?.syscall === 'listen' && cluster ? err : errnoError(err, 'listen'));
           })
       );
       return this;
@@ -760,6 +801,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream }) {
       this.#closed = true;
       this.#listening = false;
       this.listening = false;
+      if (this.#clusterKey !== undefined) {
+        process?._clusterWorker?._closeServer(this.#clusterKey);
+        this.#clusterKey = undefined;
+      }
       // Drop the ref immediately so the event loop can exit even if the kernel
       // accept/close is slow to settle.
       if (this.#handle) {

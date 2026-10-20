@@ -1,0 +1,2 @@
+listen-then-disconnect: worker exit 0 null | primary ends | primary 0
+close-during-setup: worker exit 0 null | the primary listens on the port | primary ends | primary 0

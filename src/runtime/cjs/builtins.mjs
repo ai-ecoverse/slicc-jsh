@@ -383,7 +383,14 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     http: () => getHttp(),
     https: () => getHttps(),
     tls: getTls,
-    cluster: () => (cluster ??= createCluster({ process })),
+    cluster: () =>
+      (cluster ??= createCluster({
+        process,
+        getChildProcess: () => getChildProcess(),
+        getNet: () => getNet(),
+        // fork's IPC channel (ai-ecoverse/slicc-kernel#1093).
+        canFork: () => typeof ctx?.socketpair === 'function',
+      })),
     trace_events: () => (traceEvents ??= createTraceEvents({ process })),
     http2: getHttp2,
     inspector: () => getInspector().inspector,
