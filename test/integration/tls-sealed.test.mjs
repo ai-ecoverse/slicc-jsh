@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto';
+import { X509Certificate, createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto';
 import { createServer as createTcp, connect as tcp } from 'node:net';
 import { createServer as createHttpsServer } from 'node:https';
 import { TLSSocket } from 'node:tls';
@@ -27,6 +27,11 @@ import { makeCa } from './tls-certs.mjs';
 // Each row is what a server receives and what the program sees. The program
 // must never see the secret, whatever the server does with it.
 //
+// A vault-held trust anchor (slicc-kernel#1147, 1.136.0) verifies a session
+// the bundled roots don't: a CA, the exact leaf, or an SPKI pin on the leaf
+// or an issuer, which the vault answers for the bound host. A ca the program
+// passes never does.
+//
 // Each protocol's rows run from the release that substitutes in it.
 const SEALED = {
   http1: '1.127.0', // slicc-kernel#1130: an HTTP/1.1 request head's header, and the read scrub
@@ -37,6 +42,10 @@ const SEALED = {
 const skipFor = (protocol) =>
   !(SEALED[protocol] && kernelAtLeast(SEALED[protocol])) && `slicc-kernel#1090 doesn't substitute in ${protocol} yet`;
 const skip = !kernelAtLeast('1.127.0') && 'slicc-kernel before 1.127.0 substitutes in no A2 session';
+const skipAnchors = !kernelAtLeast('1.136.0') && 'slicc-kernel before 1.136.0 has no vault anchors (slicc-kernel#1147)';
+// slicc-kernel#1224 (pg SCRAM channel binding) isn't released yet: it decides
+// what an anchored session does with libpq's channel_binding.
+const skipBinding = 'slicc-kernel#1224 is not released yet';
 
 // A placeholder as the vault makes them (fnox_proxy_<24 hex>).
 const PLACEHOLDER = 'fnox_proxy_0123456789abcdef01234567';
@@ -50,6 +59,10 @@ const BINDINGS = [
 const BOUND = { api: 'api.test', mail: 'mail.test', db: 'db.test' };
 
 const sha256 = (b) => createHash('sha256').update(b).digest();
+/** A vault anchor's name: sha256 of the anchor's whole DER, base64. */
+const anchorOf = (der) => sha256(der).toString('base64');
+/** An SPKI pin: sha256 of the certificate's SubjectPublicKeyInfo, base64. */
+const pinOf = (der) => sha256(new X509Certificate(der).publicKey.export({ type: 'spki', format: 'der' })).toString('base64');
 const hmac = (key, b) => createHmac('sha256', key).update(b).digest();
 const xor = (a, b) => Buffer.from(a.map((v, i) => v ^ b[i]));
 /** A SCRAM-SHA-256 verifier (RFC 5802 §3), as a server stores it. */
@@ -73,26 +86,50 @@ function saltOf(serverFirst) {
  * port, protocol, position, verified, handshakeAt, exit, placeholders,
  * head? }`, answered `{ values }`. A placeholder that isn't answered goes out
  * as written. `asked` is what was asked, once per host, protocol and position.
+ *
+ * From slicc-kernel 1.136.0 it also asks `sessionAnchors { stamp, session,
+ * host, port, protocol, exit }` at a session's first credential position,
+ * answered with `anchors` (DER, base64) and SPKI `pins` (sha256, base64):
+ * `anchor()` sets them, and a bound host gets them. A session one of them
+ * verifies says `verifiedBy: 'anchored', anchor` in its sessionMaterialize.
+ * `requests` is every request, in order.
  */
 function vault() {
   const asked = new Set();
+  const requests = [];
+  let anchors = { anchors: [], pins: [] };
   const hook = async (req) => {
+    if (req?.op === 'sessionAnchors') {
+      requests.push(req);
+      return BINDINGS.some((b) => b.host === req.host && b.protocol === req.protocol) ? anchors : { anchors: [], pins: [] };
+    }
     if (req?.op !== 'sessionMaterialize') return { v: 1, error: { code: 'EINVAL' } };
+    requests.push(req);
     assert.equal(req.verified, true, 'the kernel asks only for a session it verified');
     asked.add(`${req.host} ${req.protocol} ${req.position}`);
     const bound = BINDINGS.some((b) => b.host === req.host && b.protocol === req.protocol && b.positions.includes(req.position));
     if (req.position === 'scram-sha-256') {
-    // pg SCRAM (slicc-kernel 1.134.0): no placeholders, but the three
-    // messages and the program's proof; the vault names the bound placeholder
-    // whose own proof matches it.
-    const { clientFirstBare, serverFirst, clientFinalBare, proof } = req.scram;
-    const authMessage = `${clientFirstBare},${serverFirst},${clientFinalBare.replace(/,p=[^,]*$/, '')}`;
-    const ours = proves(scramVerifier(PLACEHOLDER, ...saltOf(serverFirst)), authMessage, Buffer.from(proof, typeof proof === 'string' ? 'base64' : undefined));
-    return { values: bound && ours ? { [PLACEHOLDER]: SECRET } : {} };
-  }
-  return { values: bound && req.placeholders?.includes(PLACEHOLDER) ? { [PLACEHOLDER]: SECRET } : {} };
+      // pg SCRAM (slicc-kernel 1.134.0): no placeholders, but the three
+      // messages and the program's proof; the vault names the bound placeholder
+      // whose own proof matches it.
+      const { clientFirstBare, serverFirst, clientFinalBare, proof } = req.scram;
+      const authMessage = `${clientFirstBare},${serverFirst},${clientFinalBare.replace(/,p=[^,]*$/, '')}`;
+      const ours = proves(scramVerifier(PLACEHOLDER, ...saltOf(serverFirst)), authMessage, Buffer.from(proof, typeof proof === 'string' ? 'base64' : undefined));
+      return { values: bound && ours ? { [PLACEHOLDER]: SECRET } : {} };
+    }
+    return { values: bound && req.placeholders?.includes(PLACEHOLDER) ? { [PLACEHOLDER]: SECRET } : {} };
   };
-  return { asked, hook };
+  return {
+    asked,
+    requests,
+    hook,
+    /** What sessionAnchors answers for a bound host from now on, and a fresh record. */
+    anchor({ anchors: a = [], pins = [] } = {}) {
+      anchors = { anchors: a.map((der) => Buffer.from(der).toString('base64')), pins };
+      asked.clear();
+      requests.length = 0;
+    },
+  };
 }
 
 /** An uplink peer that pipes the program's bytes to a server on the host. */
@@ -115,6 +152,75 @@ function pipeTo(port) {
   };
 }
 
+/**
+ * A program that runs `steps` (JSON, argv[5]) in turn and prints `label:
+ * result` for each: `{ label, http }` (an HTTPS request with Authorization
+ * Bearer the placeholder, or `token`, on an agent of its own), `{ label, smtp }`
+ * (nodemailer AUTH after STARTTLS) or `{ label, pg }` (a pg connection and a
+ * query). `ca` names a PEM in /os. pg's `channelBinding: 'require'` refuses,
+ * as libpq does, a server that offers no SCRAM-SHA-256-PLUS.
+ */
+const CLIENT = `const https = require('https');
+const fs = require('fs');
+const [, placeholder, mods, stepsJson] = process.argv.slice(2);
+const nodemailer = require(mods + '/nodemailer');
+const { Client } = require(mods + '/pg');
+const sasl = require(mods + '/pg/lib/crypto/sasl');
+const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+const pem = (name) => name && fs.readFileSync('/os/' + name + '.pem');
+let requireBinding = false;
+const startSession = sasl.startSession;
+sasl.startSession = (mechanisms, ...rest) => {
+  if (requireBinding && !mechanisms.includes('SCRAM-SHA-256-PLUS')) throw new Error('channel binding required, offered ' + mechanisms.join(' '));
+  return startSession(mechanisms, ...rest);
+};
+const kinds = {
+  http: (s) => new Promise((resolve) => {
+    const options = clean({ host: s.host, port: s.port, path: s.path ?? '/', ca: pem(s.ca), rejectUnauthorized: s.rejectUnauthorized });
+    const req = https.request({ ...options, agent: new https.Agent(), headers: { Authorization: 'Bearer ' + (s.token ?? placeholder) } }, (res) => {
+      let b = '';
+      res.on('data', (c) => (b += c));
+      res.on('end', () => resolve(res.statusCode + ' ' + b));
+    });
+    req.on('error', (e) => resolve('error ' + e.code));
+    req.end();
+  }),
+  smtp: async (s) => {
+    const tls = clean({ ca: pem(s.ca), rejectUnauthorized: s.rejectUnauthorized });
+    const t = nodemailer.createTransport({ name: 'client.test', host: s.host, port: s.port, requireTLS: true, tls, auth: { user: s.user ?? 'alice', pass: placeholder }, authMethod: s.method ?? 'PLAIN' });
+    try {
+      await t.sendMail({ from: 'a@client.test', to: 'b@mail.test', subject: 'hi', text: 'hi' });
+      return 'sent';
+    } catch (e) {
+      return 'error ' + e.code + ' ' + e.response;
+    } finally {
+      t.close();
+    }
+  },
+  pg: async (s) => {
+    requireBinding = s.channelBinding === 'require';
+    const c = new Client({ connectionString: 'postgres://' + (s.user ?? 'alice') + ':' + placeholder + '@' + s.host + ':' + s.port + '/db?' + s.query, enableChannelBinding: Boolean(s.channelBinding) });
+    c.on('error', () => {});
+    try {
+      await c.connect();
+      const q = await c.query('SELECT 1').then(() => 'queried', (e) => 'query error ' + e.code + ' ' + e.message);
+      await c.end();
+      return 'connected, ' + q;
+    } catch (e) {
+      // A client that refuses the server itself leaves the socket open.
+      c.connection.stream.destroy();
+      return 'error ' + e.code + ' ' + e.message;
+    }
+  },
+};
+(async () => {
+  for (const step of JSON.parse(stepsJson)) {
+    const kind = Object.keys(kinds).find((k) => step[k]);
+    console.log(step.label + ': ' + (await kinds[kind](step[kind])));
+  }
+})();
+`;
+
 function listen(server) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve((server.address ? server : server.server).address().port)));
 }
@@ -124,6 +230,11 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
   let sealed;
   const ca = makeCa();
   const other = makeCa('another CA');
+  // A private CA the bundled roots lack, and an issuer that isn't a CA.
+  const priv = makeCa('a private CA');
+  const notCa = makeCa('not a CA', { notCa: true });
+  // The leaves a test anchors or pins.
+  const leaves = {};
   const servers = [];
   const ports = {};
   // What each server was given, as [server, what, value].
@@ -170,12 +281,11 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
     // the plaintext row) and SMTPS. A user named `reflect` is refused with
     // the password quoted.
     const { SMTPServer } = await import('smtp-server');
-    const mailLeaf = ca.server(BOUND.mail);
-    for (const [label, secure] of [['smtp', false], ['smtps', true]]) {
+    const smtpServer = (label, leaf, secure) => {
       const smtp = new SMTPServer({
         secure,
-        key: mailLeaf.key,
-        cert: mailLeaf.cert,
+        key: leaf.key,
+        cert: leaf.cert,
         name: BOUND.mail,
         authMethods: ['PLAIN', 'LOGIN'],
         allowInsecureAuth: true,
@@ -192,8 +302,10 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
       });
       smtp.on('error', () => {});
       servers.push(smtp);
-      ports[label] = await listen(smtp);
-    }
+      return listen(smtp);
+    };
+    const mailLeaf = ca.server(BOUND.mail);
+    for (const [label, secure] of [['smtp', false], ['smtps', true]]) ports[label] = await smtpServer(label, mailLeaf, secure);
     route(BOUND.mail, ports.smtp);
     // SMTPS answers at its own address under another name.
     route('smtps.mail.test', ports.smtps);
@@ -381,6 +493,36 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
       peers[`${names[BOUND.db][0]}:${ports[label]}`] = pipeTo(ports[label]);
     }
 
+    // Under the private CA, or the issuer that isn't one, each reached as the
+    // bound host at its own port: the servers a vault anchor is for. HTTP:
+    // the bound leaf, another leaf for the same name, a leaf naming another
+    // host, an expired leaf, and a leaf the non-CA issued.
+    const alsoAt = (name, port) => (peers[`${names[name][0]}:${port}`] = pipeTo(port));
+    const DAY = 86400_000;
+    leaves.privApi = priv.server(BOUND.api);
+    for (const [label, leaf] of [
+      ['privApi', leaves.privApi],
+      ['privApiOther', priv.server(BOUND.api)],
+      ['privMismatch', priv.server('other.test')],
+      ['privExpired', priv.server(BOUND.api, { notBefore: new Date(Date.now() - 10 * DAY), notAfter: new Date(Date.now() - DAY) })],
+      ['notCaIssued', notCa.server(BOUND.api)],
+    ]) {
+      ports[label] = await httpsServer(label, leaf);
+      alsoAt(BOUND.api, ports[label]);
+    }
+    ports.privSmtp = await smtpServer('privSmtp', priv.server(BOUND.mail), false);
+    alsoAt(BOUND.mail, ports.privSmtp);
+    const privDbLeaf = priv.server(BOUND.db);
+    for (const [label, make] of [['privPg', pgServer], ['privScram', scramServer]]) {
+      const server = make(label, privDbLeaf);
+      servers.push(server);
+      ports[label] = await listen(server);
+      alsoAt(BOUND.db, ports[label]);
+    }
+    // The bound hosts' addresses, for a session to the IP literal.
+    ports.apiAddress = names[BOUND.api][0];
+    ports.dbAddress = names[BOUND.db][0];
+
     const { fakeUplink } = await import('@ai-ecoverse/slicc-kernel/testing');
     sealed = vault();
     jsh = await withJsh({ uplink: fakeUplink({ names, routes: { prefixes: [], exit: true }, peers, exit: 'tailscale' }), tlsEngine: true, sealed: sealed.hook });
@@ -388,6 +530,7 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
       for (const [path, data] of devPackageTree(name)) await jsh.kernel.writeFile(`/os${path}`, data);
     }
     await jsh.kernel.writeFile('/os/ca.pem', ca.pem);
+    await jsh.kernel.writeFile('/os/priv.pem', priv.pem);
     // The kernel's bundled roots: the test CA alone.
     await jsh.kernel.writeFile('/node_modules/@ai-ecoverse/wasm-tls-engine/dist/roots.der', ca.der);
   });
@@ -396,10 +539,10 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
     for (const s of servers) s.close?.();
   });
 
-  /** Run `source` in jsh: argv is the ports (JSON), the placeholder, and where the packages are. */
-  async function run(file, source) {
+  /** Run `source` in jsh: argv is the ports (JSON), the placeholder, where the packages are, and `args`. */
+  async function run(file, source, ...args) {
     await jsh.kernel.writeFile(`/os/${file}`, source);
-    const r = await jsh.run(['node', file, JSON.stringify(ports), PLACEHOLDER, '/os/node_modules']);
+    const r = await jsh.run(['node', file, JSON.stringify(ports), PLACEHOLDER, '/os/node_modules', ...args]);
     assert.equal(r.stdout.includes(SECRET), false, `the program saw the secret:\n${r.stdout}`);
     assert.equal(r.stderr.includes(SECRET), false, `the program saw the secret:\n${r.stderr}`);
     return r;
@@ -637,5 +780,230 @@ const connect = async (label, user, port, query) => {
       ]
     );
     assert.deepEqual([...sealed.asked], ['db.test pg scram-sha-256']);
+  });
+
+  /** Run CLIENT's `steps`: what the program printed for each, by label. */
+  async function client(steps) {
+    got.length = 0;
+    const r = await run('client.js', CLIENT, JSON.stringify(steps));
+    assert.equal(r.status, 0, r.stderr);
+    return Object.fromEntries(r.stdout.trim().split('\n').map((l) => [l.slice(0, l.indexOf(': ')), l.slice(l.indexOf(': ') + 2)]));
+  }
+  const portName = (port) => Object.keys(ports).find((k) => ports[k] === port);
+  /** The vault's requests in short: the server, the protocol or position, and how the session was trusted. */
+  const trail = () =>
+    sealed.requests.map((r) =>
+      r.op === 'sessionAnchors' ? `anchors ${portName(r.port)} ${r.protocol}` : `materialize ${portName(r.port)} ${r.position} ${r.verifiedBy}${r.anchor ? ` ${r.anchor}` : ''}`
+    );
+  const api = (port, more) => ({ host: BOUND.api, port: ports[port], ...more });
+  const smtp = (more) => ({ host: BOUND.mail, port: ports.privSmtp, ...more });
+  const pg = (port, query, more) => ({ host: BOUND.db, port: ports[port], query, ...more });
+  const VERIFY_PRIV = 'sslmode=verify-full&sslrootcert=/os/priv.pem';
+  const REQUIRE = 'sslmode=require&uselibpqcompat=true';
+
+  it('a private CA the vault anchors for the bound host verifies the session: HTTP Authorization, SMTP AUTH, and pg cleartext and SCRAM get the secret, whatever the program checks', { skip: skipAnchors }, async () => {
+    sealed.anchor({ anchors: [priv.der] });
+    const out = await client([
+      { label: 'http, ca', http: api('privApi', { ca: 'priv' }) },
+      { label: 'http, rejectUnauthorized false', http: api('privApi', { rejectUnauthorized: false }) },
+      { label: 'smtp PLAIN', smtp: smtp({ ca: 'priv', method: 'PLAIN' }) },
+      { label: 'smtp LOGIN', smtp: smtp({ ca: 'priv', method: 'LOGIN' }) },
+      { label: 'pg cleartext', pg: pg('privPg', VERIFY_PRIV) },
+      { label: 'pg scram, verify-full', pg: pg('privScram', VERIFY_PRIV) },
+      { label: 'pg scram, require (libpq)', pg: pg('privScram', REQUIRE) },
+    ]);
+    assert.deepEqual(out, {
+      'http, ca': '200 ok',
+      'http, rejectUnauthorized false': '200 ok',
+      'smtp PLAIN': 'sent',
+      'smtp LOGIN': 'sent',
+      'pg cleartext': 'connected, queried',
+      'pg scram, verify-full': 'connected, queried',
+      'pg scram, require (libpq)': 'connected, queried',
+    });
+    assert.deepEqual(
+      got.map((g) => g.join(' ')),
+      [
+        `privApi authorization Bearer ${SECRET}`,
+        `privApi authorization Bearer ${SECRET}`,
+        `privSmtp PLAIN secure ${SECRET}`,
+        `privSmtp LOGIN secure ${SECRET}`,
+        `privPg password tls ${SECRET}`,
+        `privScram scram n,, tls ${SECRET}`,
+        `privScram scram n,, tls ${SECRET}`,
+      ]
+    );
+    const ca = anchorOf(priv.der);
+    assert.deepEqual(trail(), [
+      'anchors privApi http1',
+      `materialize privApi header:authorization anchored ${ca}`,
+      'anchors privApi http1',
+      `materialize privApi header:authorization anchored ${ca}`,
+      'anchors privSmtp smtp',
+      `materialize privSmtp auth-plain anchored ${ca}`,
+      'anchors privSmtp smtp',
+      `materialize privSmtp auth-login anchored ${ca}`,
+      'anchors privPg pg',
+      `materialize privPg password-cleartext anchored ${ca}`,
+      'anchors privScram pg',
+      `materialize privScram scram-sha-256 anchored ${ca}`,
+      'anchors privScram pg',
+      `materialize privScram scram-sha-256 anchored ${ca}`,
+    ]);
+  });
+
+  it('the exact leaf as the anchor, or an SPKI pin on the leaf or on its issuer, gets the secret; another leaf for the same name gets the placeholder unless the issuer is pinned', { skip: skipAnchors }, async () => {
+    const leaf = leaves.privApi.der;
+    const steps = [
+      { label: 'the leaf', http: api('privApi', { ca: 'priv' }) },
+      { label: 'another leaf', http: api('privApiOther', { ca: 'priv' }) },
+    ];
+    for (const [answer, anchor, other] of [
+      [{ anchors: [leaf] }, anchorOf(leaf), PLACEHOLDER],
+      [{ pins: [pinOf(leaf)] }, pinOf(leaf), PLACEHOLDER],
+      [{ pins: [pinOf(priv.der)] }, pinOf(priv.der), SECRET],
+    ]) {
+      sealed.anchor(answer);
+      assert.deepEqual(await client(steps), { 'the leaf': '200 ok', 'another leaf': '200 ok' });
+      assert.deepEqual(got.map((g) => g.join(' ')), [`privApi authorization Bearer ${SECRET}`, `privApiOther authorization Bearer ${other}`], anchor);
+      assert.deepEqual(trail(), [
+        'anchors privApi http1',
+        `materialize privApi header:authorization anchored ${anchor}`,
+        'anchors privApiOther http1',
+        ...(other === SECRET ? [`materialize privApiOther header:authorization anchored ${anchor}`] : []),
+      ]);
+    }
+  });
+
+  it("the program's own ca is no anchor: the private CA as its ca or sslrootcert, with no vault anchor or another CA's, gets the placeholder", { skip: skipAnchors }, async () => {
+    for (const answer of [{}, { anchors: [other.der], pins: [pinOf(other.der)] }]) {
+      sealed.anchor(answer);
+      const out = await client([
+        { label: 'http', http: api('privApi', { ca: 'priv' }) },
+        { label: 'smtp', smtp: smtp({ ca: 'priv' }) },
+        { label: 'pg cleartext', pg: pg('privPg', VERIFY_PRIV) },
+        { label: 'pg scram', pg: pg('privScram', VERIFY_PRIV) },
+      ]);
+      assert.deepEqual(out, {
+        http: '200 ok',
+        smtp: 'sent',
+        'pg cleartext': 'connected, queried',
+        'pg scram': 'error 28P01 password authentication failed for user "alice"',
+      });
+      assert.deepEqual(
+        got.map((g) => g.join(' ')),
+        [`privApi authorization Bearer ${PLACEHOLDER}`, `privSmtp PLAIN secure ${PLACEHOLDER}`, `privPg password tls ${PLACEHOLDER}`, `privScram scram n,, tls ${PLACEHOLDER}`]
+      );
+      // The vault is asked for anchors, and never for a value.
+      assert.deepEqual(trail(), ['anchors privApi http1', 'anchors privSmtp smtp', 'anchors privPg pg', 'anchors privScram pg']);
+    }
+  });
+
+  it('an anchor still checks name, validity and usage: an anchored CA with a leaf naming another host or an expired leaf, and an anchor or pin that is no CA issuing, get the placeholder', { skip: skipAnchors }, async () => {
+    sealed.anchor({ anchors: [priv.der, notCa.der], pins: [pinOf(notCa.der)] });
+    const unchecked = { rejectUnauthorized: false };
+    const out = await client([
+      { label: 'anchored', http: api('privApi', unchecked) },
+      { label: 'wrong name', http: api('privMismatch', unchecked) },
+      { label: 'expired', http: api('privExpired', unchecked) },
+      { label: 'issued by no CA', http: api('notCaIssued', unchecked) },
+    ]);
+    assert.deepEqual(out, { anchored: '200 ok', 'wrong name': '200 ok', expired: '200 ok', 'issued by no CA': '200 ok' });
+    assert.deepEqual(
+      got.map((g) => g.join(' ')),
+      [
+        `privApi authorization Bearer ${SECRET}`,
+        `privMismatch authorization Bearer ${PLACEHOLDER}`,
+        `privExpired authorization Bearer ${PLACEHOLDER}`,
+        `notCaIssued authorization Bearer ${PLACEHOLDER}`,
+      ]
+    );
+    assert.deepEqual(trail(), [
+      'anchors privApi http1',
+      `materialize privApi header:authorization anchored ${anchorOf(priv.der)}`,
+      'anchors privMismatch http1',
+      'anchors privExpired http1',
+      'anchors notCaIssued http1',
+    ]);
+  });
+
+  it('an anchored server reflecting the secret gives the program none of it: an HTTP echo, an SMTP refusal and pg refusals quoting it', { skip: skipAnchors }, async () => {
+    sealed.anchor({ anchors: [priv.der] });
+    // run() fails on the secret in the program's output.
+    const out = await client([
+      { label: 'http echo', http: api('privApi', { ca: 'priv', path: '/echo' }) },
+      { label: 'smtp', smtp: smtp({ ca: 'priv', user: 'reflect' }) },
+      { label: 'pg cleartext', pg: pg('privPg', VERIFY_PRIV, { user: 'reflect' }) },
+      { label: 'pg scram, reflected', pg: pg('privScram', VERIFY_PRIV, { user: 'reflect' }) },
+      { label: 'pg scram, echoed', pg: pg('privScram', VERIFY_PRIV, { user: 'echo' }) },
+    ]);
+    // The scrub hands back the placeholder, cut to the secret's length.
+    assert.match(out['http echo'], /^200 you sent Bearer fnox_proxy_/);
+    assert.match(out.smtp, /^error EAUTH /);
+    assert.equal(out['pg cleartext'], `error 28P01 password authentication failed: ${PLACEHOLDER}`);
+    assert.match(out['pg scram, reflected'], /^error ERR_SSL_PROTOCOL_ERROR /);
+    assert.match(out['pg scram, echoed'], new RegExp(`^connected, query error 42501 you authenticated with ${PLACEHOLDER}, sending c=biws,`));
+    assert.deepEqual(
+      got.map((g) => g.join(' ')),
+      [
+        `privApi authorization Bearer ${SECRET}`,
+        `privSmtp PLAIN secure ${SECRET}`,
+        `privPg password tls ${SECRET}`,
+        `privScram scram n,, tls ${SECRET}`,
+        `privScram scram n,, tls ${SECRET}`,
+      ]
+    );
+  });
+
+  it('the vault is asked sessionAnchors once per session, at its credential position, with the session and its exit, and nothing for an IP literal', { skip: skipAnchors }, async () => {
+    sealed.anchor({ anchors: [priv.der] });
+    const address = { host: ports.apiAddress, port: ports.privApi, rejectUnauthorized: false };
+    const out = await client([
+      { label: 'first', http: api('privApi', { ca: 'priv' }) },
+      { label: 'no placeholder', http: api('privApi', { ca: 'priv', token: 'not-sealed' }) },
+      { label: 'second', http: api('privApi', { ca: 'priv' }) },
+      { label: 'http to the address', http: address },
+      { label: 'pg to the address', pg: { host: ports.dbAddress, port: ports.privPg, query: REQUIRE } },
+    ]);
+    assert.deepEqual(out, { first: '200 ok', 'no placeholder': '200 ok', second: '200 ok', 'http to the address': '200 ok', 'pg to the address': 'connected, queried' });
+    assert.deepEqual(
+      got.map((g) => g.join(' ')),
+      [
+        `privApi authorization Bearer ${SECRET}`,
+        'privApi authorization Bearer not-sealed',
+        `privApi authorization Bearer ${SECRET}`,
+        `privApi authorization Bearer ${PLACEHOLDER}`,
+        `privPg password tls ${PLACEHOLDER}`,
+      ]
+    );
+    const [a1, m1, a2, m2, ...rest] = sealed.requests;
+    assert.deepEqual(rest, [], 'the IP literal and the request without a placeholder ask nothing');
+    for (const [a, m] of [[a1, m1], [a2, m2]]) {
+      // The broker adds the caller, as to every request; no value, no verdict.
+      const { caller, stamp, session, ...fields } = a;
+      assert.deepEqual(fields, { v: 1, op: 'sessionAnchors', host: BOUND.api, port: ports.privApi, protocol: 'http1', exit: 'tailscale' });
+      assert.equal(typeof caller.pid, 'number');
+      assert.ok(stamp, 'a stamp');
+      assert.equal(typeof session, 'string');
+      assert.deepEqual([m.op, m.session, m.verifiedBy, m.anchor, m.exit], ['sessionMaterialize', session, 'anchored', anchorOf(priv.der), 'tailscale']);
+    }
+    assert.notEqual(a1.session, a2.session);
+  });
+
+  // slicc-kernel#1224 binds SCRAM-SHA-256-PLUS only in a session the bundled
+  // roots verified: an anchored one gets no -PLUS, as the kernel lane says.
+  it("pg channel binding in an anchored session: pg's enableChannelBinding (libpq's prefer) authenticates unbound with the secret", { skip: skipAnchors || skipBinding }, async () => {
+    sealed.anchor({ anchors: [priv.der] });
+    const out = await client([{ label: 'prefer', pg: pg('privScram', VERIFY_PRIV, { channelBinding: 'prefer' }) }]);
+    assert.deepEqual(out, { prefer: 'connected, queried' });
+    assert.deepEqual(got.map((g) => g.join(' ')), [`privScram scram n,, tls ${SECRET}`]);
+  });
+
+  it("pg channel binding in an anchored session: libpq's channel_binding=require fails closed, offered no -PLUS, and nothing is sent", { skip: skipAnchors || skipBinding }, async () => {
+    sealed.anchor({ anchors: [priv.der] });
+    const out = await client([{ label: 'require', pg: pg('privScram', VERIFY_PRIV, { channelBinding: 'require' }) }]);
+    assert.deepEqual(out, { require: 'error undefined channel binding required, offered SCRAM-SHA-256' });
+    assert.deepEqual(got, []);
+    assert.equal(sealed.requests.some((r) => r.op === 'sessionMaterialize'), false);
   });
 });

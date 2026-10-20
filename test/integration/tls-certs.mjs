@@ -132,8 +132,10 @@ const pair = (rsa) => (rsa ? generateKeyPairSync('rsa', { modulusLength: 2048 })
  * A CA (`rsa`: an RSA key), and `server(host, options)` for a leaf it signs:
  * `{ der, cert (leaf + CA, PEM), key }`. Options: notBefore, notAfter, san
  * (list), eku (OIDs), subject ([[key, value]]), aia ({ ocsp, caIssuers }), rsa.
+ * `notCa`: the issuer is a self-signed leaf (no CA:true, no keyCertSign), so
+ * what it signs verifies under no chain check.
  */
-export function makeCa(cn = 'slicc-jsh test CA', { rsa = false } = {}) {
+export function makeCa(cn = 'slicc-jsh test CA', { rsa = false, notCa = false } = {}) {
   const { privateKey, publicKey } = pair(rsa);
   const spki = publicKey.export({ type: 'spki', format: 'der' });
   const now = Date.now();
@@ -144,7 +146,8 @@ export function makeCa(cn = 'slicc-jsh test CA', { rsa = false } = {}) {
     notBefore: new Date(now - DAY),
     notAfter: new Date(now + 365 * DAY),
     spki,
-    ca: true,
+    ca: !notCa,
+    host: notCa ? 'not-a-ca.test' : undefined,
     key: privateKey,
     rsa,
   });
