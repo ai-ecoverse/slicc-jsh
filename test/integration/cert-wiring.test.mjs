@@ -7,7 +7,7 @@
  * only the start of the group's commit range.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -62,7 +62,6 @@ describe("cert-review's self-guard", () => {
       '.github/workflows/ci.yml',
       '.github/workflows/release.yml',
       'scripts/cert-review/**',
-      'scripts/release-line.mjs',
       'scripts/release-body.mjs',
       'scripts/release-outcome.mjs',
       '.releaserc.json',
@@ -89,5 +88,34 @@ describe('the light jobs run on the light pool, forks hosted', () => {
     const install = ci.slice(ci.indexOf('\n  install:\n'), ci.indexOf('\n  browser:\n'));
     assert.match(install, /\n {4}needs: runner\n {4}runs-on: \$\{\{ matrix\.os == 'ubuntu-latest' && needs\.runner\.outputs\.light \|\| matrix\.os \}\}\n/);
     assert.doesNotMatch(install, /sudo/);
+  });
+});
+
+describe('the release reads nothing back from the registry, and files no supply-chain alert', () => {
+  const release = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
+  const jobs = (yml) => [...yml.matchAll(/^ {2}([\w-]+):\n/gm)].map((m) => m[1]);
+
+  it('its jobs are tag, publish, notes and alert: no verify on npm', () => {
+    assert.deepEqual(jobs(release.slice(release.indexOf('\njobs:\n'))), ['tag', 'publish', 'notes', 'alert']);
+    assert.doesNotMatch(release, /verify on npm|published\.mjs|settle\.mjs|release-line\.mjs|registry\.npmjs\.org|attestations|npm audit|dist-tags|sleep /);
+  });
+
+  it("npm view runs once, in publish, before it: a re-run's already-published check, not a wait", () => {
+    const views = release.split('\n').filter((l) => /\bnpm view\b/.test(l));
+    assert.deepEqual(views.map((l) => l.trim()), ['if npm view "@ai-ecoverse/slicc-jsh@$version" version > /dev/null 2>&1; then']);
+    const publish = release.slice(release.indexOf('\n  publish:\n'), release.indexOf('\n  notes:\n'));
+    assert.ok(publish.indexOf('npm view') < publish.indexOf('npm publish --provenance'));
+  });
+
+  it('the notes job takes the previous version from the git tags, and alerts are for the tag and publish jobs only', () => {
+    const notes = release.slice(release.indexOf('\n  notes:\n'), release.indexOf('\n  alert:\n'));
+    assert.match(notes, /prev=\$\(git tag --list 'v\*'/);
+    assert.match(notes, /scripts\/cert-review\/carry\.mjs --from "v\$prev" --to "v\$VERSION" --release "v\$VERSION"/);
+    assert.match(release.slice(release.indexOf('\n  alert:\n')), /needs: \[tag, publish\]/);
+  });
+
+  it('no workflow or script files a supply-chain alert, and the registry checkers are gone', () => {
+    for (const f of ['ci.yml', 'cert-review.yml', 'release.yml']) assert.doesNotMatch(readFileSync(join(root, '.github/workflows', f), 'utf8'), /supply-chain alert/i, f);
+    for (const f of ['scripts/cert-review/published.mjs', 'scripts/cert-review/settle.mjs', 'scripts/release-line.mjs']) assert.equal(existsSync(join(root, f)), false, f);
   });
 });

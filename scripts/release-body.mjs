@@ -1,6 +1,6 @@
 /**
  * Sections of a GitHub release body that jobs own: `<!-- name -->` … `<!--
- * /name -->`, one per job (release-line, cert-review). A job replaces only
+ * /name -->`, one per job (cert-review). A job replaces only
  * its own section, in place, or appends it when it's absent; everything
  * else in the body stays, so reruns in any order never drop another's.
  */

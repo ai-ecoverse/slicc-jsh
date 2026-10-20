@@ -146,19 +146,11 @@ const GATES0 = [
   { file: 'release.yml', job: 'tag', step: 'The tag job fails', calls: /scripts\/release-outcome\.mjs/, variant: 'two tags', says: () => realOutcome(['v1.2.3', 'v1.3.0']) },
   {
     file: 'release.yml',
-    job: 'verify',
-    step: 'npm integrity',
-    calls: /scripts\/cert-review\/published\.mjs/,
-    says: () => realPublished(),
-  },
-  { file: 'release.yml', job: 'verify', step: 'The release line', calls: /scripts\/release-line\.mjs/, says: () => realReleaseLine() },
-  {
-    file: 'release.yml',
-    job: 'verify',
+    job: 'notes',
     step: 'The cert-review section',
     calls: /scripts\/cert-review\/carry\.mjs/,
-    says: () => [['versions --json', '["1.2.2","1.2.3"]'], ...realCarry()],
-    partial: [['versions --json', '["1.2.2","1.2.3"]']],
+    says: () => [['tag --list', 'v1.2.2'], ['tag --list', 'v1.2.3'], ...realCarry()],
+    partial: [['tag --list', 'v1.2.2'], ['tag --list', 'v1.2.3']],
   },
 ];
 
@@ -292,79 +284,6 @@ const realRecord = (temp) => {
   return said('record.mjs', real('scripts/cert-review/record.mjs', args));
 };
 
-const registry = (() => {
-  let made;
-  return () => {
-    if (made) return made;
-    const dir = join(scratch, 'registry');
-    mkdirSync(join(dir, 'src/package/dist'), { recursive: true });
-    writeFileSync(join(dir, 'src/package/package.json'), JSON.stringify({ name: '@ai-ecoverse/slicc-jsh', version: '1.2.3', gitHead: SHA }));
-    writeFileSync(join(dir, 'src/package/dist/node.mjs'), 'export {};\n');
-    execFileSync('tar', ['-czf', join(dir, 'pkg.tgz'), '-C', join(dir, 'src'), 'package/package.json', 'package/dist/node.mjs']);
-    const bytes = readFileSync(join(dir, 'pkg.tgz'));
-    const sha512 = createHash('sha512').update(bytes).digest('hex');
-    const integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
-    const statement = {
-      subject: [{ name: 'pkg:npm/%40ai-ecoverse/slicc-jsh@1.2.3', digest: { sha512 } }],
-      predicate: {
-        buildDefinition: {
-          externalParameters: { workflow: { repository: 'https://github.com/ai-ecoverse/slicc-jsh', path: '.github/workflows/release.yml', ref: 'refs/heads/main' } },
-          resolvedDependencies: [{ uri: 'git+https://github.com/ai-ecoverse/slicc-jsh@refs/heads/main', digest: { gitCommit: SHA } }],
-        },
-      },
-    };
-    const attestations = { attestations: [{ predicateType: 'https://slsa.dev/provenance/v1', bundle: { dsseEnvelope: { payload: Buffer.from(JSON.stringify(statement)).toString('base64') } } }] };
-    const meta = {
-      name: '@ai-ecoverse/slicc-jsh',
-      version: '1.2.3',
-      gitHead: SHA,
-      dist: {
-        tarball: 'https://registry.npmjs.org/@ai-ecoverse/slicc-jsh/-/slicc-jsh-1.2.3.tgz',
-        integrity,
-        attestations: { url: 'https://registry.npmjs.org/-/npm/v1/attestations/@ai-ecoverse%2fslicc-jsh@1.2.3' },
-      },
-    };
-    writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta));
-    writeFileSync(join(dir, 'attestations.json'), JSON.stringify(attestations));
-    writeFileSync(join(dir, 'dist-tags.json'), JSON.stringify({ latest: '1.2.3' }));
-    const mock = join(dir, 'fetch.mjs');
-    writeFileSync(
-      mock,
-      `import { readFileSync } from 'node:fs';
-const dir = ${JSON.stringify(dir)};
-globalThis.fetch = async (url) => {
-  const u = String(url);
-  const file = u.includes('/attestations/') ? 'attestations.json' : u.endsWith('.tgz') ? 'pkg.tgz' : u.endsWith('/dist-tags') ? 'dist-tags.json' : 'meta.json';
-  return new Response(readFileSync(\`\${dir}/\${file}\`));
-};
-`
-    );
-    made = { meta, imports: pathToFileURL(mock).href };
-    return made;
-  };
-})();
-
-const realPublished = () => {
-  const { imports } = registry();
-  const rules = [
-    ['audit signatures', 'audited 1 package in 0s; 1 package has a verified registry signature; 1 package has a verified attestation'],
-    ['install', ''],
-    ['git/ref/tags/v1.2.3', `{"object":{"type":"commit","sha":"${SHA}"}}`],
-    ['compare/main...', '{"status":"identical"}'],
-  ];
-  return said('published.mjs', real('scripts/cert-review/published.mjs', ['--version', '1.2.3', '--wait', '0'], { stub: ['npm', 'gh'], rules, imports }));
-};
-
-const realReleaseLine = () => {
-  const { imports } = registry();
-  const rules = [
-    ['rev-list', SHA],
-    ['compare/main...', 'identical'],
-    ['release view', NOTES],
-    ['release edit', ''],
-  ];
-  return said('release-line.mjs', real('scripts/release-line.mjs', ['1.2.3'], { stub: ['git', 'gh'], rules, imports }));
-};
 const runStep = (script, { says = [], env = {}, writes, output, setup, stubs = true } = {}) => {
   const dir = join(scratch, `run-${++runs}`);
   const temp = join(dir, 'temp');
