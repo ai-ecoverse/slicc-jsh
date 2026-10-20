@@ -210,10 +210,23 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     let ended = false;
     // The native port closed with it (its peer closed, or this side did).
     let transportClosed = false;
+    // Who waits for a message's number to be reached (whenReceived).
+    const waiters = [];
+    const reached = (n) => ((n - expect) >>> 0 === 0 || (n - expect) >>> 0 > 0x7fffffff);
+    const wake = () => {
+      for (let i = waiters.length - 1; i >= 0; i--) {
+        const [n, fn] = waiters[i];
+        if (ended || reached(n)) {
+          waiters.splice(i, 1);
+          fn();
+        }
+      }
+    };
 
     const end = () => {
       ended = true;
       transportClosed = !onOther;
+      queueMicrotask(wake);
       if (!onOther) {
         native.onmessage = null;
         native.removeEventListener('close', nativeClosed);
@@ -243,6 +256,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
         }
         port._enqueue(next);
       }
+      if (waiters.length) wake();
     };
     const pull = () => {
       if (!reader || ended) return;
@@ -325,6 +339,16 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       },
       get transportClosed() {
         return transportClosed;
+      },
+      // How many messages this side has sent (modulo 2^32).
+      get sent() {
+        return nextSend;
+      },
+      // `fn` once every message numbered below `n` has come (or the link ended).
+      whenReceived(n, fn) {
+        pull();
+        if (ended || reached(n)) fn();
+        else waiters.push([n, fn]);
       },
       // What a port that moves takes with it (all that has come, in its stash).
       state() {

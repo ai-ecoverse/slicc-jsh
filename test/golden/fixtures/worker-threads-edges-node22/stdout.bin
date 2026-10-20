@@ -11,6 +11,8 @@ a non-string execArgv entry, coerced: ["--no-warnings"]
 a worker of a -e program: w.js ran, (its parent was -e)
 threadName: "example" inside: "example"
 threadName once it has exited: null
+a worker moved its parentPort here: function
+then: its error still comes - exit 1 - printed: it still prints
 a port its worker unrefs got: hi
 and closed when that worker exited
 the program ends

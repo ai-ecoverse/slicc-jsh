@@ -6,8 +6,10 @@
 // posts after it still come; and worker.threadName is the name given (null
 // once the worker has exited); and a non-string execArgv entry is coerced,
 // as the worker sees it; and -e, -p, --check and -i in a worker's execArgv,
-// its own or its parent's, don't change what it runs; and a port whose
-// worker unref'd it and exited closes here, so the program ends.
+// its own or its parent's, don't change what it runs; a worker that
+// transfers its parentPort away still prints, and its error and exit still
+// come; and a port whose worker unref'd it and exited closes here, so the
+// program ends.
 const { Worker, MessageChannel } = require('worker_threads');
 const path = require('path');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
@@ -81,6 +83,21 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   console.log('threadName:', JSON.stringify(named.threadName), 'inside:', JSON.stringify(await once(named, 'message')));
   await once(named, 'exit');
   console.log('threadName once it has exited:', JSON.stringify(named.threadName));
+
+  const { port1: back, port2: there } = new MessageChannel();
+  const mover = new Worker(
+    "const { parentPort, workerData } = require('worker_threads'); workerData.postMessage(parentPort, [parentPort]); console.log('it still prints'); throw new Error('its error still comes');",
+    { eval: true, workerData: there, transferList: [there], stdout: true }
+  );
+  let printed = '';
+  mover.stdout.on('data', (chunk) => (printed += chunk));
+  const moverError = once(mover, 'error');
+  const moverExit = once(mover, 'exit');
+  const came = await once(back, 'message');
+  console.log('a worker moved its parentPort here:', typeof came.postMessage);
+  console.log('then:', (await moverError).message, '- exit', await moverExit, '- printed:', printed.trim());
+  came.close();
+  back.close();
 
   const { port1, port2 } = new MessageChannel();
   const unrefs = new Worker("require('worker_threads').parentPort.once('message', ({ port }) => { port.on('message', () => {}); port.unref(); port.postMessage('hi'); });", { eval: true });

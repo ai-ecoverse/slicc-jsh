@@ -5,13 +5,15 @@
  * new isolate in its process. Without ctx.thread there is only the main
  * thread, as before: `new Worker()` throws ERR_NOT_SUPPORTED.
  *
- * The thread's native port carries everything between a Worker and its
- * thread, in order: the parent port's messages ({ t: 'm' }, as
- * ../web/remote-ports.mjs sends a port's), 'online', the worker's stdout
- * and stderr, its uncaught error, and 'bye' with its exit code just before
- * it ends. So what a worker posts or prints before it exits comes before
- * its 'exit'. The kernel's `exited` ends the Worker when the thread ended
- * without a word (terminate(), or a crash).
+ * The thread's native port carries the Worker's control, in order:
+ * 'online', the worker's stdout and stderr, its uncaught error, and 'bye'
+ * with its exit code (and how many messages its parent port sent) just
+ * before it ends. The parent port has a native channel of its own, as
+ * Node's public port is apart from its internal one, so a worker can
+ * transfer its parentPort and still print and exit. What a worker posts or
+ * prints before it exits comes before its 'exit'. The kernel's `exited`
+ * ends the Worker when the thread ended without a word (terminate(), or a
+ * crash).
  *
  * Thread ids count per process from 1, as Node's do, on a counter in shared
  * memory every thread of the program has.
@@ -70,18 +72,16 @@ export function workerDataOf(ctx) {
 /**
  * A worker thread's context: fds 0–2 go to and from its Worker over the
  * thread's port (they are pipes, never a terminal), and its exit tells the
- * Worker its code first. The thread's port is this one's from the start:
- * its parent port's messages wait until the module takes them (`adopt`),
- * as Node's wait in a port no one listens to yet.
+ * Worker its code first, and how many messages its parent port sent
+ * (`sentBy`, once worker_threads has it).
  */
 export function workerContext(ctx, data) {
   const port = ctx.thread.port;
-  const waiting = [];
+  let sent = () => 0;
   const onParentInput = (fn) => {
     port.onmessage = (event) => {
       const message = event.data;
       if (message?.t === 'in' || message?.t === 'in-end') fn(message);
-      else waiting.push(event);
     };
   };
   const encoder = new TextEncoder();
@@ -113,7 +113,7 @@ export function workerContext(ctx, data) {
     if (said) return;
     said = true;
     try {
-      port.postMessage({ t: 'bye', code: code & 0xff });
+      port.postMessage({ t: 'bye', code: code & 0xff, sent: sent() });
     } catch {
       /* the Worker is gone */
     }
@@ -172,11 +172,9 @@ export function workerContext(ctx, data) {
         });
       }
     },
-    /** worker_threads' parentPort takes the thread's port (and what waited on it). */
-    adopt(linkTo) {
-      const input = port.onmessage;
-      linkTo(port, (message) => input?.({ data: message }));
-      for (const event of waiting.splice(0)) port.onmessage(event);
+    /** How many messages the parent port has sent, for 'bye'. */
+    sentBy(fn) {
+      sent = fn;
     },
   };
 }
@@ -237,6 +235,8 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     #limits;
     #handle = { kind: 'Worker' };
     #box;
+    // The parent port's native port (its peer goes to the thread).
+    #native;
     #name = '';
 
     constructor(filename, options = {}) {
@@ -310,8 +310,11 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       // The parent port's mailboxes (../web/mailbox.mjs), one per direction.
       const [here, there] = remote.mailboxPair(1 << 20);
       this.#box = here;
+      const channel = new remote.NativeMessageChannel();
+      this.#native = channel.port1;
       const data = {
         mailbox: there,
+        port: channel.port2,
         kind: WORKER_KIND,
         ...entry,
         argv: (options.argv ?? []).map(String),
@@ -340,10 +343,11 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
           const buffers = transfer.filter(isArrayBuffer);
           const cloned = structuredClone({ data: packed.data, buffers }, { transfer: buffers });
           data.workerData = { ...packed, data: cloned.data };
-          this.#spawn(data, [...transfer.filter((x) => !isArrayBuffer(x)), ...cloned.buffers]);
+          this.#spawn(data, [channel.port2, ...transfer.filter((x) => !isArrayBuffer(x)), ...cloned.buffers]);
         });
       } catch (err) {
         handles.delete(this.#handle);
+        channel.port1.close();
         throw err;
       }
     }
@@ -381,17 +385,17 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     #started(thread) {
       this.#thread = thread;
       let said;
-      const linked = remote.link(this[kPublicPort], thread.port, (message) => {
-        if (message.t === 'online') this.emit('online');
-        else if (message.t === 'out') (message.fd === 2 ? this.stderr : this.stdout).push(Buffer.from(message.chunk));
-        else if (message.t === 'error') this.emit('error', message.error);
-        else if (message.t === 'bye') {
+      const linked = remote.link(this[kPublicPort], this.#native, undefined, this.#box);
+      thread.port.onmessage = ({ data: message }) => {
+        if (message?.t === 'online') this.emit('online');
+        else if (message?.t === 'out') (message.fd === 2 ? this.stderr : this.stdout).push(Buffer.from(message.chunk));
+        else if (message?.t === 'error') this.emit('error', message.error);
+        else if (message?.t === 'bye') {
           said = message.code;
-          // Whatever it posted before is in.
-          this[kPublicPort]._remote()?.pull();
-          this.#end(said);
+          // Once whatever its parent port posted before is in.
+          linked.whenReceived(message.sent, () => this.#end(said));
         }
-      }, this.#box);
+      };
       thread.exited.then((code) => {
         if (said !== undefined) return;
         // The thread ended without a word: terminate() (1), out of memory or a crash.
@@ -499,13 +503,12 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     }
   }
 
-  // A worker's parentPort: its jsh port, on its thread's port.
+  // A worker's parentPort: its jsh port, on its own native port.
   let parentPort = null;
   if (worker) {
     parentPort = ports.makePort();
-    process._worker.adopt((native, input) =>
-      remote.link(parentPort, native, (message) => (message.t === 'in' || message.t === 'in-end') && input(message), worker.mailbox)
-    );
+    const linked = remote.link(parentPort, worker.port, undefined, worker.mailbox);
+    process._worker.sentBy(() => linked.sent);
   }
   const workerData = worker ? remote.receive(worker.workerData).data : null;
 
