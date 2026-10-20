@@ -21,6 +21,9 @@
 // buffer, which can't be transferred, fails a small post with nothing sent.
 const { Worker, MessageChannel } = require('worker_threads');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
+// A worker's exit, even one that came already: Node emits 'exit' right after
+// the last messages it drains, before a listener added on their turn.
+const exitOf = (w) => (w.threadId === -1 ? Promise.resolve() : once(w, 'exit'));
 (async () => {
   try {
     new Worker('0', { eval: true, execArgv: ['--no-warnings', '--bogus-one', '--bogus-two'] });
@@ -205,13 +208,13 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   const g = new Worker("const { workerData, parentPort } = require('worker_threads'); parentPort.postMessage(workerData.value)", { eval: true, workerData: getters });
   console.log('getter reads after the constructor:', reads);
   console.log('the worker got:', await once(g, 'message'));
-  await once(g, 'exit');
+  await exitOf(g);
   console.log('getter reads in all:', reads);
 
   const src = "import { parentPort } from 'node:worker_threads'; parentPort.postMessage(import.meta.url.slice(0, 35) + ' ' + JSON.stringify(process.argv.slice(1)));";
   const fromUrl = new Worker(new URL('data:text/javascript,' + encodeURIComponent(src)), { argv: ['x', 'y'] });
   console.log('a data: URL worker, import.meta.url and argv:', await once(fromUrl, 'message'));
-  await once(fromUrl, 'exit');
+  await exitOf(fromUrl);
 
   const wasm = new MessageChannel();
   const echoes = new Worker("require('worker_threads').parentPort.once('message', ({ port }) => port.on('message', (m) => { port.postMessage(typeof m === 'string' ? m : 'an object came'); port.close(); }));", { eval: true });
@@ -224,6 +227,6 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   }
   wasm.port1.postMessage('the post after it');
   console.log('the worker got first:', await once(wasm.port1, 'message'));
-  await once(echoes, 'exit');
+  await exitOf(echoes);
 })();
 process.on('exit', () => console.log('the program ends'));

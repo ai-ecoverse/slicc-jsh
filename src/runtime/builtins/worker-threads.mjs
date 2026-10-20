@@ -20,41 +20,10 @@
  */
 import { EventEmitter } from './events.mjs';
 import { nodeError, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, validateObject } from '../node-errors.mjs';
-import { parseNodeArgv, withoutEntryOptions } from '../cli.mjs';
+import { workerExecArgvError, workerNodeOptionsError } from '../cli.mjs';
 
 export const SHARE_ENV = Symbol.for('nodejs.worker_threads.SHARE_ENV');
 
-/**
- * The flags in a Worker's execArgv that the worker's command line would
- * refuse (Node checks them in the constructor): each as the CLI parses it,
- * with the next word as its value when it takes one.
- */
-export function invalidExecArgv(all) {
-  // -e, -p, --check and -i are inert in a worker (Node takes them).
-  const execArgv = withoutEntryOptions(all);
-  const invalid = [];
-  for (let i = 0; i < execArgv.length; i++) {
-    const flag = execArgv[i];
-    if (!flag.startsWith('-')) continue;
-    const alone = parseNodeArgv(['node', flag, '-e', '0']);
-    if (!alone.error) continue;
-    if (/requires an argument/.test(alone.error) && i + 1 < execArgv.length && !parseNodeArgv(['node', flag, execArgv[i + 1], '-e', '0']).error) {
-      i++;
-      continue;
-    }
-    invalid.push(flag);
-  }
-  return invalid;
-}
-const arrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get;
-const isArrayBuffer = (value) => {
-  try {
-    Reflect.apply(arrayBufferByteLength, value, []);
-    return true;
-  } catch {
-    return false;
-  }
-};
 const kPublicPort = Symbol('kPublicPort');
 const kHandle = Symbol('kHandle');
 const WORKER_KIND = 'slicc-jsh worker';
@@ -201,15 +170,15 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       return { file: decodeURIComponent(filename.pathname) };
     }
     if (typeof filename !== 'string') throw ERR_INVALID_ARG_TYPE('filename', ['string', 'URL'], filename);
-    if (filename.startsWith('data:')) return { url: filename };
-    if (filename.startsWith('file:')) return { file: decodeURIComponent(new URL(filename).pathname) };
     if (filename.startsWith('/') || filename.startsWith('./') || filename.startsWith('../')) {
       return { file: process._builtin('path').resolve(filename) };
     }
+    // data: and file:// come only as a URL object; a string of one is refused, as in Node.
+    const hint = filename.startsWith('file://') ? ' Wrap file:// URLs with `new URL`.' : filename.startsWith('data:') ? ' Wrap data: URLs with `new URL`.' : '';
     throw nodeError(
       TypeError,
       'ERR_WORKER_PATH',
-      `The worker script or module filename must be an absolute path or a relative path starting with './' or '../'. Received "${filename}"`
+      `The worker script or module filename must be an absolute path or a relative path starting with './' or '../'.${hint} Received "${filename}"`
     );
   }
 
@@ -238,6 +207,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     // The parent port's native port (its peer goes to the thread).
     #native;
     #name = '';
+    #threadId;
 
     constructor(filename, options = {}) {
       super();
@@ -258,22 +228,24 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       // As the thread will get them: strings (Node coerces them).
       const execArgv = options.execArgv === undefined ? undefined : options.execArgv.map(String);
       if (execArgv !== undefined) {
-        const invalid = invalidExecArgv(execArgv);
-        if (invalid.length) {
-          throw nodeError(Error, 'ERR_WORKER_INVALID_EXEC_ARGV', `Initiated Worker with invalid execArgv flags: ${invalid.join(', ')}`);
-        }
+        const invalid = workerExecArgvError(execArgv);
+        if (invalid) throw nodeError(Error, 'ERR_WORKER_INVALID_EXEC_ARGV', `Initiated Worker with invalid execArgv flags: ${invalid}`);
       }
       let env;
       const shareEnv = options.env === SHARE_ENV;
       if (shareEnv || options.env === undefined || options.env === null) env = { ...process.env };
       else if (typeof options.env === 'object') env = Object.fromEntries(Object.entries(options.env).map(([k, v]) => [k, String(v)]));
       else throw ERR_INVALID_ARG_TYPE('options.env', ['object', 'undefined', 'null', 'worker_threads.SHARE_ENV'], options.env);
+      // An env of its own: its NODE_OPTIONS are the worker's, checked now.
+      const nodeOptionsGiven = !shareEnv && options.env !== undefined && options.env !== null;
+      const badNodeOptions = nodeOptionsGiven ? workerNodeOptionsError(env.NODE_OPTIONS) : null;
+      if (badNodeOptions) throw nodeError(Error, 'ERR_WORKER_INVALID_EXEC_ARGV', `Initiated Worker with invalid NODE_OPTIONS env variable: ${badNodeOptions}`);
       if (options.name !== undefined && typeof options.name !== 'string') {
         throw ERR_INVALID_ARG_TYPE('options.name', 'string', options.name);
       }
       this.#name = options.name ?? '';
       this.#limits = limitsOf(options.resourceLimits);
-      this.threadId = ids ? Atomics.add(ids, 0, 1) + 1 : 1;
+      this.#threadId = ids ? Atomics.add(ids, 0, 1) + 1 : 1;
 
       // The parent's end of the worker's port; its messages are the worker's 'message's.
       const publicPort = ports.makePort();
@@ -320,13 +292,17 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
         argv: (options.argv ?? []).map(String),
         execArgv: execArgv ?? process.execArgv,
         env,
+        // Else the parent's own (as it started), as Node's worker inherits them.
+        nodeOptions: nodeOptionsGiven ? env.NODE_OPTIONS : worker ? worker.nodeOptions : ctx?.env?.NODE_OPTIONS,
+        nodeOptionsGiven,
         shareEnv,
         cwd: process.cwd(),
-        threadId: this.threadId,
+        threadId: this.#threadId,
         name: options.name ?? '',
         stdin: !!options.stdin,
         resourceLimits: this.#limits,
-        environmentData: [...environmentData],
+        // Cloned now, as Node's constructor does: what can't be is its DataCloneError.
+        environmentData: structuredClone([...environmentData]),
         ids,
       };
       // workerData and its transferList go as a port's message does. One
@@ -338,12 +314,11 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
           // As Node, which clones it in the constructor: what can't be
           // cloned (a function) is V8's DataCloneError now, not the
           // thread's start failing later, and its getters run once. The
-          // thread gets this clone, the transfer list's ArrayBuffers moved
-          // into it (the program's are detached, as in Node).
-          const buffers = transfer.filter(isArrayBuffer);
-          const cloned = structuredClone({ data: packed.data, buffers }, { transfer: buffers });
-          data.workerData = { ...packed, data: cloned.data };
-          this.#spawn(data, [channel.port2, ...transfer.filter((x) => !isArrayBuffer(x)), ...cloned.buffers]);
+          // thread gets this clone, its transfer list (buffers, streams,
+          // ports) moved into it (the program's are detached, as in Node).
+          const cloned = structuredClone({ packed, transfer }, { transfer });
+          data.workerData = cloned.packed;
+          this.#spawn(data, [channel.port2, ...cloned.transfer]);
         });
       } catch (err) {
         handles.delete(this.#handle);
@@ -484,6 +459,11 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
 
     get resourceLimits() {
       return this.#exited ? {} : { ...this.#limits };
+    }
+
+    // -1 once it has exited (from its 'exit' on), as Node's.
+    get threadId() {
+      return this.#exited ? -1 : this.#threadId;
     }
 
     get threadName() {

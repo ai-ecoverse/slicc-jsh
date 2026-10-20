@@ -589,8 +589,9 @@ Not as in Node: the stdio fds are the program's kernel fds. 0, 1, 2 and a device
 
 How a worker runs:
 - It is a thread of this process, with the same pid, running jsh with the worker's own globals and module graph.
-- Its entry can be a file, an ES module, a `data:` or `file:` URL, or `eval` code (`[worker eval]`).
-- It gets `workerData` and its `transferList`, `argv`, `execArgv`, a copy of `env` (or the given object), the parent's environment data, `parentPort`, `threadId` (counted per process from 1, nested workers included), `threadName` and `resourceLimits`.
+- Its entry can be a file, an ES module, a `data:` or `file:` URL (as a `URL` object; a string of one is `ERR_WORKER_PATH`, as in Node), or `eval` code (`[worker eval]`). A `file:` URL's query and fragment are dropped, as Node 22 drops them.
+- It gets `workerData` and its `transferList`, `argv`, `execArgv`, a copy of `env` (or the given object), the parent's environment data, `parentPort`, `threadId` (counted per process from 1, nested workers included), `threadName` and `resourceLimits`. `workerData` and the environment data are cloned in the constructor, so what can't be is its `DataCloneError`.
+- Its `NODE_OPTIONS` are its own `env`'s when one is given, else the parent's as it started (preloads included). The constructor refuses, with Node's `ERR_WORKER_INVALID_EXEC_ARGV` and messages, what a worker can't take: per-process options (`--title`, `--report-*`, `--trace-sigint`, …) in either, V8's (`--max-old-space-size`, `--stack-trace-limit`) and `-v`/`-h` in `execArgv`, and a flag missing its value. `-e`, `-p`, `--check` and `-i` in `execArgv` are kept in its `process.execArgv` but don't change what it runs.
 - `'online'`, `'message'`, `'error'` (its uncaught exception, as the thrown value) and `'exit'` come in Node's order. What it posts or prints before it exits comes before `'exit'`.
 - `process.exit(n)` ends the worker with `n`, an uncaught error with 1, and `terminate()` with 1. Once the worker has exited, `terminate()` resolves `undefined`.
 - Its stdout and stderr go to the parent's own unless `stdout`/`stderr` is set, in which case they are `worker.stdout`/`worker.stderr`. `stdin: true` gives `worker.stdin`.
@@ -600,7 +601,7 @@ How a worker runs:
 How ports cross between threads:
 - A message is the platform's structured clone. An `ArrayBuffer` in the transfer list is detached, a `SharedArrayBuffer` is shared (`Atomics.wait`/`notify` work across threads), and a `MessagePort` moves with the messages waiting in it.
 - Each direction also has a mailbox in shared memory. So `receiveMessageOnPort()` has a message as soon as it is posted, even in a thread blocked in `Atomics.wait`; piscina's and tinypool's atomics loops depend on that.
-- A message that transfers ports or carries a `SharedArrayBuffer` goes the platform's way instead. `receiveMessageOnPort()` can't return it until the receiving thread is back in its event loop, but it still comes in order.
+- A message goes the platform's way instead when it transfers ports or streams, carries what the platform shares or clones itself (a `SharedArrayBuffer`, a `Blob`, a `WebAssembly.Module`), or doesn't fit the mailbox. `receiveMessageOnPort()` can't return it until the receiving thread is back in its event loop, but it still comes in order. Either way its getters are read once.
 
 The real piscina 5 (in each of its `atomics` modes) and tinypool 1 run on it, and so does eslint 9's `--concurrency`.
 
@@ -610,9 +611,9 @@ Not as in Node:
 - `postMessageToThread`, `getHeapSnapshot` and `BroadcastChannel` between threads aren't there yet. A worker's `performance.eventLoopUtilization()` is zeros.
 
 **`MessageChannel` and `MessagePort`** are Node 22's, within one program, and are also the globals:
-- A message is a structured clone (an `ArrayBuffer` in the transfer list is transferred; a `MessagePort` in it goes as itself, in `ports`). Its `MessageEvent` comes on a later turn.
+- A message is a structured clone (an `ArrayBuffer` in the transfer list is transferred). A `MessagePort` in the transfer list moves: the receiver gets a new port on the same channel, in `ports`, and the one sent is detached, as in Node. A port in the message but not in the list, one listed twice, the sender itself, or one already moved or closed by the program is Node's `DataCloneError`. Its `MessageEvent` comes on a later turn.
 - The first `'message'` listener (`onmessage`, `on()`, `addEventListener()`) starts the port and refs it; until then messages wait, and `receiveMessageOnPort` takes them synchronously. A started port with a listener keeps the program alive until it's closed or `unref()`'d, as in Node.
-- `close()` closes both ends: what was posted before is delivered, then each end gets `'close'`. `new MessagePort()` is `ERR_CONSTRUCT_CALL_INVALID`.
+- `close()` closes both ends: what was posted before is delivered, then each end gets `'close'`. A port that hasn't started keeps what it holds, for `receiveMessageOnPort()` or a later listener, and gets `'close'` once that is taken. A post to a closed port is still cloned, its transfers moved, then dropped. `new MessagePort()` is `ERR_CONSTRUCT_CALL_INVALID`.
 - A port is a NodeEventTarget: `on`, `once`, `off`, `emit` and the rest, where a `'message'` listener gets the data.
 
 **Order of port messages.** BroadcastChannel and MessageChannel share Node's order. In one turn (Node's poll phase), each port, in the order the ports were made, takes its messages one per task, with a handler's ticks and microtasks run before the next. The turn comes before the program's immediates (Node's check phase) and after a timer that was already due. A port the turn has yet to reach takes a message posted during it, and one it has passed takes it on the next turn. A message posted from an immediate waits for the immediates already queued.

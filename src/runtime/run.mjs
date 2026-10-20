@@ -28,7 +28,7 @@ import { createFetch } from './web/fetch.mjs';
 import { createWebSocket } from './web/websocket.mjs';
 import { createPorts } from './web/broadcast-channel.mjs';
 import { setupChildChannel } from './builtins/ipc-channel.mjs';
-import { createRemotePorts } from './web/remote-ports.mjs';
+import { createRemotePorts, mailboxSerdes } from './web/remote-ports.mjs';
 
 // The platform's MessageChannel, before the program's own (jsh's) takes the
 // global: worker_threads' ports between threads are its ports.
@@ -478,34 +478,12 @@ export async function runNode(ctx, options = {}) {
   process._broadcastChannel = JshBroadcastChannel;
   process._ports = ports;
   // worker_threads: ports whose other end is in another thread.
-  let serdes;
   process._remotePorts = NativeMessageChannel
     ? createRemotePorts({
         ports,
         NativeMessageChannel,
         // The structured clone's own algorithm (V8's ValueSerializer), for the mailboxes.
-        serdes: () =>
-          (serdes ??= (() => {
-            const v8 = process._builtin('v8');
-            return {
-              serialize(value) {
-                const ser = new v8.Serializer();
-                // What it can't write is a DataCloneError (the native way
-                // takes it then), unlike a getter's own throw.
-                ser._getDataCloneError = function DataCloneError(message) {
-                  return new DOMException(message, 'DataCloneError');
-                };
-                ser.writeHeader();
-                ser.writeValue(value);
-                return ser.releaseBuffer();
-              },
-              deserialize(bytes) {
-                const der = new v8.Deserializer(bytes);
-                der.readHeader();
-                return der.readValue();
-              },
-            };
-          })()),
+        serdes: mailboxSerdes(process),
       })
     : null;
   if (options.worker) {

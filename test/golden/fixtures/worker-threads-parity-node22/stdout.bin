@@ -1,0 +1,67 @@
+preloaded in the main thread: 1
+execArgv ["--max-old-space-size=64"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --max-old-space-size=64
+execArgv ["--title=x"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --title=x
+execArgv ["--title","x","--bogus"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --title
+execArgv ["--bogus","--title","x"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --bogus, --title
+execArgv ["--stack-trace-limit=5"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --stack-trace-limit=5
+execArgv ["--stack-trace-limit"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --stack-trace-limit requires an argument
+execArgv ["--max-old-space-size"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --max-old-space-size
+execArgv ["--report-compact"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --report-compact
+execArgv ["--no-report-compact"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --no-report-compact
+execArgv ["--trace-sigint"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --trace-sigint
+execArgv ["-v"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: -v
+execArgv ["--version"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --version
+execArgv ["-h"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: -h
+execArgv ["-e"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: -e requires an argument
+execArgv ["--eval"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --eval requires an argument
+execArgv ["-pe"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --eval requires an argument
+execArgv ["-e","--bogus"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: -e requires an argument
+execArgv ["--bogus","-e"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: -e requires an argument
+execArgv ["--eval="] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --eval= requires an argument
+execArgv ["--require"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --require requires an argument
+execArgv ["--bogus","--require"] -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --require requires an argument
+execArgv ["-p"] -> ok
+execArgv ["-c"] -> ok
+execArgv ["--require","./other.js","--no-warnings"] -> ok
+NODE_OPTIONS from the parent env -> {"preloaded":1,"other":false}
+NODE_OPTIONS from an env with -r -> {"preloaded":0,"other":true}
+NODE_OPTIONS from an env without -> {"preloaded":0,"other":false}
+an env with NODE_OPTIONS --title=x -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid NODE_OPTIONS env variable: --title= is not allowed in NODE_OPTIONS
+an env with NODE_OPTIONS --bogus -> Error ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid NODE_OPTIONS env variable: --bogus is not allowed in NODE_OPTIONS
+an env with NODE_OPTIONS --max-old-space-size=64 -> ok
+threadId before exit is positive: true in its exit: -1
+environment data with a function -> DataCloneError 25 () => {} could not be cloned.
+a data: string -> TypeError ERR_WORKER_PATH The worker script or module filename must be an absolute path or a relative path starting with './' or '../'. Wrap data: URLs with `new URL`. Received "data:text/javascript,0"
+a file:// string -> TypeError ERR_WORKER_PATH The worker script or module filename must be an absolute path or a relative path starting with './' or '../'. Wrap file:// URLs with `new URL`. Received "file:///nowhere.js"
+a file: URL with ?variant=1 -> import.meta.url search+hash|file: |true
+a file: URL with #frag -> import.meta.url search+hash|file: |true
+a stream in workerData: streamed
+a getter and a SharedArrayBuffer -> value: "read", sab: a SharedArrayBuffer
+  getter reads: 1 the worker wrote: 42
+a view of a SharedArrayBuffer -> view: an Int32Array of 2 on a SharedArrayBuffer
+  the worker wrote: 7
+a getter and a Blob -> value: "read", blob: a Blob of 4
+  getter reads: 1
+a getter and 2 MB -> value: "read", big: 2097152
+  getter reads: 1
+a getter that throws a DataCloneError of its own -> DataCloneError mine
+  getter reads: 1
+a class instance with a getter, and a port -> holder: {"n":1,"own":"own"}, carried: a port
+  getter reads: 1
+a Worker with a port moved within the thread -> DataCloneError 25 MessagePort in transfer list is already detached
+a post with a port moved within the thread -> DataCloneError 25 MessagePort in transfer list is already detached
+a Worker with a duplicate port -> DataCloneError 25 Transfer list contains duplicate MessagePort
+a post with a duplicate port -> DataCloneError 25 Transfer list contains duplicate MessagePort
+a Worker with an unlisted port -> DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
+a post (other thread) with an unlisted port -> DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
+a post (this thread) with an unlisted port -> DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
+a post with one port listed and one not -> DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
+a Worker with a closed port -> DataCloneError 25 MessagePort in transfer list is already detached
+a post with a closed port -> DataCloneError 25 MessagePort in transfer list is already detached
+ports in a Map, as a Map key and in a Set, in this thread: function function function true
+a post (other thread) with an unlisted stream -> DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
+a Worker with an unlisted stream -> DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
+a Blob through a port in this thread: 5
+a buffer posted through a closed port, its byteLength after: 0
+a forged mark beside a real port -> real: a port, forged: {"\u0000slicc-jsh port":"00000000-0000-4000-8000-000000000000:0","slicc-jsh port":"00000000-0000-4000-8000-000000000000:0"}
+the program ends
