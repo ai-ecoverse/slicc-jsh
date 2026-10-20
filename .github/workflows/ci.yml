@@ -43,18 +43,22 @@ jobs:
       pull-requests: read
     outputs:
       runner: ${{ steps.pick.outputs.runner }}
+      light: ${{ steps.pick.outputs.light }}
     steps:
       - id: pick
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
           FORCED: ${{ vars.CI_RUNNER }}
           POOL: ${{ vars.CERT_RUNNER || 'ubuntu-latest' }}
+          LIGHT: ${{ vars.CERT_LIGHT_RUNNER || vars.CERT_RUNNER || 'ubuntu-latest' }}
         with:
           script: |
             const hosted = 'ubuntu-latest';
             const pick = async (runner, why) => {
+              const light = runner === hosted || process.env.FORCED ? runner : process.env.LIGHT;
               core.setOutput('runner', runner);
-              await core.summary.addRaw(`runner: ${runner} (${why})\n`).write();
+              core.setOutput('light', light);
+              await core.summary.addRaw(`runner: ${runner}, light: ${light} (${why})\n`).write();
             };
             if (process.env.FORCED) return await pick(process.env.FORCED, 'vars.CI_RUNNER');
             const pool = process.env.POOL;
@@ -249,12 +253,14 @@ jobs:
     # #!/usr/bin/env jsh script, re-run upgrades), (b) no Node and no
     # terminal fails with the instructions, the "yes, download Node" path on
     # a pseudo-terminal (test/install/answer-tty.py), and (c) --uninstall.
-    # About 20 s of work, so it runs hosted on both OSes, not on the pool.
+    # About 20 s of work: Linux on the light pool (vars.CERT_LIGHT_RUNNER,
+    # else vars.CERT_RUNNER; hosted for forks), macOS hosted.
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    needs: runner
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && needs.runner.outputs.light || matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
