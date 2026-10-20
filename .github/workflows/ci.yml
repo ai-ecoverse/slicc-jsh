@@ -19,7 +19,7 @@ env:
   # The toolchain's Node, for every job (the baseline 22.22.0 stays pinned on
   # its own setup-node, renovate.json).
   # renovate: datasource=node-version depName=node versioning=node
-  NODE_VERSION: '24.22.0'
+  NODE_VERSION: '26.12.0'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
