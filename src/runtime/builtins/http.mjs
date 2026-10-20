@@ -127,13 +127,13 @@ function emitError(emitter, err) {
 
 /**
  * A write to a kept-alive socket the server has closed fails EPIPE in the
- * kernel; Node's kernel takes the bytes and the peer's reset comes as
- * `read ECONNRESET`, which is what Node's retry idiom checks
- * (`req.reusedSocket && err.code === 'ECONNRESET'`).
+ * kernel; Node's kernel takes the bytes, and on Linux the request ends with
+ * the server's FIN as 'socket hang up' (ECONNRESET), which is what Node's
+ * retry idiom checks (`req.reusedSocket && err.code === 'ECONNRESET'`).
  */
 function resetOfReused(req, err) {
   if (!req.reusedSocket || err?.code !== 'EPIPE') return err;
-  return Object.assign(new Error('read ECONNRESET'), { errno: -104, code: 'ECONNRESET', syscall: 'read' });
+  return Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
 }
 
 function headerObj(rawHeaders) {

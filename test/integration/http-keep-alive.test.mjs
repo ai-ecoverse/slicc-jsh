@@ -141,6 +141,6 @@ describe('http keep-alive (kernel)', () => {
     clearTimeout(bound);
     assert.equal(r.status, 1, r.stderr);
     assert.equal(r.stdout, '');
-    assert.match(r.stderr, /^Error: read ECONNRESET$/m);
+    assert.match(r.stderr, /^Error: socket hang up$/m);
   });
 });
