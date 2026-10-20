@@ -282,6 +282,29 @@ function refused(object) {
   }
 }
 
+/**
+ * jsh's own hook for what the platform clones or shares itself (its host
+ * objects, SharedArrayBuffers): on a Serializer, `(object) => index` or
+ * undefined (written as is); on a Deserializer, `(index) => object`. The
+ * mailboxes of ../web/remote-ports.mjs send them beside the bytes.
+ */
+export const kHostObjects = Symbol('slicc-jsh host objects');
+
+/**
+ * Whether structured clone takes `object` as an ordinary object (its own
+ * enumerable properties, read once, into a plain one): not one of the
+ * builtins it writes in its own way, nor one it refuses. (A platform object
+ * is the caller's to tell apart.)
+ */
+export function isOrdinaryObject(object) {
+  if (object === null || typeof object !== 'object' || Array.isArray(object) || ArrayBuffer.isView(object) || refused(object)) return false;
+  // (RegExp.prototype answers `source`, but is an ordinary object to V8.)
+  const regexp = object !== RegExp.prototype && branded(regexpSource, object);
+  const brands = [arrayBufferByteLength, sharedByteLength, dateGetTime, mapSize, setSize, booleanValueOf, numberValueOf, bigintValueOf, stringValueOf];
+  if (regexp || brands.some((fn) => branded(fn, object))) return false;
+  return !(typeof Error.isError === 'function' ? Error.isError(object) : Reflect.apply(objectToString, object, []) === '[object Error]');
+}
+
 /** Canonical array index (0 … 2**32 - 2) of a property key, or -1. */
 function arrayIndex(key) {
   if (key.length === 0 || key.length > 10) return -1;
@@ -515,6 +538,12 @@ export function createSerdes({ Buffer }) {
       return;
     }
     ids.set(object, state.nextId++);
+    const host = self[kHostObjects]?.(object);
+    if (host !== undefined) {
+      out.byte(T.hostObject);
+      out.varint(host);
+      return;
+    }
     if (refused(object)) throw notCloned(self, object);
 
     if (Array.isArray(object)) return writeArray(self, state, object);
@@ -1248,6 +1277,12 @@ export function createSerdes({ Buffer }) {
 
   function readHostObject(self, r) {
     const id = r.nextId++;
+    if (self[kHostObjects]) {
+      const object = self[kHostObjects](readVarint(r));
+      if (object === undefined) fail();
+      addObject(r, id, object);
+      return object;
+    }
     if (typeof self._readHostObject !== 'function') fail();
     const object = Reflect.apply(self._readHostObject, self, []);
     if (object === null || (typeof object !== 'object' && typeof object !== 'function')) {

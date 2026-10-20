@@ -31,8 +31,11 @@ const kInspect = Symbol.for('nodejs.util.inspect.custom');
 const kCreate = Symbol('MessagePort');
 const kPortMark = '\u0000slicc-jsh port';
 // A transferred port's mark is `<nonce>:<index>`, the nonce new for each
-// message: data that happens to hold the mark's key is left as it is.
-export const newPortNonce = () => globalThis.crypto?.randomUUID?.() ?? `${Math.random()}`.slice(2);
+// message: data that happens to hold the mark's key is left as it is. Its
+// random source is taken before the program runs, which can't replace it.
+const randomUUID = typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID.bind(globalThis.crypto) : null;
+const random = Math.random;
+export const newPortNonce = () => randomUUID?.() ?? `${random()}`.slice(2);
 export const portMark = (nonce, i) => ({ [kPortMark]: `${nonce}:${i}` });
 export function markIndex(value, nonce) {
   const mark = value?.[kPortMark];
@@ -52,6 +55,19 @@ export function createPorts({
   const ready = new Set();
   let created = 0;
   let flushing = null;
+  // How a port whose other end is in another thread moves within this one
+  // (./remote-ports.mjs's export and import): set by it.
+  let moveLinked = null;
+  const portError = (message) => new DOMException(message, 'DataCloneError');
+  /** A jsh port in `value` that isn't in `listed`, found through its own data properties (no getter runs). */
+  const hasUnlisted = (value, listed, seen = new Set()) => {
+    if (value === null || typeof value !== 'object' || seen.has(value)) return false;
+    if (value instanceof MessagePort) return !listed.includes(value);
+    seen.add(value);
+    if (value instanceof Map) return [...value].some(([k, v]) => hasUnlisted(k, listed, seen) || hasUnlisted(v, listed, seen));
+    if (value instanceof Set) return [...value].some((v) => hasUnlisted(v, listed, seen));
+    return Object.values(Object.getOwnPropertyDescriptors(value)).some((d) => d.enumerable && 'value' in d && hasUnlisted(d.value, listed, seen));
+  };
 
   // The ports this turn still visits (in the order they were made), the one
   // being visited and how many of its messages it takes, and the ports
@@ -148,10 +164,17 @@ export function createPorts({
 
   // A transferred port goes by itself (one thread): out of the value before
   // the clone, back in after it; the rest of the transfer list is the clone's.
-  const cloneFor = (message, transfer) => {
+  const cloneFor = (message, transfer, source) => {
     const list = transfer === undefined || transfer === null ? [] : Array.isArray(transfer) ? transfer : (transfer?.transfer ?? []);
     const ports = [...list].filter((x) => x instanceof MessagePort);
     const rest = [...list].filter((x) => !(x instanceof MessagePort));
+    // Node's checks of the ports in it: the sender itself, one moved on
+    // already or closed by the program, a duplicate, and one in the message
+    // that isn't listed.
+    if (source && ports.includes(source)) throw portError('Transfer list contains source port');
+    if (ports.some((port) => port._unusable())) throw portError('MessagePort in transfer list is already detached');
+    if (new Set(ports).size !== ports.length) throw portError('Transfer list contains duplicate MessagePort');
+    if (hasUnlisted(message, ports)) throw portError('Object that needs transfer was found in message but not listed in transferList');
     const nonce = newPortNonce();
     const marks = new Map(ports.map((port, i) => [port, portMark(nonce, i)]));
     const seen = new Set();
@@ -181,6 +204,9 @@ export function createPorts({
       seen.clear();
       swap(marked, undo);
     }
+    // Moved: each a new port, entangled as it was, and the sent one detached.
+    const moved = ports.map((port) => port._moveHere());
+    ports.splice(0, ports.length, ...moved);
     return { data: restore(data), ports };
   };
 
@@ -302,9 +328,11 @@ export function createPorts({
     // Its other end in another thread (./remote-ports.mjs): `post(message,
     // transfer)` and `close()` go there instead of to #peer.
     #link = null;
-    // Moved to another thread: it takes and delivers nothing more.
+    // Moved (to another thread, or within this one): it takes and delivers nothing more.
     #detached = false;
     #open = true;
+    // Closed by the program (not by its other end): it can't be transferred.
+    #closedHere = false;
     #started = false;
     #refed = false;
     #handle = { kind: 'message-port' };
@@ -336,9 +364,11 @@ export function createPorts({
       }
       if (this.#link) {
         if (this.#open) this.#link.post(message, transfer);
+        // Closed, it is still cloned and its transfers moved, then dropped, as in Node.
+        else cloneFor(message, transfer, this);
         return;
       }
-      const entry = cloneFor(message, transfer);
+      const entry = cloneFor(message, transfer, this);
       const peer = this.#peer;
       if (!this.#open || !peer) return;
       peer.#queue.push(entry);
@@ -353,6 +383,7 @@ export function createPorts({
     }
 
     close() {
+      this.#closedHere = true;
       if (!this.#open) return;
       if (this.#link) {
         const link = this.#link;
@@ -430,6 +461,31 @@ export function createPorts({
     }
     get _detached() {
       return this.#detached;
+    }
+    /** @internal Moved on already, or closed by the program: Node's detached port. */
+    _unusable() {
+      return this.#detached || this.#closedHere;
+    }
+    /**
+     * @internal Transferred within this thread: a new port in its place
+     * (its queue, its other end, whether it was closed), as Node's transfer
+     * makes one, and this one detached.
+     */
+    _moveHere() {
+      if (this.#link) return moveLinked(this);
+      const fresh = new MessagePort(kCreate);
+      const peer = this.#peer;
+      fresh.#peer = peer;
+      if (peer) peer.#peer = fresh;
+      fresh.#queue = this.#queue.splice(0);
+      fresh.#open = this.#open;
+      fresh.#closeDue = this.#closeDue;
+      this.#peer = null;
+      this.#detached = true;
+      this.#open = false;
+      this.#closeDue = false;
+      this.#setRef(false);
+      return fresh;
     }
     /** @internal */
     _pending() {
@@ -595,7 +651,12 @@ export function createPorts({
   /** @internal An unpaired port, for one that comes from another thread. */
   const makePort = () => new MessagePort(kCreate);
 
-  return { BroadcastChannel, MessageChannel, MessagePort, receiveMessageOnPort, makePort, kPortMark };
+  /** @internal How a linked port moves within this thread (./remote-ports.mjs). */
+  const setLinkedMover = (fn) => {
+    moveLinked = fn;
+  };
+
+  return { BroadcastChannel, MessageChannel, MessagePort, receiveMessageOnPort, makePort, kPortMark, setLinkedMover };
 }
 
 export function createBroadcastChannel(options) {

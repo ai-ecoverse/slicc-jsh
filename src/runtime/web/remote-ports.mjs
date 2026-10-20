@@ -11,10 +11,13 @@
  * (the structured clone's own algorithm), so the receiving thread has it at
  * once, for receiveMessageOnPort() even while it never returns to its event
  * loop. Its ArrayBuffers in the transfer list are copied there and detached
- * here, which a program can't tell from a move. A message the mailbox can't
- * take (one transferring ports, or with SharedArrayBuffers in it) goes on
- * the native port. Every message has the sender's next number, and the receiver hands
- * them to its port in that order, whichever way they came.
+ * here, which a program can't tell from a move. One the mailbox can't take
+ * goes on the native port: as those bytes, beside what the platform shares
+ * or clones itself (SharedArrayBuffers, Blobs, …), when it transfers only
+ * ArrayBuffers (its getters are read once, either way), else as the
+ * platform's clone of it (one transferring ports or streams). Every message
+ * has the sender's next number, and the receiver hands them to its port in
+ * that order, whichever way they came.
  *
  * A jsh port in a message (in its transfer list) goes as the end of a native
  * channel, with its mailboxes, its numbering, the messages it had waiting,
@@ -22,10 +25,12 @@
  * now talks over the channel's other end.
  *
  * On the native port: { t: 'm', seq, data, ports } for a message (its jsh
- * ports marked in `data`, as the in-thread clone marks them), { t: 'c', seq }
- * for a close. Anything else is the thread's own (a worker's 'online', its
+ * ports marked in `data`, as the in-thread clone marks them), or
+ * { t: 'm', seq, bytes, hosts } for one serialized; { t: 'c', seq } for a
+ * close. Anything else is the thread's own (a worker's 'online', its
  * output, …), for `onOther`.
  */
+import { isOrdinaryObject, kHostObjects } from '../builtins/v8-serdes.mjs';
 import { markIndex, newPortNonce, portMark } from './broadcast-channel.mjs';
 import { createMailbox, mailboxReader, mailboxWriter } from './mailbox.mjs';
 
@@ -40,6 +45,22 @@ const isArrayBuffer = (value) => {
   }
 };
 const CHANNEL_MAILBOX = 256 * 1024;
+const sharedByteLength = typeof SharedArrayBuffer === 'function' ? Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength').get : null;
+
+// What the platform clones or shares itself: V8's host objects (Blobs,
+// keys, images, …), SharedArrayBuffers and WebAssembly's objects. jsh's
+// serializer leaves them to it, and the port walk doesn't go into them.
+const PLATFORM = [
+  'Blob', 'FileList', 'ImageData', 'ImageBitmap', 'CryptoKey', 'DOMMatrixReadOnly', 'DOMPointReadOnly', 'DOMRectReadOnly', 'DOMQuad',
+  'RTCCertificate', 'FileSystemHandle', 'VideoFrame', 'AudioData', 'EncodedVideoChunk', 'EncodedAudioChunk', 'OffscreenCanvas',
+  'MediaStreamTrack',
+]
+  .map((name) => globalThis[name])
+  .concat(['Module', 'Memory', 'Global', 'Table', 'Tag', 'Exception'].map((name) => globalThis.WebAssembly?.[name]))
+  .filter((Class) => typeof Class === 'function');
+const isPlatformObject = (value) => (sharedByteLength !== null && hasBrandOf(sharedByteLength, value)) || PLATFORM.some((Class) => value instanceof Class);
+const unlisted = () => new DOMException('Object that needs transfer was found in message but not listed in transferList', 'DataCloneError');
+const detached = () => new DOMException('MessagePort in transfer list is already detached', 'DataCloneError');
 
 // What a transfer list may hold (Node's): ArrayBuffers (not shared ones),
 // message ports (jsh's and the platform's) and web streams. Each by its
@@ -47,6 +68,14 @@ const CHANNEL_MAILBOX = 256 * 1024;
 // prototype can be faked; a fake would pass, and only fail once a port had
 // gone).
 const getterOf = (Class, key) => (typeof Class === 'function' ? Object.getOwnPropertyDescriptor(Class.prototype, key)?.get : undefined);
+function hasBrandOf(get, item) {
+  try {
+    Reflect.apply(get, item, []);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const hasBrand = (get, item) => {
   try {
     Reflect.apply(get, item, []);
@@ -76,6 +105,39 @@ function checkTransferList(list, JshPort, brands) {
     seen.add(item);
     if (isArrayBuffer(item) && item.detached) throw new DOMException('Cannot transfer object of unsupported type.', 'DataCloneError');
   }
+}
+
+/**
+ * The mailboxes' serialization: the structured clone's own algorithm (V8's
+ * ValueSerializer, `process`'s v8, made when first used). `host` gives an
+ * index for what the platform clones or shares itself, sent beside the
+ * bytes, as V8's host objects are; what it can't write is V8's
+ * DataCloneError.
+ */
+export function mailboxSerdes(process) {
+  let made;
+  return () =>
+    (made ??= (() => {
+      const v8 = process._builtin('v8');
+      return {
+        serialize(value, host) {
+          const ser = new v8.Serializer();
+          ser._getDataCloneError = function DataCloneError(message) {
+            return new DOMException(message, 'DataCloneError');
+          };
+          if (host) ser[kHostObjects] = host;
+          ser.writeHeader();
+          ser.writeValue(value);
+          return ser.releaseBuffer();
+        },
+        deserialize(bytes, hosts) {
+          const der = new v8.Deserializer(bytes);
+          if (hosts) der[kHostObjects] = (i) => hosts[i];
+          der.readHeader();
+          return der.readValue();
+        },
+      };
+    })());
 }
 
 export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
@@ -125,28 +187,32 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     }
     const proto = Object.getPrototypeOf(value);
     if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) {
-      // Another object: structured clone makes it a plain one of its own
-      // enumerable properties, so a port among them is swapped in such a
-      // copy. Without one, it goes as it is (binary data, dates and regexps
-      // are never walked).
-      if (ArrayBuffer.isView(value) || isArrayBuffer(value) || value instanceof Date || value instanceof RegExp) return value;
+      // Another object: an ordinary one (a class instance) is what
+      // structured clone makes a plain one of, of its own enumerable
+      // properties, so the copy is that, its getters read once, here. A
+      // builtin or a platform object (a stream, a native port) goes as it
+      // is, never walked.
+      if (!isOrdinaryObject(value) || isPlatformObject(value) || brands.some((get) => hasBrand(get, value))) return value;
       const copy = {};
       seen.set(value, copy);
-      let swappedAny = false;
-      for (const key of Object.keys(value)) {
-        copy[key] = mapPorts(value[key], swap, seen);
-        if (copy[key] !== value[key]) swappedAny = true;
-      }
-      if (swappedAny) return copy;
-      seen.set(value, value);
-      return value;
+      for (const key of Object.keys(value)) copy[key] = mapPorts(value[key], swap, seen);
+      return copy;
     }
     const out = Array.isArray(value) ? new Array(value.length) : {};
     seen.set(value, out);
     for (const key of Object.keys(value)) out[key] = mapPorts(value[key], swap, seen);
     return out;
   }
-  const swapPorts = (value, marks) => mapPorts(value, (v) => marks.get(v));
+  // A port that isn't listed (jsh's or the platform's), or a stream, is
+  // Node's DataCloneError: it would only go by being transferred.
+  const swapPorts = (value, marks, listed) =>
+    mapPorts(value, (v) => {
+      const mark = marks.get(v);
+      if (mark) return mark;
+      if (listed.includes(v)) return v;
+      if (v instanceof MessagePort || brands.some((get) => hasBrand(get, v))) throw unlisted();
+      return undefined;
+    });
   const restorePorts = (value, list, nonce) =>
     mapPorts(value, (v) => {
       const at = markIndex(v, nonce);
@@ -162,24 +228,25 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     const list = transferListOf(transfer);
     const jshPorts = list.filter((x) => x instanceof MessagePort);
     const rest = list.filter((x) => !(x instanceof MessagePort));
-    for (const port of jshPorts) {
-      if (port._detached) throw new DOMException('MessagePort in transfer list is already detached', 'DataCloneError');
-    }
+    // One moved on already, or closed by the program (not by its other end).
+    for (const port of jshPorts) if (port._unusable()) throw detached();
     checkTransferList(list, MessagePort, brands);
-    if (jshPorts.length === 0) return fn({ data: message, ports: [] }, rest);
     const nonce = newPortNonce();
     const marks = new Map(jshPorts.map((port, i) => [port, portMark(nonce, i)]));
     // Staged first, the rest of the transfer list (platform ports, streams,
     // buffers) moved into the clone: what can't be cloned (a function) or
     // transferred (a port or stream already gone) fails here, before any jsh
     // port is exported, which leaves them this side's, usable, as in Node.
-    const staged = structuredClone({ marked: swapPorts(message, marks), rest }, { transfer: rest });
+    // The walk reads each property once; the clone takes its copy.
+    const staged = structuredClone({ marked: swapPorts(message, marks, rest), rest }, { transfer: rest });
+    if (jshPorts.length === 0) return fn({ data: staged.marked, ports: [] }, staged.rest);
     const natives = [];
     const envelopes = jshPorts.map((port) => exportPort(port, natives));
     return fn({ data: staged.marked, ports: envelopes, nonce }, [...natives, ...staged.rest]);
   }
 
   function receive(message) {
+    if (message.bytes) return { data: serdes().deserialize(message.bytes, message.hosts), ports: [] };
     const list = (message.ports ?? []).map(importPort);
     return { data: list.length ? restorePorts(message.data, list, message.nonce) : message.data, ports: list };
   }
@@ -285,31 +352,32 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
         // A port can't send itself (Node's DataCloneError), checked before
         // anything leaves: exported, it would cut its own link.
         if (list.includes(port)) throw new DOMException('Transfer list contains source port', 'DataCloneError');
-        // Nothing to transfer but ArrayBuffers: the mailbox, the buffers'
-        // bytes copied and theirs detached (a move, as a program sees it).
-        if (writer && list.every(isArrayBuffer)) {
+        // Nothing to transfer but ArrayBuffers: serialized once (its
+        // getters read once, what it can't be is the post's error), the
+        // buffers' bytes copied and theirs detached (a move, as a program
+        // sees it).
+        if (list.every(isArrayBuffer)) {
           // V8's checks of a transfer list, before the message is out.
           checkTransferList(list, MessagePort, brands);
-          let bytes;
-          try {
-            bytes = serdes().serialize(message);
-          } catch (err) {
-            // What jsh's serializer can't write (a host object) goes the
-            // native way; anything else (a getter's own throw) is the post's.
-            if (err?.name !== 'DataCloneError') throw err;
-            bytes = null;
-          }
-          if (bytes && writer.fits(bytes.length)) {
-            // A buffer the message's getters detached meanwhile is gone
-            // already: the rest move, and the post stands, as in Node. They
-            // move before the record is out: one that can't (a
+          const hosts = [];
+          const bytes = serdes().serialize(message, (object) => {
+            if (object instanceof MessagePort || brands.some((get) => hasBrand(get, object))) throw unlisted();
+            return isPlatformObject(object) ? hosts.push(object) - 1 : undefined;
+          });
+          // A buffer the message's getters detached meanwhile is gone
+          // already: the rest move, and the post stands, as in Node.
+          const live = list.filter((b) => !b.detached);
+          if (writer && hosts.length === 0 && writer.fits(bytes.length)) {
+            // They move before the record is out: one that can't (a
             // WebAssembly.Memory's) fails the post with nothing sent.
-            const live = list.filter((b) => !b.detached);
             if (live.length) structuredClone(live, { transfer: live });
             writer.write(seq, bytes);
-            nextSend = (nextSend + 1) >>> 0;
-            return;
+          } else {
+            // The native way, the buffers moved with it (or neither).
+            native.postMessage({ t: 'm', seq, bytes, hosts, moved: live }, live);
           }
+          nextSend = (nextSend + 1) >>> 0;
+          return;
         }
         pack(message, transfer, (packed, natives) => {
           native.postMessage({ t: 'm', seq, ...packed }, natives);
@@ -408,7 +476,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       if (!list?.length) return { data, ports: [] };
       const nonce = newPortNonce();
       const marks = new Map(list.map((p, i) => [p, portMark(nonce, i)]));
-      return { data: swapPorts(data, marks), ports: list.map((p) => exportPort(p, natives)), nonce };
+      return { data: swapPorts(data, marks, []), ports: list.map((p) => exportPort(p, natives)), nonce };
     };
     return {
       native,
@@ -442,6 +510,14 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       return [held.packed, held.list];
     });
   }
+
+  // A linked port transferred within this thread: exported and imported
+  // again, a new port on the same channel.
+  ports.setLinkedMover?.((port) => {
+    const natives = [];
+    const envelope = exportPort(port, natives);
+    return importPort(structuredClone(envelope, { transfer: natives }));
+  });
 
   return { link, pack, hold, receive, exportPort, importPort, mailboxPair, NativeMessageChannel };
 }

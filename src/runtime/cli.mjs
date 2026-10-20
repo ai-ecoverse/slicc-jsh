@@ -75,6 +75,96 @@ export function withoutEntryOptions(execArgv = []) {
 }
 
 /**
+ * Node 22.22.0's per-process options: a Worker refuses them in its execArgv
+ * and in its env's NODE_OPTIONS. Recorded by trying each name in its option
+ * table (require('internal/options')) both ways; their `--no-` forms too.
+ */
+const WORKER_PER_PROCESS = new Set([
+  '--debug-arraybuffer-allocations', '--disable-proto', '--disable-wasm-trap-handler', '--enable-fips',
+  '--force-fips', '--icu-data-dir', '--node-memory-debug', '--node-snapshot', '--openssl-config',
+  '--openssl-legacy-provider', '--openssl-shared-config', '--prof-process', '--report-compact', '--report-dir',
+  '--report-directory', '--report-filename', '--report-on-fatalerror', '--secure-heap', '--secure-heap-min',
+  '--snapshot-blob', '--title', '--tls-cipher-list', '--trace-event-categories', '--trace-event-file-pattern',
+  '--trace-events-enabled', '--trace-sigint', '--use-bundled-ca', '--use-largepages', '--use-openssl-ca',
+  '--use-system-ca', '--v8-pool-size', '--zero-fill-buffers',
+]);
+/** And what only its execArgv refuses: V8's options, and the ones that aren't a program's. */
+const WORKER_EXEC_REFUSED = new Set([
+  '--abort-on-uncaught-exception', '--completion-bash', '--debug', '--debug-brk',
+  '--disallow-code-generation-from-strings', '--enable-etw-stack-walking', '--experimental-sea-config',
+  '--experimental-shadow-realm', '--expose-gc', '--harmony', '--harmony-shadow-realm', '--help',
+  '--huge-max-old-generation-size', '--interpreted-frames-native-stack', '--jitless', '--max-old-space-size',
+  '--max-semi-space-size', '--perf-basic-prof', '--perf-basic-prof-only-functions', '--perf-prof',
+  '--perf-prof-unwinding-info', '--prof', '--run', '--security-revert', '--stack-trace-limit', '--use-strict',
+  '--v8-options', '--version', '--watch', '--watch-path', '-h', '-v',
+]);
+// The one V8 option the worker parser reads with its value before refusing it.
+const WORKER_V8_VALUED = new Set(['--stack-trace-limit']);
+const inSet = (set, name) => set.has(name) || (name.startsWith('--no-') && set.has(`--${name.slice(5)}`));
+const refusedInWorker = (name) => inSet(WORKER_PER_PROCESS, name) || inSet(WORKER_EXEC_REFUSED, name);
+
+/**
+ * What Node's Worker constructor says of an execArgv it refuses (after
+ * "Initiated Worker with invalid execArgv flags: "), or null. As its parser
+ * reads them: in order, up to the first word that isn't an option; a flag
+ * whose value is missing is that error alone; otherwise every flag the
+ * worker can't take, as written.
+ */
+export function workerExecArgvError(execArgv) {
+  const invalid = [];
+  for (let i = 0; i < execArgv.length; i++) {
+    const word = execArgv[i];
+    if (!word.startsWith('-') || word === '-' || word === '--') break;
+    const name = word.startsWith('--') ? word.split('=')[0] : word;
+    const next = execArgv[i + 1];
+    // -e, -p, --check and -i are inert in a worker, once whole (-pe is --eval's).
+    if (/^(-e|--eval|-pe|-ep)$/.test(word)) {
+      if (missingValue(next)) return `${word.length === 3 ? '--eval' : word} requires an argument`;
+      i++;
+      continue;
+    }
+    if (word === '--eval=' || word === '--print=') return `${word} requires an argument`;
+    if (word === '-p' || word === '--print') {
+      if (!missingValue(next)) i++;
+      continue;
+    }
+    if (/^--(eval|print)=/.test(word) || /^(-c|--check|-i|--interactive)$/.test(word)) continue;
+    if (WORKER_V8_VALUED.has(name) && name === word) {
+      if (missingValue(next)) return `${word} requires an argument`;
+      i++;
+      invalid.push(word);
+      continue;
+    }
+    if (refusedInWorker(name)) {
+      invalid.push(word);
+      continue;
+    }
+    const alone = parseNodeArgv(['node', word, '-e', '0']);
+    if (!alone.error) continue;
+    if (/requires an argument/.test(alone.error)) {
+      if (missingValue(next)) return `${word} requires an argument`;
+      if (!parseNodeArgv(['node', word, next, '-e', '0']).error) {
+        i++;
+        continue;
+      }
+    }
+    invalid.push(word);
+  }
+  return invalid.length ? invalid.join(', ') : null;
+}
+
+/**
+ * What Node's Worker constructor says of NODE_OPTIONS in the env it was
+ * given (after "Initiated Worker with invalid NODE_OPTIONS env variable: "),
+ * or null: its per-process options aren't allowed there.
+ */
+export function workerNodeOptionsError(text) {
+  if (typeof text !== 'string' || text === '') return null;
+  const parsed = parseNodeOptions(text, 'node', { refuse: 'error' });
+  return parsed.error ? parsed.error.replace(/^node: /, '').trimEnd() : null;
+}
+
+/**
  * A worker's command line, as Node gives a Worker's thread: its execArgv
  * (the Worker's option, else its parent's), its script (or its eval code, or
  * a data: URL's module), then its argv. An eval worker's argv[1] is
@@ -89,7 +179,9 @@ export function workerCommandLine(data) {
   // name), as Node's worker runs it.
   else if (data.url !== undefined) argv.push('--input-type=module', '-e', `import ${JSON.stringify(data.url)};`, '--', ...data.argv);
   else argv.push(data.file, ...data.argv);
-  const parsed = parseNodeArgv(argv);
+  // Its NODE_OPTIONS: its env's, or (with the parent's env) the parent's own,
+  // without what a worker doesn't take.
+  const parsed = parseNodeArgv(argv, { nodeOptions: data.nodeOptions, refuse: data.nodeOptionsGiven ? 'error' : 'drop' });
   // An eval worker's argv[1] is `[worker eval]`; a data: URL's has none.
   if (data.eval !== undefined) parsed.processArgv = [parsed.processArgv[0], '[worker eval]', ...data.argv];
   else if (data.url !== undefined) parsed.processArgv = [parsed.processArgv[0], ...data.argv];
@@ -116,7 +208,11 @@ export function inputTypeOf(execArgv = []) {
  * allows there. Answers the words jsh applies (in CLI form, before the
  * command line's), or Node's error.
  */
-export function parseNodeOptions(text, argv0 = 'node', { watch = false } = {}) {
+/**
+ * `refuse`: a worker's NODE_OPTIONS, where Node's per-process options are
+ * 'error' (its env's) or dropped ('drop', the parent's own).
+ */
+export function parseNodeOptions(text, argv0 = 'node', { watch = false, refuse } = {}) {
   const words = [];
   let inString = false;
   let fresh = true;
@@ -155,8 +251,12 @@ export function parseNodeOptions(text, argv0 = 'node', { watch = false } = {}) {
     if (name.startsWith('--no-') && ENV_VALUED.has(`--${name.slice(5)}`)) {
       return { error: `${argv0}: ${raw} is an invalid negation because it is not a boolean option`, status: 9 };
     }
+    if (refuse === 'drop' && inSet(WORKER_PER_PROCESS, name)) {
+      if (eq === -1 && ENV_VALUED.has(name) && !missingValue(words[i + 1])) i++;
+      continue;
+    }
     // Node names an option given with a value with its `=` (`--eval= is not allowed`).
-    if (word === '--' || !allowed.has(name)) return { error: `${argv0}: ${eq === -1 ? raw : `${raw}=`} is not allowed in NODE_OPTIONS`, status: 9 };
+    if (word === '--' || !allowed.has(name) || (refuse && inSet(WORKER_PER_PROCESS, name))) return { error: `${argv0}: ${eq === -1 ? raw : `${raw}=`} is not allowed in NODE_OPTIONS`, status: 9 };
     const alias = ENV_ALIASES[name];
     const canonical = alias?.length === 1 ? alias[0] : name;
     const takesValue = ENV_VALUED.has(canonical);
@@ -204,10 +304,10 @@ function jshKnows(word, watch = false) {
  * `watch`: whether this kernel can run --watch (an IPC channel to the child,
  * and fs.watch). Without it --watch and its options stay bad options.
  */
-export function parseNodeArgv(argv, { nodeOptions, watch = false } = {}) {
+export function parseNodeArgv(argv, { nodeOptions, watch = false, refuse } = {}) {
   const argv0 = argv[0] ?? 'node';
   if (typeof nodeOptions === 'string' && nodeOptions !== '') {
-    const env = parseNodeOptions(nodeOptions, argv0, { watch });
+    const env = parseNodeOptions(nodeOptions, argv0, { watch, refuse });
     if (env.error) return env;
     if (env.args.length > 0) {
       // (Watch mode from NODE_OPTIONS alone has no file there: Node's error.)
