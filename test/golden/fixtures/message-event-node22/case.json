@@ -1,5 +1,5 @@
 {
-  "description": "Node 22's MessageEvent (undici 6.23's), which jsh makes itself rather than load the platform's (#566): its prototype, name and descriptors; the constructor's WebIDL conversions and their TypeErrors (argument count, a symbol type, a non-object init, ports and source not MessagePorts, a null init's missing defaults); the brand checks; initMessageEvent; inspect; a port's and a BroadcastChannel's messages are instances of the global MessageEvent",
+  "description": "Node 22's MessageEvent (undici 6.23's), which jsh makes itself rather than load the platform's (#566): its prototype, name and descriptors; the constructor's WebIDL conversions and their TypeErrors (argument count, a symbol type, a non-object init, ports and source not MessagePorts, a null init's missing defaults, the order the init's members are read in); the brand checks; initMessageEvent; inspect; a port's and a BroadcastChannel's messages are instances of the global MessageEvent",
   "argv": ["script.js"],
   "shim": true
 }

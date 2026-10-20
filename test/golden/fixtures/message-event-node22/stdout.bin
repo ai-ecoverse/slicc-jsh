@@ -40,6 +40,7 @@ coerce => [
   false
 ]
 null fields => [ null, 'null', 'null' ]
+init read order => "bubbles cancelable composed data origin lastEventId source ports"
 lone surrogate origin => 2
 origin symbol THROW TypeError undefined "Cannot convert a Symbol value to a string"
 lastEventId symbol THROW TypeError undefined "MessageEvent constructor: eventInitDict.lastEventId is a symbol, which cannot be converted to a DOMString."

@@ -51,6 +51,11 @@ show('coerce', () => {
   return [e.type, e.origin, e.lastEventId, e.data, e.bubbles, e.cancelable, e.composed];
 });
 show('null fields', () => { const e = new E('m', { data: null, origin: null, lastEventId: null }); return [e.data, e.origin, e.lastEventId]; });
+show('init read order', () => {
+  const seen = [];
+  new E('m', new Proxy({}, { get: (t, k) => { if (typeof k === 'string') seen.push(k); } }));
+  return seen.join(' ');
+});
 show('lone surrogate origin', () => new E('m', { origin: 'a\ud800' }).origin.length);
 show('origin symbol', () => new E('m', { origin: Symbol('o') }));
 show('lastEventId symbol', () => new E('m', { lastEventId: Symbol('l') }));
