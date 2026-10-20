@@ -1061,7 +1061,7 @@ const connect = async (label, user, port, query) => {
     const out = await client(steps);
     const failed = 'error 28P01 password authentication failed for user "alice"';
     const closed = 'error undefined channel binding required, offered SCRAM-SHA-256';
-    const passed = kernelAtLeast('1.137.0');
+    const passThrough = kernelAtLeast('1.137.0');
     assert.deepEqual(out, {
       'prefer, verify-full': 'connected, queried',
       'prefer, require (libpq)': 'connected, queried',
@@ -1071,20 +1071,20 @@ const connect = async (label, user, port, query) => {
       'prefer, disable': failed,
       'require, verify-full': 'connected, queried',
       'require, require (libpq)': 'connected, queried',
-      'require, verify-full, a root of its own': passed ? failed : closed,
-      'require, require (libpq), untrusted': passed ? failed : closed,
-      'require, require (libpq), wrong name': passed ? failed : closed,
+      'require, verify-full, a root of its own': passThrough ? failed : closed,
+      'require, require (libpq), untrusted': passThrough ? failed : closed,
+      'require, require (libpq), wrong name': passThrough ? failed : closed,
       'require, disable': closed,
     });
     // The server checked c= against its own leaf for each -PLUS.
     const bound = `scram scram p=tls-server-end-point,, tls ${SECRET}`;
     const untouched = ['scram', 'scramUntrusted', 'scramMismatch'].map((server) =>
-      passed ? `${server} scram p=tls-server-end-point,, tls ${PLACEHOLDER}` : `${server} scram n,, tls neither`
+      passThrough ? `${server} scram p=tls-server-end-point,, tls ${PLACEHOLDER}` : `${server} scram n,, tls neither`
     );
-    assert.deepEqual(got.map((g) => g.join(' ')), [bound, bound, ...untouched, `scram scram y,, plain ${PLACEHOLDER}`, bound, bound, ...(passed ? untouched : [])]);
+    assert.deepEqual(got.map((g) => g.join(' ')), [bound, bound, ...untouched, `scram scram y,, plain ${PLACEHOLDER}`, bound, bound, ...(passThrough ? untouched : [])]);
     const asked = ['anchors scram pg', 'anchors scramUntrusted pg', 'anchors scramMismatch pg'];
     const roots = ['anchors scram pg', 'materialize scram scram-sha-256 roots'];
-    assert.deepEqual(trail(), [...roots, ...roots, ...asked, ...roots, ...roots, ...(passed ? asked : [])]);
+    assert.deepEqual(trail(), [...roots, ...roots, ...asked, ...roots, ...roots, ...(passThrough ? asked : [])]);
   });
 
   it("pg channel binding with a password of the program's own, where nothing has to change: bound to a server the bundled roots verify, and unbound without TLS, it authenticates", { skip: skipBinding }, async () => {
@@ -1118,6 +1118,8 @@ const connect = async (label, user, port, query) => {
     assert.deepEqual(out, Object.fromEntries(steps.map((s) => [s.label, 'connected, queried'])));
     const bound = ['scram', 'privScram', 'scramUntrusted'].map((server) => `${server} scram p=tls-server-end-point,, tls ${OWN}`);
     assert.deepEqual(got.map((g) => g.join(' ')), [...bound, ...bound]);
+    // The vault is asked for anchors, and for no value.
+    assert.deepEqual(trail().filter((t) => t.startsWith('materialize')), []);
   });
 
   // slicc-kernel#1224 binds SCRAM-SHA-256-PLUS only in a session the bundled

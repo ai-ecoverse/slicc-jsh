@@ -235,6 +235,7 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
   const VERIFY = 'sslmode=verify-full';
   const REQUIRE = 'sslmode=require&uselibpqcompat=true';
   const OWN_ROOT = 'sslmode=verify-full&sslrootcert=/os/ca.pem';
+  const PRIV_ROOT = 'sslmode=verify-full&sslrootcert=/os/priv.pem';
   const plus = 'connected, ssl true, SCRAM-SHA-256-PLUS';
   const failed = 'error 28P01 password authentication failed for user "alice"';
 
@@ -258,7 +259,8 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
 
   it("the placeholder where the kernel can't vouch for PostgreSQL or the secret isn't bound: verify-full with the program's own sslrootcert, a host the secret isn't bound to, and no TLS fail authentication; require fails closed or, from 1.137.0, binds and fails", async () => {
     const out = await client([
-      { label: 'a private CA, prefer', port: privPort, query: 'sslmode=verify-full&sslrootcert=/os/priv.pem', channelBinding: 'prefer' },
+      { label: 'a private CA, prefer', port: privPort, query: PRIV_ROOT, channelBinding: 'prefer' },
+      { label: 'a private CA, require', port: privPort, query: PRIV_ROOT, channelBinding: 'require' },
       { label: 'own sslrootcert, prefer', query: OWN_ROOT, channelBinding: 'prefer' },
       { label: 'own sslrootcert, no binding', query: OWN_ROOT },
       { label: 'own sslrootcert, require', query: OWN_ROOT, channelBinding: 'require' },
@@ -268,6 +270,7 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
     ]);
     assert.deepEqual(out, {
       'a private CA, prefer': failed,
+      'a private CA, require': kernelAtLeast('1.137.0') ? failed : 'error undefined channel binding required, offered SCRAM-SHA-256',
       'own sslrootcert, prefer': failed,
       'own sslrootcert, no binding': failed,
       // slicc-kernel#1278 (1.137.0) leaves the session alone, -PLUS and all.
@@ -301,14 +304,13 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
   // (1.137.0) passes that exchange through: PostgreSQL checks the binding.
   it("a password of the program's own in a session the kernel didn't verify: a root of its own and a private CA through sslrootcert, prefer and require bind with SCRAM-SHA-256-PLUS and authenticate", { skip: skipOwnBinding }, async () => {
     const own = { user: 'own', password: OWN };
-    const PRIV_ROOT = 'sslmode=verify-full&sslrootcert=/os/priv.pem';
     const steps = ['prefer', 'require'].flatMap((channelBinding) => [
       { label: `${channelBinding}, a root of its own`, query: OWN_ROOT, channelBinding, ...own },
       { label: `${channelBinding}, a private CA`, port: privPort, query: PRIV_ROOT, channelBinding, ...own },
     ]);
     const out = await client(steps);
     assert.deepEqual(out, Object.fromEntries(steps.map((s) => [s.label, plus])));
-    // Nothing the vault could put a value in.
+    // The vault is asked for no value.
     assert.deepEqual(sealed.requests, []);
   });
 });
