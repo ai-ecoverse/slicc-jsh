@@ -40,13 +40,23 @@ const isArrayBuffer = (value) => {
 };
 const CHANNEL_MAILBOX = 256 * 1024;
 
+// What a transfer list may hold (Node's): ArrayBuffers (not shared ones),
+// message ports (jsh's and the platform's) and web streams.
+const TRANSFERABLE_TAGS = new Set(['[object MessagePort]', '[object ReadableStream]', '[object WritableStream]', '[object TransformStream]']);
+const isTransferable = (item, JshPort) =>
+  item !== null &&
+  typeof item === 'object' &&
+  (item instanceof JshPort || isArrayBuffer(item) || TRANSFERABLE_TAGS.has(Object.prototype.toString.call(item)));
+
 /**
  * V8's checks of a transfer list, made before anything is sent or any port
- * exported, with its errors: a duplicate, or an ArrayBuffer already gone.
+ * exported, with its errors: what can't be transferred at all, a duplicate,
+ * or an ArrayBuffer already gone.
  */
-function checkTransferList(list) {
+function checkTransferList(list, JshPort) {
   const seen = new Set();
   for (const item of list) {
+    if (!isTransferable(item, JshPort)) throw new DOMException('Found invalid value in transferList.', 'DataCloneError');
     if (seen.has(item)) {
       const kind = isArrayBuffer(item) ? 'ArrayBuffer' : 'MessagePort';
       throw new DOMException(`Transfer list contains duplicate ${kind}`, 'DataCloneError');
@@ -117,7 +127,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     for (const port of jshPorts) {
       if (port._detached) throw new DOMException('MessagePort in transfer list is already detached', 'DataCloneError');
     }
-    checkTransferList(list);
+    checkTransferList(list, MessagePort);
     if (jshPorts.length === 0) return fn({ data: message, ports: [] }, rest);
     const marks = new Map(jshPorts.map((port, i) => [port, { [kPortMark]: i }]));
     const marked = swapPorts(message, marks);
@@ -209,7 +219,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
         // bytes copied and theirs detached (a move, as a program sees it).
         if (writer && list.every(isArrayBuffer)) {
           // V8's checks of a transfer list, before the message is out.
-          checkTransferList(list);
+          checkTransferList(list, MessagePort);
           let bytes;
           try {
             bytes = serdes().serialize(message);

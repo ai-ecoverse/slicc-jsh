@@ -10,7 +10,9 @@
 // no [worker eval] in its argv; invalid execArgv flags throw from the
 // constructor; a port in an Error's cause arrives as a port; a getter that
 // throws makes the post throw, once, and sends nothing; and a getter that
-// detaches a listed buffer leaves the post standing.
+// detaches a listed buffer leaves the post standing; and a transfer list
+// with something that can't be transferred ({}, a SharedArrayBuffer) is a
+// DataCloneError that leaves the ports in it usable.
 const { Worker, MessageChannel } = require('worker_threads');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
 (async () => {
@@ -70,6 +72,21 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   console.log('that port still works:', await hi);
   kept.close();
   keptPeer.close();
+
+  const { port1: withJunk, port2: withJunkPeer } = new MessageChannel();
+  for (const junk of [{}, new SharedArrayBuffer(4)]) {
+    try {
+      echo.postMessage({ withJunk }, [withJunk, junk]);
+      console.log('posted');
+    } catch (e) {
+      console.log('a transfer list with', Object.prototype.toString.call(junk) + ':', e.name, e.message);
+    }
+  }
+  const junkHi = once(withJunkPeer, 'message');
+  withJunk.postMessage('still here');
+  console.log('its port:', await junkHi);
+  withJunk.close();
+  withJunkPeer.close();
 
   const { port1: inCause } = new MessageChannel();
   echo.postMessage({ err: new TypeError('with a port', { cause: inCause }) }, [inCause]);

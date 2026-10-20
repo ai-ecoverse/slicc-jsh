@@ -6,6 +6,9 @@ a post that cannot be cloned: DataCloneError
 its port still works: hello
 a port and a duplicate ArrayBuffer: DataCloneError Transfer list contains duplicate ArrayBuffer
 that port still works: hi
+a transfer list with [object Object]: DataCloneError Found invalid value in transferList.
+a transfer list with [object SharedArrayBuffer]: DataCloneError Found invalid value in transferList.
+its port: still here
 an Error whose cause is a port: TypeError with a port, its cause a port
 a getter that throws once: first read | reads: 1
 the worker got: after the throwing getter

@@ -27,6 +27,7 @@ const OVERFLOW = 0x80000000;
 export const MAILBOX_BYTES = 1 << 20;
 const OVERFLOW_MAX = 1 << 30;
 
+/** `size`: a power of two (positions are the byte counts modulo it, and those wrap at 2^32). */
 export function createMailbox(size = MAILBOX_BYTES) {
   const ring = new SharedArrayBuffer(HEADER + size);
   // Growable where the engine has it; else the overflow area is as big as it gets.
@@ -58,7 +59,9 @@ export function mailboxWriter({ ring: sab, big }) {
     if (pos + 4 <= size) at.setUint32(pos, value >>> 0, true);
     else put(offset, new Uint8Array(new Uint32Array([value >>> 0]).buffer));
   };
-  const room = () => size - ((Atomics.load(header, W) >>> 0) - (Atomics.load(header, R) >>> 0));
+  // What is unread is W - R modulo 2^32: both wrap after 4 GiB (the ring's
+  // size divides 2^32, so positions go on across it).
+  const room = () => size - ((Atomics.load(header, W) - Atomics.load(header, R)) >>> 0);
   const publish = (written, need) => {
     Atomics.store(header, W, (written + need) | 0);
     Atomics.add(header, COUNT, 1);
