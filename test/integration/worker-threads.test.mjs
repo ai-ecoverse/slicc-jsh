@@ -163,3 +163,44 @@ process.on('exit', () => console.log('the program ends'));
     assert.equal(r.stdout, 'message up\nuncaught ERR_WORKER_CRASHED\nexit 1\nthe program ends\n');
   });
 });
+
+// A post to a worker whose transfer list has a jsh port and something that
+// can't be transferred (a locked stream): the post fails before the port is
+// exported, so the port stays usable. (Node loses it there; jsh keeps it.)
+describe('worker transfers (kernel)', { skip: !kernelAtLeast(THREADS_KERNEL) }, () => {
+  let jsh;
+  before(async () => {
+    jsh = await withJsh();
+  });
+  after(() => jsh?.close());
+
+  it('a locked stream in a transfer list fails the post, and the port in it still works', async () => {
+    await jsh.kernel.writeFile(
+      '/os/locked.js',
+      `const { Worker, MessageChannel } = require('worker_threads');
+const w = new Worker('require("worker_threads").parentPort.on("message", () => {})', { eval: true });
+w.once('online', () => {
+  const { port1, port2 } = new MessageChannel();
+  const locked = new ReadableStream();
+  locked.getReader();
+  try {
+    w.postMessage({ port1 }, [port1, locked]);
+    console.log('posted');
+  } catch (e) {
+    console.log('post:', e.name);
+  }
+  port2.once('message', (m) => {
+    console.log('the port still works:', m);
+    port2.close();
+    w.terminate();
+  });
+  port1.postMessage('hello');
+});
+`
+    );
+    const r = await jsh.run(['node', 'locked.js']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, 'post: DataCloneError\nthe port still works: hello\n');
+  });
+});

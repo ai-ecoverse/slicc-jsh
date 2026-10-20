@@ -10,6 +10,9 @@ a transfer list with [object Object]: DataCloneError Found invalid value in tran
 a transfer list with [object SharedArrayBuffer]: DataCloneError Found invalid value in transferList.
 a transfer list with a fake port: DataCloneError Found invalid value in transferList.
 its port: still here
+a transfer list with a locked stream: DataCloneError
+a port and a stream together: a function port and a ReadableStream
+data holding a mark key: fake is [15], real is function
 a stream posted before the worker started: a stream posted early
 an Error whose cause is a port: TypeError with a port, its cause a port
 a getter that throws once: first read | reads: 1

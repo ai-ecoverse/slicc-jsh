@@ -26,6 +26,7 @@
  * for a close. Anything else is the thread's own (a worker's 'online', its
  * output, …), for `onOther`.
  */
+import { markIndex, newPortNonce, portMark } from './broadcast-channel.mjs';
 import { createMailbox, mailboxReader, mailboxWriter } from './mailbox.mjs';
 
 const CLOSE = Symbol('close');
@@ -78,7 +79,7 @@ function checkTransferList(list, JshPort, brands) {
 }
 
 export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
-  const { MessagePort, makePort, kPortMark } = ports;
+  const { MessagePort, makePort } = ports;
   const NativePort = NativeMessageChannel ? Object.getPrototypeOf(new NativeMessageChannel().port1).constructor : null;
   const brands = [
     getterOf(NativePort, 'onmessage'),
@@ -130,8 +131,11 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     return out;
   }
   const swapPorts = (value, marks) => mapPorts(value, (v) => marks.get(v));
-  const restorePorts = (value, list) =>
-    mapPorts(value, (v) => (kPortMark in v && typeof v[kPortMark] === 'number' ? list[v[kPortMark]] : undefined));
+  const restorePorts = (value, list, nonce) =>
+    mapPorts(value, (v) => {
+      const at = markIndex(v, nonce);
+      return at >= 0 ? list[at] : undefined;
+    });
 
   /**
    * `message` and its transfer list as the platform can clone them: the
@@ -147,19 +151,21 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     }
     checkTransferList(list, MessagePort, brands);
     if (jshPorts.length === 0) return fn({ data: message, ports: [] }, rest);
-    const marks = new Map(jshPorts.map((port, i) => [port, { [kPortMark]: i }]));
-    const marked = swapPorts(message, marks);
-    // What can't be cloned (a function) fails here, before any port is
-    // exported: they stay this side's, usable, as in Node.
-    structuredClone(marked);
+    const nonce = newPortNonce();
+    const marks = new Map(jshPorts.map((port, i) => [port, portMark(nonce, i)]));
+    // Staged first, the rest of the transfer list (platform ports, streams,
+    // buffers) moved into the clone: what can't be cloned (a function) or
+    // transferred (a port or stream already gone) fails here, before any jsh
+    // port is exported, which leaves them this side's, usable, as in Node.
+    const staged = structuredClone({ marked: swapPorts(message, marks), rest }, { transfer: rest });
     const natives = [];
     const envelopes = jshPorts.map((port) => exportPort(port, natives));
-    return fn({ data: marked, ports: envelopes }, [...natives, ...rest]);
+    return fn({ data: staged.marked, ports: envelopes, nonce }, [...natives, ...staged.rest]);
   }
 
   function receive(message) {
     const list = (message.ports ?? []).map(importPort);
-    return { data: list.length ? restorePorts(message.data, list) : message.data, ports: list };
+    return { data: list.length ? restorePorts(message.data, list, message.nonce) : message.data, ports: list };
   }
 
   /** A pair of mailboxes, as the two ends of a link see them. */
@@ -200,7 +206,8 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       while (stash.has(expect)) {
         const next = stash.get(expect);
         stash.delete(expect);
-        expect += 1;
+        // Numbers go modulo 2^32, as the mailbox stores them.
+        expect = (expect + 1) >>> 0;
         if (next === CLOSE) {
           end();
           port._remoteClosed();
@@ -248,7 +255,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
             bytes = null;
           }
           if (bytes && writer.write(seq, bytes)) {
-            nextSend++;
+            nextSend = (nextSend + 1) >>> 0;
             // A buffer the message's getters detached meanwhile is gone
             // already: the rest move, and the post stands, as in Node.
             const live = list.filter((b) => !b.detached);
@@ -258,17 +265,18 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
         }
         pack(message, transfer, (packed, natives) => {
           native.postMessage({ t: 'm', seq, ...packed }, natives);
-          nextSend++;
+          nextSend = (nextSend + 1) >>> 0;
         });
       },
       // A message packed and cloned before (with its transfers), now sent.
       postPacked(packed, list) {
         native.postMessage({ t: 'm', seq: nextSend, ...packed }, list);
-        nextSend++;
+        nextSend = (nextSend + 1) >>> 0;
       },
       close() {
         try {
-          native.postMessage({ t: 'c', seq: nextSend++ });
+          native.postMessage({ t: 'c', seq: nextSend });
+          nextSend = (nextSend + 1) >>> 0;
         } catch {
           /* the other thread is gone */
         }
@@ -331,8 +339,9 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     natives.push(native);
     const exportEntry = ({ data, ports: list }) => {
       if (!list?.length) return { data, ports: [] };
-      const marks = new Map(list.map((p, i) => [p, { [kPortMark]: i }]));
-      return { data: swapPorts(data, marks), ports: list.map((p) => exportPort(p, natives)) };
+      const nonce = newPortNonce();
+      const marks = new Map(list.map((p, i) => [p, portMark(nonce, i)]));
+      return { data: swapPorts(data, marks), ports: list.map((p) => exportPort(p, natives)), nonce };
     };
     return {
       native,

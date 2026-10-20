@@ -13,8 +13,9 @@
 // detaches a listed buffer leaves the post standing; and a transfer list
 // with something that can't be transferred ({}, a SharedArrayBuffer) is a
 // DataCloneError that leaves the ports in it usable, a fake port (a forged
-// tag) too; and a stream posted, with its transfer, before the worker has
-// started gets there.
+// tag) too, or a locked stream; a port and a stream travel
+// together; data that holds a port mark's key is left as it is; and a stream
+// posted, with its transfer, before the worker has started gets there.
 const { Worker, MessageChannel } = require('worker_threads');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
 (async () => {
@@ -32,7 +33,7 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   }
 
   const echo = new Worker(
-    "const { parentPort } = require('worker_threads'); parentPort.on('message', (m) => parentPort.postMessage(m?.err instanceof Error ? m.err.constructor.name + ' ' + m.err.message + ', its cause a ' + (typeof m.err.cause?.postMessage === 'function' ? 'port' : 'non-port') : m instanceof Map ? 'a Map with a ' + (typeof m.get('port')?.postMessage === 'function' ? 'port' : 'no port') : typeof m === 'string' ? m : 'an object'));",
+    "const { parentPort } = require('worker_threads'); parentPort.on('message', (m) => parentPort.postMessage(m && typeof m === 'object' && 'fake' in m ? 'fake is ' + (typeof m.fake?.postMessage === 'function' ? 'a port' : JSON.stringify(Object.keys(m.fake).map((k) => k.length))) + ', real is ' + typeof m.real?.postMessage : m && typeof m === 'object' && 'together' in m ? 'a ' + typeof m.alongside?.postMessage + ' port and a ' + m.together?.constructor?.name : m?.err instanceof Error ? m.err.constructor.name + ' ' + m.err.message + ', its cause a ' + (typeof m.err.cause?.postMessage === 'function' ? 'port' : 'non-port') : m instanceof Map ? 'a Map with a ' + (typeof m.get('port')?.postMessage === 'function' ? 'port' : 'no port') : typeof m === 'string' ? m : 'an object'));",
     { eval: true }
   );
   await once(echo, 'online');
@@ -95,6 +96,27 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
   console.log('its port:', await junkHi);
   withJunk.close();
   withJunkPeer.close();
+
+  // (Node loses the port that goes with a locked stream; only the error is
+  // Node's to compare.)
+  const { port1: withLocked } = new MessageChannel();
+  const locked = new ReadableStream();
+  locked.getReader();
+  try {
+    echo.postMessage({ withLocked }, [withLocked, locked]);
+    console.log('posted');
+  } catch (e) {
+    console.log('a transfer list with a locked stream:', e.name);
+  }
+
+  const { port1: alongside } = new MessageChannel();
+  const together = new ReadableStream({ start(c) { c.enqueue('x'); c.close(); } });
+  echo.postMessage({ alongside, together }, [alongside, together]);
+  console.log('a port and a stream together:', await next());
+  const MARK = String.fromCharCode(0) + 'slicc-jsh port';
+  const { port1: realPort } = new MessageChannel();
+  echo.postMessage({ fake: { [MARK]: 0 }, real: realPort }, [realPort]);
+  console.log('data holding a mark key:', await next());
 
   const reader = new Worker(
     "const { parentPort } = require('worker_threads'); parentPort.once('message', async ({ stream }) => { let text = ''; for await (const chunk of stream) text += chunk; parentPort.postMessage(text); });",

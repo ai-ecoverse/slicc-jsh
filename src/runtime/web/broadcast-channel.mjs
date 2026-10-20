@@ -30,6 +30,15 @@ import { nodeError } from '../node-errors.mjs';
 const kInspect = Symbol.for('nodejs.util.inspect.custom');
 const kCreate = Symbol('MessagePort');
 const kPortMark = '\u0000slicc-jsh port';
+// A transferred port's mark is `<nonce>:<index>`, the nonce new for each
+// message: data that happens to hold the mark's key is left as it is.
+export const newPortNonce = () => globalThis.crypto?.randomUUID?.() ?? `${Math.random()}`.slice(2);
+export const portMark = (nonce, i) => ({ [kPortMark]: `${nonce}:${i}` });
+export function markIndex(value, nonce) {
+  const mark = value?.[kPortMark];
+  if (typeof nonce !== 'string' || typeof mark !== 'string' || !mark.startsWith(`${nonce}:`)) return -1;
+  return Number(mark.slice(nonce.length + 1));
+}
 
 export function createPorts({
   handles,
@@ -143,7 +152,8 @@ export function createPorts({
     const list = transfer === undefined || transfer === null ? [] : Array.isArray(transfer) ? transfer : (transfer?.transfer ?? []);
     const ports = [...list].filter((x) => x instanceof MessagePort);
     const rest = [...list].filter((x) => !(x instanceof MessagePort));
-    const marks = new Map(ports.map((port, i) => [port, { [kPortMark]: i }]));
+    const nonce = newPortNonce();
+    const marks = new Map(ports.map((port, i) => [port, portMark(nonce, i)]));
     const seen = new Set();
     const swap = (value, map) => {
       if (value === null || typeof value !== 'object' || seen.has(value)) return value;
@@ -155,7 +165,8 @@ export function createPorts({
     };
     const restore = (value) => {
       if (value === null || typeof value !== 'object') return value;
-      if (kPortMark in value) return ports[value[kPortMark]];
+      const at = markIndex(value, nonce);
+      if (at >= 0) return ports[at];
       if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
       for (const key of Object.keys(value)) value[key] = restore(value[key]);
       return value;
