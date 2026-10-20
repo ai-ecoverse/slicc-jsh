@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { X509Certificate, createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto';
 import { createServer as createTcp, connect as tcp } from 'node:net';
 import { createServer as createHttpsServer } from 'node:https';
+import { createRequire } from 'node:module';
 import { TLSSocket } from 'node:tls';
 import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
 import { makeCa } from './tls-certs.mjs';
@@ -43,13 +44,18 @@ const skipFor = (protocol) =>
   !(SEALED[protocol] && kernelAtLeast(SEALED[protocol])) && `slicc-kernel#1090 doesn't substitute in ${protocol} yet`;
 const skip = !kernelAtLeast('1.127.0') && 'slicc-kernel before 1.127.0 substitutes in no A2 session';
 const skipAnchors = !kernelAtLeast('1.136.0') && 'slicc-kernel before 1.136.0 has no vault anchors (slicc-kernel#1147)';
-// slicc-kernel#1224 (pg SCRAM channel binding) isn't released yet: it decides
-// what an anchored session does with libpq's channel_binding.
-const skipBinding = 'slicc-kernel#1224 is not released yet';
+// slicc-kernel#1224 (1.136.4): pg SCRAM channel binding in a sealed session.
+// The kernel picks the gs2 header itself, tls-server-end-point where the
+// bundled roots verified a server offering -PLUS, and an anchored session
+// gets no binding. Its vault side, slicc-vault 1.15.1, isn't needed here:
+// the vault is this file's own hook.
+const skipBinding = !kernelAtLeast('1.136.4') && 'slicc-kernel before 1.136.4 has no sealed pg channel binding (slicc-kernel#1224)';
 
 // A placeholder as the vault makes them (fnox_proxy_<24 hex>).
 const PLACEHOLDER = 'fnox_proxy_0123456789abcdef01234567';
 const SECRET = 'jsh-1090-the-sealed-secret';
+// A password of the program's own, not sealed: the SCRAM server's user `own`.
+const OWN = 'jsh-1224-a-password-of-its-own';
 // The host each protocol's secret is bound to, and the positions it may go to.
 const BINDINGS = [
   { host: 'api.test', protocol: 'http1', positions: ['header:authorization'] },
@@ -199,7 +205,7 @@ const kinds = {
   },
   pg: async (s) => {
     requireBinding = s.channelBinding === 'require';
-    const c = new Client({ connectionString: 'postgres://' + (s.user ?? 'alice') + ':' + placeholder + '@' + s.host + ':' + s.port + '/db?' + s.query, enableChannelBinding: Boolean(s.channelBinding) });
+    const c = new Client({ connectionString: 'postgres://' + (s.user ?? 'alice') + ':' + (s.password ?? placeholder) + '@' + s.host + ':' + s.port + '/db?' + s.query, enableChannelBinding: Boolean(s.channelBinding) });
     c.on('error', () => {});
     try {
       await c.connect();
@@ -381,6 +387,10 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
     // pg with SCRAM-SHA-256 (RFC 5802, RFC 7677) as PostgreSQL does it: over
     // TLS it offers SCRAM-SHA-256-PLUS too, and refuses a client that says
     // `y` (it could bind but thinks the server can't) there, as a downgrade.
+    // As auth-scram.c, it takes -PLUS only with `p=tls-server-end-point`, and
+    // `p=` only with -PLUS, and checks the binding data itself: c= is the gs2
+    // header and, for -PLUS, the hash of its own leaf (RFC 5929 §4.1, SHA-256
+    // for the test CA's ECDSA-SHA256 signature).
     // It holds SECRET's verifier alone, checks the client's proof against it
     // and proves itself with its own signature (R 12) before R 0; a proof that
     // doesn't check gets 28P01. What it records is whose password the proof
@@ -388,6 +398,7 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
     // neither. A user named `reflect` is refused in place of R 12 with the
     // client-final quoted; one named `echo` is let in, and refused its query
     // with the client-final quoted and the password it authenticated with.
+    // One named `own` has OWN's verifier in place of SECRET's.
     const scramServer = (label, leaf) =>
       createTcp((sock) => {
         const int32 = (v) => { const b = Buffer.alloc(4); b.writeInt32BE(v); return b; };
@@ -398,11 +409,12 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
           const tls = Boolean(s.encrypted);
           const salt = randomBytes(16);
           const iterations = 4096;
-          const verifier = scramVerifier(SECRET, salt, iterations);
+          let verifier;
           let buf = Buffer.alloc(0);
           let user;
           let state = 'startup';
           let gs2;
+          let binding;
           let clientFirstBare;
           let serverFirst;
           let nonce;
@@ -417,6 +429,7 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
                 const params = buf.subarray(8, len).toString().split('\0');
                 buf = buf.subarray(len);
                 user = params[params.indexOf('user') + 1];
+                verifier = scramVerifier(user === 'own' ? OWN : SECRET, salt, iterations);
                 const mechanisms = [...(tls ? ['SCRAM-SHA-256-PLUS'] : []), 'SCRAM-SHA-256'];
                 s.write(msg('R', Buffer.concat([int32(10), ...mechanisms.map(cstr), Buffer.from('\0')])));
                 state = 'initial';
@@ -434,10 +447,12 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
                 const clientFirst = body.subarray(end + 5).toString();
                 gs2 = clientFirst.slice(0, clientFirst.indexOf(',', clientFirst.indexOf(',') + 1) + 1);
                 clientFirstBare = clientFirst.slice(gs2.length);
-                if (mechanism !== 'SCRAM-SHA-256' || (gs2 === 'y,,' && tls) || !['n,,', 'y,,'].includes(gs2)) {
+                const plus = mechanism === 'SCRAM-SHA-256-PLUS' && tls && gs2 === 'p=tls-server-end-point,,';
+                if (!plus && (mechanism !== 'SCRAM-SHA-256' || (gs2 === 'y,,' && tls) || !['n,,', 'y,,'].includes(gs2))) {
                   got.push([label, `scram ${gs2} ${tls ? 'tls' : 'plain'}`, `refused ${mechanism}`]);
                   return refuse(s, `SCRAM channel binding negotiation error for user "${user}"`);
                 }
+                binding = Buffer.concat([Buffer.from(gs2), plus ? sha256(leaf.der) : Buffer.alloc(0)]).toString('base64');
                 nonce = `${/(?:^|,)r=([^,]*)/.exec(clientFirstBare)[1]}${randomBytes(18).toString('base64')}`;
                 serverFirst = `r=${nonce},s=${salt.toString('base64')},i=${iterations}`;
                 s.write(msg('R', Buffer.concat([int32(11), Buffer.from(serverFirst)])));
@@ -449,8 +464,12 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
                 const withoutProof = clientFinal.replace(/,p=[^,]*$/, '');
                 const proof = Buffer.from(/,p=([^,]*)$/.exec(clientFinal)?.[1] ?? '', 'base64');
                 const authMessage = `${clientFirstBare},${serverFirst},${withoutProof}`;
-                const ok = withoutProof === `c=${Buffer.from(gs2).toString('base64')},r=${nonce}` && proves(verifier, authMessage, proof);
-                const from = ok ? SECRET : proves(scramVerifier(PLACEHOLDER, salt, iterations), authMessage, proof) ? PLACEHOLDER : 'neither';
+                if (withoutProof !== `c=${binding},r=${nonce}`) {
+                  got.push([label, `scram ${gs2} ${tls ? 'tls' : 'plain'}`, 'binding mismatch']);
+                  return refuse(s, 'SCRAM channel binding check failed');
+                }
+                const ok = proves(verifier, authMessage, proof);
+                const from = ok ? (user === 'own' ? OWN : SECRET) : proves(scramVerifier(PLACEHOLDER, salt, iterations), authMessage, proof) ? PLACEHOLDER : 'neither';
                 got.push([label, `scram ${gs2} ${tls ? 'tls' : 'plain'}`, from]);
                 if (!ok) return refuse(s, `password authentication failed for user "${user}"`);
                 if (user === 'reflect') return refuse(s, `password authentication failed for user "${user}": you sent ${clientFinal}`);
@@ -990,8 +1009,126 @@ const connect = async (label, user, port, query) => {
     assert.notEqual(a1.session, a2.session);
   });
 
+  it('the SCRAM server checks channel binding itself: pg on the host binds to its leaf (tls-server-end-point, RFC 5929) and authenticates; binding data for another leaf is refused', async () => {
+    // pg outside jsh, to the fixture directly: what a client's own binding
+    // proves to it, with no kernel in between.
+    const { Client } = createRequire(import.meta.url)('pg');
+    const sasl = createRequire(import.meta.url)('pg/lib/crypto/sasl');
+    const connect = async (stream) => {
+      got.length = 0;
+      const c = new Client({ host: '127.0.0.1', port: ports.scram, user: 'alice', password: SECRET, database: 'db', ssl: { ca: ca.pem, servername: BOUND.db }, enableChannelBinding: true });
+      c.on('error', () => {});
+      const continueSession = sasl.continueSession;
+      if (stream) sasl.continueSession = (session, password, data) => continueSession(session, password, data, stream);
+      try {
+        await c.connect();
+        await c.end();
+        return 'connected';
+      } catch (e) {
+        c.connection.stream.destroy();
+        return `error ${e.code} ${e.message}`;
+      } finally {
+        sasl.continueSession = continueSession;
+      }
+    };
+    assert.equal(await connect(), 'connected');
+    assert.deepEqual(got.map((g) => g.join(' ')), [`scram scram p=tls-server-end-point,, tls ${SECRET}`]);
+    const otherLeaf = ca.server(BOUND.db).der;
+    assert.equal(await connect({ getPeerCertificate: () => ({ raw: otherLeaf }) }), 'error 28P01 SCRAM channel binding check failed');
+    assert.deepEqual(got.map((g) => g.join(' ')), ['scram scram p=tls-server-end-point,, tls binding mismatch']);
+  });
+
+  // slicc-kernel#1224: in a session the bundled roots verified, the kernel
+  // offers SCRAM-SHA-256-PLUS and binds to the leaf it verified. Where it
+  // didn't verify the server it drops -PLUS and sends n,, for a y,, (pg
+  // refuses y,, after offering -PLUS), so the program's own proof, from the
+  // placeholder over y,,, proves nothing; require fails closed in the program.
+  it("pg channel binding where the bundled roots verify the server: enableChannelBinding (libpq's channel_binding=prefer) and require bind to the server's leaf and authenticate with the secret; with a root of its own, an untrusted chain, a wrong name or without TLS, prefer fails and require fails closed", { skip: skipBinding }, async () => {
+    sealed.anchor({});
+    const verified = [['verify-full', 'scram', 'sslmode=verify-full'], ['require (libpq)', 'scram', REQUIRE]];
+    const unverified = [
+      ['verify-full, a root of its own', 'scram', 'sslmode=verify-full&sslrootcert=/os/ca.pem'],
+      ['require (libpq), untrusted', 'scramUntrusted', REQUIRE],
+      ['require (libpq), wrong name', 'scramMismatch', REQUIRE],
+      ['disable', 'scram', 'sslmode=disable'],
+    ];
+    const steps = ['prefer', 'require'].flatMap((cb) => [...verified, ...unverified].map(([label, port, query]) => ({ label: `${cb}, ${label}`, pg: pg(port, query, { channelBinding: cb }) })));
+    const out = await client(steps);
+    const failed = 'error 28P01 password authentication failed for user "alice"';
+    const closed = 'error undefined channel binding required, offered SCRAM-SHA-256';
+    assert.deepEqual(out, {
+      'prefer, verify-full': 'connected, queried',
+      'prefer, require (libpq)': 'connected, queried',
+      'prefer, verify-full, a root of its own': failed,
+      'prefer, require (libpq), untrusted': failed,
+      'prefer, require (libpq), wrong name': failed,
+      'prefer, disable': failed,
+      'require, verify-full': 'connected, queried',
+      'require, require (libpq)': 'connected, queried',
+      'require, verify-full, a root of its own': closed,
+      'require, require (libpq), untrusted': closed,
+      'require, require (libpq), wrong name': closed,
+      'require, disable': closed,
+    });
+    // The server checked c= against its own leaf for each -PLUS.
+    const bound = `scram scram p=tls-server-end-point,, tls ${SECRET}`;
+    assert.deepEqual(
+      got.map((g) => g.join(' ')),
+      [
+        bound,
+        bound,
+        'scram scram n,, tls neither',
+        'scramUntrusted scram n,, tls neither',
+        'scramMismatch scram n,, tls neither',
+        `scram scram y,, plain ${PLACEHOLDER}`,
+        bound,
+        bound,
+      ]
+    );
+    assert.deepEqual(trail(), [
+      'anchors scram pg',
+      'materialize scram scram-sha-256 roots',
+      'anchors scram pg',
+      'materialize scram scram-sha-256 roots',
+      'anchors scram pg',
+      'anchors scramUntrusted pg',
+      'anchors scramMismatch pg',
+      'anchors scram pg',
+      'materialize scram scram-sha-256 roots',
+      'anchors scram pg',
+      'materialize scram scram-sha-256 roots',
+    ]);
+  });
+
+  it("pg channel binding with a password of the program's own, where nothing has to change: bound to a server the bundled roots verify, and unbound without TLS, it authenticates", { skip: skipBinding }, async () => {
+    sealed.anchor({});
+    const own = (query, channelBinding) => pg('scram', query, { user: 'own', password: OWN, channelBinding });
+    const out = await client([
+      { label: 'prefer, verify-full', pg: own('sslmode=verify-full', 'prefer') },
+      { label: 'require, require (libpq)', pg: own(REQUIRE, 'require') },
+      { label: 'prefer, disable', pg: own('sslmode=disable', 'prefer') },
+    ]);
+    assert.deepEqual(out, { 'prefer, verify-full': 'connected, queried', 'require, require (libpq)': 'connected, queried', 'prefer, disable': 'connected, queried' });
+    assert.deepEqual(got.map((g) => g.join(' ')), [`scram scram p=tls-server-end-point,, tls ${OWN}`, `scram scram p=tls-server-end-point,, tls ${OWN}`, `scram scram y,, plain ${OWN}`]);
+  });
+
+  // On 1.136.4 the kernel drops -PLUS and rewrites the program's y,, to n,,
+  // in a session it didn't verify but a vault anchor still could (a root of
+  // the program's own, an untrusted chain), so a program authenticating with
+  // its own password and libpq's default channel_binding=prefer fails there.
+  // Before it (1.136.2) the server refused the program's y,, as a downgrade.
+  it("pg channel binding with a password of the program's own in a session the kernel didn't verify: prefer still authenticates", { skip: skipBinding, todo: "slicc-kernel 1.136.4 rewrites the program's y,, to n,, and its proof fails" }, async () => {
+    sealed.anchor({});
+    const own = (port, query) => pg(port, query, { user: 'own', password: OWN, channelBinding: 'prefer' });
+    const out = await client([
+      { label: 'a root of its own', pg: own('scram', 'sslmode=verify-full&sslrootcert=/os/ca.pem') },
+      { label: 'untrusted', pg: own('scramUntrusted', REQUIRE) },
+    ]);
+    assert.deepEqual(out, { 'a root of its own': 'connected, queried', untrusted: 'connected, queried' });
+  });
+
   // slicc-kernel#1224 binds SCRAM-SHA-256-PLUS only in a session the bundled
-  // roots verified: an anchored one gets no -PLUS, as the kernel lane says.
+  // roots verified: an anchored one gets no -PLUS (slicc-kernel#1259).
   it("pg channel binding in an anchored session: pg's enableChannelBinding (libpq's prefer) authenticates unbound with the secret", { skip: skipAnchors || skipBinding }, async () => {
     sealed.anchor({ anchors: [priv.der] });
     const out = await client([{ label: 'prefer', pg: pg('privScram', VERIFY_PRIV, { channelBinding: 'prefer' }) }]);
