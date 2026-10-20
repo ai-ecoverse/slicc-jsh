@@ -36,6 +36,13 @@
         "kernel-cert-floor"
       ],
       "enabled": false
+    },
+    {
+      "description": "cert-review compat packages (scripts/cert-review/lib.mjs kernelPackage): cert-compat-wasm-bash is the newest wasm-bash whose engines.slicc-kernel the older cert kernels (kernel-cert-new, -186, -floor) meet, linked for them when the tree's own wasm-bash needs a newer kernel. Move it by hand, only to a version those kernels still meet.",
+      "matchDepNames": [
+        "cert-compat-wasm-bash"
+      ],
+      "enabled": false
     }
   ]
 }
