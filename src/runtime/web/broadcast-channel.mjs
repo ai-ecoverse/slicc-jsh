@@ -66,6 +66,9 @@ export function createPorts({
         later(() => step(true));
         return;
       }
+      // The turn starts when the posting task ended, not when this task got
+      // to run: a timeout due in between waits for it too.
+      const startedAt = Math.min(checkAt, Date.now());
       checkAt = Infinity;
       delivering.pending = false;
       if (first) {
@@ -74,7 +77,7 @@ export function createPorts({
         closes = [];
         current = null;
         delivering.active = turn.length > 0;
-        delivering.since = Date.now();
+        delivering.since = startedAt;
       }
       for (;;) {
         if (current && left > 0) {
