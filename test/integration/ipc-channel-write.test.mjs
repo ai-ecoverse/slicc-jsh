@@ -28,8 +28,9 @@ function channelOver(takes) {
     close: () => Promise.resolve(),
   };
   const streamBaseState = new Int32Array(3);
-  const channel = createChannelHandle({ ctx, handles: createHandleTable(), streamBaseState, constants, fd: 3 });
-  return { channel, streamBaseState, written };
+  const exitFlush = new Set();
+  const channel = createChannelHandle({ ctx, handles: createHandleTable(), streamBaseState, constants, fd: 3, exitFlush });
+  return { channel, streamBaseState, written, flushAtExit: () => [...exitFlush].forEach((flush) => flush()) };
 }
 
 describe('IPC channel writes (try-write)', () => {
@@ -54,5 +55,17 @@ describe('IPC channel writes (try-write)', () => {
     assert.equal(channel.writeBuffer(req, new Uint8Array(100)), 0);
     assert.equal(streamBaseState[constants.kLastWriteWasAsync], 0);
     assert.deepEqual(written, [100]);
+  });
+
+  it("the exit flush writes what is queued, but runs no send's callback, as Node runs none once the program ends", () => {
+    // The socket takes 10 bytes now; at exit, the rest.
+    const { channel, written, flushAtExit } = channelOver([10]);
+    const req = {};
+    channel.writeBuffer(req, new Uint8Array(100));
+    const done = [];
+    req.oncomplete = (status) => done.push(status);
+    flushAtExit();
+    assert.deepEqual(written, [10, 90]);
+    assert.deepEqual(done, []);
   });
 });

@@ -180,22 +180,33 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
   // (each is done at once; it only waits between them, or for its turn), so
   // what it has left is written here, as far as the socket takes it: the
   // peer may be waiting for this program to end before it reads, so the rest
-  // is lost, as Node loses it.
+  // is lost, as Node loses it. No send's callback runs: the program is
+  // ending, and Node runs none once it is.
   const flushSync = () => {
     if (writing && !tryWrite) return;
     waiting?.abort();
     waiting = null;
     const left = writes.splice(0);
-    for (const { req, bytes } of left) {
+    for (const { bytes } of left) {
       channel.writeQueueSize -= bytes.length;
       try {
         if (!tryWrite) ctx.sync.write(fd, bytes);
         else if (ctx.sync.write(fd, bytes, NONBLOCK) < bytes.length) return;
-        req.oncomplete?.(0);
       } catch {
         if (tryWrite) return;
-        req.oncomplete?.(-32);
       }
+    }
+  };
+
+  // A send's callback that throws doesn't stop the drain: its exception is
+  // the program's uncaught one, as from libuv's write callback in Node.
+  const complete = (req, status) => {
+    try {
+      req.oncomplete?.(status);
+    } catch (err) {
+      queueMicrotask(() => {
+        throw err;
+      });
     }
   };
   exitFlush?.add(flushSync);
@@ -235,7 +246,7 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
       }
       writes.shift();
       channel.writeQueueSize -= write.bytes.length;
-      write.req.oncomplete?.(status);
+      complete(write.req, status);
     }
   }
 
@@ -249,7 +260,7 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
         status = uvWriteError(err);
       }
       channel.writeQueueSize -= bytes.length;
-      req.oncomplete?.(status);
+      complete(req, status);
     }
   }
 
