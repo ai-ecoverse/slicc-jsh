@@ -64,7 +64,7 @@ const GATES0 = [
   { file: 'ci.yml', job: 'ci', step: 'Node parallel', calls: /npm run test:node-parallel/, says: [['test:node-parallel', 'totals: PASS=134 FAIL=8 SKIP=0 of 142']] },
   { file: 'ci.yml', job: 'ci', step: 'Pack (files allowlist)', calls: /node -e "const p=JSON\.parse/, says: [['prepack', 'packed package.json: no prepare or prepack']], setup: packed },
   { file: 'ci.yml', job: 'install', step: 'install.sh', calls: /sh test\/install\/run\.sh/, says: [['run.sh', 'all install.sh cases passed']] },
-  { file: 'ci.yml', job: 'browser', step: 'Browser suite', calls: /npm run test:browser/, says: [['test:browser', 'ℹ pass 62'], ['test:browser', 'ℹ fail 0']] },
+  { file: 'ci.yml', job: 'browser', step: 'Browser suite', calls: /npm run test:browser/, env: { DISPLAY: ':99' }, says: [['test:browser', 'ℹ pass 62'], ['test:browser', 'ℹ fail 0']] },
   {
     file: 'cert-review.yml',
     job: 'scope',
