@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { checkManifest, one, run, tagOnMain } from './checks.mjs';
 import { NAME, SEMVER, sha } from './lib.mjs';
+import { settle } from './settle.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -24,28 +25,30 @@ const fail = (what) => {
   problems.push(what);
   return undefined;
 };
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const REGISTRY = 'https://registry.npmjs.org';
+const DOC = `${REGISTRY}/${NAME.replace('/', '%2f')}`;
+const deadline = Date.now() + Number(values.wait) * 1000;
+const settled = (what, url, accept) => settle(what, url, accept, { deadline });
+const newer = (a, b) => {
+  const [x, y] = [a, b].map((v) => v.split('.').map(Number));
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  return false;
+};
 
-async function meta() {
-  const until = Date.now() + Number(values.wait) * 1000;
-  for (;;) {
-    try {
-      return JSON.parse(run('npm', ['view', `${NAME}@${version}`, '--json']));
-    } catch (error) {
-      if (Date.now() > until) throw error;
-      await sleep(10_000);
-    }
-  }
-}
+const ok = (what) => async (res) => (res.ok ? { done: true, value: res } : { seen: `${what} ${res.status} ${res.statusText}` });
 
-async function fetchOk(url, what) {
-  for (let i = 0; ; i++) {
-    const res = await fetch(url);
-    if (res.ok) return res;
-    if (i >= 30) throw new Error(`${what}: ${res.status} ${res.statusText} (${url})`);
-    await sleep(10_000);
-  }
-}
+const meta = () => settled(`${NAME}@${version}`, `${DOC}/${version}`, async (res) => (res.ok ? { done: true, value: await res.json() } : { seen: `${res.status} ${res.statusText}` }));
+
+const fetchOk = (url, what) => settled(what, url, ok(what));
+
+const latest = () =>
+  settled(`dist-tags.latest`, `${REGISTRY}/-/package/${NAME.replace('/', '%2f')}/dist-tags`, async (res) => {
+    if (!res.ok) return { seen: `${res.status} ${res.statusText}` };
+    const tag = (await res.json()).latest;
+    if (tag === version) return { done: true, value: tag };
+    if (typeof tag === 'string' && SEMVER.test(tag) && newer(tag, version)) return { fail: `npm latest is ${tag}, newer than ${version}` };
+    return { seen: `npm latest is ${tag}, not ${version}` };
+  });
 
 async function download(m, tgz) {
   const url = new URL(m.dist.tarball);
@@ -109,8 +112,7 @@ try {
     signatures(dir);
     const tag = tagOnMain(repo, version, fail, facts);
     if (commit !== tag) fail(`tag v${version} is ${tag}, provenance says ${commit}`);
-    const latest = run('npm', ['view', NAME, 'dist-tags.latest']).trim();
-    if (latest !== version) fail(`npm latest is ${latest}, not ${version}`);
+    await latest().catch((error) => fail(error.message));
   }
 } catch (error) {
   problems.push(`check failed: ${one(error.stderr || error.message).slice(0, 300)}`);
