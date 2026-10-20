@@ -38,6 +38,10 @@ module.exports = {
       streamWrap: { streamBaseState, kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync },
     };
   },
+  /** node --watch: lib/internal/main/watch_mode.js, which runs as it loads. */
+  get watchMode() {
+    return require('internal/main/watch_mode');
+  },
   /** process.finalization: lib/internal/process/finalization.js. */
   get finalization() {
     return require('internal/process/finalization');

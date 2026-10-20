@@ -184,6 +184,8 @@ const bindings = {
     setMaybeCacheGeneratedSourceMap(fn) {
       sourceMapHooks.cacheGenerated = fn;
     },
+    // src/node_exit_code.h's codes.
+    exitCodes: { kNoFailure: 0, kGenericUserError: 1 },
     triggerUncaughtException(err) {
       const trigger = globalThis.process?._triggerUncaught;
       if (typeof trigger === 'function') trigger(err);

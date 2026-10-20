@@ -9,6 +9,7 @@ import { createWasiBinding } from './wasi-binding.mjs';
 import { stripVTControlCharacters } from 'node-inspect-extracted';
 import nodeInspect from 'node-inspect-extracted';
 import { loadVendorCjs } from './vendor-load.mjs';
+import { SIGNALS } from './signals.mjs';
 import * as errors from './node-errors.mjs';
 import {
   getSystemErrorMap,
@@ -47,12 +48,24 @@ function getOptionValue(name) {
     const a = argv[i];
     if (a === name) values.push(VALUED.has(name) ? argv[++i] : true);
     else if (a.startsWith(`${name}=`)) values.push(a.slice(name.length + 1));
+    // A boolean's --no- form (--no-watch-preserve-output): the last one wins.
+    else if (!VALUED.has(name) && a === `--no-${name.slice(2)}`) values.push(false);
   }
-  if (name === '--disable-warning') return values.filter((v) => typeof v === 'string');
-  if (VALUED.has(name)) return values.length ? String(values[values.length - 1]) : '';
+  if (!VALUED.has(name) && values.length && values[values.length - 1] === false) return false;
+  if (name === '--disable-warning' || name === '--watch-path') return values.filter((v) => typeof v === 'string');
+  if (VALUED.has(name)) return values.length ? String(values[values.length - 1]) : (DEFAULTS[name] ?? '');
   return values.length > 0;
 }
-const VALUED = new Set(['--disable-warning', '--redirect-warnings', '--diagnostic-dir']);
+const VALUED = new Set([
+  '--disable-warning',
+  '--redirect-warnings',
+  '--diagnostic-dir',
+  '--watch-path',
+  '--watch-kill-signal',
+  '--env-file',
+  '--env-file-if-exists',
+]);
+const DEFAULTS = { '--watch-kill-signal': 'SIGTERM' };
 
 const builtin = (id) => proc()._builtin(id);
 const lazy = (get) => Object.assign(get, { lazyRequire: true });
@@ -341,6 +354,12 @@ export function loadNodeLib({ ctx, process } = {}) {
         kEmptyObject: Object.freeze({ __proto__: null }),
         SymbolDispose: Symbol.dispose || Symbol.for('nodejs.dispose'),
         SymbolAsyncDispose: Symbol.asyncDispose || Symbol.for('nodejs.asyncDispose'),
+        // A signal's number, from its name or number (ERR_UNKNOWN_SIGNAL otherwise).
+        convertToValidSignal(signal) {
+          if (typeof signal === 'number' && Object.values(SIGNALS).includes(signal)) return signal;
+          if (typeof signal === 'string' && SIGNALS[signal.toUpperCase()]) return SIGNALS[signal.toUpperCase()];
+          throw errors.nodeError(TypeError, 'ERR_UNKNOWN_SIGNAL', `Unknown signal: ${signal}`);
+        },
         get promisify() {
           return runtimeUtil().promisify;
         },
@@ -504,6 +523,10 @@ export function loadNodeLib({ ctx, process } = {}) {
         },
       })),
       'internal/process/permission': { isEnabled: () => false, has: () => true },
+      // internal/main/watch_mode: its process is set up already (run.mjs).
+      'internal/process/pre_execution': { prepareMainThreadExecution() {}, markBootstrapComplete() {} },
+      'internal/timers': { TIMEOUT_MAX: 2 ** 31 - 1 },
+      child_process: lazy(() => builtin('child_process')),
       'internal/util/inspector': {
         // No inspector: what Node does without one.
         sendInspectorCommand: (cb, onError) => onError?.(),

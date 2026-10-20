@@ -327,7 +327,11 @@ export async function runNode(ctx, options = {}) {
   };
 
   // NODE_OPTIONS first, as Node reads it.
-  const parsed = parseNodeArgv([...ctx.argv], { nodeOptions: ctx.env?.NODE_OPTIONS });
+  const parsed = parseNodeArgv([...ctx.argv], {
+    nodeOptions: ctx.env?.NODE_OPTIONS,
+    // --watch: the child's IPC channel (slicc-kernel#1093) and fs.watch (1.125.0).
+    watch: typeof ctx.socketpair === 'function' && typeof ctx.fs?.watch === 'function',
+  });
   if (parsed.error) {
     await ctx.write(2, `${parsed.error}\n`);
     return parsed.status ?? 9;
@@ -791,7 +795,9 @@ export async function runNode(ctx, options = {}) {
     const limit = process._options.findLast?.((a) => a.startsWith('--stack-trace-limit='));
     if (limit) Error.stackTraceLimit = Number(limit.slice(20));
     // node -r / --require: loaded first, in order, as Node's preload modules.
-    if (typeof options.main !== 'function') {
+    // Not in --watch's own process: watch_mode passes them to the child,
+    // which runs them (as Node's watcher runs none).
+    if (typeof options.main !== 'function' && parsed.mode !== 'watch') {
       for (const request of parsed.preload ?? []) {
         try {
           cjs.preload(request);
@@ -866,6 +872,10 @@ export async function runNode(ctx, options = {}) {
           return dieUncaught(() => printUncaught(err));
         }
       }
+    } else if (parsed.mode === 'watch') {
+      // Node's watch mode: this process runs the program in a child, and
+      // again when a file it loaded changes (internal/main/watch_mode).
+      process._nodeLib().watchMode;
     } else if (parsed.mode === 'empty' && !parsed.check && !parsed.stdinScript && (parsed.interactive || process.stdin.isTTY)) {
       // Node's REPL: no script, and stdin a terminal (or -i).
       const status = startRepl();

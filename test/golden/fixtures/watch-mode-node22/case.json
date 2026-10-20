@@ -1,0 +1,14 @@
+{
+  "description": "node --watch and --watch-path (Node's internal/main/watch_mode): the program in a child that reports the modules it requires and imports over IPC, a restart when one of them changes, --watch-path's watched tree, the messages, SIGTERM ending the watch with the child, and the flag errors",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.125.11",
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

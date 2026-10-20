@@ -128,7 +128,18 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   }
 
   /** @type {Map<string, { namespace?: object, exportsObj?: object, evaluating?: boolean, promise?: Promise<object> }>} */
-  const cache = new Map();
+  // node --watch's child: each module it loads goes to the watch process,
+  // as its URL ('watch:import'), when it is first cached.
+  let watchReport;
+  const cache = new (class extends Map {
+    set(key, value) {
+      if (!this.has(key) && typeof key === 'string' && key.startsWith('/')) {
+        watchReport ??= Boolean(process.env.WATCH_REPORT_DEPENDENCIES);
+        if (watchReport && typeof process.send === 'function') process.send({ 'watch:import': [publicUrlOf(key)] });
+      }
+      return super.set(key, value);
+    }
+  })();
   /** Filenames currently on the async evaluation stack (cycle detection). */
   const evaluatingStack = new Set();
 

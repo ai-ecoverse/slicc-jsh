@@ -1,0 +1,8 @@
+{
+  "description": "node --watch's options as Node 22 parses them: empty values and invalid negations (status 9), the boolean forms (the last of --watch and --no-watch wins; --watch=<any> is watch mode), watch options in NODE_OPTIONS (--watch there alone has no file), and a -r preload, which runs in the watched child only",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.125.11"
+}

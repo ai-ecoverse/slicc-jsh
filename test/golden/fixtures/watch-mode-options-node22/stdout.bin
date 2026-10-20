@@ -1,0 +1,36 @@
+--watch-path=: 9
+  <node>: --watch-path= requires an argument
+--watch-kill-signal=: 9
+  <node>: --watch-kill-signal= requires an argument
+--no-watch-path=x: 9
+  <node>: --no-watch-path=x is an invalid negation because it is not a boolean option
+--no-watch-kill-signal=SIGINT: 9
+  <node>: --no-watch-kill-signal=SIGINT is an invalid negation because it is not a boolean option
+--no-watch: 0
+  app ran
+--watch --no-watch: 0
+  app ran
+--watch-path=. --no-watch: 0
+  app ran
+--no-watch-preserve-output: 0
+  app ran
+--watch-preserve-output=false: 0
+  app ran
+--no-watch --watch: 0
+  app ran
+  Completed running 'app.js'. Waiting for file changes before restarting...
+--watch=false: 0
+  app ran
+  Completed running 'app.js'. Waiting for file changes before restarting...
+NODE_OPTIONS=--watch: 9
+  <node>: --watch requires specifying a file
+NODE_OPTIONS=--watch-path=.: 9
+  <node>: --watch requires specifying a file
+NODE_OPTIONS=--watch-preserve-output: 0
+  app ran
+NODE_OPTIONS=--watch-kill-signal=SIGINT: 0
+  app ran
+--watch -r ./pre.js: 0
+  preload in the watched child
+  app ran
+  Completed running 'app.js'. Waiting for file changes before restarting...

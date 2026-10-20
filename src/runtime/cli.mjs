@@ -72,7 +72,7 @@ export function inputTypeOf(execArgv = []) {
  * allows there. Answers the words jsh applies (in CLI form, before the
  * command line's), or Node's error.
  */
-export function parseNodeOptions(text, argv0 = 'node') {
+export function parseNodeOptions(text, argv0 = 'node', { watch = false } = {}) {
   const words = [];
   let inString = false;
   let fresh = true;
@@ -132,15 +132,17 @@ export function parseNodeOptions(text, argv0 = 'node') {
     const word = apply[i];
     const name = word.split('=')[0];
     const valued = !word.includes('=') && ENV_VALUED.has(ENV_ALIASES[name]?.length === 1 ? ENV_ALIASES[name][0] : name);
-    if (jshKnows(word)) known.push(word, ...(valued ? [apply[i + 1]] : []));
+    if (jshKnows(word, watch)) known.push(word, ...(valued ? [apply[i + 1]] : []));
     if (valued) i++;
   }
   return { args: known };
 }
 
 /** An option jsh's command line takes (see parseNodeArgv). */
-function jshKnows(word) {
+function jshKnows(word, watch = false) {
   const name = word.split('=')[0];
+  // The watch options, where the kernel can watch (as on the command line).
+  if (watch && /^--(no-)?watch(-path|-kill-signal|-preserve-output)?$/.test(name)) return true;
   return (
     booleanToggle(name) !== null ||
     VALUED_FLAGS.includes(name) ||
@@ -154,15 +156,20 @@ function jshKnows(word) {
  * value counts; `-r` / `--import` lists take NODE_OPTIONS' first), and they
  * aren't in execArgv: `options` is what's in effect.
  */
-export function parseNodeArgv(argv, { nodeOptions } = {}) {
+/**
+ * `watch`: whether this kernel can run --watch (an IPC channel to the child,
+ * and fs.watch). Without it --watch and its options stay bad options.
+ */
+export function parseNodeArgv(argv, { nodeOptions, watch = false } = {}) {
   const argv0 = argv[0] ?? 'node';
   if (typeof nodeOptions === 'string' && nodeOptions !== '') {
-    const env = parseNodeOptions(nodeOptions, argv0);
+    const env = parseNodeOptions(nodeOptions, argv0, { watch });
     if (env.error) return env;
     if (env.args.length > 0) {
-      const fromEnv = parseCommandLine([argv0, ...env.args]);
+      // (Watch mode from NODE_OPTIONS alone has no file there: Node's error.)
+      const fromEnv = parseCommandLine([argv0, ...env.args], { watch });
       if (fromEnv.error) return fromEnv;
-      const cli = parseCommandLine(argv);
+      const cli = parseCommandLine(argv, { watch });
       if (cli.error || cli.mode === 'version' || cli.mode === 'help') return cli;
       return {
         ...cli,
@@ -174,7 +181,7 @@ export function parseNodeArgv(argv, { nodeOptions } = {}) {
       };
     }
   }
-  const parsed = parseCommandLine(argv);
+  const parsed = parseCommandLine(argv, { watch });
   return parsed.execArgv ? { ...parsed, options: effective(parsed.execArgv) } : parsed;
 }
 
@@ -211,8 +218,10 @@ function booleanToggle(name) {
 /** Node's: a value that looks like an option isn't one (`--require --no-warnings`). */
 const missingValue = (next) => next === undefined || next.startsWith('-');
 
-function parseCommandLine(argv) {
+function parseCommandLine(argv, { watch: watchable = false } = {}) {
   const argv0 = argv[0] ?? 'node';
+  // --watch (or --watch-path): Node's watch mode runs the program in a child.
+  let watch = false;
   const args = argv.slice(1);
   let evalCode;
   let print = false;
@@ -352,6 +361,38 @@ function parseCommandLine(argv) {
       i += 1;
       continue;
     }
+    // Node's booleans: --watch, --watch=<anything> (watch mode, whatever the
+    // value, as in Node), --no-watch, and the same for
+    // --watch-preserve-output. The last of --watch and --no-watch wins.
+    const watchBoolean = watchable && /^--(no-)?watch(-preserve-output)?(=|$)/.exec(arg);
+    if (watchBoolean && !(watchBoolean[1] && arg.includes('='))) {
+      if (!watchBoolean[2]) watch = !watchBoolean[1];
+      flags.push(arg);
+      i += 1;
+      continue;
+    }
+    if (watchable && /^--no-watch-(path|kill-signal)(=|$)/.test(arg)) {
+      return { error: `${argv0}: ${arg} is an invalid negation because it is not a boolean option`, status: 9 };
+    }
+    const watchValued = watchable && ['--watch-path', '--watch-kill-signal'].find((f) => arg === f || arg.startsWith(`${f}=`));
+    if (watchValued) {
+      if (watchValued === '--watch-path') watch = true;
+      if (arg === watchValued) {
+        if (missingValue(args[i + 1])) {
+          const lines = [`${argv0}: ${arg} requires an argument`];
+          if (watchValued === '--watch-path') lines.push(`${argv0}: --watch requires specifying a file`);
+          return { error: lines.join('\n'), status: 9 };
+        }
+        flags.push(arg, args[i + 1]);
+        i += 2;
+      } else if (arg === `${watchValued}=`) {
+        return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      } else {
+        flags.push(arg);
+        i += 1;
+      }
+      continue;
+    }
     if (BOOLEAN_FLAGS.has(arg) || (arg.startsWith('--') && booleanToggle(arg.split('=')[0]))) {
       flags.push(arg);
       i += 1;
@@ -401,6 +442,23 @@ function parseCommandLine(argv) {
 
   if (check && evalCode !== undefined) {
     return { error: `${argv0}: either --check or --eval can be used, not both`, status: 9 };
+  }
+
+  if (watch) {
+    if (evalCode !== undefined) return { error: `${argv0}: either --watch or --eval can be used, not both`, status: 9 };
+    if (check) return { error: `${argv0}: either --watch or --check can be used, not both`, status: 9 };
+    if (interactive) return { error: `${argv0}: either --watch or --interactive can be used, not both`, status: 9 };
+    if (script === undefined && !stdinScript) return { error: `${argv0}: --watch requires specifying a file`, status: 9 };
+    // Node's internal/main/watch_mode: it runs the program as given, again
+    // whenever a file it loaded changes.
+    return {
+      mode: 'watch',
+      processArgv: [argv0, ...(stdinScript ? ['-'] : [script]), ...userArgs],
+      execArgv: [...flags],
+      preload,
+      imports,
+      v8Warnings,
+    };
   }
 
   if (evalCode !== undefined) {
