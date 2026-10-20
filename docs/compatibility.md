@@ -197,6 +197,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - argv, env and cwd; Node's errors for a bad `cwd`, a missing command (`ENOENT`) and a file without `x` (`EACCES`), as `'error'` and then `'close'` with the negative errno, never thrown;
 - stdio `inherit`, `pipe` and `ignore`, with streams on `.stdin`, `.stdout` and `.stderr`;
 - the events `spawn`, `exit`, `close` and `error`; `.kill(signal)`; `.pid`.
+- `ref()` and `unref()`, as in Node: an unref'd child doesn't keep the program alive, and nor does its stdio. A `.stdout` or `.stderr` pipe still being read does, until it ends or is `unref()`'d (golden `child-process-unref-node22`). tinypool's child-process workers rely on this.
 - On slicc-kernel 1.87.0 and later (`ctx.sync.spawn`), the child starts inside `spawn()`, so `.pid` is set when it returns and a `kill()` or `process.kill(child.pid)` right after reaches it, as in Node. On older kernels it starts a tick later, and `.pid` is set by `'spawn'`.
 
 **Finding the command.** A bare name is found on the child's `PATH` (`options.env`'s, else `/usr/bin:/bin`), as `execvp` does, for `spawn`, `execFile`, `spawnSync` and `execFileSync`:

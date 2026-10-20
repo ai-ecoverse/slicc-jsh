@@ -1,0 +1,8 @@
+{
+  "description": "child_process: an unref'd child doesn't keep the program alive, whatever its stdio, while a child.stdout pipe still being read does until it is unref'd, and ref() takes it back; tinypool's isolateWorkers child processes",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.126.0"
+}

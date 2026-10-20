@@ -559,12 +559,14 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       this.spawnargs = [];
       this.#kernel = null;
       this.#handle = null;
+      this.#refed = true;
       this.#closing = false;
       this.#exited = false;
     }
 
     #kernel;
     #handle;
+    #refed;
     #closing;
     #exited;
 
@@ -588,11 +590,13 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
     }
 
     ref() {
+      this.#refed = true;
       if (this.#handle) handles.add(this.#handle);
       return this;
     }
 
     unref() {
+      this.#refed = false;
       if (this.#handle) handles.delete(this.#handle);
       return this;
     }
@@ -602,7 +606,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       this.#kernel = child;
       this.pid = child.pid;
       this.#handle = { kind: 'child', pid: child.pid };
-      handles.add(this.#handle);
+      if (this.#refed) handles.add(this.#handle);
     }
 
     /** @internal */
@@ -640,6 +644,19 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         cb(err);
       },
     });
+    const handle = { kind: 'pipe' };
+    let refed = true;
+    let reading = false;
+    r.ref = () => {
+      refed = true;
+      if (reading) handles.add(handle);
+      return r;
+    };
+    r.unref = () => {
+      refed = false;
+      handles.delete(handle);
+      return r;
+    };
     r._sliccPump = async (webStream) => {
       if (!webStream) {
         if (!gone) r.push(null);
@@ -649,6 +666,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         webStream.cancel().catch(() => {});
         return;
       }
+      reading = true;
+      if (refed) handles.add(handle);
       try {
         reader = webStream.getReader();
         for (;;) {
@@ -661,6 +680,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
         if (!gone) r.push(null);
       } catch (err) {
         if (!gone) r.destroy(err);
+      } finally {
+        reading = false;
+        handles.delete(handle);
       }
     };
     return r;
@@ -916,7 +938,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       const spawnErr = safeEmit(child, 'spawn');
       if (spawnErr) return;
       const waitP = kernelChild.wait();
-      trackPromise(handles, waitP);
+      waitP.finally(() => handles.notify?.()).catch(() => {});
       waitP.then(
         (status) => {
           const { code, signal } = decodeWait(status);
