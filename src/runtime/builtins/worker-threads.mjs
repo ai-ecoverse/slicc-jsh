@@ -388,10 +388,6 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
           this.#end(said);
         }
       }, this.#box);
-      for (const [held, own] of this.#pending.splice(0)) {
-        if (own) thread.port.postMessage(own);
-        else linked.postPacked(...held);
-      }
       thread.exited.then((code) => {
         if (said !== undefined) return;
         // The thread ended without a word: terminate() (1), out of memory or a crash.
@@ -413,6 +409,19 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
           }
         } else this.#end(code);
       });
+      // What was posted before the thread was there, now, with the exit
+      // handler in place first: one that can't be sent is the program's
+      // uncaught error, and the Worker still ends.
+      for (const [held, own] of this.#pending.splice(0)) {
+        try {
+          if (own) thread.port.postMessage(own);
+          else linked.postPacked(...held);
+        } catch (err) {
+          queueMicrotask(() => {
+            throw err;
+          });
+        }
+      }
     }
 
     #post(message) {

@@ -41,22 +41,33 @@ const isArrayBuffer = (value) => {
 const CHANNEL_MAILBOX = 256 * 1024;
 
 // What a transfer list may hold (Node's): ArrayBuffers (not shared ones),
-// message ports (jsh's and the platform's) and web streams.
-const TRANSFERABLE_TAGS = new Set(['[object MessagePort]', '[object ReadableStream]', '[object WritableStream]', '[object TransformStream]']);
-const isTransferable = (item, JshPort) =>
+// message ports (jsh's and the platform's) and web streams. Each by its
+// brand: a getter of its own that throws for anything else (a tag or a
+// prototype can be faked; a fake would pass, and only fail once a port had
+// gone).
+const getterOf = (Class, key) => (typeof Class === 'function' ? Object.getOwnPropertyDescriptor(Class.prototype, key)?.get : undefined);
+const hasBrand = (get, item) => {
+  try {
+    Reflect.apply(get, item, []);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const isTransferable = (item, JshPort, brands) =>
   item !== null &&
   typeof item === 'object' &&
-  (item instanceof JshPort || isArrayBuffer(item) || TRANSFERABLE_TAGS.has(Object.prototype.toString.call(item)));
+  (item instanceof JshPort || isArrayBuffer(item) || brands.some((get) => hasBrand(get, item)));
 
 /**
  * V8's checks of a transfer list, made before anything is sent or any port
  * exported, with its errors: what can't be transferred at all, a duplicate,
  * or an ArrayBuffer already gone.
  */
-function checkTransferList(list, JshPort) {
+function checkTransferList(list, JshPort, brands) {
   const seen = new Set();
   for (const item of list) {
-    if (!isTransferable(item, JshPort)) throw new DOMException('Found invalid value in transferList.', 'DataCloneError');
+    if (!isTransferable(item, JshPort, brands)) throw new DOMException('Found invalid value in transferList.', 'DataCloneError');
     if (seen.has(item)) {
       const kind = isArrayBuffer(item) ? 'ArrayBuffer' : 'MessagePort';
       throw new DOMException(`Transfer list contains duplicate ${kind}`, 'DataCloneError');
@@ -68,6 +79,13 @@ function checkTransferList(list, JshPort) {
 
 export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
   const { MessagePort, makePort, kPortMark } = ports;
+  const NativePort = NativeMessageChannel ? Object.getPrototypeOf(new NativeMessageChannel().port1).constructor : null;
+  const brands = [
+    getterOf(NativePort, 'onmessage'),
+    getterOf(globalThis.ReadableStream, 'locked'),
+    getterOf(globalThis.WritableStream, 'locked'),
+    getterOf(globalThis.TransformStream, 'readable'),
+  ].filter(Boolean);
 
   const transferListOf = (transfer) =>
     transfer === undefined || transfer === null ? [] : Array.isArray(transfer) ? transfer : [...(transfer?.transfer ?? [])];
@@ -127,7 +145,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     for (const port of jshPorts) {
       if (port._detached) throw new DOMException('MessagePort in transfer list is already detached', 'DataCloneError');
     }
-    checkTransferList(list, MessagePort);
+    checkTransferList(list, MessagePort, brands);
     if (jshPorts.length === 0) return fn({ data: message, ports: [] }, rest);
     const marks = new Map(jshPorts.map((port, i) => [port, { [kPortMark]: i }]));
     const marked = swapPorts(message, marks);
@@ -219,7 +237,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
         // bytes copied and theirs detached (a move, as a program sees it).
         if (writer && list.every(isArrayBuffer)) {
           // V8's checks of a transfer list, before the message is out.
-          checkTransferList(list, MessagePort);
+          checkTransferList(list, MessagePort, brands);
           let bytes;
           try {
             bytes = serdes().serialize(message);
@@ -342,17 +360,11 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
    */
   function hold(message, transfer) {
     return pack(message, transfer, (packed, list) => {
-      const held = structuredClone(packed, { transfer: list });
-      return [held, natives(held)];
+      // The clone's own transferables (ports, buffers, streams), to be
+      // transferred again when it is sent.
+      const held = structuredClone({ packed, list }, { transfer: list });
+      return [held.packed, held.list];
     });
-  }
-  const NativePort = NativeMessageChannel ? Object.getPrototypeOf(new NativeMessageChannel().port1).constructor : null;
-  function natives(value, out = [], seen = new Set()) {
-    if (value === null || typeof value !== 'object' || seen.has(value)) return out;
-    seen.add(value);
-    if (NativePort && value instanceof NativePort) out.push(value);
-    else if (Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype) for (const key of Object.keys(value)) natives(value[key], out, seen);
-    return out;
   }
 
   return { link, pack, hold, receive, exportPort, importPort, mailboxPair, NativeMessageChannel };

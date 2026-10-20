@@ -12,7 +12,9 @@
 // throws makes the post throw, once, and sends nothing; and a getter that
 // detaches a listed buffer leaves the post standing; and a transfer list
 // with something that can't be transferred ({}, a SharedArrayBuffer) is a
-// DataCloneError that leaves the ports in it usable.
+// DataCloneError that leaves the ports in it usable, a fake port (a forged
+// tag) too; and a stream posted, with its transfer, before the worker has
+// started gets there.
 const { Worker, MessageChannel } = require('worker_threads');
 const once = (w, ev) => new Promise((r) => w.once(ev, r));
 (async () => {
@@ -82,11 +84,32 @@ const once = (w, ev) => new Promise((r) => w.once(ev, r));
       console.log('a transfer list with', Object.prototype.toString.call(junk) + ':', e.name, e.message);
     }
   }
+  try {
+    echo.postMessage({ withJunk }, [withJunk, { [Symbol.toStringTag]: 'MessagePort' }]);
+    console.log('posted');
+  } catch (e) {
+    console.log('a transfer list with a fake port:', e.name, e.message);
+  }
   const junkHi = once(withJunkPeer, 'message');
   withJunk.postMessage('still here');
   console.log('its port:', await junkHi);
   withJunk.close();
   withJunkPeer.close();
+
+  const reader = new Worker(
+    "const { parentPort } = require('worker_threads'); parentPort.once('message', async ({ stream }) => { let text = ''; for await (const chunk of stream) text += chunk; parentPort.postMessage(text); });",
+    { eval: true }
+  );
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue('a stream ');
+      controller.enqueue('posted early');
+      controller.close();
+    },
+  });
+  reader.postMessage({ stream }, [stream]);
+  console.log('a stream posted before the worker started:', await once(reader, 'message'));
+  await reader.terminate();
 
   const { port1: inCause } = new MessageChannel();
   echo.postMessage({ err: new TypeError('with a port', { cause: inCause }) }, [inCause]);
