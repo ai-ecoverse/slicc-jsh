@@ -187,4 +187,47 @@ server.listen(0, '127.0.0.1', async () => {
     assert.equal(r.status, 0);
     assert.deepEqual(r.stdout.split('\n'), ['ping PONG', 'set OK', 'get v null', 'commands PING SET GET GET QUIT', '']);
   });
+
+  it('the packages dns unblocked load in a kernel program', async () => {
+    const packages = {
+      pg: ['Client', 'Pool'],
+      nodemailer: ['createTransport'],
+      undici: ['request', 'Agent'],
+      fastify: [],
+      nats: ['connect'],
+      ssh2: ['Client', 'Server'],
+      superagent: ['get', 'post'],
+      'googleapis-common': ['GoogleAuth', 'createAPIRequest'],
+    };
+    for (const name of Object.keys(packages)) {
+      for (const [path, data] of devPackageTree(name)) await jsh.kernel.writeFile(`/os${path}`, data);
+    }
+    await jsh.kernel.writeFile(
+      '/os/dns-unblocked.js',
+      `const packages = ${JSON.stringify(packages)};
+for (const [name, members] of Object.entries(packages)) {
+  try {
+    const m = require(name);
+    console.log(name, typeof m, members.map((k) => k + ':' + typeof m[k]).join(' '));
+  } catch (e) {
+    console.log(name, 'error', e.code, e.message.split('\\n')[0]);
+  }
+}
+`
+    );
+    const r = await jsh.run(['node', 'dns-unblocked.js']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    assert.deepEqual(r.stdout.split('\n'), [
+      'pg object Client:function Pool:function',
+      'nodemailer object createTransport:function',
+      'undici object request:function Agent:function',
+      'fastify function ',
+      'nats object connect:function',
+      'ssh2 object Client:function Server:function',
+      'superagent function get:function post:function',
+      'googleapis-common object GoogleAuth:function createAPIRequest:function',
+      '',
+    ]);
+  });
 });
