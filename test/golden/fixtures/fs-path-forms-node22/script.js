@@ -1,3 +1,4 @@
+process.noDeprecation = true;
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -201,6 +202,35 @@ const after = (name) => {
     ['readlinkSync bad encoding', () => fs.readlinkSync(Buffer.from('l'), 'nope')],
     ['realpathSync object', () => fs.realpathSync({ toString: () => 'f' })],
     ['existsSync number', () => fs.existsSync(1)],
+    ['truncateSync fd', () => {
+      const tfd = fs.openSync('g', 'w');
+      fs.writeSync(tfd, 'abcdef');
+      fs.truncateSync(tfd, 2);
+      fs.closeSync(tfd);
+      return fs.readFileSync('g', 'utf8');
+    }],
+    ['new ReadStream with createReadStream replaced', () => {
+      const own = fs.createReadStream;
+      fs.createReadStream = () => 'replaced';
+      try {
+        const s = new fs.ReadStream(Buffer.from('f'));
+        s.destroy();
+        return `${s instanceof fs.ReadStream} ${show(s.path)}`;
+      } finally {
+        fs.createReadStream = own;
+      }
+    }],
+    ['new WriteStream with createWriteStream replaced', () => {
+      const own = fs.createWriteStream;
+      fs.createWriteStream = () => 'replaced';
+      try {
+        const s = new fs.WriteStream(new URL(pathToFileURL(path.resolve('w3'))));
+        s.destroy();
+        return `${s instanceof fs.WriteStream} ${show(s.path)}`;
+      } finally {
+        fs.createWriteStream = own;
+      }
+    }],
   ]) {
     try {
       out(`${label}: ${show(call())}`);
@@ -224,9 +254,19 @@ const after = (name) => {
     ['promises.readlink buffer', () => fs.promises.readlink(new URL(pathToFileURL(path.resolve('l'))), 'buffer')],
     ['promises.readlink missing', () => fs.promises.readlink(Buffer.from('missing'))],
     ['promises.watch object', () => fs.promises.watch({}).next()],
+    ['promises.truncate number', () => fs.promises.truncate(3)],
   ]) {
     out(`${label}: ${await call().then(show, (e) => `reject ${err(e)}`)}`);
   }
+  await new Promise((res) => {
+    const tfd = fs.openSync('g', 'w');
+    fs.writeSync(tfd, 'abcdef');
+    fs.truncate(tfd, 3, (e) => {
+      fs.closeSync(tfd);
+      out(`truncate fd: ${e ? err(e) : fs.readFileSync('g', 'utf8')}`);
+      res();
+    });
+  });
 
   const BAD = {
     object: () => ({}),

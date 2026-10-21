@@ -499,6 +499,9 @@ readlinkSync hex: "66"
 readlinkSync bad encoding: TypeError ERR_INVALID_ARG_VALUE "The argument 'encoding' is invalid encoding. Received 'nope'"
 realpathSync object: "/W/f"
 existsSync number: false
+truncateSync fd: "ab"
+new ReadStream with createReadStream replaced: "true Buffer(f)"
+new WriteStream with createWriteStream replaced: "true \"/W/w3\""
 promises.readFile FileHandle: "abc"
 promises.appendFile FileHandle: abcz
 promises.writeFile FileHandle: q
@@ -508,6 +511,8 @@ promises.writeFile number: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" a
 promises.readlink buffer: Buffer(f)
 promises.readlink missing: reject Error ENOENT "ENOENT: no such file or directory, readlink 'missing'" path:"missing"
 promises.watch object: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+promises.truncate number: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received type number (3)"
+truncate fd: abc
 bad object: TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
   accessSync access appendFileSync appendFile chmodSync chmod chownSync chown lchownSync lchown lstatSync lstat lutimesSync lutimes mkdirSync mkdir openSync open opendirSync opendir readdirSync readdir readFileSync readFile readlinkSync readlink rmSync rm rmdirSync rmdir statSync stat statfsSync statfs truncateSync truncate unlinkSync unlink utimesSync utimes writeFileSync writeFile symlinkSync path createReadStream createWriteStream watch watchFile unwatchFile openAsBlob realpathSync.native
 bad object: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"

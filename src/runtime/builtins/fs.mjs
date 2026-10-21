@@ -2492,12 +2492,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
 
   // fs.ReadStream / fs.WriteStream: callable like Node's, and `instanceof`
   // holds for the streams createReadStream / createWriteStream make.
+  const streamPath = (p, options) => (options?.fd != null ? p : getValidatedPath(p, 'path', { keepBuffer: true }));
   function ReadStream(p, options) {
-    return fsModule.createReadStream(p, options);
+    return createReadStream(streamPath(p, options), options);
   }
   Object.defineProperty(ReadStream, Symbol.hasInstance, { value: (x) => !!x?.[FS_READ_STREAM] });
   function WriteStream(p, options) {
-    return fsModule.createWriteStream(p, options);
+    return createWriteStream(streamPath(p, options), options);
   }
   Object.defineProperty(WriteStream, Symbol.hasInstance, { value: (x) => !!x?.[FS_WRITE_STREAM] });
 
@@ -2885,7 +2886,7 @@ const PATH_NAMES = {
 };
 const PATHLESS = /^(f[a-z]+|close|read|readv|write|writev|glob|lchmod|_toUnixTimestamp)(Sync)?$/;
 const KEEPS_BUFFER = /^(readdir|opendir|createReadStream|createWriteStream|watchFile|unwatchFile)(Sync)?$/;
-const TAKES_FD = /^(readFile|writeFile|appendFile)(Sync)?$/;
+const TAKES_FD = /^(readFile|writeFile|appendFile|truncate)(Sync)?$/;
 const STREAMS = /^create(Read|Write)Stream$/;
 
 /**
