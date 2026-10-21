@@ -38,7 +38,6 @@ const [shardIx, shardOf] = (() => {
 const suffix = shardOf > 1 ? `-${shardIx + 1}` : '';
 const out = join(work, 'fixtures', kernel.id);
 mkdirSync(out, { recursive: true });
-const base = stage.trees.base;
 
 const own = join(work, 'mfx', kernel.id);
 const fx = join(own, 'fx');
@@ -60,7 +59,7 @@ async function install(k, dir, name) {
 async function boot(pkgDir) {
   const k = await createNodeKernel({ users: 'enforce', network: { transport: nodeTransport() } });
   for (const u of ['cone', 'cone2']) await k.users.add({ name: u });
-  for (const n of ['wasm-bash', 'wasm-coreutils']) await install(k, join(base, '@ai-ecoverse', n), `@ai-ecoverse/${n}`);
+  for (const n of ['wasm-bash', 'wasm-coreutils']) await install(k, join(kernel.modules, '@ai-ecoverse', n), `@ai-ecoverse/${n}`);
   await install(k, pkgDir, '@ai-ecoverse/slicc-jsh');
   return k;
 }
@@ -271,6 +270,19 @@ async function runRows(pkgName, pkgDir) {
 process.on('unhandledRejection', (e) => {
   if (!/terminated/.test(String(e))) console.log('# unhandled', String(e).slice(0, 200));
 });
+
+{
+  const k = await boot(stage.published.dir);
+  const r = await krun(k, ['sh', '-c', 'echo ok'], { cwd: '/tmp', user: 'cone' });
+  try {
+    await k.terminate();
+  } catch {}
+  if (r.status !== 0 || r.stdout.trim() !== 'ok') {
+    const bash = readJson(join(kernel.modules, '@ai-ecoverse/wasm-bash/package.json'));
+    console.log(`::error title=m-fixtures: no sh on kernel ${kernel.id}::sh -c 'echo ok' on slicc-kernel ${kernel.version} with ${bash.name}@${bash.version} gave rc=${r.status}, stderr ${JSON.stringify(r.stderr.trim().slice(0, 300))}: every sh case and row would cover nothing`);
+    process.exit(1);
+  }
+}
 
 const pkgs = { new: stage.published.dir, prev: stage.previous.dir };
 if (values.case) {

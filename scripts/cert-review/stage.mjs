@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { KERNEL, NAME, SEMVER, archive, kernelPackage, npmFlags, packFrom, packTree, readJson, relFiles, root, sh, sha, sri, untar } from './lib.mjs';
+import { KERNEL, NAME, SEMVER, archive, npmFlags, packFrom, packTree, readJson, relFiles, root, sh, sha, shadowModules, sri, untar } from './lib.mjs';
 
 const { values } = parseArgs({
   options: {
@@ -74,26 +74,6 @@ function stageKernel(pin) {
   renameSync(join(shimmed, 'dist/node.js'), join(shimmed, 'dist/node-kernel.js'));
   writeFileSync(join(shimmed, 'dist/node.js'), ENFORCE_SHIM);
   return { ...pin, tgz, sha256: sha('sha256', tgz), plain, enforce: shimmed };
-}
-
-function shadowModules(base, kernelDir, kernel, dest) {
-  rmSync(dest, { recursive: true, force: true });
-  mkdirSync(dest, { recursive: true });
-  for (const name of readdirSync(base)) {
-    if (name !== '@ai-ecoverse') {
-      symlinkSync(join(base, name), join(dest, name));
-      continue;
-    }
-    mkdirSync(join(dest, name));
-    for (const sub of readdirSync(join(base, name))) {
-      if (sub === 'slicc-kernel') continue;
-      const pick = kernelPackage(base, sub, kernel);
-      if (pick.compat) console.log(`stage: kernel ${kernel} gets ${name}/${sub}@${pick.version} (cert-compat-${sub}): the tree's own needs a newer kernel`);
-      symlinkSync(pick.dir, join(dest, name, sub));
-    }
-    symlinkSync(kernelDir, join(dest, name, 'slicc-kernel'));
-  }
-  return dest;
 }
 
 function packageDiff(a, b) {

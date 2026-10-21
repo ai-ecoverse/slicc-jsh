@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -210,4 +210,24 @@ export function kernelPackage(base, sub, kernel) {
   throw new Error(
     `kernel ${kernel}: ${own.name}@${own.version} needs slicc-kernel ${range}, and no cert-compat-${sub} devDependency fits it${alt ? ` (${alt.name}@${alt.version} needs ${altRange})` : ''}`
   );
+}
+
+export function shadowModules(base, kernelDir, kernel, dest) {
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dest, { recursive: true });
+  for (const name of readdirSync(base)) {
+    if (name !== '@ai-ecoverse') {
+      symlinkSync(join(base, name), join(dest, name));
+      continue;
+    }
+    mkdirSync(join(dest, name));
+    for (const sub of readdirSync(join(base, name))) {
+      if (sub === 'slicc-kernel') continue;
+      const pick = kernelPackage(base, sub, kernel);
+      if (pick.compat) console.log(`stage: kernel ${kernel} gets ${name}/${sub}@${pick.version} (cert-compat-${sub}): the tree's own needs a newer kernel`);
+      symlinkSync(pick.dir, join(dest, name, sub));
+    }
+    symlinkSync(kernelDir, join(dest, name, 'slicc-kernel'));
+  }
+  return dest;
 }
