@@ -268,6 +268,23 @@ const scenarios = [
     step('after');
     res.end('bc');
   }],
+  ['strictContentLength, end(body) short of the length, then destroy', GET('/sc3'), (res, step, log) => {
+    res.setHeader('Content-Length', '10');
+    res.strictContentLength = true;
+    log(`end ${code(() => res.end('hi'))}`);
+    step('after');
+    res.destroy();
+  }],
+  ['strictContentLength, end(body) short of the length, then end with the rest', GET('/sc4'), (res, step, log) => {
+    res.setHeader('Content-Length', '10');
+    res.strictContentLength = true;
+    log(`end ${code(() => res.end('hi'))}`);
+    step('after');
+    res.write('abc');
+    step('write');
+    res.end('defgh');
+    step('end');
+  }],
   ['writeHead with a list', GET('/li'), (res, step) => {
     res.writeHead(200, ['X-A', '1', 'X-A', '2', 'Content-Length', '2']);
     step('writeHead');

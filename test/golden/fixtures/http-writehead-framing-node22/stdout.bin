@@ -416,6 +416,28 @@ strictContentLength, end short
   kept alive true
   req close after the response
   wire "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nabcHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+strictContentLength, end(body) short of the length, then destroy
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  end Error ERR_HTTP_CONTENT_LENGTH_MISMATCH Response body's content-length of 2 byte(s) does not match the content-length of 10 byte(s) set in header
+  after: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nContent-Length: 10\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  close: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=false
+  kept alive false
+  req close after the response
+  wire ""
+strictContentLength, end(body) short of the length, then end with the rest
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  end Error ERR_HTTP_CONTENT_LENGTH_MISMATCH Response body's content-length of 2 byte(s) does not match the content-length of 10 byte(s) set in header
+  after: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nContent-Length: 10\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  write: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nContent-Length: 10\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nhiabcdefghHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
 writeHead with a list
   start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
   writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false

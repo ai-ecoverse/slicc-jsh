@@ -701,7 +701,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     }),
     writableObjectMode: getter(() => false),
     writableLength: getter(function () {
-      return this.outputSize + this[kChunkedLength] + (this.socket ? this.socket.writableLength : 0);
+      return this.outputSize + this[kChunkedLength] + (this[kBatch]?.size ?? 0) + (this.socket ? this.socket.writableLength : 0);
     }),
     writableHighWaterMark: getter(function () {
       return this.socket ? this.socket.writableHighWaterMark : this[kHighWaterMark];
@@ -896,6 +896,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       const batch = this[kBatch];
       if (batch) {
         batch.socket = socket;
+        batch.size = (batch.size ?? 0) + buf.length;
         batch.push(buf, callback);
         return true;
       }
@@ -1153,29 +1154,32 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         }
         return this;
       }
-      const own = !this[kBatch];
-      if (own) this[kBatch] = [];
-      try {
-        if (chunk) {
-          writeChunk(this, chunk, encoding, null, true);
-        } else if (!this._header) {
-          this._contentLength = 0;
-          this._implicitHeader();
-        }
-        if (typeof callback === 'function') this.once('finish', callback);
-        if (strictContentLength(this) && this[kBytesWritten] !== this._contentLength) {
-          throw contentLengthMismatch(this[kBytesWritten], this._contentLength);
-        }
-        const finish = () => {
-          if (this.socket?._hadError) return;
-          this[kFinish]();
-        };
-        if (this._hasBody && this.chunkedEncoding) this._send(`0\r\n${this._trailer}\r\n`, 'latin1', finish);
-        else if (!this._headerSent || this.writableLength || chunk) this._send('', 'latin1', finish);
-        else process.nextTick(finish);
-      } finally {
-        if (own) this[kUncorkWire]();
+      if (chunk) {
+        this[kBatch] ??= [];
+        writeChunk(this, chunk, encoding, null, true);
+      } else if (!this._header) {
+        this[kBatch] ??= [];
+        this._contentLength = 0;
+        this._implicitHeader();
       }
+      if (typeof callback === 'function') this.once('finish', callback);
+      if (strictContentLength(this) && this[kBytesWritten] !== this._contentLength) {
+        throw contentLengthMismatch(this[kBytesWritten], this._contentLength);
+      }
+      this[kBatch] ??= [];
+      if (this[kChunkedBuffer].length !== 0) {
+        this.socket?.cork?.();
+        this[kCorked] = 1;
+        this.uncork();
+      }
+      const finish = () => {
+        if (this.socket?._hadError) return;
+        this[kFinish]();
+      };
+      if (this._hasBody && this.chunkedEncoding) this._send(`0\r\n${this._trailer}\r\n`, 'latin1', finish);
+      else if (!this._headerSent || this.writableLength || chunk) this._send('', 'latin1', finish);
+      else process.nextTick(finish);
+      this[kUncorkWire]();
       const state = this.socket?._writableState;
       if (state?.corked) {
         state.corked = 1;
