@@ -233,6 +233,11 @@ function createPrimary({ process, getChildProcess, getNet, canFork }) {
     }
     handle.data ||= message.data;
     handle.add(worker, message.proxy, (errno, reply) => {
+      // A worker that has asked to leave (acknowledged) doesn't wait for
+      // the answer, and may be gone, its end closed, before this side has
+      // read that: the write would be an EPIPE (#675). Node's primary
+      // answers before it acks, its bind being synchronous.
+      if (worker.exitedAfterDisconnect) return;
       const { data } = handles.get(key) ?? handle;
       if (errno) handles.delete(key);
       send(worker, { errno, key, ack: message.seq, data, ...reply });
