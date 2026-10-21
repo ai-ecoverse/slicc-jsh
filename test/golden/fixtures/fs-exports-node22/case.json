@@ -1,0 +1,7 @@
+{
+  "description": "node:fs's keys as Node 22 has them, CommonJS, the ESM namespace in its sorted order and fs/promises: F_OK..X_OK read-only, lchmod as an undefined key, FileReadStream/FileWriteStream, _toUnixTimestamp, promises.constants, glob, openAsBlob, readv/writev, and fs.Dir with its constructor and path errors",
+  "argv": ["script.mjs"],
+  "shim": true,
+  "kernel": "1.125.0",
+  "files": [{ "path": "/os/script.mjs", "from": "script.mjs" }]
+}

@@ -1,0 +1,6 @@
+{
+  "description": "readv/readvSync, writev/writevSync and FileHandle readv/writev: positions, the fd's own position, short reads, empty lists (readv's EINVAL), a read-only or closed fd, append mode, promisify's names, and the argument errors",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

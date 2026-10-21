@@ -46,6 +46,9 @@ module.exports = {
   get finalization() {
     return require('internal/process/finalization');
   },
+  get fsGlob() {
+    return require('internal/fs/glob');
+  },
   get readline() {
     return require('readline');
   },

@@ -1,0 +1,6 @@
+{
+  "description": "fs.openAsBlob: a Promise of a Blob with the file's bytes, its type, slice, text and stream, a URL or Buffer path, an empty file, and the errors of a missing file, a bad path, bad options and a null byte",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

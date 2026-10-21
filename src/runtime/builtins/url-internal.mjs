@@ -228,6 +228,7 @@ export function createUrlInternals({ nodePath, Buffer }) {
     fileURLToPath,
     fileURLToPathBuffer,
     pathToFileURL,
+    toPathIfFileURL: (fileURLOrPath) => (isURL(fileURLOrPath) ? fileURLToPath(fileURLOrPath) : fileURLOrPath),
     urlToHttpOptions,
     unsafeProtocol,
     hostlessProtocol,

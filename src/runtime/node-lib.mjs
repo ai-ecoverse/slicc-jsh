@@ -21,6 +21,7 @@ import {
 } from './node-bindings.mjs';
 import { createUtil } from './builtins/util.mjs';
 import { createUrlInternals, urlBindings } from './builtins/url-internal.mjs';
+import { DirentFromStats } from './builtins/fs.mjs';
 import * as acorn from 'acorn';
 import { ES_GLOBALS, decorateErrorStack, makeContextifyScriptWith, setGlobalOverlay } from './builtins/vm.mjs';
 import { ErrorPrepareStackTrace, overrideStackTrace, setInternalPrepareStackTrace } from './stack.mjs';
@@ -539,6 +540,8 @@ export function loadNodeLib({ ctx, process } = {}) {
       async_hooks: lazy(() => builtin('async_hooks')),
       os: lazy(() => builtin('os')),
       fs: lazy(() => builtin('fs')),
+      'fs/promises': lazy(() => builtin('fs/promises')),
+      'internal/fs/utils': lazy(() => ({ DirentFromStats })),
       path: lazy(() => builtin('path')),
       // The console is made before the builtins exist: until then, the Buffer class itself.
       buffer: lazy(() => (typeof proc()._builtinLoader === 'function' ? builtin('buffer') : { Buffer: proc()._Buffer })),

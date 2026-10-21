@@ -1,0 +1,6 @@
+{
+  "description": "fs.Dir from opendirSync, opendir and promises.opendir: readSync, read with and without a callback, close and closeSync twice (ERR_DIR_CLOSED), a Buffer path, for await and entries(), recursive, Symbol.dispose and asyncDispose, and the errors of a missing path, a file, bufferSize and callbacks",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

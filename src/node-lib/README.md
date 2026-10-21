@@ -23,4 +23,5 @@ To update, copy the files from the new Node tag and re-run the goldens.
 | `lib/internal/main/watch_mode.js`, `lib/internal/watch_mode/files_watcher.js` | `node --watch` / `--watch-path` |
 | `lib/internal/child_process/serialization.js` | the IPC channel's `'json'` and `'advanced'` framing (`fork`, `'ipc'` in `stdio`, `process.send`) |
 | `lib/sys.js`, `lib/diagnostics_channel.js`, `lib/stream/consumers.js` | `require('sys')`, `require('diagnostics_channel')` (and the console's channels), `require('stream/consumers')` |
+| `lib/internal/fs/glob.js` | `fs.glob`, `fs.globSync`, `fs.promises.glob` (on Node's minimatch, the npm package) |
 | `lib/wasi.js` | `require('wasi')`, on `internalBinding('wasi')` from `src/runtime/wasi-binding.mjs` (the kernel's `ctx.sync.wasi.create`) |

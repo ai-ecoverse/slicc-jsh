@@ -27,15 +27,20 @@ function cjsToNamespace(exports) {
     Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
     return ns;
   }
-  const ns = { default: exports };
+  const ns = {};
   // Functions (e.g. module.Module) are callable objects with named exports.
   if (
     exports != null &&
     (typeof exports === 'object' || typeof exports === 'function') &&
     !Array.isArray(exports)
   ) {
-    for (const key of Reflect.ownKeys(exports)) {
-      if (key === 'default') continue;
+    const keys = Reflect.ownKeys(exports);
+    const names = [...new Set(['default', ...keys.filter((k) => typeof k === 'string')])].sort();
+    for (const key of [...names, ...keys.filter((k) => typeof k !== 'string')]) {
+      if (key === 'default') {
+        ns.default = exports;
+        continue;
+      }
       try {
         const d = Object.getOwnPropertyDescriptor(exports, key);
         if (d) Object.defineProperty(ns, key, d);
@@ -43,7 +48,7 @@ function cjsToNamespace(exports) {
         ns[key] = exports[key];
       }
     }
-  }
+  } else ns.default = exports;
   Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
   return ns;
 }
