@@ -68,7 +68,7 @@ module.exports.textLength = ({ text }) => text.length;
   });
 
   it('tinypool with and without useAtomics: tasks on two threads', async () => {
-    assert.equal(version('tinypool'), '1.1.1');
+    assert.equal(version('tinypool'), '2.2.0');
     const lines = await run(`(async () => {
   const { Tinypool } = await import('tinypool');
   for (const useAtomics of [true, false]) {
@@ -80,6 +80,37 @@ module.exports.textLength = ({ text }) => text.length;
 })();
 `);
     assert.deepEqual(lines, ['true [2,3,4,5] 2', 'false [2,3,4,5] 2']);
+  });
+
+  it('tinypool on worker threads and on child processes, isolated or not: env, a task that throws, an aborted task', async () => {
+    await jsh.kernel.writeFile(
+      '/os/pool/tp.js',
+      `const { isMainThread } = require('worker_threads');
+module.exports = ({ a, b }) => ({ sum: a + b, isMainThread, foo: process.env.FOO, pid: process.pid });
+module.exports.boom = () => { throw Object.assign(new Error('boom'), { code: 'EBOOM' }); };
+module.exports.never = () => new Promise(() => {});
+`
+    );
+    const lines = await run(`(async () => {
+  const { Tinypool } = await import('tinypool');
+  for (const runtime of ['worker_threads', 'child_process']) for (const isolateWorkers of [false, true]) {
+    const pool = new Tinypool({ filename: __dirname + '/tp.js', minThreads: 2, maxThreads: 2, runtime, isolateWorkers, env: { FOO: 'bar' } });
+    const out = await Promise.all([1, 2, 3].map((a) => pool.run({ a, b: 1 })));
+    const error = await pool.run({}, { name: 'boom' }).catch((e) => e.message);
+    const ac = new AbortController();
+    const aborted = pool.run({}, { name: 'never', signal: ac.signal }).catch((e) => e.message);
+    ac.abort();
+    console.log(runtime, isolateWorkers, JSON.stringify(out.map((r) => r.sum)), out.every((r) => r.isMainThread === (runtime === 'child_process') && r.foo === 'bar' && (r.pid === process.pid) === (runtime === 'worker_threads')), error, await aborted);
+    await pool.destroy();
+  }
+})();
+`);
+    assert.deepEqual(lines, [
+      'worker_threads false [2,3,4] true boom The task has been aborted',
+      'worker_threads true [2,3,4] true boom The task has been aborted',
+      'child_process false [2,3,4] true boom The task has been aborted',
+      'child_process true [2,3,4] true boom The task has been aborted',
+    ]);
   });
 });
 
