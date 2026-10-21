@@ -131,7 +131,10 @@ test('parent disconnects first', async () => {
 });
 
 test('send after disconnect', async () => {
-  const cp = fork(child, ['stay']);
+  const cp = fork(child, ['stay'], { silent: true });
+  let out = '';
+  cp.stdout.on('data', (d) => (out += d));
+  const done = Promise.all([new Promise((r) => cp.stdout.on('end', r)), new Promise((r) => cp.on('exit', r))]);
   await new Promise((r) => cp.once('message', r));
   cp.disconnect();
   log('send returns', cp.send('late', (e) => log('callback:', err(e))));
@@ -140,7 +143,8 @@ test('send after disconnect', async () => {
   await new Promise((r) => cp.once('error', r));
   cp.once('error', (e) => log('second disconnect:', err(e)));
   cp.disconnect();
-  await new Promise((r) => cp.on('exit', r));
+  await done;
+  process.stdout.write(out);
 });
 
 test('a channel without listeners lets the child end', async () => {
