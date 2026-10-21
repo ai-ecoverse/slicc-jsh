@@ -654,9 +654,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #listening = false;
     #handle;
     #closed = false;
-    // A listen() the kernel hasn't answered yet, and its port.
-    #pendingListen = null;
-    #port = 0;
+    // listen()s the kernel hasn't answered yet (a promise → its port), and
+    // those close() took over (it closes their listeners).
+    #pendingListens = new Map();
+    #takenOver = new WeakSet();
     #acceptAbort;
     #connections = 0;
     #listenerClosed = false;
@@ -741,16 +742,17 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         : port > 0 && releasing.has(port)
           ? releasing.get(port).then(() => ctx.net.listen({ port, host, backlog: parsed.backlog }))
           : ctx.net.listen({ port, host, backlog: parsed.backlog });
-      this.#pendingListen = listening;
-      this.#port = port;
+      this.#pendingListens.set(listening, port);
       void trackPromise(
         handles,
         listening
           .then((listener) => {
+            this.#pendingListens.delete(listening);
             if (!listener) return;
-            this.#pendingListen = null;
             if (this.#closed) {
-              // Closed meanwhile: close() closes it (and frees its port).
+              // Closed meanwhile: close() closes it (and frees its port) if
+              // it took this listen() over, else it's closed here.
+              if (!this.#takenOver.has(listening)) void listener.close();
               // Closed while the primary set it up: it gives the address back.
               if (this.#clusterKey !== undefined) {
                 process?._clusterWorker?._closeServer(this.#clusterKey);
@@ -832,15 +834,16 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       }
       const listener = this.#listener;
       this.#listener = undefined;
-      // Closed before the kernel's listen was done: the listener closes once
-      // it comes, and its port is busy until then.
-      if (!listener && this.#pendingListen) {
-        const port = this.#port;
-        const released = this.#pendingListen.then(
-          (pending) => pending?.close?.(),
-          () => {}
-        );
-        const settled = Promise.resolve(released).catch(() => {});
+      // Closed before the kernel's listen()s were done: each listener closes
+      // once it comes, and its port is busy until then.
+      for (const [pending, port] of this.#pendingListens) {
+        this.#takenOver.add(pending);
+        const settled = Promise.resolve(
+          pending.then(
+            (arrived) => arrived?.close?.(),
+            () => {}
+          )
+        ).catch(() => {});
         if (port > 0) {
           releasing.set(port, settled);
           settled.then(() => {
@@ -848,8 +851,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           });
         }
         trackPromise(handles, settled).catch(() => {});
-        this.#pendingListen = null;
       }
+      this.#pendingListens.clear();
       // The kernel's close keeps the loop alive until it is done (Node's
       // handle does, until its close callback).
       trackPromise(handles, Promise.resolve(listener?.close?.()).catch(() => {})).catch(() => {});
