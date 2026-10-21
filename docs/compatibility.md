@@ -152,7 +152,7 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 
 On older kernels `chmod` and `fchmod` check their arguments and that the path exists, change nothing, and say so once, with a warning (`JSH_NO_CHMOD`).
 
-**Owners and times.** `chown`, `lchown`, `fchown`, `utimes`, `lutimes` and `futimes` check their arguments and that the path (or fd) exists, as Node's do, and change nothing, on every kernel: the kernel's JS file system has no call for them. There is no `fs.lchmod` or `lchmodSync`, as in Node on Linux, and `promises.lchmod` rejects with `ERR_METHOD_NOT_IMPLEMENTED`.
+**Owners and times.** `chown`, `lchown`, `fchown`, `utimes`, `lutimes` and `futimes` check their arguments and that the path (or fd) exists, as Node's do, and change nothing, on every kernel: the kernel's JS file system has no call for them. `fs.lchmod` and `lchmodSync` are keys whose value is `undefined`, as in Node on Linux, and `promises.lchmod` rejects with `ERR_METHOD_NOT_IMPLEMENTED`.
 
 **Arguments first.** As in Node, fs checks its arguments before it touches the file system: open's flags, the data of `writeFile`/`appendFile`, and every `mode`. A path with a NUL byte is `ERR_INVALID_ARG_VALUE` (`existsSync` says `false`).
 
@@ -189,7 +189,15 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - `fs.promises.watch` iterates `{ eventType, filename }`. An aborted `signal` ends it with an `AbortError`. More events than `maxQueue` (2048) before the program reads them are an `ERR_FS_WATCH_QUEUE_OVERFLOW` with `overflow: 'error'`, or a warning for each event dropped with `'ignore'`. Events come one at a time, as in Node, so a waiting `next()` reads each as it comes, and the queue fills only while nothing is waiting. As in Node 22, `encoding: 'buffer'` is `ERR_INVALID_ARG_VALUE` here, and an unknown encoding's message has its two names swapped, and `recursive` iterates Node's Linux watcher, which drops events that come between two `next()` calls.
 - Not as on Linux: the kernel ends a watch when its path goes, so a watched file or directory that is renamed away, or under a directory that is renamed away, gives the events of a removal and then nothing more. inotify keeps following the moved inode. Two separate watchers each get their events in order, but which of them hears first is the kernel's order. When a program watches both a file and its directory (as `recursive` does), Linux reports an overwrite (a truncate and a write) twice, because the two watches' events alternate in inotify's queue and aren't merged; jsh reports it once.
 
-**Not available:** `glob`, `globSync`, `promises.glob`, `openAsBlob`, `readv`, `writev`, `fs.Dir` as an export (`opendir` works), and `promises.constants`.
+**Exports.** `require('fs')` and `import * as fs from 'node:fs'` have Node 22's keys (golden `fs-exports-node22`), `watch` only on slicc-kernel 1.125.0 and later. The top-level `F_OK`, `R_OK`, `W_OK` and `X_OK` are read-only, the legacy `FileReadStream` and `FileWriteStream` are `ReadStream` and `WriteStream`, and `promises.constants` is `fs.constants`. A builtin's ESM namespace lists its names in sorted order, as a module namespace does.
+
+**`glob`.** `glob`, `globSync` and `promises.glob` are Node 22.22's own `lib/internal/fs/glob.js`, on Node's copy of minimatch (10.0.3), over jsh's `lstat` and `readdir` (golden `fs-glob-node22`). They match case-sensitively, as on Linux. As in Node 22, `lstatSync` with `throwIfNoEntry: false` returns `undefined` for `ENOENT` only, so `globSync('file.js/x')` throws `ENOTDIR`.
+
+**`Dir`.** `fs.Dir` is Node's class: `opendir`, `opendirSync` and `promises.opendir` return one, and `read`, `readSync`, `close`, `closeSync`, `entries`, `for await` and `Symbol.dispose`/`asyncDispose` behave as Node 22's, `ERR_DIR_CLOSED` included (golden `fs-dir-node22`). The kernel has no directory stream, so a `Dir` lists the directory when it is opened, and entries made or removed after that aren't seen.
+
+**`readv` and `writev`.** `readv`, `readvSync`, `writev`, `writevSync` and `FileHandle.readv`/`writev` check their arguments as Node does and read or write the buffers in order on the descriptor (golden `fs-readv-writev-node22`). `writev` writes its buffers in one write. As in libuv, a `readv` of no buffers is `EINVAL`.
+
+**`openAsBlob`** resolves to a `Blob` of the file's bytes, read when it is called; Node reads the file when the `Blob` is read, and fails then if the file has changed. A file that can't be opened throws Node's `ERR_INVALID_ARG_VALUE` (`Unable to open file as blob`) at the call (golden `fs-openasblob-node22`).
 
 ## `child_process`
 

@@ -1,0 +1,6 @@
+{
+  "description": "fs.glob, globSync and promises.glob as Node 22's lib/internal/fs/glob.js: wildcards, globstars, braces, extglobs, classes, symlinks, cwd (a path or URL), exclude (a function or patterns), withFileTypes, an absolute pattern, ENOTDIR under a file, and the argument errors",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

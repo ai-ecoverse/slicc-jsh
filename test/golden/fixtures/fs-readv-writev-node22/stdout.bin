@@ -1,0 +1,37 @@
+writevSync 11
+writevSync empty 0
+writevSync at 0 1
+writevSync position string 1
+content Jello world!
+readvSync at 0 12 "Jel" "lo w" "orld!\u0000\u0000\u0000\u0000\u0000"
+readvSync at 9 3 "ld" "!\u0000"
+readvSync at end 0
+readvSync past end 0
+readvSync empty list THROW Error EINVAL "EINVAL: invalid argument, read"
+readvSync current position 6 "Jello" " " 3
+writevSync read-only THROW Error EBADF "EBADF: bad file descriptor, write"
+readvSync closed THROW Error EBADF "EBADF: bad file descriptor, read"
+writevSync closed THROW Error EBADF "EBADF: bad file descriptor, write"
+readvSync not array THROW TypeError ERR_INVALID_ARG_TYPE "The \"buffers\" argument must be an ArrayBufferView[]. Received an instance of Buffer"
+readvSync string item THROW TypeError ERR_INVALID_ARG_TYPE "The \"buffers\" argument must be an ArrayBufferView[]. Received an instance of Array"
+writevSync string item THROW TypeError ERR_INVALID_ARG_TYPE "The \"buffers\" argument must be an ArrayBufferView[]. Received an instance of Array"
+writevSync bad fd THROW RangeError ERR_OUT_OF_RANGE "The value of \"fd\" is out of range. It must be >= 0 && <= 2147483647. Received -1"
+readvSync bad fd THROW TypeError ERR_INVALID_ARG_TYPE "The \"fd\" argument must be of type number. Received type string ('1')"
+readv no cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"cb\" argument must be of type function. Received undefined"
+writev no cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"cb\" argument must be of type function. Received type number (0)"
+writev bad cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"cb\" argument must be of type function. Received type string ('x')"
+append mode abcd
+writev(cb) null 2 "E" "F"
+writev(cb) empty null 0 0
+readv(cb) null 6 "abcd" "EF\u0000\u0000" true
+promisify(readv) ["bytesRead","buffers"]
+promisify(writev) ["bytesWritten","buffer"]
+readv(cb) closed Error EBADF "EBADF: bad file descriptor, read" read 0 1
+fh.writev 5 "12" "345" null bytesWritten,buffers
+fh.writev empty 0 0
+fh.readv 4 "23" "45\u0000\u0000\u0000\u0000\u0000\u0000\u0000" null bytesRead,buffers
+fh.readv end 0
+fh.readv bad TypeError ERR_INVALID_ARG_TYPE "The \"buffers\" argument must be an ArrayBufferView[]. Received type string ('x')"
+fh.writev bad TypeError ERR_INVALID_ARG_TYPE "The \"buffers\" argument must be an ArrayBufferView[]. Received an instance of Array"
+fh.readv closed Error EBADF "file closed" readv
+fh.writev closed Error EBADF "file closed" writev

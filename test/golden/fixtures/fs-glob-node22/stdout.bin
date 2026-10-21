@@ -1,0 +1,53 @@
+globSync "*.js" ["dangling.js","top.js","x[1].js"]
+globSync "**/*.js" ["dangling.js","node_modules/pkg/index.js","src/a.js","src/lib/c.js","src/lib/deep/d.js","test/a.test.js","top.js","x[1].js"]
+globSync "src/**" ["src","src/a.js","src/b.mjs","src/empty","src/lib","src/lib/c.js","src/lib/deep","src/lib/deep/d.js","src/lib/deep/e.txt"]
+globSync "src/**/" ["src","src/empty","src/lib","src/lib/deep"]
+globSync "src/*/" ["src/empty","src/lib"]
+globSync "**/*.{js,mjs}" ["dangling.js","node_modules/pkg/index.js","src/a.js","src/b.mjs","src/lib/c.js","src/lib/deep/d.js","test/a.test.js","top.js","x[1].js"]
+globSync "src/lib/../*.js" ["src/a.js"]
+globSync "./src/*.js" ["src/a.js"]
+globSync "src/?.js" ["src/a.js"]
+globSync "src/[ab].*" ["src/a.js","src/b.mjs"]
+globSync "!(src)/*.js" ["test/a.test.js"]
+globSync "@(src|test)/*.js" ["src/a.js","test/a.test.js"]
+globSync "**/deep/*" ["src/lib/deep/d.js","src/lib/deep/e.txt"]
+globSync "**" [".","README.md","dangling.js","link","node_modules","node_modules/pkg","node_modules/pkg/index.js","src","src/a.js","src/b.mjs","src/empty","src/lib","src/lib/c.js","src/lib/deep","src/lib/deep/d.js","src/lib/deep/e.txt","test","test/a.test.js","top.js","x[1].js"]
+globSync "*" ["README.md","dangling.js","link","node_modules","src","test","top.js","x[1].js"]
+globSync "link/**" ["link","link/c.js","link/deep","link/deep/d.js","link/deep/e.txt"]
+globSync "link/*.js" ["link/c.js"]
+globSync "dangling.js" ["dangling.js"]
+globSync "missing/**" []
+globSync "x\\[1\\].js" []
+globSync "top.js/x" THROW ENOTDIR lstat
+globSync "" []
+globSync "." []
+globSync ".." []
+globSync "<work>/src/*.js" ["<work>/src/a.js"]
+promises.glob "top.js/x" []
+globSync array ["README.md","test/a.test.js"]
+globSync cwd ["a.js","lib/c.js","lib/deep/d.js"]
+globSync cwd URL ["a.js"]
+globSync cwd missing []
+globSync exclude fn ["dangling.js","src/a.js","src/lib/c.js","src/lib/deep/d.js","top.js","x[1].js"]
+globSync exclude array ["dangling.js","src/a.js","test/a.test.js","top.js","x[1].js"]
+globSync withFileTypes [".|src|d|true","src/lib/deep|d.js|f|true","src/lib/deep|e.txt|f|true","src/lib|c.js|f|true","src/lib|deep|d|true","src|a.js|f|true","src|b.mjs|f|true","src|empty|d|true","src|lib|d|true"]
+globSync withFileTypes link [".|link|l|true"]
+globSync withFileTypes exclude []
+promises.glob ["dangling.js","node_modules/pkg/index.js","src/a.js","src/lib/c.js","src/lib/deep/d.js","test/a.test.js","top.js","x[1].js"]
+promises.glob cwd ["empty","lib"]
+promises.glob withFileTypes ["src/lib/deep|d.js|f|true","src/lib/deep|e.txt|f|true","src/lib|c.js|f|true","src/lib|deep|d|true","src|lib|d|true"]
+promises.glob exclude ["dangling.js","src/a.js","src/lib/c.js","test/a.test.js","top.js","x[1].js"]
+promises.glob iterator function function
+glob(cb) null ["src/a.js"]
+glob(cb) withFileTypes null ["src|a.js|f|true","src|b.mjs|f|true","src|empty|d|true","src|lib|d|true"]
+globSync number THROW TypeError ERR_INVALID_ARG_TYPE "The \"patterns\" argument must be of type string. Received type number (1)"
+globSync array of number THROW TypeError ERR_INVALID_ARG_TYPE "The \"patterns[1]\" argument must be of type string. Received type number (1)"
+globSync options string THROW TypeError ERR_INVALID_ARG_TYPE "The \"options\" argument must be of type object. Received type string ('x')"
+globSync cwd number THROW TypeError ERR_INVALID_ARG_TYPE "The \"paths[0]\" argument must be of type string. Received type number (1)"
+globSync exclude string THROW TypeError ERR_INVALID_ARG_TYPE "The \"options.exclude\" property must be of type function or string[]. Received type string ('x')"
+globSync exclude [1] THROW TypeError ERR_INVALID_ARG_TYPE "The \"options.exclude[0]\" property must be of type string. Received type number (1)"
+glob no cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"cb\" argument must be of type function. Received undefined"
+glob bad cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"cb\" argument must be of type function. Received type number (1)"
+glob(cb) number TypeError ERR_INVALID_ARG_TYPE "The \"patterns\" argument must be of type string. Received type number (1)"
+promises.glob number returned object
+promises.glob number iterated TypeError ERR_INVALID_ARG_TYPE "The \"patterns\" argument must be of type string. Received type number (1)"

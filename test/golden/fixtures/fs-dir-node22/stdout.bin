@@ -1,0 +1,30 @@
+path d
+readSync all d/a.txt:f d/sub:d
+readSync at end null
+readSync closed THROW Error ERR_DIR_CLOSED "Directory handle was closed"
+read closed: rejected Error ERR_DIR_CLOSED "Directory handle was closed"
+read(cb) closed THROW Error ERR_DIR_CLOSED "Directory handle was closed"
+closeSync closed THROW Error ERR_DIR_CLOSED "Directory handle was closed"
+close closed: rejected Error ERR_DIR_CLOSED "Directory handle was closed"
+close(cb) closed Error ERR_DIR_CLOSED "Directory handle was closed"
+Buffer path true
+read() dirent true
+read(cb) null true
+read() end null null
+close() then done
+for await recursive d/a.txt:f d/sub/b.txt:f d/sub:d
+after for await THROW Error ERR_DIR_CLOSED "Directory handle was closed"
+promises.opendir entries() d/a.txt:f d/sub:d
+after dispose THROW Error ERR_DIR_CLOSED "Directory handle was closed"
+after asyncDispose THROW Error ERR_DIR_CLOSED "Directory handle was closed"
+opendir(cb) null true d
+opendir(cb) missing Error ENOENT "ENOENT: no such file or directory, opendir 'missing'" opendir missing
+promises.opendir missing Error ENOENT "ENOENT: no such file or directory, opendir 'missing'"
+opendirSync file THROW Error ENOTDIR "ENOTDIR: not a directory, opendir"
+opendirSync bufferSize 0 THROW RangeError ERR_OUT_OF_RANGE "The value of \"options.bufferSize\" is out of range. It must be >= 1 && <= 4294967295. Received 0"
+opendirSync bufferSize x THROW TypeError ERR_INVALID_ARG_TYPE "The \"options.bufferSize\" property must be of type number. Received type string ('x')"
+opendirSync bufferSize 1 undefined
+opendirSync number THROW TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received type number (1)"
+opendir no cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"callback\" argument must be of type function. Received undefined"
+read bad cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"callback\" argument must be of type function. Received type number (1)"
+close bad cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"callback\" argument must be of type function. Received type number (1)"

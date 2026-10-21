@@ -6,6 +6,7 @@ import { trackPromise } from '../async-handles.mjs';
 import { createCp } from './fs-cp.mjs';
 import { createStatWatchers } from './fs-watchers.mjs';
 import { createFsWatch } from './fs-watch.mjs';
+import { Dir } from './fs-dir.mjs';
 import { UV_ERRORS } from '../node-bindings.mjs';
 import {
   ERR_INVALID_ARG_TYPE,
@@ -17,9 +18,13 @@ import {
   validateObject,
   validateUint32,
   validateAbortSignal,
+  validateFunction,
+  validateString,
+  nodeError,
 } from '../node-errors.mjs';
 import { kernelAtLeast, kernelVersion } from '../kernel-version.mjs';
 import { queueMicrotask } from '../async-context.mjs';
+import { kCustomPromisifyArgs } from './util.mjs';
 
 // Node's argument checks (lib/internal/fs/utils.js), before any call.
 /** getValidatedFd: an int32 >= 0. */
@@ -50,6 +55,11 @@ function validatePathType(p) {
   if (typeof p === 'string' || p instanceof Uint8Array || (p && typeof p === 'object' && typeof p.href === 'string')) return;
   throw ERR_INVALID_ARG_TYPE('path', ['string', 'Buffer', 'URL'], p);
 }
+function validateBufferArray(buffers) {
+  if (!Array.isArray(buffers) || !buffers.every((b) => ArrayBuffer.isView(b))) throw ERR_INVALID_ARG_TYPE('buffers', 'ArrayBufferView[]', buffers);
+  return buffers;
+}
+const bytesOf = (view) => new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
 /** Node's argument errors: thrown at the call, never given to a callback. */
 const isArgError = (err) => /^ERR_(INVALID_ARG_TYPE|INVALID_ARG_VALUE|OUT_OF_RANGE|MISSING_ARGS)$/.test(err?.code ?? '');
 /** A uid / gid: -1 (keep) up to kMaxUserId. */
@@ -258,6 +268,21 @@ class Dirent {
   }
   isSocket() {
     return false;
+  }
+}
+
+const kStats = Symbol('stats');
+export class DirentFromStats extends Dirent {
+  constructor(name, stats, parentPath) {
+    super(name, null, parentPath);
+    this[kStats] = stats;
+  }
+}
+for (const name of Reflect.ownKeys(Dirent.prototype)) {
+  if (name !== 'constructor') {
+    DirentFromStats.prototype[name] = function () {
+      return this[kStats][name]();
+    };
   }
 }
 
@@ -1340,7 +1365,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         return statView(syncFs.lstat(abs(p)), options?.bigint === true);
       } catch (err) {
         const code = err?.code || 'ENOENT';
-        if (options?.throwIfNoEntry === false && (code === 'ENOENT' || code === 'ENOTDIR')) return undefined;
+        if (options?.throwIfNoEntry === false && code === 'ENOENT') return undefined;
         throw nodeFsError(code, 'lstat', pathArg, err);
       }
     },
@@ -1795,14 +1820,18 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       if (fd !== 0 && fd !== 1 && fd !== 2 && !fdTable.has(fd)) throw nodeFsError('EBADF', 'fdatasync', undefined);
     },
     opendirSync(p, options) {
-      let entries;
-      try {
-        entries = readdirSync(p, { withFileTypes: true, recursive: options?.recursive === true }, { followLinks: false });
-      } catch (err) {
-        // Node's opendir errors name the syscall, not the path.
-        throw nodeFsError(err?.code || 'ENOENT', 'opendir', undefined, err);
-      }
-      return createDir(String(p), entries);
+      return openDir(p, options, undefined);
+    },
+    readvSync(fd, buffers, position) {
+      validatedFd(fd);
+      validateBufferArray(buffers);
+      return readBuffers(fd, buffers, typeof position === 'number' ? position : null);
+    },
+    writevSync(fd, buffers, position) {
+      validatedFd(fd);
+      validateBufferArray(buffers);
+      if (buffers.length === 0) return 0;
+      return writeBuffers(fd, buffers, typeof position === 'number' ? position : null);
     },
     linkSync(existingPath, newPath) {
       // The kernel decides: tmpfs links (one inode, nlink 2), the root file
@@ -1814,6 +1843,74 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       }
     },
   };
+
+  function readBuffers(fd, buffers, position) {
+    if (buffers.length === 0) throw nodeFsError('EINVAL', 'read', undefined);
+    let total = 0;
+    for (const view of buffers) {
+      const n = syncApi.readSync(fd, bytesOf(view), 0, view.byteLength, position === null ? null : position + total);
+      total += n;
+      if (n < view.byteLength) break;
+    }
+    return total;
+  }
+  function writeBuffers(fd, buffers, position) {
+    const bytes = new Uint8Array(buffers.reduce((n, b) => n + b.byteLength, 0));
+    let at = 0;
+    for (const view of buffers) {
+      bytes.set(bytesOf(view), at);
+      at += view.byteLength;
+    }
+    return syncApi.writeSync(fd, bytes, 0, bytes.length, position);
+  }
+  function vectored(name, run, empty) {
+    const fn = {
+      [name](fd, buffers, position, callback) {
+        validatedFd(fd);
+        validateBufferArray(buffers);
+        const cb = callback || position;
+        validateFunction(cb, 'cb');
+        const pos = typeof position === 'number' ? position : null;
+        let result = 0;
+        let error = null;
+        if (!(empty && buffers.length === 0)) {
+          try {
+            result = run(fd, buffers, pos);
+          } catch (err) {
+            error = err;
+          }
+        }
+        queueMicrotask(() => cb(error, result, buffers));
+      },
+    }[name];
+    Object.defineProperty(fn, kCustomPromisifyArgs, { value: [name === 'readv' ? 'bytesRead' : 'bytesWritten', name === 'readv' ? 'buffers' : 'buffer'], enumerable: false });
+    return fn;
+  }
+  function openDir(p, options, errPath) {
+    validatePathType(p);
+    const opts = typeof options === 'string' ? { encoding: options } : (options ?? {});
+    let entries;
+    try {
+      entries = readdirSync(p instanceof Uint8Array ? decoder.decode(p) : p, { withFileTypes: true, recursive: opts.recursive === true, encoding: opts.encoding }, { followLinks: false });
+    } catch (err) {
+      if (isArgError(err)) throw err;
+      throw nodeFsError(err?.code || 'ENOENT', 'opendir', errPath, err);
+    }
+    return new Dir({ entries }, p, opts);
+  }
+  function opendir(p, options, callback) {
+    const cb = typeof options === 'function' ? options : callback;
+    validateFunction(cb, 'callback');
+    let dir;
+    let error = null;
+    try {
+      dir = openDir(p, typeof options === 'function' ? undefined : options, p);
+    } catch (err) {
+      if (isArgError(err)) throw err;
+      error = err;
+    }
+    queueMicrotask(() => (error ? cb(error) : cb(null, dir)));
+  }
 
   let cpImpl;
   function getCp() {
@@ -1845,63 +1942,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     }
   }
   syncApi.realpathSync.native = realpathNative;
-
-  /** Node's fs.Dir over a listing taken when it was opened. */
-  function createDir(dirPath, entries) {
-    let closed = false;
-    const next = () => {
-      if (closed) {
-        const e = new Error('Directory handle was closed');
-        e.code = 'ERR_DIR_CLOSED';
-        throw e;
-      }
-      return entries.length ? entries.shift() : null;
-    };
-    return {
-      path: dirPath,
-      readSync: next,
-      read(cb) {
-        if (typeof cb === 'function') {
-          queueMicrotask(() => {
-            try {
-              cb(null, next());
-            } catch (err) {
-              cb(err);
-            }
-          });
-          return undefined;
-        }
-        return Promise.resolve().then(next);
-      },
-      closeSync() {
-        if (closed) next();
-        closed = true;
-      },
-      close(cb) {
-        let err = null;
-        if (closed) {
-          try {
-            next();
-          } catch (e) {
-            err = e;
-          }
-        }
-        closed = true;
-        if (typeof cb === 'function') {
-          queueMicrotask(() => cb(err));
-          return undefined;
-        }
-        return err ? Promise.reject(err) : Promise.resolve();
-      },
-      async *[Symbol.asyncIterator]() {
-        try {
-          for (let d = next(); d; d = next()) yield d;
-        } finally {
-          closed = true;
-        }
-      },
-    };
-  }
 
   /** Node's ERR_INVALID_ARG_TYPE for a missing/invalid fs callback ("cb"). */
   function requireCallback(cb) {
@@ -2078,7 +2118,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       return track((async () => syncApi.lutimesSync(p, ...args))());
     },
     opendir(p, options) {
-      return track((async () => syncApi.opendirSync(p, options))());
+      return track((async () => openDir(p, options, p))());
     },
     unlink(p) {
       return track(
@@ -2153,6 +2193,18 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         }
         const bytesRead = syncApi.readSync(fd, buffer, offset, length, position);
         return { bytesRead, buffer };
+      },
+      async readv(buffers, position) {
+        ensureOpen('readv');
+        validateBufferArray(buffers);
+        const bytesRead = readBuffers(fd, buffers, typeof position === 'number' ? position : null);
+        return { __proto__: null, bytesRead, buffers };
+      },
+      async writev(buffers, position) {
+        ensureOpen('writev');
+        validateBufferArray(buffers);
+        const bytesWritten = buffers.length === 0 ? 0 : writeBuffers(fd, buffers, typeof position === 'number' ? position : null);
+        return { __proto__: null, bytesWritten, buffers };
       },
       async write(data, offset, length, position) {
         ensureOpen('write');
@@ -2610,7 +2662,26 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     futimes: callbackify(syncApi.futimesSync, { minArgsBeforeCb: 3 }),
     fsync: callbackify(syncApi.fsyncSync),
     fdatasync: callbackify(syncApi.fdatasyncSync),
-    opendir: callbackify(syncApi.opendirSync),
+    opendir,
+    Dir,
+    openAsBlob(p, options = {}) {
+      validateObject(options, 'options');
+      const type = options.type || '';
+      validateString(type, 'options.type');
+      validatePathType(p);
+      let data;
+      try {
+        data = syncApi.readFileSync(p instanceof Uint8Array ? decoder.decode(p) : p);
+      } catch {
+        throw nodeError(TypeError, 'ERR_INVALID_ARG_VALUE', 'Unable to open file as blob');
+      }
+      return Promise.resolve(new Blob([data], { type }));
+    },
+    _toUnixTimestamp: toUnixTimestamp,
+    lchmod: undefined,
+    lchmodSync: undefined,
+    readv: vectored('readv', readBuffers, false),
+    writev: vectored('writev', writeBuffers, true),
     symlink: callbackify(syncApi.symlinkSync, { minArgsBeforeCb: 2 }),
     readlink: callbackify(syncApi.readlinkSync),
     Stats,
@@ -2725,8 +2796,48 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
           StatWatcher: statWatchers.StatWatcher,
         })
       : null;
+  for (const [name, value] of Object.entries({ F_OK: 0, R_OK: 4, W_OK: 2, X_OK: 1 })) {
+    Object.defineProperty(fsModule, name, { enumerable: true, value });
+  }
+  for (const [legacy, name] of [['FileReadStream', 'ReadStream'], ['FileWriteStream', 'WriteStream']]) {
+    let value = fsModule[name];
+    Object.defineProperty(fsModule, legacy, {
+      enumerable: true,
+      configurable: true,
+      get: () => value,
+      set: (v) => {
+        value = v;
+      },
+    });
+  }
+  promises.constants = fsModule.constants;
   acceptFileUrls(fsModule);
   acceptFileUrls(promises, { async: true });
+  const Glob = () => process._nodeLib().fsGlob.Glob;
+  fsModule.glob = function glob(pattern, options, callback) {
+    if (typeof options === 'function') {
+      callback = options;
+      options = undefined;
+    }
+    validateFunction(callback, 'cb');
+    track(
+      (async () => {
+        try {
+          const res = [];
+          for await (const entry of new (Glob())(pattern, options).glob()) res.push(entry);
+          callback(null, res);
+        } catch (err) {
+          callback(err);
+        }
+      })()
+    );
+  };
+  fsModule.globSync = function globSync(pattern, options) {
+    return new (Glob())(pattern, options).globSync();
+  };
+  promises.glob = async function* glob(pattern, options) {
+    yield* new (Glob())(pattern, options).glob();
+  };
   // After acceptFileUrls: they take URLs themselves, after their options, as
   // Node's do, and promises.watch, an async generator, only when first iterated.
   if (fsWatch) {
