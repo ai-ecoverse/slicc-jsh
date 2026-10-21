@@ -200,6 +200,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     #thread = null;
     #exited = false;
     #terminated = false;
+    #early = false;
     #exitCode;
     #exitWaiters = [];
     #pending = [];
@@ -363,6 +364,13 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
 
     #started(thread) {
       this.#thread = thread;
+      if (this.#early) {
+        this.#pending.length = 0;
+        this.#native.close();
+        thread.exited.then(() => this.#end(0));
+        thread.terminate().catch(() => {});
+        return;
+      }
       let said;
       const linked = remote.link(this[kPublicPort], this.#native, undefined, this.#box);
       thread.port.onmessage = ({ data: message }) => {
@@ -467,7 +475,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       this.#terminated = true;
       const done = new Promise((resolve) => this.#exitWaiters.push(resolve));
       if (this.#thread) this.#thread.terminate().catch(() => {});
-      else this.once('online', () => this.#thread?.terminate().catch(() => {}));
+      else this.#early = true;
       return done;
     }
 
