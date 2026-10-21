@@ -11,6 +11,7 @@ import { EventEmitter } from './events.mjs';
 import { connectError, createFetchClient, isLoopbackHost } from './http-fetch.mjs';
 import { noTls as notSupported } from './tls.mjs';
 import { kernelAtLeast } from '../kernel-version.mjs';
+import { queueMicrotask } from '../async-context.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
 
@@ -42,7 +43,8 @@ function headersToObject(headers) {
   return out;
 }
 
-export function createHttps({ ctx, Buffer, http, handles, getStream, getTls }) {
+export function createHttps({ ctx, Buffer, http, handles, getStream, timers = globalThis, getTls }) {
+  const { setTimeout, clearTimeout } = timers;
   const client = createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODES: http?.STATUS_CODES });
 
   function createServer() {

@@ -19,6 +19,7 @@ import {
   validateAbortSignal,
 } from '../node-errors.mjs';
 import { kernelAtLeast, kernelVersion } from '../kernel-version.mjs';
+import { queueMicrotask } from '../async-context.mjs';
 
 // Node's argument checks (lib/internal/fs/utils.js), before any call.
 /** getValidatedFd: an int32 >= 0. */
@@ -2578,7 +2579,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       }
       void err;
       // A macrotask later, as the thread pool would answer.
-      setTimeout(() => {
+      timers.setTimeout(() => {
         const e = new TypeError('callback is not a function');
         e._fsPretty = `node:fs:1225\n      return callback(err);\n             ^\n\n${e.stack}\n`;
         throw e;

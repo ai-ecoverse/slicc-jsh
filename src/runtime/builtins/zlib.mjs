@@ -152,7 +152,7 @@ function unavailableError(name) {
   return err;
 }
 
-function unavailable(name) {
+function unavailable(name, setImmediate) {
   // The callback forms (brotliCompress(buffer[, options], callback), …)
   // check their arguments as Node's zlibBuffer does, then report through the
   // callback, as a failing engine would.
@@ -224,7 +224,7 @@ export function createZlib({ ctx, process, Buffer, getStream, util, assert, time
     loadBrotli: () => loadVendorCjs({ ctx, packageRoot: PACKAGE_ROOT, name: 'brotli', process }),
     loadZstd: () => loadVendorCjs({ ctx, packageRoot: PACKAGE_ROOT, name: 'zstd', process }),
   });
-  for (const name of UNAVAILABLE) zlib[name] = native[name] ?? unavailable(name);
+  for (const name of UNAVAILABLE) zlib[name] = native[name] ?? unavailable(name, timers.setImmediate);
   // Node 22's deprecated top-level copies of the constants (all but
   // BROTLI_*): read-only and non-enumerable.
   for (const [key, value] of Object.entries(ZLIB_CONSTANTS)) {

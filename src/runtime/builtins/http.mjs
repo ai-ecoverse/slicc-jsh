@@ -5,6 +5,7 @@ import { trackPromise } from '../async-handles.mjs';
 import { ERR_OUT_OF_RANGE, nodeError, validateInteger } from '../node-errors.mjs';
 import { EventEmitter } from './events.mjs';
 import { createFetchClient, isLoopbackHost } from './http-fetch.mjs';
+import { queueMicrotask } from '../async-context.mjs';
 
 // Node 22's table (lib/_http_server.js), in its order.
 const STATUS_CODES = {
@@ -260,7 +261,8 @@ function responseHasNoBody(method, statusCode) {
   return false;
 }
 
-export function createHttp({ ctx, process, Buffer, handles, getStream, net, getFetch }) {
+export function createHttp({ ctx, process, Buffer, handles, getStream, timers = globalThis, net, getFetch }) {
+  const { setTimeout, clearTimeout } = timers;
   void ctx;
   void process;
   const stream = getStream();

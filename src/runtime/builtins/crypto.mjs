@@ -154,6 +154,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     name: 'crypto',
     globals: { process, Buffer },
     process,
+    scope: { globalThis: new Proxy(globalThis, { get: (target, key) => (key === 'setTimeout' ? timers.setTimeout : Reflect.get(target, key)) }) },
     requires: {
       stream: getStream(),
       'readable-stream': getStream(),
@@ -1105,7 +1106,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
 
   const crypto = {
     // Node 22's enumerable exports, in its order.
-    checkPrime: notHereCallback('crypto.checkPrime'),
+    checkPrime: notHereCallback('crypto.checkPrime', setImmediate),
     checkPrimeSync: notHere('crypto.checkPrimeSync'),
     createCipheriv: (cipher, key, iv, options) => new Cipheriv(cipher, key, iv, options),
     createDecipheriv: (cipher, key, iv, options) => new Decipheriv(cipher, key, iv, options),
@@ -1120,7 +1121,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     createSign: notHere('crypto.createSign'),
     createVerify: notHere('crypto.createVerify'),
     diffieHellman: notHere('crypto.diffieHellman'),
-    generatePrime: notHereCallback('crypto.generatePrime'),
+    generatePrime: notHereCallback('crypto.generatePrime', setImmediate),
     generatePrimeSync: notHere('crypto.generatePrimeSync'),
     getCiphers,
     getCipherInfo,
@@ -1131,7 +1132,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
     hkdfSync,
     pbkdf2,
     pbkdf2Sync,
-    generateKeyPair: notHereCallback('crypto.generateKeyPair'),
+    generateKeyPair: notHereCallback('crypto.generateKeyPair', setImmediate),
     generateKeyPairSync: notHere('crypto.generateKeyPairSync'),
     generateKey,
     generateKeySync,
@@ -1201,7 +1202,7 @@ export function createCrypto({ ctx, process, Buffer, getStream, stringDecoder, h
  * callback is checked first, as Node's, and gets the error on a later turn,
  * as a failed job reports.
  */
-function notHereCallback(name) {
+function notHereCallback(name, setImmediate) {
   return function notAvailable(...args) {
     const callback = typeof args[1] === 'function' ? args[1] : args[2];
     validateFunction(callback, 'callback');

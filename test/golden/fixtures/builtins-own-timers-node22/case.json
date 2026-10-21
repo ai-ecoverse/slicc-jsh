@@ -1,0 +1,1 @@
+{ "description": "builtins schedule on jsh's own timers: a program that removes the global timers and queueMicrotask, and require('timers')'s, still gets the callbacks of crypto, zlib, fs, child_process, perf_hooks, net and http, and ends", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }

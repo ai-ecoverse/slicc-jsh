@@ -12,7 +12,7 @@ import { VENDOR } from './vendor-embedded.mjs';
 const decoder = new TextDecoder();
 const cache = new Map();
 
-function evalCjs(source, filename, requires = {}) {
+function evalCjs(source, filename, requires = {}, scope = {}) {
   const module = { exports: {} };
   // Builtins a bundle leaves external (stream, util, …) come from the runtime.
   const require = (id) => {
@@ -23,8 +23,8 @@ function evalCjs(source, filename, requires = {}) {
     }
     throw new Error(`vendor bundle unexpected require(${JSON.stringify(id)}) in ${filename}`);
   };
-  const fn = new Function('exports', 'module', 'require', '__filename', '__dirname', source);
-  fn(module.exports, module, require, filename, '/');
+  const fn = new Function('exports', 'module', 'require', '__filename', '__dirname', ...Object.keys(scope), source);
+  fn(module.exports, module, require, filename, '/', ...Object.values(scope));
   return module.exports;
 }
 
@@ -105,7 +105,7 @@ function fromBuildTree(name) {
  * @param {object} [opts.process] for PNPM_HOME / HOME discovery
  * @param {object} [opts.requires] modules the bundle's require() gets, by id
  */
-export function loadVendorCjs({ ctx, packageRoot, name, globals = {}, process, requires } = {}) {
+export function loadVendorCjs({ ctx, packageRoot, name, globals = {}, process, requires, scope } = {}) {
   const key = name;
   if (cache.has(key)) return cache.get(key);
 
@@ -131,7 +131,7 @@ export function loadVendorCjs({ ctx, packageRoot, name, globals = {}, process, r
     globalThis[k] = v;
   }
   try {
-    const exports = evalCjs(source, path, requires);
+    const exports = evalCjs(source, path, requires, scope);
     cache.set(key, exports);
     return exports;
   } finally {

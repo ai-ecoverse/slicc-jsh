@@ -75,6 +75,12 @@ export function bindToCurrent(fn) {
 
 let installed = false;
 
+const ownQueueMicrotask = globalThis.queueMicrotask;
+
+export function queueMicrotask(callback) {
+  return Reflect.apply(ownQueueMicrotask, globalThis, [installed ? bindToCurrent(callback) : callback]);
+}
+
 /**
  * Carry the context into promise reactions and queueMicrotask, from the
  * first AsyncLocalStorage on (until then nothing has a store to carry, and

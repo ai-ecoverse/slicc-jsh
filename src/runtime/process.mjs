@@ -5,6 +5,7 @@ import { createStdio } from './stdio.mjs';
 import { bufferBytes } from './buffer.mjs';
 import { loadNodeLib } from './node-lib.mjs';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, nodeError, validateUint32 } from './node-errors.mjs';
+import { queueMicrotask } from './async-context.mjs';
 
 /** Node version reported by the shim (M1 target). */
 export const NODE_SHIM_VERSION = '22.22.0';

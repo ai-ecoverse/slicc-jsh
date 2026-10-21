@@ -24,6 +24,7 @@ import { createUrlInternals, urlBindings } from './builtins/url-internal.mjs';
 import * as acorn from 'acorn';
 import { ES_GLOBALS, decorateErrorStack, makeContextifyScriptWith, setGlobalOverlay } from './builtins/vm.mjs';
 import { ErrorPrepareStackTrace, overrideStackTrace, setInternalPrepareStackTrace } from './stack.mjs';
+import { queueMicrotask } from './async-context.mjs';
 
 for (const [name, value] of Object.entries(urlBindings)) setBinding(name, value);
 

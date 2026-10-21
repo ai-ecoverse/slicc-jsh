@@ -5,6 +5,7 @@
  */
 import nodeInspect from 'node-inspect-extracted';
 import { SIGNALS } from './signals.mjs';
+import { queueMicrotask } from './async-context.mjs';
 
 /** Set by lib/internal/source_map (see internalBinding('errors')). */
 export const sourceMapHooks = { errorSource: undefined, cacheGenerated: undefined };

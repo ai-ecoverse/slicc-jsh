@@ -388,15 +388,13 @@ function failSpawnEnoent(child, process, handles, file, argv, closeLater) {
 /**
  * @param {{ ctx: object, process: object, Buffer: object, handles: object, getStream: () => object }} deps
  */
-export function createChildProcess({ ctx, process, Buffer, handles, getStream, getFs }) {
+export function createChildProcess({ ctx, process, Buffer, handles, getStream, timers = globalThis, getFs }) {
+  const { setImmediate, setTimeout, clearTimeout } = timers;
   const path = createPath(() => process.cwd());
 
   // Spawns on a kernel without ctx.sync.spawn (before 1.87.0), until they settle.
   const inflightSpawns = new Set();
-  // The program's setImmediate, as it is when child_process loads: a
-  // child's 'exit' can come after a fatal error took the globals down.
-  const programImmediate = globalThis.setImmediate;
-  const later = (fn) => (typeof programImmediate === 'function' ? programImmediate(fn) : queueMicrotask(fn));
+  const later = (fn) => setImmediate(fn);
 
   // An IPC channel: a socketpair, one end passed to the child at fd >= 3
   // (ai-ecoverse/slicc-kernel#1093). Without it, as before: no fork, and
