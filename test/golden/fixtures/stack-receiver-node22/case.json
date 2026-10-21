@@ -1,0 +1,1 @@
+{ "description": "a method frame names its receiver as V8 does (Type.fn [as method]), and CallSite getTypeName/getMethodName say so: jest assertion frames are at Object.toEqual", "argv": ["script.js"], "shim": true }

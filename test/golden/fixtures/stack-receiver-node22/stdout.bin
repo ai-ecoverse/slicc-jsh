@@ -1,0 +1,7 @@
+a method on a plain object: at Object.method (…) | Object method method
+a named function as a property of another name: at Object.throwingMatcher [as toEqual] (…) | Object toEqual throwingMatcher
+an anonymous function as a property: at o.anon (…) | Object anon o.anon
+a function made elsewhere, as a property (jest): at Object.toEqual (…) | Object toEqual null
+an arrow as a property: at o.arrow (…) | Object arrow o.arrow
+a class method: at Matchers.toThrow (…) | Matchers toThrow toThrow
+a method on a null-prototype object: at Object.m (…) | Object m m
