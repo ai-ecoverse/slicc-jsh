@@ -11,7 +11,7 @@ Goal: a `.jsh` script runs on an ordinary macOS or Linux machine as `jsh script.
 
 1. **`fs` is Node's.** There's no compatibility layer for v6's promise-returning `fs`: "the closer to node, the better". Scripts that relied on v6's `fs` move to Node's API.
 2. **`sliccy:http` and `sliccy:skill` are built into slicc-jsh**, like `cli`, `color`, `fmt`, `time`, `pool` and `exec`.
-3. **`skill.token(id)` only calls `oauth-token <id>`.** There's no fallback to an environment variable and no other command.
+3. **`skill.token(id)` only calls `jerk <id> get --reveal`** ([slicc-jerk](https://github.com/ai-ecoverse/slicc-jerk)). There's no fallback to an environment variable and no other command. It called v6's `oauth-token <id>` until [#74](https://github.com/ai-ecoverse/slicc-jsh/issues/74) (2026-10-21). jerk's provider ids are canonical: there are no aliases, so skills use `adobe-aio` and `xai` where v6 had `adobe` and `xai-grok`. A failure throws `skill.token('<id>'): <jerk's stderr>` with jerk's exit code as `err.exitCode`.
 4. **Colour depends on whether stdout is a TTY**, everywhere. `FORCE_COLOR` and `NO_COLOR` override.
 5. **`sliccy-browser` lives in slicc-cdp** ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)).
 
@@ -142,7 +142,7 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 | `color` | **on when stdout is a TTY**. `FORCE_COLOR` (anything but `''`, `0`, `false`) forces it on and `FORCE_COLOR=0` off; otherwise a non-empty `NO_COLOR` turns it off | on unless `NO_COLOR` |
 | `exec` | `exec(cmd)` runs the engine's shell; `exec.spawn(argv)` uses no shell; `exec.start()` is v6's killable, buffered-stdin handle; results are `{ stdout, stderr, exitCode }`; a missing command gives 127 and `<cmd>: command not found` | just-bash |
 | `http` | v6's `http.client`, over the engine's `fetch` | same, over the realm `fetch` |
-| `skill` | `dir` is the script's directory; `root`, `refs` and `assets` are the skill folder's (the parent of a `scripts/` directory, as in v6); `config()` uses Node's `fs`; `token(id)` runs `oauth-token <id>` and nothing else | same, over v6's `fs` and its shell |
+| `skill` | `dir` is the script's directory; `root`, `refs` and `assets` are the skill folder's (the parent of a `scripts/` directory, as in v6); `config()` uses Node's `fs`; `token(id)` runs `jerk <id> get --reveal` and nothing else; a failure carries jerk's exit code as `err.exitCode` | same, over v6's `fs` and its shell, except that `token(id)` runs `oauth-token <id>` |
 | `browser` | `@ai-ecoverse/sliccy-browser` over CDP ([slicc-cdp#40](https://github.com/ai-ecoverse/slicc-cdp/issues/40)) | RPC to SLICC's CDP owner |
 | `agent`, `usb`, `serial`, `hid`, `computer` | error: SLICC only | yes |
 
@@ -211,7 +211,8 @@ The resolution order is the same in both engines (`src/jsh/sliccy/index.mjs`):
 | file system | OPFS/VFS: `/workspace`, `/shared`, `/tmp` | the real one. `/workspace/…` paths don't exist (13 scripts); `skill.dir` is the portable way to find a skill's files |
 | `PATH` commands for `exec` | kernel commands; `.jsh` scripts on `PATH` | host commands; `.jsh` scripts with `#!/usr/bin/env jsh` |
 | `playwright-cli`, `curlwright` | built in | install `@ai-ecoverse/slicc-cdp` (native binaries) |
-| `webhook`, `crontask`, `oauth-token`, `agent` | built in | not present; `skill.token` fails unless an `oauth-token` is on `PATH` |
+| `webhook`, `crontask`, `agent` | built in | not present |
+| `jerk` (for `skill.token`) | seven: the `@ai-ecoverse/slicc-jerk` kernel command, which prints a vault placeholder; v6: `oauth-token` instead | install `@ai-ecoverse/slicc-jerk`; without it `skill.token` fails with `jerk: command not found` (127) |
 | network | kernel transport / proxy | direct, no CORS |
 | `process.env` | shell env plus the selected provider's API key | the host env |
 

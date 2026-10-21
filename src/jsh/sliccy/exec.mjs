@@ -88,8 +88,9 @@ function joinChild(dir, name) {
 
 /**
  * `sliccy:skill`, ported from slicc's `skill-global.ts`. `fs` is the
- * engine's Node `fs`; `token(id)` runs `oauth-token <id>` and nothing else
- * (decided 2026-10-10 on slicc-jsh#22).
+ * engine's Node `fs`; `token(id)` runs `jerk <id> get --reveal` and nothing
+ * else (slicc-jsh#74; it ran v6's `oauth-token` before). The id goes to jerk
+ * as it is: jerk's provider ids are canonical, with no aliases.
  */
 /**
  * The skill folder for the Agent Skills layout, as in slicc v6
@@ -152,10 +153,12 @@ export function createSkill({ argv, fs, exec }) {
     if (typeof providerId !== 'string' || !providerId.trim()) {
       throw new TypeError('skill.token(providerId): providerId must be a non-empty string');
     }
-    const { stdout, stderr, exitCode } = await exec.spawn(['oauth-token', providerId]);
+    const { stdout, stderr, exitCode } = await exec.spawn(['jerk', providerId, 'get', '--reveal']);
     if (exitCode !== 0) {
-      const msg = stderr.trim() || `oauth-token exited with code ${exitCode}`;
-      throw new Error(`skill.token('${providerId}'): ${msg}`);
+      const msg = stderr.trim() || `jerk exited with code ${exitCode}`;
+      const err = new Error(`skill.token('${providerId}'): ${msg}`);
+      err.exitCode = exitCode;
+      throw err;
     }
     return stdout.replace(/\r?\n+$/, '');
   }

@@ -80,7 +80,7 @@ The case name is given for every row below.
 
 **What seven's Node entry can't show** (not covered, and not driven on https://seven.sliccy.ai either):
 - `sliccy:browser`: `@ai-ecoverse/sliccy-browser` isn't installed in the test kernel, and there is no CDP target;
-- `oauth-token`, `webhook`, `playwright-cli`;
+- `jerk` (seven's build: `skill.token`), `webhook`, `playwright-cli`;
 - a real terminal: every run here has stdout on a pipe;
 - the browser transport: in the Node entry, `fetch('http://127.0.0.1:…')` reaches the *host's* loopback, while `http`/`net` sockets live on the kernel's loopback.
 
@@ -241,7 +241,8 @@ The case name is given for every row below.
 | `exec(cmd)`, `exec.spawn(argv)`: result shape, stderr, codes, pipes, quoting, 127 | same; not-found text `bash: …` | same; `jsh: line 1: …` | same as seven | same | 42 / 20 | sliccy-exec |
 | `exec.start()` kill | `124`, `bash: execution aborted` | `143` | `143` | six-only detail | 2 | sliccy-exec-start |
 | `http.client` | same | same (also exports `HttpError`) | same | same | 8 | sliccy-http |
-| `skill.dir`, `config()`, `token()` → `oauth-token` | same | same | same | same | 27 / 20 / 4 | sliccy-skill |
+| `skill.dir`, `config()` | same | same | same | same | 27 / 20 | sliccy-skill |
+| `skill.token(id)` | runs `oauth-token <id>` | runs `jerk <id> get --reveal` (#74); `err.exitCode` is jerk's | n/a | six≠seven by design (decision 3) | 4 | sliccy-skill |
 | `skill.refs` / `skill.assets` for `scripts/x.jsh` | `<skill>/references`, `<skill>/assets`, plus `skill.root` | same since #80 (was `<skill>/scripts/references`, no `root`) | n/a | fixed (#80): seven=six, no Node counterpart | 2 | sliccy-skill |
 | `sliccy:browser` | the bridge (no browser here: `browser is not available in this runtime`) | unknown name unless `@ai-ecoverse/sliccy-browser` is installed | n/a | unknown for real seven | **37** | sliccy-browser |
 
@@ -392,4 +393,4 @@ Things seven already does better than six and should keep, since all of them fol
 ## Rows the harness couldn't settle (unknown)
 
 - six: unhandled rejections, `child_process.*Sync`, `import()` inside `new Function`, `globalThis.process`, the browser global set (in-process realm; see above).
-- seven: `sliccy:browser` and `playwright-cli` over CDP, `oauth-token`, the browser network transport, and real terminal runs (TTY colour, `isTTY: true`, `columns`). These need a session on real seven.
+- seven: `sliccy:browser` and `playwright-cli` over CDP, `jerk` (`skill.token`), the browser network transport, and real terminal runs (TTY colour, `isTTY: true`, `columns`). These need a session on real seven.
