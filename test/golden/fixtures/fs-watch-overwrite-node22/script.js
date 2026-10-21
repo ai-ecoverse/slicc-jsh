@@ -46,6 +46,19 @@ setTimeout(() => {
   await step('recursive: overwrite in a subdirectory', () => fs.writeFileSync(at('r', 'sub', 'o.txt'), 'oo'));
   await step('recursive: empty overwrite', () => fs.writeFileSync(at('r', 'c.txt'), ''));
   await step('recursive: append', () => fs.appendFileSync(at('r', 'c.txt'), 'x'));
+  const throughFd = (file, ...writes) => {
+    const fd = fs.openSync(file, 'r+');
+    for (const w of writes) fs.writeSync(fd, w);
+    fs.closeSync(fd);
+  };
+  await step('recursive: a write through a descriptor', () => throughFd(at('r', 'c.txt'), 'Z'));
+  await step('recursive: two writes through a descriptor', () => throughFd(at('r', 'c.txt'), 'Z', 'Y'));
+  await step("recursive: writeFileSync with 'r+'", () => fs.writeFileSync(at('r', 'c.txt'), 'Q', { flag: 'r+' }));
+  await step('recursive: ftruncate', () => {
+    const fd = fs.openSync(at('r', 'c.txt'), 'r+');
+    fs.ftruncateSync(fd, 1);
+    fs.closeSync(fd);
+  });
   r.close();
 
   fs.mkdirSync(at('f'));
@@ -89,6 +102,7 @@ setTimeout(() => {
   const dir = watch('dir', at('v'));
   await step('a file and its directory: overwrite', () => fs.writeFileSync(at('v', 'v.txt'), 'vv'));
   await step('a file and its directory: append', () => fs.appendFileSync(at('v', 'v.txt'), 'x'));
+  await step('a file and its directory: a write through a descriptor', () => throughFd(at('v', 'v.txt'), 'Z'));
   await step('a file and its directory: the file removed', () => fs.unlinkSync(at('v', 'v.txt')));
   file.close();
   dir.close();

@@ -44,7 +44,7 @@ const step = (d) => {
   out += d;
   if (out.includes('app v1') && !wrote) {
     wrote = true;
-    fs.writeFileSync(__dirname + '/app.js', "console.log('app v2', typeof process.send);\\n");
+    fs.writeFileSync(__dirname + '/app.js', "console.log('app v2', typeof process.send);\\n", { flag: 'r+' });
   }
   if (out.includes('app v2') && !killed) {
     killed = true;

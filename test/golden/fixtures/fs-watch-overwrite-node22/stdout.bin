@@ -6,6 +6,14 @@ change sub/o.txt, change sub/o.txt
 change c.txt
 -- recursive: append
 change c.txt
+-- recursive: a write through a descriptor
+change c.txt
+-- recursive: two writes through a descriptor
+change c.txt, change c.txt
+-- recursive: writeFileSync with 'r+'
+change c.txt
+-- recursive: ftruncate
+change c.txt
 -- file: overwrite
 change f.txt
 -- file: empty overwrite
@@ -27,6 +35,8 @@ A rename n.txt, B rename n.txt, A change n.txt, B change n.txt
 -- a file and its directory: overwrite
 dir change v.txt, file change v.txt, dir change v.txt, file change v.txt
 -- a file and its directory: append
+dir change v.txt, file change v.txt
+-- a file and its directory: a write through a descriptor
 dir change v.txt, file change v.txt
 -- a file and its directory: the file removed
 file change v.txt, file rename v.txt, file rename v.txt, dir rename v.txt
