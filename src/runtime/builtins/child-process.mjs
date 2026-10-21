@@ -9,6 +9,7 @@
  */
 import { kernelAtLeast, kernelVersion } from '../kernel-version.mjs';
 import { trackPromise } from '../async-handles.mjs';
+import { resourceHere, runInResource } from '../async-context.mjs';
 import {
   ERR_INVALID_ARG_TYPE,
   ERR_INVALID_ARG_VALUE,
@@ -629,6 +630,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
   /** Create pipe Readable immediately (Node exposes .stdout before spawn finishes). */
   function createPipeReadable() {
     const { Readable } = getStream();
+    const resource = resourceHere();
     let reader = null;
     let gone = false;
     const r = new Readable({
@@ -680,11 +682,11 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
           if (done || gone) break;
           const chunk =
             value instanceof Uint8Array ? Buffer.from(value) : Buffer.from(String(value));
-          r.push(chunk);
+          runInResource(resource, r.push, r, [chunk]);
         }
-        if (!gone) r.push(null);
+        if (!gone) runInResource(resource, r.push, r, [null]);
       } catch (err) {
-        if (!gone) r.destroy(err);
+        if (!gone) runInResource(resource, r.destroy, r, [err]);
       } finally {
         hold(false);
       }

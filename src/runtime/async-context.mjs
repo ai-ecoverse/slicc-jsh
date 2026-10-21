@@ -6,9 +6,11 @@
  * resource itself. The context goes into process.nextTick, the timers and
  * immediates, queueMicrotask, the reactions given to .then / .catch /
  * .finally, and AsyncResource (bind, runInAsyncScope, AsyncLocalStorage.bind
- * and snapshot). A native `await` continuation is the engine's own job:
- * it resumes with the context outside every run (fail safe: a store goes
- * missing, it's never another run's).
+ * and snapshot), and the callbacks of jsh's own I/O (net, http, child
+ * stdio). A native `await` continuation is the engine's own job: with the
+ * kernel's ctx.asyncContext it follows the store, else it resumes with the
+ * context outside every run (fail safe: a store goes missing, it's never
+ * another run's).
  *
  * A frame is null (no store anywhere) or a Map from storage to its store.
  * Frames are immutable once made; run() swaps one in for the length of a
@@ -21,14 +23,25 @@ let current = null;
 // a callback of the runtime's own I/O), whose end jsh can't restore after.
 let depth = 0;
 
+let resource = null;
+let offered = null;
+let host = null;
+
+export function useHostContext(slot) {
+  if (typeof slot?.run === 'function' && typeof slot.getStore === 'function' && typeof slot.enterWith === 'function') {
+    offered = slot;
+  }
+}
+
 /** The frame now (captured by whatever schedules a callback). */
 export function currentFrame() {
+  if (host && depth === 0 && mainDepth === 0) return host.getStore() ?? null;
   return current;
 }
 
 /** Whether jsh entered the code running now (so it puts the frame back after). */
 export function inTrackedCall() {
-  return depth > 0 || mainDepth > 0;
+  return host !== null || depth > 0 || mainDepth > 0;
 }
 
 // The program's own synchronous start (the main module, -e, stdin): jsh
@@ -47,21 +60,35 @@ export function mainEnd() {
 }
 
 /** Call `fn` with `frame` as the context, then always put the previous one back. */
-export function runInFrame(frame, fn, thisArg, args) {
+export function runInFrame(frame, fn, thisArg, args, holder = null) {
   const previous = current;
+  const previousHolder = resource;
   current = frame;
+  resource = holder;
   depth++;
   try {
+    if (host) return host.run(frame, () => Reflect.apply(fn, thisArg, args));
     return Reflect.apply(fn, thisArg, args);
   } finally {
     depth--;
     current = previous;
+    resource = previousHolder;
   }
+}
+
+export function resourceHere() {
+  return { frame: currentFrame() };
+}
+
+export function runInResource(holder, fn, thisArg, args) {
+  return runInFrame(holder.frame, fn, thisArg, args, holder);
 }
 
 /** enterWith: the frame stays until the tracked call that is running ends. */
 export function enterFrame(frame) {
   current = frame;
+  if (resource) resource.frame = frame;
+  host?.enterWith(frame);
 }
 
 /** `fn`, called in the frame of now, with the previous frame put back after. */
@@ -89,6 +116,7 @@ export function queueMicrotask(callback) {
 export function installPropagation() {
   if (installed) return;
   installed = true;
+  host = offered;
   const P = globalThis.Promise;
   const nativeThen = P.prototype.then;
   const then = {

@@ -5,7 +5,7 @@ import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 import { connectError } from './http-fetch.mjs';
 import { validateBoolean, validateInt32 } from '../node-errors.mjs';
-import { queueMicrotask } from '../async-context.mjs';
+import { queueMicrotask, resourceHere, runInResource } from '../async-context.mjs';
 
 function errnoError(err, syscall) {
   const code = err?.code ?? err?.cause?.code ?? 'EIO';
@@ -124,6 +124,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #startOnWrite = null;
     // The TLS socket that took the connection: it goes when this one does.
     #owner;
+    #resource = { frame: null };
 
     constructor(options = {}) {
       // Node net.Socket defaults allowHalfOpen to false. HTTP servers opt in
@@ -240,6 +241,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       // resume so buffered EOF from #pumpRead is consumed (fin4.js).
       this.resume?.();
       if (quiet) return;
+      runInResource(this.#resource, this.#emitConnect, this, []);
+    }
+
+    #emitConnect() {
       this.emit('connect');
       this.emit('ready');
     }
@@ -281,6 +286,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
      */
     [kStartTls](parent, request) {
       this.#connecting = true;
+      this.#resource = resourceHere();
       const run = async () => {
         if (this.destroyed) return;
         const { host, tls } = request.dial();
@@ -377,6 +383,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         throw err;
       }
       if (callback) this.once('connect', callback);
+      this.#resource = resourceHere();
       this.connecting = true;
       this.#connecting = true;
       const host = options.host ?? '127.0.0.1';
@@ -490,12 +497,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             this.#readableEof = true;
             // Yield so prior push(buf) nextTicks can run before EOF.
             await Promise.resolve();
-            this.push(null);
-            // allowHalfOpen false: auto-end AFTER 'end' listeners so
-            // `s.on('end', () => s.end('bye'))` can still write (Node; endreply.js).
-            this.#scheduleAutoEnd();
-            // Wake drainLoop to flush readable-stream's deferred 'data'/'end'.
-            handles.notify();
+            runInResource(this.#resource, this.#endRead, this, []);
             break;
           }
           const buf =
@@ -504,7 +506,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
               : Buffer.from(value);
           // Keep pulling from the kernel stream; readable-stream buffers if paused.
           // Waiting on push()===false deadlocks when the only consumer is 'data'.
-          this.push(buf);
+          runInResource(this.#resource, this.push, this, [buf]);
           handles.notify();
           await Promise.resolve();
         }
@@ -516,15 +518,22 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         const code = err?.code ?? err?.cause?.code;
         if (!this.destroyed && (code === 'EBADF' || code === 'ECONNRESET' || code === 'EPIPE')) {
           this.#readableEof = true;
-          this.push(null);
-          this.#scheduleAutoEnd();
-          handles.notify();
+          runInResource(this.#resource, this.#endRead, this, []);
         } else if (!this.destroyed) {
-          this.destroy(this[kIoError]?.(err) ?? errnoError(err, 'read'));
+          runInResource(this.#resource, this.destroy, this, [this[kIoError]?.(err) ?? errnoError(err, 'read')]);
         }
       } finally {
         if (!this.#detached) this.#maybeFinishConn();
       }
+    }
+
+    #endRead() {
+      this.push(null);
+      // allowHalfOpen false: auto-end AFTER 'end' listeners so
+      // `s.on('end', () => s.end('bye'))` can still write (Node; endreply.js).
+      this.#scheduleAutoEnd();
+      // Wake drainLoop to flush readable-stream's deferred 'data'/'end'.
+      handles.notify();
     }
 
     /**
@@ -774,6 +783,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     async #acceptLoop() {
       const listener = this.#listener;
       if (!listener) return;
+      const resource = resourceHere();
       try {
         for (;;) {
           if (this.#closed) break;
@@ -784,12 +794,12 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           this.#connections++;
           socket[kServer] = this;
           socket._attach(conn);
-          this.emit('connection', socket);
+          runInResource(resource, this.emit, this, ['connection', socket]);
           handles.notify();
         }
       } catch (err) {
         if (!this.#closed && err?.name !== 'AbortError') {
-          this.emit('error', errnoError(err, 'accept'));
+          runInResource(resource, this.emit, this, ['error', errnoError(err, 'accept')]);
         }
       }
     }
