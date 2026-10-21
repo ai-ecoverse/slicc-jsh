@@ -193,7 +193,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 
 **`glob`.** `glob`, `globSync` and `promises.glob` are Node 22.22's own `lib/internal/fs/glob.js`, on Node's copy of minimatch (10.0.3), over jsh's `lstat` and `readdir` (golden `fs-glob-node22`). They match case-sensitively, as on Linux. As in Node 22, `lstatSync` with `throwIfNoEntry: false` returns `undefined` for `ENOENT` only, so `globSync('file.js/x')` throws `ENOTDIR`.
 
-**`Dir`.** `fs.Dir` is Node's class: `opendir`, `opendirSync` and `promises.opendir` return one, and `read`, `readSync`, `close`, `closeSync`, `entries`, `for await` and `Symbol.dispose`/`asyncDispose` behave as Node 22's, `ERR_DIR_CLOSED` included (golden `fs-dir-node22`). The kernel has no directory stream, so a `Dir` lists the directory when it is opened, and entries made or removed after that aren't seen.
+**`Dir`.** `fs.Dir` is Node's class: `opendir`, `opendirSync` and `promises.opendir` return one, and `read`, `readSync`, `close`, `closeSync`, `entries`, `for await` and `Symbol.dispose`/`asyncDispose` behave as Node 22's, `ERR_DIR_CLOSED` and `ERR_DIR_CONCURRENT_OPERATION` included: an async read in flight queues the async calls after it and refuses the sync ones (golden `fs-dir-node22`). The kernel has no directory stream, so a `Dir` lists the directory when it is opened, and entries made or removed after that aren't seen.
 
 **`readv` and `writev`.** `readv`, `readvSync`, `writev`, `writevSync` and `FileHandle.readv`/`writev` check their arguments as Node does and read or write the buffers in order on the descriptor (golden `fs-readv-writev-node22`). `writev` writes its buffers in one write. As in libuv, a `readv` of no buffers is `EINVAL`.
 

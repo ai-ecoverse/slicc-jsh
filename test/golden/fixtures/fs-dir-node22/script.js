@@ -85,6 +85,38 @@ const names = (list) => list.map((e) => `${path.relative(work, path.resolve(e.pa
   sync('opendirSync bufferSize 1', () => fs.opendirSync('d', { bufferSize: 1 }).closeSync());
   sync('opendirSync number', () => fs.opendirSync(1));
   sync('opendir no cb', () => fs.opendir('d'));
+  const d8 = fs.opendirSync('d');
+  await new Promise((resolve) => {
+    d8.read((e, first) => {
+      console.log('read(cb) first', e, first instanceof fs.Dirent);
+      sync('readSync in read(cb)', () => d8.readSync());
+      sync('closeSync in read(cb)', () => d8.closeSync());
+      d8.read((e2, second) => {
+        console.log('read(cb) queued', e2, second instanceof fs.Dirent);
+        sync('readSync after queued read', () => d8.readSync());
+        d8.close((e3) => {
+          console.log('close(cb) after', e3);
+          resolve();
+        });
+      });
+    });
+    sync('readSync during read(cb)', () => d8.readSync());
+    sync('closeSync during read(cb)', () => d8.closeSync());
+  });
+  const d9 = fs.opendirSync('d');
+  const pending = d9.read();
+  sync('readSync during read()', () => d9.readSync());
+  const order = [];
+  d9.close((e) => order.push(`close ${e}`));
+  pending.then(() => order.push('read resolved'));
+  console.log('read() during', (await pending) instanceof fs.Dirent);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  console.log('queued order', order.join(', '));
+  const d10 = fs.opendirSync('d', { bufferSize: 1 });
+  const got = [];
+  for (let e = d10.readSync(); e; e = d10.readSync()) got.push(e.name);
+  await new Promise((resolve) => d10.read((e, x) => (console.log('bufferSize 1', got.length, x), resolve())));
+  d10.closeSync();
   const d7 = fs.opendirSync('d');
   sync('read bad cb', () => d7.read(1));
   sync('close bad cb', () => d7.close(1));

@@ -26,5 +26,17 @@ opendirSync bufferSize x THROW TypeError ERR_INVALID_ARG_TYPE "The \"options.buf
 opendirSync bufferSize 1 undefined
 opendirSync number THROW TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received type number (1)"
 opendir no cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"callback\" argument must be of type function. Received undefined"
+readSync during read(cb) THROW Error ERR_DIR_CONCURRENT_OPERATION "Cannot do synchronous work on directory handle with concurrent asynchronous operations"
+closeSync during read(cb) THROW Error ERR_DIR_CONCURRENT_OPERATION "Cannot do synchronous work on directory handle with concurrent asynchronous operations"
+read(cb) first null true
+readSync in read(cb) THROW Error ERR_DIR_CONCURRENT_OPERATION "Cannot do synchronous work on directory handle with concurrent asynchronous operations"
+closeSync in read(cb) THROW Error ERR_DIR_CONCURRENT_OPERATION "Cannot do synchronous work on directory handle with concurrent asynchronous operations"
+read(cb) queued null true
+readSync after queued read null
+close(cb) after null
+readSync during read() THROW Error ERR_DIR_CONCURRENT_OPERATION "Cannot do synchronous work on directory handle with concurrent asynchronous operations"
+read() during true
+queued order read resolved, close null
+bufferSize 1 2 null
 read bad cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"callback\" argument must be of type function. Received type number (1)"
 close bad cb THROW TypeError ERR_INVALID_ARG_TYPE "The \"callback\" argument must be of type function. Received type number (1)"
