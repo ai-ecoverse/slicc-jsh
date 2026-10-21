@@ -976,10 +976,11 @@ const allocated = new WeakMap();
 /**
  * Bytes held by the ArrayBuffers this realm's Buffers allocated that are
  * still alive: process.memoryUsage()'s `arrayBuffers` when the kernel can't
- * measure it. As on Node, memory transferred away still counts. Views
- * (Buffer.from(arrayBuffer), subarray) allocate nothing and count nothing,
- * and neither do Buffers under 4 KiB or a plain `new Uint8Array(n)`, so this
- * is a lower bound of Node's figure.
+ * measure it. As on Node, memory transferred away still counts, but only
+ * while the detached Buffer lives. Views (Buffer.from(arrayBuffer),
+ * subarray) allocate nothing and count nothing, and neither do Buffers under
+ * 4 KiB or a plain `new Uint8Array(n)`, so this is a lower bound of Node's
+ * figure.
  */
 export function bufferBytes(Buffer) {
   return allocated.get(Buffer)?.() ?? 0;
