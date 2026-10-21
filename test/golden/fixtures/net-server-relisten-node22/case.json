@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#740 review: a net.Server closed with a connection still open and listening again before it ends doesn't emit 'close' while it listens (Node's _emitCloseIfDrained returns while _handle is set); the next close() emits it once, and both close callbacks run",
+  "argv": ["main.js"],
+  "shim": true
+}

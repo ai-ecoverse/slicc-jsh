@@ -690,6 +690,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #clusterKey;
     #clusterAddress;
     #unref = false;
+    #generation = 0;
     _handle = null;
     maxConnections = Infinity;
 
@@ -732,6 +733,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       if (parsed.callback) this.once('listening', parsed.callback);
 
       this.#closed = false;
+      const generation = ++this.#generation;
       this.#acceptAbort = new AbortController();
       const host = parsed.host ?? '127.0.0.1';
       const port = parsed.port ?? 0;
@@ -762,6 +764,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
               err.port = port;
               throw err;
             }
+            if (generation !== this.#generation) {
+              cluster._closeServer(reply.key);
+              return listener;
+            }
             this.#clusterKey = reply.key;
             this.#clusterAddress = reply.sockname;
             return listener;
@@ -776,15 +782,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           .then((listener) => {
             this.#pendingListens.delete(listening);
             if (!listener) return;
-            if (this.#closed || this.#takenOver.has(listening)) {
+            if (generation !== this.#generation) {
               // Closed meanwhile: close() closes it (and frees its port) if
               // it took this listen() over, else it's closed here.
               if (!this.#takenOver.has(listening)) closeQuietly(listener);
-              // Closed while the primary set it up: it gives the address back.
-              if (this.#clusterKey !== undefined) {
-                process?._clusterWorker?._closeServer(this.#clusterKey);
-                this.#clusterKey = undefined;
-              }
               return;
             }
             this.#listener = listener;
@@ -843,8 +844,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         return this;
       }
       this.#closed = true;
+      this.#generation++;
       this.#listening = false;
       this._handle = null;
+      this.#clusterAddress = undefined;
       if (this.#clusterKey !== undefined) {
         process?._clusterWorker?._closeServer(this.#clusterKey);
         this.#clusterKey = undefined;
@@ -901,7 +904,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #emitCloseIfDrained() {
-      if (!this.#listenerClosed || this.#connections > 0) return;
+      if (this._handle || !this.#listenerClosed || this.#connections > 0) return;
       this.#listenerClosed = false;
       nextTick(() => this.emit('close'));
     }

@@ -1,2 +1,4 @@
 listen-then-disconnect: worker exit 0 null | primary ends | primary 0
 close-during-setup: worker exit 0 null | the primary listens on the port | primary ends | primary 0
+exclusive-relisten: worker: a connection reaches address(), listening events 0 | worker exit 0 null | primary ends | primary 0
+relisten-during-setup: worker: a connection reaches address(), listening events 1 | worker exit 0 null | primary ends | primary 0

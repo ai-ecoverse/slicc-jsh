@@ -13,7 +13,10 @@ const getPort = () =>
 (async () => {
   cluster.setupPrimary({ exec: path.join(__dirname, 'worker.js'), args: [name] });
   const port = await getPort();
+  let listening = 0;
+  cluster.on('listening', () => listening++);
   const w = cluster.fork({ PORT: String(port) });
+  w.on('message', (m) => console.log(`worker: ${m}, listening events ${listening}`));
   w.on('exit', (code, signal) => {
     console.log(`worker exit ${code} ${signal}`);
     if (name !== 'close-during-setup') return;
