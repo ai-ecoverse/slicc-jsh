@@ -9,10 +9,12 @@ if (role === 'idle') {
 } else if (role === 'spawner') {
   spawn(process.execPath, [self, 'idle'], { stdio: ['inherit', 'inherit', 'ignore'] }).unref();
 } else if (role === 'case') {
-  setTimeout(() => {
-    console.log(name, 'held');
-    process.exit(3);
-  }, 1000).unref();
+  const held = () =>
+    setTimeout(() => {
+      console.log(name, 'held');
+      process.exit(3);
+    }, 1000).unref();
+  if (name !== 'grandchild') held();
   let child;
   if (name === 'fork') {
     child = fork(self, ['idle'], { stdio: 'pipe' });
@@ -25,6 +27,7 @@ if (role === 'idle') {
     const keep = setInterval(() => {}, 1000);
     child.on('exit', (code) => {
       clearInterval(keep);
+      held();
       console.log(name, 'child exit', code);
     });
   } else {

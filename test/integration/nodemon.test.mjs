@@ -39,13 +39,17 @@ const n = spawn(process.execPath, ['/node_modules/nodemon/bin/nodemon.js', '--wa
 });
 let out = '';
 let wrote = false;
+let killed = false;
 const step = (d) => {
   out += d;
   if (out.includes('app v1') && !wrote) {
     wrote = true;
     fs.writeFileSync(__dirname + '/app.js', "console.log('app v2', typeof process.send);\\n");
   }
-  if (out.includes('app v2')) n.kill('SIGTERM');
+  if (out.includes('app v2') && !killed) {
+    killed = true;
+    n.kill('SIGTERM');
+  }
 };
 n.stdout.on('data', step);
 n.stderr.on('data', step);

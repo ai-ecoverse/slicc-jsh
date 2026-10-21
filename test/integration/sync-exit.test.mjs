@@ -12,6 +12,7 @@ import { withJsh } from './helpers.mjs';
 // long; with sync.exit it never starts.
 const SPIN = 2000;
 const spin = `{ const t = Date.now(); while (Date.now() - t < ${SPIN}); }`;
+const stamp = "process.stderr.write('t=' + Date.now() + ';');";
 
 describe('process.exit on ctx.sync.exit (kernel)', () => {
   let jsh;
@@ -21,16 +22,17 @@ describe('process.exit on ctx.sync.exit (kernel)', () => {
   after(() => jsh?.close());
 
   const timed = async (argv) => {
-    const t = Date.now();
     const r = await jsh.run(argv);
-    return { ...r, ms: Date.now() - t };
+    const t = /t=(\d+);/.exec(r.stderr);
+    assert.ok(t, `no stamp: ${JSON.stringify(r.stderr)}`);
+    return { ...r, ms: Date.now() - Number(t[1]) };
   };
 
   it('no finally or catch runs after process.exit(); the exit listeners and earlier writes do', async () => {
     const r = await timed([
       'node',
       '-e',
-      `process.on('exit', (c) => console.log('exit', c)); try { process.stdout.write('before '); process.exit(3); } catch ${spin} finally ${spin}`,
+      `process.on('exit', (c) => console.log('exit', c)); try { process.stdout.write('before '); ${stamp} process.exit(3); } catch ${spin} finally ${spin}`,
     ]);
     assert.equal(r.status, 3);
     assert.equal(r.stdout, 'before exit 3\n');
@@ -38,7 +40,7 @@ describe('process.exit on ctx.sync.exit (kernel)', () => {
   });
 
   it('inside an async function: its finally never runs', async () => {
-    const r = await timed(['node', '-e', `(async () => { try { await 1; process.exit(5); } finally ${spin} })()`]);
+    const r = await timed(['node', '-e', `(async () => { try { await 1; ${stamp} process.exit(5); } finally ${spin} })()`]);
     assert.equal(r.status, 5);
     assert.ok(r.ms < SPIN * 0.75, `took ${r.ms} ms`);
   });
@@ -46,7 +48,7 @@ describe('process.exit on ctx.sync.exit (kernel)', () => {
   it("a .jsh's cli.die ends at once too", async () => {
     await jsh.kernel.writeFile(
       '/os/die.jsh',
-      `const cli = require('sliccy:cli');\ntry { cli.die('bad thing', 3); } finally ${spin}\n`
+      `const cli = require('sliccy:cli');\ntry { ${stamp} cli.die('bad thing', 3); } finally ${spin}\n`
     );
     const r = await timed(['jsh', 'die.jsh']);
     assert.equal(r.status, 3);

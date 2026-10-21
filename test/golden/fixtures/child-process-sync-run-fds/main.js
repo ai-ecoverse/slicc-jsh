@@ -39,7 +39,7 @@ console.log('[/execSync both to stdout]');
 // timeout kill could come first on a loaded runner (#353).
 const pidFile = 'w-srf-bg.pid';
 fs.rmSync(mark, { force: true });
-const gc = `process.on("SIGPIPE", () => {}); const fs = require("fs"); const t = setInterval(() => { try { fs.writeSync(1, "x\\\\n"); } catch (e) { fs.writeFileSync("${mark}", e.code); process.exit(0); } }, 5); setTimeout(() => { fs.writeFileSync("${mark}", "never"); process.exit(0); }, 6000);`;
+const gc = `process.on("SIGPIPE", () => {}); const fs = require("fs"); const done = (s) => { fs.writeFileSync("${mark}.tmp", s); fs.renameSync("${mark}.tmp", "${mark}"); process.exit(0); }; const t = setInterval(() => { try { fs.writeSync(1, "x\\\\n"); } catch (e) { done(e.code); } }, 5); setTimeout(() => done("never"), 6000);`;
 r = cp.spawnSync('/bin/sh', ['-c', `node -e '${gc}' & wait`], { maxBuffer: 16 });
 console.log('maxBuffer kill with a writing grandchild', r.error && r.error.code, r.signal);
 
