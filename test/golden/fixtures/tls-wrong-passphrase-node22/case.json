@@ -1,0 +1,6 @@
+{
+  "description": "#453: tls.createSecureContext with an encrypted key and a wrong, empty or missing passphrase throws Node 22.22.0's error (code, message, library, reason, opensslErrorStack): bad decrypt when the padding check fails, the decoder's unsupported (and OpenSSL's ASN.1 errors for the first two levels) when a wrong decrypt passes it. PKCS#8 and traditional (SEC1, PKCS#1) PEM with AES-128/192/256-CBC, the ciphers jsh's kernel takes; fixed keys, real ones found by search and crafted ones (garbage encrypted with 'not it') for each decoder error. Any DER key is the decoder's unsupported, as Node's tls reads only PEM.",
+  "argv": ["main.js"],
+  "shim": true,
+  "kernel": "1.124.13"
+}

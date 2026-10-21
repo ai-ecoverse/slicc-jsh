@@ -37,8 +37,8 @@ const UPLINK = '203.0.113.10';
 // A key encrypted with the passphrase 'pw', fixed rather than made per run.
 // OpenSSL decrypts it with the passphrase given, or an empty one. For about
 // one random salt and IV in 500 the result passes the padding check, and
-// Node then says DECODER unsupported, not bad decrypt (the kernel's engine
-// says bad decrypt for both). Host Node 22.22.0 gives bad decrypt for this
+// Node then says DECODER unsupported, not bad decrypt (jsh decrypts the key
+// itself to tell them apart, golden tls-wrong-passphrase-node22). Host Node 22.22.0 gives bad decrypt for this
 // key with no passphrase, '' and 'not it'.
 const LOCKED_KEY = `-----BEGIN ENCRYPTED PRIVATE KEY-----
 MIH0MF8GCSqGSIb3DQEFDTBSMDEGCSqGSIb3DQEFDDAkBBBdGALvtdtyJoUW4sQG
@@ -735,8 +735,8 @@ const go = (label, opts) => new Promise((resolve) => {
 
   it("bad key material: Node's codes, messages and properties for a wrong or missing passphrase, a key that isn't one, another certificate's key, a certificate that isn't one", { skip: skipControls }, async () => {
     // Node throws these from tls.connect (createSecureContext); jsh throws
-    // what it can see without the key (it isn't one, the certificate isn't
-    // one), and the rest is the kernel's at connect, on 'error'.
+    // what it can see without the kernel (it isn't one, the certificate isn't
+    // one, a wrong passphrase), and another certificate's key is the kernel's at connect, on 'error'.
     const { host, shim } = await both(
       'badkey.js',
       `const tls = require('tls');
