@@ -24,12 +24,12 @@ console.log('replaced: the path', JSON.stringify(fs.readFileSync(at('f'), 'utf8'
 fs.closeSync(fd);
 
 fs.writeFileSync(at('a'), 'old');
-fd = fs.openSync(at('a'), 'a');
+fd = fs.openSync(at('a'), 'a+');
 fs.writeFileSync(at('b'), 'new');
 fs.renameSync(at('b'), at('a'));
 fs.writeSync(fd, '+');
 fs.appendFileSync(fd, '!');
-console.log('replaced, appending: the path', JSON.stringify(fs.readFileSync(at('a'), 'utf8')));
+console.log('replaced, appending: the path', JSON.stringify(fs.readFileSync(at('a'), 'utf8')), 'the descriptor reads', readAll(fd));
 fs.closeSync(fd);
 
 fs.writeFileSync(at('w'), 'old');

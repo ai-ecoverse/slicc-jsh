@@ -635,9 +635,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       try {
         const pos = inPlace.append ? inPlace.file.size() : filePosition == null ? ent.pos : filePosition;
         const n = inPlace.file.write(pos, bytes);
-        if (inPlace.held) inPlace.file.sync();
         const written = typeof n === 'number' ? n : bytes.length;
         if (filePosition == null) ent.pos = pos + written;
+        if (inPlace.held) inPlace.file.sync();
         return written;
       } finally {
         if (!inPlace.held) inPlace.file.close();
@@ -1671,7 +1671,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       try {
         return writeBytesAtPath(ent, bytes, filePosition);
       } catch (err) {
-        throw nodeFsError(err?.code || 'EIO', 'write', ent.path, err);
+        throw nodeFsError(err?.code || 'EIO', 'write', undefined, err);
       }
     },
     fstatSync(fd, options) {
@@ -1710,7 +1710,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         }
         syncFs.writeFile(ent.path, cur);
       } catch (err) {
-        throw nodeFsError(err?.code || 'EIO', 'ftruncate', ent.path, err);
+        throw nodeFsError(err?.code || 'EIO', 'ftruncate', undefined, err);
       }
     },
     closeSync(fd) {
