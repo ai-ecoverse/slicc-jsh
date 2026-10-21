@@ -1,0 +1,5 @@
+{
+  "description": "AsyncLocalStorage as Node 22.22.0's in the callbacks of the runtime's own I/O: a net server's 'connection' (the listen's store) and its accepted socket's 'data' (none), a client socket's 'connect', 'data', 'end' and 'close' (the connect's), an http server's 'request', its body and the next kept-alive request (the listen's), a client request's 'response' and its body (the request's), a child's stdout (the spawn's); enterWith in a timer, a socket's 'data' and an http 'request', reaching what it schedules and no other callback",
+  "argv": ["script.js"],
+  "shim": true
+}

@@ -5,7 +5,7 @@ import { trackPromise } from '../async-handles.mjs';
 import { ERR_OUT_OF_RANGE, nodeError, validateInteger } from '../node-errors.mjs';
 import { EventEmitter } from './events.mjs';
 import { createFetchClient, isLoopbackHost } from './http-fetch.mjs';
-import { queueMicrotask } from '../async-context.mjs';
+import { queueMicrotask, resourceHere, runInResource } from '../async-context.mjs';
 
 // Node 22's table (lib/_http_server.js), in its order.
 const STATUS_CODES = {
@@ -585,6 +585,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
    * `Upgrade` request goes to 'upgrade' listeners, with the socket.
    */
   function handleConnection(socket, requestListener, server) {
+    const resource = resourceHere();
     let buf = Buffer.alloc(0);
     let busy = false;
     let served = 0;
@@ -642,7 +643,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       }, server.requestTimeout);
       requestTimer.unref?.();
     };
-    const pump = () => {
+    const pump = () => runInResource(resource, pumpNow, null, []);
+    const pumpNow = () => {
       if (busy || socket.destroyed || buf.length === 0) return;
       clearTimeout(idleTimer);
       idleTimer = null;
@@ -715,6 +717,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       conn.idle = false;
       served++;
       const req = makeIncomingMessage(socket, body);
+      const emit = req.emit;
+      req.emit = function (...args) {
+        return runInResource(resource, emit, this, args);
+      };
       setRequestLine(req, parsed, headers);
       const res = new ServerResponse(req);
       // Node's shouldKeepAlive: HTTP/1.1 unless the client says close, and
@@ -1137,6 +1143,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
 
     // The names as given (Node writes them so), by their lower-case key.
     #names = Object.create(null);
+    #resource = resourceHere();
 
     constructor(options, callback) {
       // Not destroyed when the request is written: the response comes after
@@ -1272,9 +1279,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       // listener (removeSocket, which hands the socket's slot to the next
       // queued request) must still hear the socket close.
       const own = [];
+      const resource = this.#resource;
       const listen = (event, fn) => {
-        socket.on(event, fn);
-        own.push([event, fn]);
+        const inFrame = (...args) => runInResource(resource, fn, socket, args);
+        socket.on(event, inFrame);
+        own.push([event, inFrame]);
       };
       const unlisten = (event) => {
         for (let i = own.length - 1; i >= 0; i--) {

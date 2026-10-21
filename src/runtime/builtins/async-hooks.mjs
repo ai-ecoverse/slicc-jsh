@@ -9,10 +9,11 @@
  *
  * AsyncLocalStorage keeps its store in the program's async context
  * (async-context.mjs). That context goes into process.nextTick, the timers
- * and immediates, queueMicrotask, .then / .catch / .finally reactions and
- * AsyncResource. A native `await` continuation can't carry it, so it
- * resumes outside every run: getStore() gives the store outside the run
- * (usually undefined), never another run's.
+ * and immediates, queueMicrotask, .then / .catch / .finally reactions,
+ * AsyncResource and jsh's own I/O callbacks. A native `await` continuation
+ * carries it only with the kernel's ctx.asyncContext; else it resumes
+ * outside every run: getStore() gives the store outside the run (usually
+ * undefined), never another run's.
  */
 import { ERR_INVALID_ARG_TYPE, nodeError, validateFunction, validateObject, validateString } from '../node-errors.mjs';
 import { currentFrame, enterFrame, inTrackedCall, installPropagation, runInFrame } from '../async-context.mjs';

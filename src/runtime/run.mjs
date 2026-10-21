@@ -1,4 +1,4 @@
-import { mainBegin, mainEnd } from './async-context.mjs';
+import { mainBegin, mainEnd, useHostContext } from './async-context.mjs';
 import { initSourceMaps } from './source-maps.mjs';
 import { installProcessMembers } from './process-members.mjs';
 import { installCredentials } from './process-credentials.mjs';
@@ -225,6 +225,7 @@ const platformSetTimeout = globalThis.setTimeout.bind(globalThis);
  */
 export async function runNode(ctx, options = {}) {
   installStackPrepare();
+  useHostContext(ctx.asyncContext);
   const handles = createHandleTable();
   // A tick wakes the loop when it waits on a handle (drainLoop).
   const nextTick = createNextTick(() => handles.notify());
