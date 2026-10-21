@@ -1,0 +1,56 @@
+== --trace-event-file-pattern PATTERN show.js: status 0
+execArgv ["--trace-event-file-pattern","PATTERN"] categories undefined
+== --trace-event-file-pattern=x-${rotation}.log show.js: status 0
+execArgv ["--trace-event-file-pattern=x-${rotation}.log"] categories undefined
+== --trace-event-categories node.perf,v8 --trace-event-file-pattern PATTERN show.js: status 0
+execArgv ["--trace-event-categories","node.perf,v8","--trace-event-file-pattern","PATTERN"] categories node.perf,v8
+== --trace-event-file-pattern=PATTERN --trace-event-categories=b,a,a show.js: status 0
+execArgv ["--trace-event-file-pattern=PATTERN","--trace-event-categories=b,a,a"] categories a,b
+== --trace-event-categories a --trace-event-categories c --trace-event-file-pattern PATTERN show.js: status 0
+execArgv ["--trace-event-categories","a","--trace-event-categories","c","--trace-event-file-pattern","PATTERN"] categories c
+== --trace-event-categories  show.js: status 0
+execArgv ["--trace-event-categories",""] categories undefined
+== --trace-events-enabled --trace-event-file-pattern PATTERN show.js: status 0
+execArgv ["--trace-events-enabled","--trace-event-file-pattern","PATTERN"] categories node,node.async_hooks,v8
+== --trace-event-categories a --trace-events-enabled --trace-event-file-pattern PATTERN show.js: status 0
+execArgv ["--trace-event-categories","a","--trace-events-enabled","--trace-event-file-pattern","PATTERN"] categories node,node.async_hooks,v8
+== --trace-events-enabled --trace-event-categories a --trace-event-file-pattern PATTERN show.js: status 0
+execArgv ["--trace-events-enabled","--trace-event-categories","a","--trace-event-file-pattern","PATTERN"] categories a
+== --trace-event-categories b --trace-event-file-pattern PATTERN -e const t = require('trace_events'); t.createTracing({ categories: ['a'] }).enable(); console.log(t.getEnabledCategories());: status 0
+a,b
+== NODE_OPTIONS="--trace-event-categories a --trace-event-file-pattern PATTERN" --trace-event-categories b show.js: status 0
+execArgv ["--trace-event-categories","b"] categories b
+== NODE_OPTIONS="--trace-event-categories=a --trace-event-file-pattern=PATTERN" show.js: status 0
+execArgv [] categories a
+== NODE_OPTIONS="--trace-events-enabled --trace-event-file-pattern PATTERN" show.js: status 0
+execArgv [] categories node,node.async_hooks,v8
+== --trace-event-categories -e 1: status 9
+node: --trace-event-categories requires an argument
+== --trace-event-categories= -e 1: status 9
+node: --trace-event-categories= requires an argument
+== --trace-event-file-pattern -e 1: status 9
+node: --trace-event-file-pattern requires an argument
+== --trace-event-file-pattern= -e 1: status 9
+node: --trace-event-file-pattern= requires an argument
+== --trace-event-file-pattern: status 9
+node: --trace-event-file-pattern requires an argument
+== --no-trace-event-categories -e 1: status 9
+node: --no-trace-event-categories is an invalid negation because it is not a boolean option
+== --no-trace-event-file-pattern=x -e 1: status 9
+node: --no-trace-event-file-pattern=x is an invalid negation because it is not a boolean option
+== --no-trace-events-enabled -e 1: status 9
+node: --no-trace-events-enabled is an invalid negation because it is not a boolean option
+== --title= -e 1: status 9
+node: --title= requires an argument
+== --no-title -e 1: status 9
+node: --no-title is an invalid negation because it is not a boolean option
+== NODE_OPTIONS="--trace-event-categories" -e 1: status 9
+node: --trace-event-categories requires an argument
+== NODE_OPTIONS="--trace-event-categories=" -e 1: status 9
+node: --trace-event-categories= requires an argument
+== NODE_OPTIONS="--no-trace-event-file-pattern" -e 1: status 9
+node: --no-trace-event-file-pattern is an invalid negation because it is not a boolean option
+== NODE_OPTIONS="--no-trace-events-enabled" -e 1: status 9
+node: --no-trace-events-enabled is an invalid negation because it is not a boolean option
+== NODE_OPTIONS="--no-loader" -e 1: status 9
+node: --no-loader is an invalid negation because it is not a boolean option
