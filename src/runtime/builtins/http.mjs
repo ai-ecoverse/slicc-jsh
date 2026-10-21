@@ -955,7 +955,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
               /* ignore */
             }
           }
-          delete pool[name];
         }
       }
     }

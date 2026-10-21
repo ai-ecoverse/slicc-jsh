@@ -1,0 +1,9 @@
+answers 200 200 200
+idle: sockets=0/0 freeSockets=3/1 requests=0/0 total=3
+one in use: sockets=1/1 freeSockets=2/1 requests=0/0 total=3
+after destroy: sockets=1/1 freeSockets=2/1 requests=0/0 total=3
+close 1: listed=2 self=false total=2
+close 2: listed=1 self=false total=1
+close 3: listed=0 self=false total=0
+held request ECONNRESET
+all closed: sockets=0/0 freeSockets=0/0 requests=0/0 total=0

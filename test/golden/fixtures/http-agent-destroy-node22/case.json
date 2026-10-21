@@ -1,0 +1,7 @@
+{
+  "description": "http.Agent destroy() destroys every socket, free or in use, but leaves them listed: right after it, sockets and freeSockets still hold them, and each leaves the pool (and totalSocketCount) at its own 'close'; jsh emptied both pools at once and never took the sockets off totalSocketCount",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true
+}
