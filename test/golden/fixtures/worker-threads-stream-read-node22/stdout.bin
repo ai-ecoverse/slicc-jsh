@@ -1,0 +1,4 @@
+for await: message late | exit
+pipeTo: message late | exit
+never read: no message | exit
+a stream twice, the global gone: true true late

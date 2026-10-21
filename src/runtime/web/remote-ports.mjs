@@ -141,8 +141,45 @@ export function mailboxSerdes(process) {
     })());
 }
 
-export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
+export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles }) {
   const { MessagePort, makePort } = ports;
+  const readableLocked = getterOf(globalThis.ReadableStream, 'locked');
+  const isReadable = (value) => !!readableLocked && hasBrand(readableLocked, value);
+  // The platform's, taken before the program runs (which may replace them).
+  const NativeReadableStream = globalThis.ReadableStream;
+  const { apply } = Reflect;
+  const getReader = NativeReadableStream?.prototype.getReader;
+  const ReaderPrototype = NativeReadableStream && Object.getPrototypeOf(new NativeReadableStream().getReader());
+  const readerRead = ReaderPrototype?.read;
+  const readerCancel = ReaderPrototype?.cancel;
+  const streamCancel = NativeReadableStream?.prototype.cancel;
+
+  // A ReadableStream that came from another thread holds the program while
+  // a read on it is pending (its chunks come from that thread), as Node's
+  // does, and not otherwise: the stream the program gets reads it through
+  // one that holds a handle while each read is in flight.
+  function heldWhileRead(stream) {
+    if (!handles) return stream;
+    let reader;
+    return new NativeReadableStream(
+      {
+        async pull(controller) {
+          reader ??= apply(getReader, stream, []);
+          const handle = { kind: 'message-port' };
+          handles.add(handle);
+          try {
+            const { value, done } = await apply(readerRead, reader, []);
+            if (done) controller.close();
+            else controller.enqueue(value);
+          } finally {
+            handles.delete(handle);
+          }
+        },
+        cancel: (reason) => (reader ? apply(readerCancel, reader, [reason]) : apply(streamCancel, stream, [reason])),
+      },
+      { highWaterMark: 0 }
+    );
+  }
   const NativePort = NativeMessageChannel ? Object.getPrototypeOf(new NativeMessageChannel().port1).constructor : null;
   const brands = [
     getterOf(NativePort, 'onmessage'),
@@ -214,11 +251,6 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
       if (v instanceof MessagePort || brands.some((get) => hasBrand(get, v))) throw unlisted();
       return undefined;
     });
-  const restorePorts = (value, list, nonce) =>
-    mapPorts(value, (v) => {
-      const at = markIndex(v, nonce);
-      return at >= 0 ? list[at] : undefined;
-    });
 
   /**
    * `message` and its transfer list as the platform can clone them: the
@@ -240,16 +272,28 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes }) {
     // port is exported, which leaves them this side's, usable, as in Node.
     // The walk reads each property once; the clone takes its copy.
     const staged = structuredClone({ marked: swapPorts(message, marks, rest), rest }, { transfer: rest });
-    if (jshPorts.length === 0) return fn({ data: staged.marked, ports: [] }, staged.rest);
+    // Whether the receiver has streams to find in it.
+    const streams = rest.some(isReadable);
+    if (jshPorts.length === 0) return fn({ data: staged.marked, ports: [], streams }, staged.rest);
     const natives = [];
     const envelopes = jshPorts.map((port) => exportPort(port, natives));
-    return fn({ data: staged.marked, ports: envelopes, nonce }, [...natives, ...staged.rest]);
+    return fn({ data: staged.marked, ports: envelopes, nonce, streams }, [...natives, ...staged.rest]);
   }
 
   function receive(message) {
     if (message.bytes) return { data: serdes().deserialize(message.bytes, message.hosts), ports: [] };
     const list = (message.ports ?? []).map(importPort);
-    return { data: list.length ? restorePorts(message.data, list, message.nonce) : message.data, ports: list };
+    if (!list.length && !message.streams) return { data: message.data, ports: list };
+    // One wrapper for each stream, wherever it is in the message (an alias stays one).
+    const wrappers = new Map();
+    const data = mapPorts(message.data, (v) => {
+      const at = list.length ? markIndex(v, message.nonce) : -1;
+      if (at >= 0) return list[at];
+      if (!message.streams || !isReadable(v)) return undefined;
+      if (!wrappers.has(v)) wrappers.set(v, heldWhileRead(v));
+      return wrappers.get(v);
+    });
+    return { data, ports: list };
   }
 
   /** A pair of mailboxes, as the two ends of a link see them. */
