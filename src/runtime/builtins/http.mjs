@@ -944,16 +944,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, net, getF
     }
     /** Node's: every socket, in use or free, goes. */
     destroy() {
-      for (const pool of [this.freeSockets, this.sockets]) {
-        for (const name of Object.keys(pool)) {
-          for (const s of [...pool[name]]) {
-            try {
-              s.destroy?.();
-            } catch {
-              /* ignore */
-            }
-          }
-          delete pool[name];
+      const all = [this.freeSockets, this.sockets].flatMap((pool) => Object.values(pool).flat());
+      for (const s of all) {
+        try {
+          s.destroy?.();
+        } catch {
+          /* ignore */
         }
       }
     }
