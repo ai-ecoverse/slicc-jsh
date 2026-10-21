@@ -144,6 +144,14 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
   const { MessagePort, makePort } = ports;
   const readableLocked = getterOf(globalThis.ReadableStream, 'locked');
   const isReadable = (value) => !!readableLocked && hasBrand(readableLocked, value);
+  // The platform's, taken before the program runs (which may replace them).
+  const NativeReadableStream = globalThis.ReadableStream;
+  const { apply } = Reflect;
+  const getReader = NativeReadableStream?.prototype.getReader;
+  const ReaderPrototype = NativeReadableStream && Object.getPrototypeOf(new NativeReadableStream().getReader());
+  const readerRead = ReaderPrototype?.read;
+  const readerCancel = ReaderPrototype?.cancel;
+  const streamCancel = NativeReadableStream?.prototype.cancel;
 
   // A ReadableStream that came from another thread holds the program while
   // a read on it is pending (its chunks come from that thread), as Node's
@@ -152,21 +160,21 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
   function heldWhileRead(stream) {
     if (!handles) return stream;
     let reader;
-    return new ReadableStream(
+    return new NativeReadableStream(
       {
         async pull(controller) {
-          reader ??= stream.getReader();
+          reader ??= apply(getReader, stream, []);
           const handle = { kind: 'message-port' };
           handles.add(handle);
           try {
-            const { value, done } = await reader.read();
+            const { value, done } = await apply(readerRead, reader, []);
             if (done) controller.close();
             else controller.enqueue(value);
           } finally {
             handles.delete(handle);
           }
         },
-        cancel: (reason) => (reader ?? stream).cancel(reason),
+        cancel: (reason) => (reader ? apply(readerCancel, reader, [reason]) : apply(streamCancel, stream, [reason])),
       },
       { highWaterMark: 0 }
     );
@@ -275,10 +283,14 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
     if (message.bytes) return { data: serdes().deserialize(message.bytes, message.hosts), ports: [] };
     const list = (message.ports ?? []).map(importPort);
     if (!list.length && !message.streams) return { data: message.data, ports: list };
+    // One wrapper for each stream, wherever it is in the message (an alias stays one).
+    const wrappers = new Map();
     const data = mapPorts(message.data, (v) => {
       const at = list.length ? markIndex(v, message.nonce) : -1;
       if (at >= 0) return list[at];
-      return message.streams && isReadable(v) ? heldWhileRead(v) : undefined;
+      if (!message.streams || !isReadable(v)) return undefined;
+      if (!wrappers.has(v)) wrappers.set(v, heldWhileRead(v));
+      return wrappers.get(v);
     });
     return { data, ports: list };
   }
