@@ -1,0 +1,21 @@
+-- file: its directory renamed, then the file appended to
+change f
+-- file: removed
+change f, rename f, rename f
+-- file: renamed
+rename f
+-- file: appended to under its new name
+change f
+-- file: removed under its new name
+change f, rename f, rename f
+-- directory: renamed
+rename w
+-- directory: mkdir in it under its new name
+rename n
+-- directory: its parent renamed, then a mkdir in it
+rename m
+-- directory: emptied and removed
+rename m, rename n, rename w, rename w
+-- recursive: its parent renamed and back, then a file appended to
+change a
+done
