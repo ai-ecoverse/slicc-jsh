@@ -556,11 +556,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
    * give (a directory: EISDIR): the fd then reads by its path. A refusal
    * (EACCES, EMFILE, …) is the open's.
    */
-  function openReadOnly(target, pathArg) {
+  function openHeld(target, pathArg, options = { read: true }) {
     if (typeof ctx.sync?.open !== 'function') return null;
     let file;
     try {
-      file = ctx.sync.open(target, { read: true });
+      file = ctx.sync.open(target, options);
     } catch (err) {
       if (OPEN_REFUSALS.has(err?.code)) throw nodeFsError(err.code, 'open', pathArg, err);
       return null;
@@ -630,16 +630,17 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
   }
 
   function writeBytesAtPath(ent, bytes, filePosition) {
-    const inPlace = writesInPlace && openInPlace(ent.path, { write: true, append: ent.append ?? String(ent.flags).includes('a') });
+    const inPlace = writesInPlace && writableFileOf(ent, ent.append ?? String(ent.flags).includes('a'));
     if (inPlace) {
       try {
         const pos = inPlace.append ? inPlace.file.size() : filePosition == null ? ent.pos : filePosition;
         const n = inPlace.file.write(pos, bytes);
         const written = typeof n === 'number' ? n : bytes.length;
         if (filePosition == null) ent.pos = pos + written;
+        if (inPlace.held) inPlace.file.sync();
         return written;
       } finally {
-        inPlace.file.close();
+        if (!inPlace.held) inPlace.file.close();
       }
     }
     let cur = new Uint8Array(0);
@@ -855,6 +856,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       if (err?.code === 'ENOENT') return null;
       throw err;
     }
+  }
+
+  function writableFileOf(ent, append = false) {
+    if (ent.file && ent.writable) return { file: ent.file, append, held: true };
+    return openInPlace(ent.path, { write: true, append });
   }
 
   /**
@@ -1322,7 +1328,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         let end = null;
         if (ent) {
           try {
-            end = syncFs.stat(ent.path).size ?? 0;
+            end = ent.file ? ent.file.size() : (syncFs.stat(ent.path).size ?? 0);
           } catch {
             end = 0;
           }
@@ -1573,7 +1579,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
           pos = 0;
         }
       }
-      const ranged = fl.writable ? null : openReadOnly(target, pathArg);
+      const ranged = !fl.writable
+        ? openHeld(target, pathArg)
+        : writesInPlace
+          ? openHeld(target, pathArg, { read: !!fl.readable, write: true, append: !!fl.append })
+          : null;
       const fd = nextFd++;
       fdTable.set(fd, {
         path: target,
@@ -1661,7 +1671,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       try {
         return writeBytesAtPath(ent, bytes, filePosition);
       } catch (err) {
-        throw nodeFsError(err?.code || 'EIO', 'write', ent.path, err);
+        throw nodeFsError(err?.code || 'EIO', 'write', undefined, err);
       }
     },
     fstatSync(fd, options) {
@@ -1681,12 +1691,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       const ent = fdTable.get(fd);
       if (!ent) throw nodeFsError('EBADF', 'ftruncate', undefined);
       try {
-        const inPlace = writesInPlace && openInPlace(ent.path, { write: true });
+        const inPlace = writesInPlace && writableFileOf(ent);
         if (inPlace) {
           try {
             inPlace.file.truncate(len);
+            if (inPlace.held) inPlace.file.sync();
           } finally {
-            inPlace.file.close();
+            if (!inPlace.held) inPlace.file.close();
           }
           return;
         }
@@ -1699,7 +1710,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         }
         syncFs.writeFile(ent.path, cur);
       } catch (err) {
-        throw nodeFsError(err?.code || 'EIO', 'ftruncate', ent.path, err);
+        throw nodeFsError(err?.code || 'EIO', 'ftruncate', undefined, err);
       }
     },
     closeSync(fd) {

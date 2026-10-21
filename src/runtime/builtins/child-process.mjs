@@ -794,7 +794,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
         })().catch(() => {})
       );
     }
-    child._stdioPumps = Promise.all(pumps);
+    child._stdioPumps = Promise.all(pumps).finally(() => files.forEach((f, i) => i > 0 && f?.release?.()));
   }
 
   function safeEmit(child, event, ...args) {
@@ -893,10 +893,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     // Node); spawn() held it open, and it is let go once the child has it.
     const direct = files.map((f) => (f?.release && f.kernelFd != null ? f.kernelFd : null));
     const served = files.map((f, i) => (direct[i] != null ? null : f));
-    // A file served here (stdin fed from its kernel descriptor) is let go
-    // once it has been read, in connectStdio; a device once the child has it.
+    // A file served here is let go in connectStdio (stdin once it has been
+    // read, output once all of it is written); a device once the child has it.
     const releaseDirect = () => files.forEach((f, i) => direct[i] != null && f?.release?.());
-    const releaseServedOutput = () => served.forEach((f, i) => i > 0 && f?.release?.());
     const request = {
       argv,
       cwd,
@@ -1024,7 +1023,6 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       }
       closePair(false);
       releaseDirect();
-      releaseServedOutput();
       child._bindKernel(kernelChild);
       child.stdout?._sliccHold?.();
       child.stderr?._sliccHold?.();
@@ -1038,10 +1036,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     inflightSpawns.add(spawnPromise);
     const settled = () => inflightSpawns.delete(spawnPromise);
     spawnPromise.then(settled, settled);
-    spawnPromise.then(() => {
-      releaseDirect();
-      releaseServedOutput();
-    }, releaseAll);
+    spawnPromise.then(releaseDirect, releaseAll);
     spawnPromise.then((kernelChild) => {
       child._bindKernel(kernelChild);
       run(kernelChild);
