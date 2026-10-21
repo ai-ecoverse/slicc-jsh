@@ -2,7 +2,7 @@
  * node:http over net (ctx.net loopback) + IncomingMessage / ServerResponse.
  */
 import { trackPromise } from '../async-handles.mjs';
-import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, nodeError, validateInteger, validateString } from '../node-errors.mjs';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE, nodeError, validateInteger, validateString } from '../node-errors.mjs';
 import { EventEmitter } from './events.mjs';
 import { createFetchClient, isLoopbackHost, kIncomingDestroy, kIncomingRead } from './http-fetch.mjs';
 import { queueMicrotask, resourceHere, runInResource } from '../async-context.mjs';
@@ -235,6 +235,23 @@ function indexOfBytes(haystack, needle, from = 0) {
 const HEAD_SEP = new Uint8Array([13, 10, 13, 10]); // \r\n\r\n
 
 /** Parse HTTP/1.x head from a byte buffer; returns null if incomplete. */
+function framingError(rawHeaders, packet, bytesParsed) {
+  let lengths = 0;
+  let chunked = false;
+  let reason = null;
+  let code = null;
+  for (let i = 0; i < rawHeaders.length && !code; i += 2) {
+    const key = String(rawHeaders[i]).toLowerCase();
+    if (key === 'transfer-encoding') chunked = true;
+    if (key !== 'content-length') continue;
+    if (++lengths > 1) [code, reason] = ['HPE_UNEXPECTED_CONTENT_LENGTH', 'Duplicate Content-Length'];
+    else if (!/^\d+$/.test(rawHeaders[i + 1])) [code, reason] = ['HPE_INVALID_CONTENT_LENGTH', 'Invalid character in Content-Length'];
+  }
+  if (!code && lengths && chunked) [code, reason] = ['HPE_INVALID_TRANSFER_ENCODING', "Transfer-Encoding can't be present with Content-Length"];
+  if (!code) return null;
+  return Object.assign(new Error(`Parse Error: ${reason}`), { bytesParsed, code, reason, rawPacket: packet });
+}
+
 function parseHead(buf, Buffer) {
   const bytes = buf instanceof Uint8Array ? buf : Buffer.from(buf);
   const idx = indexOfBytes(bytes, HEAD_SEP);
@@ -254,8 +271,10 @@ function parseHead(buf, Buffer) {
     if (colon === -1) continue;
     rawHeaders.push(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
   }
+  const error = framingError(rawHeaders, bytes, idx + 4);
   if (m) {
     return {
+      error,
       kind: 'request',
       method: m.groups.method,
       url: m.groups.url,
@@ -266,6 +285,7 @@ function parseHead(buf, Buffer) {
   }
   if (statusM) {
     return {
+      error,
       kind: 'response',
       statusCode: Number(statusM.groups.status),
       // As the server sent it (Node's parser doesn't look it up).
@@ -326,7 +346,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
   const nop = () => {};
 
   function IncomingMessage(socket) {
-    Readable.call(this, socket?.readableHighWaterMark ? { highWaterMark: socket.readableHighWaterMark } : undefined);
+    Readable.call(this, socket ? { highWaterMark: socket.readableHighWaterMark } : undefined);
     this.socket = socket;
     this.httpVersionMajor = null;
     this.httpVersionMinor = null;
@@ -797,9 +817,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       if (typeof statusMessage === 'string') this.statusMessage = statusMessage;
       else if (statusMessage && typeof statusMessage === 'object') headers = statusMessage;
       if (Array.isArray(headers)) {
-        for (let i = 0; i + 1 < headers.length; i += 2) this.appendHeader(headers[i], headers[i + 1]);
+        const flat = !this[kOutHeaders] && Array.isArray(headers[0]) ? headers.flat() : headers;
+        if (flat.length % 2 !== 0) throw ERR_INVALID_ARG_VALUE('headers', headers);
+        for (let i = 0; i < flat.length; i += 2) this.removeHeader(flat[i]);
+        for (let i = 0; i < flat.length; i += 2) if (flat[i]) this.appendHeader(flat[i], flat[i + 1]);
       } else if (headers) {
-        for (const [k, v] of Object.entries(headers)) this.setHeader(k, v);
+        for (const [k, v] of Object.entries(headers)) if (k) this.setHeader(k, v);
       }
       return this;
     },
@@ -1045,6 +1068,19 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         return;
       }
       if (parsed.kind !== 'request') return;
+      if (parsed.error) {
+        socket.off('data', onData);
+        if (server.listenerCount('clientError') > 0) {
+          server.emit('clientError', parsed.error, socket);
+          return;
+        }
+        try {
+          socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n', destroy);
+        } catch {
+          destroy();
+        }
+        return;
+      }
       // The headers are in: headersTimeout is done, the body has requestTimeout.
       clearTimeout(headersTimer);
       headersTimer = null;
@@ -1846,6 +1882,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (parsed.kind !== 'response') {
           this.emit('error', new Error(parsed.message ?? 'Parse Error'));
           socket.destroy();
+          return;
+        }
+        if (parsed.error) {
+          emitted = true;
+          quietClose();
+          emitError(this, parsed.error);
+          if (!this.destroyed) this.destroy();
           return;
         }
         const headers = headerObj(parsed.rawHeaders);

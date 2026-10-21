@@ -31,10 +31,10 @@ const FETCH_OWNED = new Set([
   'proxy-connection',
 ]);
 
-/** Methods the Fetch standard forbids (a Request with one throws). */
 export const kIncomingRead = Symbol('kIncomingRead');
 export const kIncomingDestroy = Symbol('kIncomingDestroy');
 
+/** Methods the Fetch standard forbids (a Request with one throws). */
 const FETCH_FORBIDDEN_METHODS = new Set(['CONNECT', 'TRACE', 'TRACK']);
 
 function unsupported(what, host) {

@@ -262,6 +262,8 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - `OutgoingMessage` has Node's header API: `setHeader` (with Node's checks), `appendHeader`, `setHeaders`, `getHeader`, `getHeaders`, `getHeaderNames`, `getRawHeaderNames`, `hasHeader`, `removeHeader`, `addTrailers`, and the `writable*`, `headersSent` and `errored` getters. A value is kept as given (`getHeader` of a number is the number).
 - `ClientRequest` has `setNoDelay`, `setSocketKeepAlive` and `clearTimeout` (superagent calls them), and `req.socket` once it has one. `http.Server()` and `http.Agent()` work without `new`.
 - The `headers` of a request and of a response join a repeated field as Node does (`, `, `; ` for `cookie`; `set-cookie` is a list).
+- As with Node 22's llhttp, a repeated `Content-Length`, one that isn't a number, or `Content-Length` with `Transfer-Encoding` is a parse error (`HPE_UNEXPECTED_CONTENT_LENGTH`, `HPE_INVALID_CONTENT_LENGTH`, `HPE_INVALID_TRANSFER_ENCODING`). A server emits `'clientError'`, or with no listener answers `400 Bad Request` and closes; a client request gets `'error'` (golden `http-content-length-framing-node22`).
+- `writeHead` with a list of headers replaces those names first and keeps repeats within the list, as Node's does; a list of an odd length throws `ERR_INVALID_ARG_VALUE`.
 - Not there: `_addHeaderLine` and its kin, `writeEarlyHints`, `writeProcessing`, the deprecated `_headers`/`_headerNames`, and `https.Agent`'s session cache. `res.writeHead()` doesn't render the head yet, so an `end(body)` after it is sent with a `Content-Length`, where Node's is chunked.
 - `https.Server` throws `ERR_NOT_SUPPORTED`, as `https.createServer` does.
 

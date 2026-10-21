@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#726: a request or response with a repeated Content-Length, a Content-Length that isn't a number, or both Content-Length and Transfer-Encoding is a parse error, as in Node 22's llhttp: the server answers 400 and closes, or emits clientError when it has a listener, and the client request gets the error; repeated fields join as Node's",
+  "argv": ["main.js"],
+  "shim": true
+}

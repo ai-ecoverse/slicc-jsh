@@ -123,12 +123,57 @@ function live() {
       cres.on('data', (chunk) => (data += chunk));
       cres.on('end', () => {
         console.log('client body', data);
-        srv.close(() => console.log('closed'));
+        srv.close(() => {
+          console.log('closed');
+          writeHeads();
+        });
       });
     });
     console.log('request', creq instanceof http.ClientRequest, creq instanceof http.OutgoingMessage, P(creq) === http.ClientRequest.prototype);
     creq.setNoDelay(true);
     creq.setSocketKeepAlive(false);
     creq.end('hello');
+  });
+}
+
+function writeHeads() {
+  const cases = {
+    '/merge': (res) => {
+      res.setHeader('Set-Cookie', 'a=1');
+      res.setHeader('X-Keep', 'k');
+      res.writeHead(200, ['Set-Cookie', 'b=2', 'Set-Cookie', 'c=3', 'X-New', 'n', 'Content-Length', '4']);
+    },
+    '/pairs': (res) => res.writeHead(200, [['X-P', '1'], ['X-Q', '2'], ['Content-Length', '4']]),
+    '/odd': (res) => res.writeHead(200, ['X-A']),
+    '/pairs-after': (res) => {
+      res.setHeader('X-Old', 'o');
+      res.writeHead(200, [['X-P', '1']]);
+    },
+    '/object': (res) => {
+      res.setHeader('X-Old', 'o');
+      res.writeHead(201, 'Made', { 'X-Old': 'replaced', 'X-More': ['1', '2'], 'Content-Length': '4' });
+    },
+  };
+  const srv = http.createServer((req, res) => {
+    try {
+      cases[req.url](res);
+    } catch (err) {
+      console.log(`writeHead ${req.url} throws ${err.code}`);
+      res.statusCode = 500;
+      res.statusMessage = 'Failed';
+    }
+    res.end('done');
+  });
+  srv.listen(0, '127.0.0.1', async () => {
+    for (const path of Object.keys(cases)) {
+      const out = await new Promise((resolve) => {
+        const socket = net.connect(srv.address().port, '127.0.0.1', () => socket.write(`GET ${path} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`));
+        let data = '';
+        socket.on('data', (d) => (data += d));
+        socket.on('close', () => resolve(data.replace(/Date: [^\r]*\r\n/, '')));
+      });
+      console.log(`writeHead ${path} ${JSON.stringify(out)}`);
+    }
+    srv.close();
   });
 }
