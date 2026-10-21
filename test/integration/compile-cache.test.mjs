@@ -3,11 +3,11 @@
  * cache directory, the kernel's process workers keep V8's compiled jsh bundle
  * there and later processes and threads reuse it. jsh behaves the same cold,
  * warm, in a fresh kernel on the same cache, and when the directory can't be
- * written (the kernel then just doesn't cache).
+ * created (the kernel then just doesn't cache).
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
@@ -31,7 +31,8 @@ w.on('message', (n) => {
 });
 `;
 
-const files = (dir) => readdirSync(dir, { recursive: true }).filter((f) => !f.endsWith('/'));
+// The cache's files, not its directories: a directory alone isn't a compiled bundle.
+const files = (dir) => readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile());
 
 describe('compileCache: jsh runs the same with the kernel caching its compiled bundle', { skip }, () => {
   let dir;
@@ -46,10 +47,7 @@ describe('compileCache: jsh runs the same with the kernel caching its compiled b
     assert.match(plain.stdout, /worker 42\nesm 7\n$/);
     assert.match(plain.stderr, /TypeError: boom\n {4}at thrower \(\/os\/p\.js:10:/);
   });
-  after(() => {
-    chmodSync(dir, 0o700);
-    rmSync(dir, { recursive: true, force: true });
-  });
+  after(() => rmSync(dir, { recursive: true, force: true }));
 
   it('cold, warm and in a fresh kernel on the same cache: the same output, and the cache is used', async () => {
     const first = await withJsh({ compileCache: dir });
@@ -67,19 +65,21 @@ describe('compileCache: jsh runs the same with the kernel caching its compiled b
     }
   });
 
-  it("a cache directory that can't be written: the kernel doesn't cache, and jsh runs the same", async () => {
-    const locked = mkdtempSync(join(tmpdir(), 'jsh-compile-cache-ro-'));
-    chmodSync(locked, 0o500);
+  it("a cache directory that can't be created: the kernel doesn't cache, and jsh runs the same", async () => {
+    // Under a regular file, so not even root can make it (a mode can't stop root).
+    const parent = mkdtempSync(join(tmpdir(), 'jsh-compile-cache-ro-'));
+    const blocker = join(parent, 'a-file');
+    writeFileSync(blocker, '');
     try {
-      const jsh = await withJsh({ compileCache: locked });
+      const jsh = await withJsh({ compileCache: join(blocker, 'cache') });
       await jsh.kernel.writeFile('/os/p.js', PROGRAM);
       const r = await jsh.run(['node', 'p.js']);
       await jsh.close();
       assert.deepEqual({ status: r.status, stdout: r.stdout, stderr: r.stderr }, { status: plain.status, stdout: plain.stdout, stderr: plain.stderr });
-      assert.deepEqual(files(locked), []);
+      assert.equal(statSync(blocker).isFile(), true);
+      assert.deepEqual(readdirSync(parent), ['a-file']);
     } finally {
-      chmodSync(locked, 0o700);
-      rmSync(locked, { recursive: true, force: true });
+      rmSync(parent, { recursive: true, force: true });
     }
   });
 });
