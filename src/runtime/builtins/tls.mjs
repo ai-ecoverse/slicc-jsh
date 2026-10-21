@@ -27,6 +27,7 @@ import { deprecate } from './util.mjs';
 import { kConnectTls, kDetach, kIoError, kStartNow, kStartTls, kTlsSession } from './net.mjs';
 import { certificateObject, isIssuedBy, likelyIssued, parseCertificate } from './x509.mjs';
 import { kernelAtLeast } from '../kernel-version.mjs';
+import { lockedKeyError } from './tls-key.mjs';
 
 // tls.connect's options on its socket (Node's kConnectOptions).
 const kConnectOptions = Symbol('slicc-jsh.tls.connectOptions');
@@ -58,15 +59,33 @@ const OSSL_ERRORS = {
     ],
   ],
   ERR_OSSL_UNSUPPORTED: ['DECODER routines', 'unsupported', 'error:1E08010C'],
+  ERR_OSSL_EVP_UNSUPPORTED_KEYLENGTH: [
+    'digital envelope routines',
+    'unsupported keylength',
+    'error:0300007B',
+    ['error:0300007B:digital envelope routines::unsupported keylength'],
+  ],
+  ERR_OSSL_CRYPTO_PARAM_UNSIGNED_INTEGER_NEGATIVE_VALUE_UNSUPPORTED: [
+    'common libcrypto routines',
+    'param unsigned integer negative value unsupported',
+    'error:0780007D',
+    ['error:0780007D:common libcrypto routines::param unsigned integer negative value unsupported'],
+  ],
+  ERR_OSSL_INVALID_ITERATION_COUNT: [
+    'Provider routines',
+    'invalid iteration count',
+    'error:1C80007B',
+    ['error:1C80007B:Provider routines::invalid iteration count'],
+  ],
   ERR_OSSL_X509_KEY_VALUES_MISMATCH: ['x509 certificate routines', 'key values mismatch', 'error:05800074'],
   ERR_OSSL_PEM_NO_START_LINE: ['PEM routines', 'no start line', 'error:0480006C'],
   ERR_OSSL_PEM_BAD_END_LINE: ['PEM routines', 'bad end line', 'error:04800066'],
 };
 
-function osslError(code) {
-  const [library, reason, id, stack] = OSSL_ERRORS[code];
+function osslError(code, stack = OSSL_ERRORS[code][3]) {
+  const [library, reason, id] = OSSL_ERRORS[code];
   const err = new Error(`${id}:${library}::${reason}`);
-  if (stack) err.opensslErrorStack = [...stack];
+  if (stack?.length) err.opensslErrorStack = [...stack];
   return Object.assign(err, { library, reason, code });
 }
 
@@ -611,9 +630,11 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       const pass = keys[0]?.passphrase !== undefined ? keys[0].passphrase : options.passphrase;
       validateKeyOrCertOption(`${name}.key`, pem);
       if (pass !== undefined && pass !== null) validateString(pass, `${name}.passphrase`);
-      // What isn't a key at all fails here, as in Node; a passphrase or a
-      // key that doesn't match the certificate, at connect (the kernel's).
+      // What isn't a key at all, a DER key and a wrong passphrase fail here,
+      // as in Node; a key that doesn't match the certificate, at connect (the kernel's).
       if (!isKeyMaterial(pem)) throw osslError('ERR_OSSL_UNSUPPORTED');
+      const locked = lockedKeyError(pem, pass ?? '', getCrypto(), Buffer);
+      if (locked) throw osslError(locked.code, locked.stack);
       context[kOwnKey] = { key: pem, ...(pass !== undefined && pass !== null ? { passphrase: pass } : {}) };
     }
     if (sigalgs !== undefined && sigalgs !== null) {
@@ -665,9 +686,8 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     return /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/.test(text) ? undefined : 'ERR_OSSL_PEM_BAD_END_LINE';
   }
 
-  /** A key as PEM (PKCS#8, encrypted or not, PKCS#1 or SEC1) or DER: what the kernel reads. */
+  /** A key as PEM (PKCS#8, encrypted or not, PKCS#1 or SEC1): what Node's tls reads. */
   function isKeyMaterial(key) {
-    if (typeof key !== 'string' && key[0] === 0x30) return true;
     const text = typeof key === 'string' ? key : Buffer.from(key.buffer, key.byteOffset, key.byteLength).toString('latin1');
     return /-----BEGIN (?:RSA |EC |ENCRYPTED )?PRIVATE KEY-----/.test(text);
   }
