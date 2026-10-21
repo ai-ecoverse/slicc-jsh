@@ -420,8 +420,9 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       this.stderr.push(null);
       this[kPublicPort]._remoteClosed();
       handles.delete(this.#handle);
-      // After the last of the worker's messages and output.
-      setImmediate(() => {
+      // After the last of the worker's messages and output, on jsh's own
+      // timers (not the program's setImmediate, which it may replace).
+      process._builtin('timers').setImmediate(() => {
         this.emit('exit', code);
         for (const resolve of this.#exitWaiters.splice(0)) resolve(code);
       });

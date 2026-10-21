@@ -1,0 +1,1 @@
+{ "description": "a Worker emits its exit without the global setImmediate: a program that removes it still gets its worker message and exit, and ends", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }
