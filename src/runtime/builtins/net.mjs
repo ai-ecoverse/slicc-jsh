@@ -667,6 +667,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
   }
 
+  class TCP {
+    constructor(fd) {
+      this.reading = false;
+      this.fd = fd;
+    }
+  }
+
   class Server extends EventEmitter {
     #listener;
     #listening = false;
@@ -682,7 +689,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     // In a cluster worker: the primary's key and address for this server.
     #clusterKey;
     #clusterAddress;
-    listening = false;
+    #unref = false;
+    _handle = null;
     maxConnections = Infinity;
 
     constructor(options, connectionListener) {
@@ -701,9 +709,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       if (!this.#listener) return null;
       if (this.#clusterAddress) return { ...this.#clusterAddress };
       return {
-        port: this.#listener.port,
-        family: 'IPv4',
         address: this.#listener.host || '127.0.0.1',
+        family: 'IPv4',
+        port: this.#listener.port,
       };
     }
 
@@ -723,6 +731,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       }
       if (parsed.callback) this.once('listening', parsed.callback);
 
+      this.#closed = false;
       this.#acceptAbort = new AbortController();
       const host = parsed.host ?? '127.0.0.1';
       const port = parsed.port ?? 0;
@@ -767,7 +776,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           .then((listener) => {
             this.#pendingListens.delete(listening);
             if (!listener) return;
-            if (this.#closed) {
+            if (this.#closed || this.#takenOver.has(listening)) {
               // Closed meanwhile: close() closes it (and frees its port) if
               // it took this listen() over, else it's closed here.
               if (!this.#takenOver.has(listening)) closeQuietly(listener);
@@ -780,9 +789,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             }
             this.#listener = listener;
             this.#listening = true;
-            this.listening = true;
+            this._handle = new TCP(listener.fd);
             this.#handle = { kind: 'server', fd: listener.fd };
-            handles.add(this.#handle);
+            if (!this.#unref) handles.add(this.#handle);
             try {
               this.emit('listening');
             } catch (err) {
@@ -809,7 +818,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       const resource = resourceHere();
       try {
         for (;;) {
-          if (this.#closed) break;
+          if (this.#closed || this.#listener !== listener) break;
           // The server's handle keeps the loop alive (or not, unref'd): a
           // pending accept is not a handle of its own.
           const conn = await listener.accept({ signal: this.#acceptAbort.signal });
@@ -821,7 +830,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           handles.notify();
         }
       } catch (err) {
-        if (!this.#closed && err?.name !== 'AbortError') {
+        if (!this.#closed && this.#listener === listener && err?.name !== 'AbortError') {
           runInResource(resource, this.emit, this, ['error', errnoError(err, 'accept')]);
         }
       }
@@ -835,7 +844,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       }
       this.#closed = true;
       this.#listening = false;
-      this.listening = false;
+      this._handle = null;
       if (this.#clusterKey !== undefined) {
         process?._clusterWorker?._closeServer(this.#clusterKey);
         this.#clusterKey = undefined;
@@ -898,10 +907,12 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     ref() {
+      this.#unref = false;
       if (this.#handle) handles.add(this.#handle);
       return this;
     }
     unref() {
+      this.#unref = true;
       if (this.#handle) handles.delete(this.#handle);
       return this;
     }
@@ -912,6 +923,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       return this;
     }
   }
+
+  Object.defineProperty(Server.prototype, 'listening', {
+    get() {
+      return !!this._handle;
+    },
+    configurable: true,
+    enumerable: true,
+  });
 
   function createServer(options, connectionListener) {
     return new Server(options, connectionListener);

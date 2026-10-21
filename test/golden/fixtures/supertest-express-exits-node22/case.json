@@ -1,0 +1,6 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#723: supertest 7 against an Express app closes the server it starts once the last request has settled (it checks server._handle), so the program exits by itself after its results; a shared factory, an agent with a cookie, a failed expectation, end(cb), and a server the caller listens on itself",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["express", "supertest"]
+}
