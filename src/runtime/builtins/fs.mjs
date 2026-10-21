@@ -834,6 +834,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
 
   const kernelRefusesDev = kernelAtLeast(ctx, '1.93.0');
   const mkdirRootEio = kernelAtLeast(ctx, '1.93.0') && !kernelAtLeast(ctx, '1.94.1');
+  const appendsInPlace = typeof ctx.sync?.open === 'function' && kernelAtLeast(ctx, '1.143.4');
 
   /**
    * A removal the kernel answered ENOENT for, of an entry that is still there
@@ -1303,6 +1304,15 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       try {
         let prev = new Uint8Array(0);
         existed = syncFs.exists(target);
+        if (existed && appendsInPlace) {
+          const file = ctx.sync.open(target, { write: true, append: true });
+          try {
+            file.write(file.size(), next);
+          } finally {
+            file.close();
+          }
+          return;
+        }
         if (existed) prev = syncFs.readFile(target);
         const merged = new Uint8Array(prev.length + next.length);
         merged.set(prev);

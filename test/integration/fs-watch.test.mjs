@@ -128,7 +128,7 @@ describe('fs.watch in the kernel', needs, () => {
     await jsh.kernel.writeFile('/tmp/parent/dir/stop', '');
     const r = await run;
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(await read('/tmp/parent.log'), 'watching\nfile change f.txt\ndir rename stop\n');
+    assert.equal(await read('/tmp/parent.log'), `watching\n${kernelAtLeast('1.143.4') ? 'file change f.txt\n' : ''}file change f.txt\ndir rename stop\n`);
   });
 
   it('an AbortSignal aborted on an outside change closes the watcher; nothing comes after close()', async () => {
