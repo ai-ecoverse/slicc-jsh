@@ -1688,7 +1688,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
           } finally {
             inPlace.file.close();
           }
-          if (ent.pos > len) ent.pos = len;
           return;
         }
         let cur = syncFs.readFile(ent.path);
@@ -1699,7 +1698,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
           cur = out;
         }
         syncFs.writeFile(ent.path, cur);
-        if (ent.pos > len) ent.pos = len;
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'ftruncate', ent.path, err);
       }

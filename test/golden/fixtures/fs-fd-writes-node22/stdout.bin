@@ -7,6 +7,7 @@ a buffer slice at 0 "12ZWef\u0000\u0000\u0000\u0000Q" 11
 ftruncate shorter "12ZW" 4
 ftruncate longer "12ZW\u0000\u0000" 6
 ftruncate -1 "" 0
+ftruncate below the position, then a write "abcd\u0000\u0000XYZ" 9
 writeFileSync 'r+' "xyllo" 5
 'r+' on a missing file ENOENT open
 a read-only descriptor EBADF write
