@@ -92,6 +92,21 @@ setTimeout(() => {
   file.close();
   dir.close();
 
+  fs.mkdirSync(at('y', 'w'), { recursive: true });
+  const child = watch('dir', at('y', 'w'));
+  const parent = watch('parent', at('y'));
+  await step('a directory watched before its parent: the directory removed', () => fs.rmdirSync(at('y', 'w')));
+  child.close();
+  parent.close();
+
+  fs.mkdirSync(at('z', 'w', 'w'), { recursive: true });
+  const same = watch('', at('z', 'w'));
+  await step('a directory with an entry of its own name: both removed', () => {
+    fs.rmdirSync(at('z', 'w', 'w'));
+    fs.rmdirSync(at('z', 'w'));
+  });
+  same.close();
+
   sentinel.close();
   fs.rmSync(root, { recursive: true });
   console.log('done');

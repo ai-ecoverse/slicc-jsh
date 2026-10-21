@@ -28,4 +28,8 @@ A rename n.txt, B rename n.txt, A change n.txt, B change n.txt
 dir change v.txt, file change v.txt, dir change v.txt, file change v.txt
 -- a file and its directory: append
 dir change v.txt, file change v.txt
+-- a directory watched before its parent: the directory removed
+parent rename w, dir rename w, dir rename w
+-- a directory with an entry of its own name: both removed
+rename w, rename w, rename w
 done
