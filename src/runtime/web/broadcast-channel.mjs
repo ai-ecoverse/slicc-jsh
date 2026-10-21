@@ -36,6 +36,8 @@ const kPortMark = '\u0000slicc-jsh port';
 // random source is taken before the program runs, which can't replace it.
 const randomUUID = typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID.bind(globalThis.crypto) : null;
 const random = Math.random;
+const dateNow = Date.now;
+const clock = () => call(dateNow, Date);
 // A Map's and a Set's own entries, as structured clone reads them: by the
 // builtins (a program's own iterator, set or add on one isn't run), taken
 // before the program runs, as is how they're called.
@@ -165,14 +167,15 @@ export function createPorts({
     if (timerAt != null) checkAt = timerAt;
     else {
       let idle = 0;
+      let hops = 0;
       const mark = () => {
-        const now = Date.now();
+        const now = clock();
         if (now === checkAt) idle += 1;
         else {
           checkAt = now;
           idle = 0;
         }
-        if (idle < 4) queueMicrotask(mark);
+        if (idle < 4 && ++hops < 1000) queueMicrotask(mark);
       };
       queueMicrotask(mark);
     }

@@ -1,0 +1,6 @@
+{
+  "description": "A program that replaces Date.now with a clock that never repeats still gets its port messages, immediates and timers, as in Node 22: jsh's watch for the end of the posting task's microtasks uses its own clock",
+  "kernel": "1.92.0",
+  "argv": ["script.js"],
+  "shim": true
+}
