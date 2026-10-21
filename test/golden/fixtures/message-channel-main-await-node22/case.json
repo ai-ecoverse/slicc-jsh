@@ -1,0 +1,6 @@
+{
+  "description": "Posts from a microtask of the main script, then long work behind two awaits (#565, #593): the timer that came due during that work runs before the message turn, as in Node 22",
+  "kernel": "1.92.0",
+  "argv": ["script.js"],
+  "shim": true
+}
