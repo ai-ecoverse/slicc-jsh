@@ -328,7 +328,7 @@ export function createResolver({
     throw moduleNotFound(request, stack);
   }
 
-  return { resolve, tryFile, loadAsDirectory };
+  return { resolve, tryFile, loadAsDirectory, loadAsFileOrDir };
 }
 
 /** A bare specifier's package name (`@scope/name` or `name`). */

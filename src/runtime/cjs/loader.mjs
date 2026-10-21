@@ -588,6 +588,8 @@ export function createCjs({
       if (resolved.type === 'builtin') return builtins.load(resolved.id);
       return loadFile(resolved.filename, preloadParent);
     },
+    /** The entry's file (an absolute path): as given, else with an extension, or a directory's main; null when there is none. */
+    resolveMain: (filename) => resolver.loadAsFileOrDir(filename),
     setRequireEsmHook,
     setImportModuleHook,
     findPackageType,

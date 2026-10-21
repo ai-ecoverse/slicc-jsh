@@ -172,6 +172,19 @@ function finalizeProps(props) {
   return p;
 }
 
+const MAIN_NOT_FOUND_FRAMES = [
+  'Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)',
+  'defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)',
+  'resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)',
+  'Function._load (node:internal/modules/cjs/loader:1192:37)',
+  'TracingChannel.traceSync (node:diagnostics_channel:328:14)',
+  'wrapModuleLoad (node:internal/modules/cjs/loader:237:24)',
+  'Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)',
+  'node:internal/main/run_main_module:36:49',
+]
+  .map((frame) => `    at ${frame}`)
+  .join('\n');
+
 function glueStackAndProps(stack, props) {
   const frames = stack.replace(/\n+$/, '');
   if (!props) return frames;
@@ -244,8 +257,10 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPro
   if (err.code === 'MODULE_NOT_FOUND') {
     head = `node:internal/modules/cjs/loader:1386\n  throw err;\n  ^\n\n`;
     const rs = err.requireStack?.[0];
-    // The requiring file's frame (internal/preload's are Node's own).
-    const stackLine = rs?.startsWith('/') ? `    at Object.<anonymous> (${rs}:1:1)` : '';
+    // The requiring file's frame (internal/preload's are Node's own); a
+    // missing entry's are Node 22.22's, its loader finding the main.
+    const requirerLine = rs?.startsWith('/') ? `    at Object.<anonymous> (${rs}:1:1)` : '';
+    const stackLine = err.mainEntry ? MAIN_NOT_FOUND_FRAMES : requirerLine;
     // Node's inspect of the error, its defaults: a require stack that fits
     // on a line is one (`[ '/x.js' ]`).
     const inspected = sanitizeInspected(util.inspect(err, { depth: 10 }));

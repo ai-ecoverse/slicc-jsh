@@ -8,6 +8,7 @@ import nodeInspect from 'node-inspect-extracted';
 import { createBuffer } from './buffer.mjs';
 import { createUtil } from './builtins/util.mjs';
 import { createCjs } from './cjs/loader.mjs';
+import { moduleNotFound } from './cjs/errors.mjs';
 import { inputTypeOf, parseNodeArgv, workerCommandLine } from './cli.mjs';
 import { nodeError } from './node-errors.mjs';
 import { createEsm } from './esm/loader.mjs';
@@ -1117,10 +1118,19 @@ export async function runNode(ctx, options = {}) {
         }
       }
     } else if (parsed.mode === 'file') {
-      const filePath = ctx.resolve(parsed.script);
+      const filePath = ctx.resolve(parsed.script).replace(/(?<=.)\/+$/, '');
+      // Node's resolveMainPath: the entry as require() finds a file (an
+      // extension added, a directory's main); none is Node's loader's
+      // MODULE_NOT_FOUND, thrown before the program runs.
+      const entryPath = cjs.resolveMain(filePath);
+      if (entryPath == null) {
+        const err = moduleNotFound(filePath);
+        Object.defineProperty(err, 'mainEntry', { value: true });
+        return dieUncaught(() => printUncaught(err));
+      }
       let source;
       try {
-        source = decoder.decode(ctx.sync.fs.readFile(filePath));
+        source = decoder.decode(ctx.sync.fs.readFile(entryPath));
       } catch (err) {
         const msg = err?.message ?? String(err);
         await ctx.write(2, `${ctx.argv[0]}: cannot open ${parsed.script}: ${msg}\n`);
@@ -1130,7 +1140,7 @@ export async function runNode(ctx, options = {}) {
       // Node runs the entry from its real path (so its own requires, and a
       // require of itself, resolve as for any module); process.argv[1] keeps
       // the path as given. --preserve-symlinks-main keeps the link.
-      const mainPath = realMainPath(ctx, filePath, process._options);
+      const mainPath = realMainPath(ctx, entryPath, process._options);
       if (parsed.check) {
         // --check: compiled as the module it is, under its real path, never run.
         let kind = esm.isEsmFilename(mainPath, source) ? 'module' : 'commonjs';
