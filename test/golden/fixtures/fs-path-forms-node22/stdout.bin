@@ -1,0 +1,627 @@
+access str sync: undefined
+access str cb: undefined
+access str promise: undefined
+access buf sync: undefined
+access buf cb: undefined
+access buf promise: undefined
+access u8 sync: undefined
+access u8 cb: undefined
+access u8 promise: undefined
+access url sync: undefined
+access url cb: undefined
+access url promise: undefined
+appendFile "y" str sync: undefined f="abcy"
+appendFile "y" str cb: undefined f="abcy"
+appendFile "y" str promise: undefined f="abcy"
+appendFile "y" buf sync: undefined f="abcy"
+appendFile "y" buf cb: undefined f="abcy"
+appendFile "y" buf promise: undefined f="abcy"
+appendFile "y" u8 sync: undefined f="abcy"
+appendFile "y" u8 cb: undefined f="abcy"
+appendFile "y" u8 promise: undefined f="abcy"
+appendFile "y" url sync: undefined f="abcy"
+appendFile "y" url cb: undefined f="abcy"
+appendFile "y" url promise: undefined f="abcy"
+chmod 420 str sync: undefined mode=644
+chmod 420 str cb: undefined mode=644
+chmod 420 str promise: undefined mode=644
+chmod 420 buf sync: undefined mode=644
+chmod 420 buf cb: undefined mode=644
+chmod 420 buf promise: undefined mode=644
+chmod 420 u8 sync: undefined mode=644
+chmod 420 u8 cb: undefined mode=644
+chmod 420 u8 promise: undefined mode=644
+chmod 420 url sync: undefined mode=644
+chmod 420 url cb: undefined mode=644
+chmod 420 url promise: undefined mode=644
+chown -1 -1 str sync: undefined
+chown -1 -1 str cb: undefined
+chown -1 -1 str promise: undefined
+chown -1 -1 buf sync: undefined
+chown -1 -1 buf cb: undefined
+chown -1 -1 buf promise: undefined
+chown -1 -1 u8 sync: undefined
+chown -1 -1 u8 cb: undefined
+chown -1 -1 u8 promise: undefined
+chown -1 -1 url sync: undefined
+chown -1 -1 url cb: undefined
+chown -1 -1 url promise: undefined
+copyFile str sync: undefined d,f,g,l
+copyFile str cb: undefined d,f,g,l
+copyFile str promise: undefined d,f,g,l
+copyFile buf sync: undefined d,f,g,l
+copyFile buf cb: undefined d,f,g,l
+copyFile buf promise: undefined d,f,g,l
+copyFile u8 sync: undefined d,f,g,l
+copyFile u8 cb: undefined d,f,g,l
+copyFile u8 promise: undefined d,f,g,l
+copyFile url sync: undefined d,f,g,l
+copyFile url cb: undefined d,f,g,l
+copyFile url promise: undefined d,f,g,l
+cp {"recursive":true} str sync: undefined d2=x
+cp {"recursive":true} str cb: undefined d2=x
+cp {"recursive":true} str promise: undefined d2=x
+cp {"recursive":true} buf sync: undefined d2=x
+cp {"recursive":true} u8 sync: undefined d2=x
+cp {"recursive":true} url sync: undefined d2=x
+cp {"recursive":true} url cb: undefined d2=x
+cp {"recursive":true} url promise: undefined d2=x
+lchown -1 -1 str sync: undefined
+lchown -1 -1 str cb: undefined
+lchown -1 -1 str promise: undefined
+lchown -1 -1 buf sync: undefined
+lchown -1 -1 buf cb: undefined
+lchown -1 -1 buf promise: undefined
+lchown -1 -1 u8 sync: undefined
+lchown -1 -1 u8 cb: undefined
+lchown -1 -1 u8 promise: undefined
+lchown -1 -1 url sync: undefined
+lchown -1 -1 url cb: undefined
+lchown -1 -1 url promise: undefined
+lstat str sync: Stats(link 1)
+lstat str cb: Stats(link 1)
+lstat str promise: Stats(link 1)
+lstat buf sync: Stats(link 1)
+lstat buf cb: Stats(link 1)
+lstat buf promise: Stats(link 1)
+lstat u8 sync: Stats(link 1)
+lstat u8 cb: Stats(link 1)
+lstat u8 promise: Stats(link 1)
+lstat url sync: Stats(link 1)
+lstat url cb: Stats(link 1)
+lstat url promise: Stats(link 1)
+lutimes 1 2 str sync: undefined
+lutimes 1 2 str cb: undefined
+lutimes 1 2 str promise: undefined
+lutimes 1 2 buf sync: undefined
+lutimes 1 2 buf cb: undefined
+lutimes 1 2 buf promise: undefined
+lutimes 1 2 u8 sync: undefined
+lutimes 1 2 u8 cb: undefined
+lutimes 1 2 u8 promise: undefined
+lutimes 1 2 url sync: undefined
+lutimes 1 2 url cb: undefined
+lutimes 1 2 url promise: undefined
+mkdir str sync: undefined d,f,l,m
+mkdir str cb: undefined d,f,l,m
+mkdir str promise: undefined d,f,l,m
+mkdir buf sync: undefined d,f,l,m
+mkdir buf cb: undefined d,f,l,m
+mkdir buf promise: undefined d,f,l,m
+mkdir u8 sync: undefined d,f,l,m
+mkdir u8 cb: undefined d,f,l,m
+mkdir u8 promise: undefined d,f,l,m
+mkdir url sync: undefined d,f,l,m
+mkdir url cb: undefined d,f,l,m
+mkdir url promise: undefined d,f,l,m
+mkdir {"recursive":true} str sync: "m" d,f,l,m
+mkdir {"recursive":true} str cb: "m" d,f,l,m
+mkdir {"recursive":true} str promise: "m" d,f,l,m
+mkdir {"recursive":true} buf sync: "m" d,f,l,m
+mkdir {"recursive":true} buf cb: "m" d,f,l,m
+mkdir {"recursive":true} buf promise: "m" d,f,l,m
+mkdir {"recursive":true} u8 sync: "m" d,f,l,m
+mkdir {"recursive":true} u8 cb: "m" d,f,l,m
+mkdir {"recursive":true} u8 promise: "m" d,f,l,m
+mkdir {"recursive":true} url sync: "/W/m" d,f,l,m
+mkdir {"recursive":true} url cb: "/W/m" d,f,l,m
+mkdir {"recursive":true} url promise: "/W/m" d,f,l,m
+mkdtemp str sync: tmp(ok)
+mkdtemp str cb: tmp(ok)
+mkdtemp str promise: tmp(ok)
+mkdtemp buf sync: tmp(ok)
+mkdtemp buf cb: tmp(ok)
+mkdtemp buf promise: tmp(ok)
+mkdtemp u8 sync: tmp(ok)
+mkdtemp u8 cb: tmp(ok)
+mkdtemp u8 promise: tmp(ok)
+mkdtemp url sync: tmp(ok)
+mkdtemp url cb: tmp(ok)
+mkdtemp url promise: tmp(ok)
+mkdtemp "buffer" str sync: Buffer(tmp(ok))
+mkdtemp "buffer" str cb: Buffer(tmp(ok))
+mkdtemp "buffer" str promise: Buffer(tmp(ok))
+mkdtemp "buffer" buf sync: Buffer(tmp(ok))
+mkdtemp "buffer" buf cb: Buffer(tmp(ok))
+mkdtemp "buffer" buf promise: Buffer(tmp(ok))
+mkdtemp "buffer" u8 sync: Buffer(tmp(ok))
+mkdtemp "buffer" u8 cb: Buffer(tmp(ok))
+mkdtemp "buffer" u8 promise: Buffer(tmp(ok))
+mkdtemp "buffer" url sync: Buffer(tmp(ok))
+mkdtemp "buffer" url cb: Buffer(tmp(ok))
+mkdtemp "buffer" url promise: Buffer(tmp(ok))
+readdir str sync: ["x"]
+readdir str cb: ["x"]
+readdir str promise: ["x"]
+readdir buf sync: ["x"]
+readdir buf cb: ["x"]
+readdir buf promise: ["x"]
+readdir u8 sync: ["x"]
+readdir u8 cb: ["x"]
+readdir u8 promise: ["x"]
+readdir url sync: ["x"]
+readdir url cb: ["x"]
+readdir url promise: ["x"]
+readdir {"encoding":"buffer"} str sync: [Buffer(x)]
+readdir {"encoding":"buffer"} str cb: [Buffer(x)]
+readdir {"encoding":"buffer"} str promise: [Buffer(x)]
+readdir {"encoding":"buffer"} buf sync: [Buffer(x)]
+readdir {"encoding":"buffer"} buf cb: [Buffer(x)]
+readdir {"encoding":"buffer"} buf promise: [Buffer(x)]
+readdir {"encoding":"buffer"} u8 sync: [Buffer(x)]
+readdir {"encoding":"buffer"} u8 cb: [Buffer(x)]
+readdir {"encoding":"buffer"} u8 promise: [Buffer(x)]
+readdir {"encoding":"buffer"} url sync: [Buffer(x)]
+readdir {"encoding":"buffer"} url cb: [Buffer(x)]
+readdir {"encoding":"buffer"} url promise: [Buffer(x)]
+readdir {"withFileTypes":true} str sync: [Dirent("x" file "d")]
+readdir {"withFileTypes":true} str cb: [Dirent("x" file "d")]
+readdir {"withFileTypes":true} str promise: [Dirent("x" file "d")]
+readdir {"withFileTypes":true} buf sync: [Dirent("x" file Buffer(d))]
+readdir {"withFileTypes":true} buf cb: [Dirent("x" file Buffer(d))]
+readdir {"withFileTypes":true} buf promise: [Dirent("x" file Buffer(d))]
+readdir {"withFileTypes":true} u8 sync: [Dirent("x" file Uint8Array(d))]
+readdir {"withFileTypes":true} u8 cb: [Dirent("x" file Uint8Array(d))]
+readdir {"withFileTypes":true} u8 promise: [Dirent("x" file Uint8Array(d))]
+readdir {"withFileTypes":true} url sync: [Dirent("x" file "/W/d")]
+readdir {"withFileTypes":true} url cb: [Dirent("x" file "/W/d")]
+readdir {"withFileTypes":true} url promise: [Dirent("x" file "/W/d")]
+readdir {"recursive":true} str sync: ["x"]
+readdir {"recursive":true} str cb: ["x"]
+readdir {"recursive":true} str promise: ["x"]
+readdir {"recursive":true} url sync: ["x"]
+readdir {"recursive":true} url cb: ["x"]
+readdir {"recursive":true} url promise: ["x"]
+readFile str sync: Buffer(abc)
+readFile str cb: Buffer(abc)
+readFile str promise: Buffer(abc)
+readFile buf sync: Buffer(abc)
+readFile buf cb: Buffer(abc)
+readFile buf promise: Buffer(abc)
+readFile u8 sync: Buffer(abc)
+readFile u8 cb: Buffer(abc)
+readFile u8 promise: Buffer(abc)
+readFile url sync: Buffer(abc)
+readFile url cb: Buffer(abc)
+readFile url promise: Buffer(abc)
+readFile "utf8" str sync: "abc"
+readFile "utf8" str cb: "abc"
+readFile "utf8" str promise: "abc"
+readFile "utf8" buf sync: "abc"
+readFile "utf8" buf cb: "abc"
+readFile "utf8" buf promise: "abc"
+readFile "utf8" u8 sync: "abc"
+readFile "utf8" u8 cb: "abc"
+readFile "utf8" u8 promise: "abc"
+readFile "utf8" url sync: "abc"
+readFile "utf8" url cb: "abc"
+readFile "utf8" url promise: "abc"
+readlink str sync: "f"
+readlink str cb: "f"
+readlink str promise: "f"
+readlink buf sync: "f"
+readlink buf cb: "f"
+readlink buf promise: "f"
+readlink u8 sync: "f"
+readlink u8 cb: "f"
+readlink u8 promise: "f"
+readlink url sync: "f"
+readlink url cb: "f"
+readlink url promise: "f"
+readlink {"encoding":"buffer"} str sync: Buffer(f)
+readlink {"encoding":"buffer"} str cb: Buffer(f)
+readlink {"encoding":"buffer"} str promise: Buffer(f)
+readlink {"encoding":"buffer"} buf sync: Buffer(f)
+readlink {"encoding":"buffer"} buf cb: Buffer(f)
+readlink {"encoding":"buffer"} buf promise: Buffer(f)
+readlink {"encoding":"buffer"} u8 sync: Buffer(f)
+readlink {"encoding":"buffer"} u8 cb: Buffer(f)
+readlink {"encoding":"buffer"} u8 promise: Buffer(f)
+readlink {"encoding":"buffer"} url sync: Buffer(f)
+readlink {"encoding":"buffer"} url cb: Buffer(f)
+readlink {"encoding":"buffer"} url promise: Buffer(f)
+realpath str sync: "/W/f"
+realpath str cb: "/W/f"
+realpath str promise: "/W/f"
+realpath buf sync: "/W/f"
+realpath buf cb: "/W/f"
+realpath buf promise: "/W/f"
+realpath u8 sync: THROW Error ENOENT "ENOENT: no such file or directory, lstat '/W/108'" path:"/W/108"
+realpath u8 cb: ERR Error ENOENT "ENOENT: no such file or directory, lstat '/W/108'" path:"/W/108"
+realpath u8 promise: "/W/f"
+realpath url sync: "/W/f"
+realpath url cb: "/W/f"
+realpath url promise: "/W/f"
+realpath {"encoding":"buffer"} str sync: Buffer(/W/f)
+realpath {"encoding":"buffer"} str cb: Buffer(/W/f)
+realpath {"encoding":"buffer"} str promise: Buffer(/W/f)
+realpath {"encoding":"buffer"} buf sync: Buffer(/W/f)
+realpath {"encoding":"buffer"} buf cb: Buffer(/W/f)
+realpath {"encoding":"buffer"} buf promise: Buffer(/W/f)
+realpath {"encoding":"buffer"} u8 sync: THROW Error ENOENT "ENOENT: no such file or directory, lstat '/W/108'" path:"/W/108"
+realpath {"encoding":"buffer"} u8 cb: ERR Error ENOENT "ENOENT: no such file or directory, lstat '/W/108'" path:"/W/108"
+realpath {"encoding":"buffer"} u8 promise: Buffer(/W/f)
+realpath {"encoding":"buffer"} url sync: Buffer(/W/f)
+realpath {"encoding":"buffer"} url cb: Buffer(/W/f)
+realpath {"encoding":"buffer"} url promise: Buffer(/W/f)
+rename str sync: undefined d,l,r
+rename str cb: undefined d,l,r
+rename str promise: undefined d,l,r
+rename buf sync: undefined d,l,r
+rename buf cb: undefined d,l,r
+rename buf promise: undefined d,l,r
+rename u8 sync: undefined d,l,r
+rename u8 cb: undefined d,l,r
+rename u8 promise: undefined d,l,r
+rename url sync: undefined d,l,r
+rename url cb: undefined d,l,r
+rename url promise: undefined d,l,r
+rm {"recursive":true} str sync: undefined f,l
+rm {"recursive":true} str cb: undefined f,l
+rm {"recursive":true} str promise: undefined f,l
+rm {"recursive":true} buf sync: undefined f,l
+rm {"recursive":true} buf cb: undefined f,l
+rm {"recursive":true} buf promise: undefined f,l
+rm {"recursive":true} u8 sync: undefined f,l
+rm {"recursive":true} u8 cb: undefined f,l
+rm {"recursive":true} u8 promise: undefined f,l
+rm {"recursive":true} url sync: undefined f,l
+rm {"recursive":true} url cb: undefined f,l
+rm {"recursive":true} url promise: undefined f,l
+rm str sync: undefined d,l
+rm str cb: undefined d,l
+rm str promise: undefined d,l
+rm buf sync: undefined d,l
+rm buf cb: undefined d,l
+rm buf promise: undefined d,l
+rm u8 sync: undefined d,l
+rm u8 cb: undefined d,l
+rm u8 promise: undefined d,l
+rm url sync: undefined d,l
+rm url cb: undefined d,l
+rm url promise: undefined d,l
+rmdir str sync: undefined d,f,l
+rmdir str cb: undefined d,f,l
+rmdir str promise: undefined d,f,l
+rmdir buf sync: undefined d,f,l
+rmdir buf cb: undefined d,f,l
+rmdir buf promise: undefined d,f,l
+rmdir u8 sync: undefined d,f,l
+rmdir u8 cb: undefined d,f,l
+rmdir u8 promise: undefined d,f,l
+rmdir url sync: undefined d,f,l
+rmdir url cb: undefined d,f,l
+rmdir url promise: undefined d,f,l
+stat str sync: Stats(file 3)
+stat str cb: Stats(file 3)
+stat str promise: Stats(file 3)
+stat buf sync: Stats(file 3)
+stat buf cb: Stats(file 3)
+stat buf promise: Stats(file 3)
+stat u8 sync: Stats(file 3)
+stat u8 cb: Stats(file 3)
+stat u8 promise: Stats(file 3)
+stat url sync: Stats(file 3)
+stat url cb: Stats(file 3)
+stat url promise: Stats(file 3)
+stat str sync: THROW Error ENOENT "ENOENT: no such file or directory, stat 'missing'" path:"missing"
+stat str cb: ERR Error ENOENT "ENOENT: no such file or directory, stat 'missing'" path:"missing"
+stat str promise: THROW Error ENOENT "ENOENT: no such file or directory, stat 'missing'" path:"missing"
+stat buf sync: THROW Error ENOENT "ENOENT: no such file or directory, stat 'missing'" path:"missing"
+stat buf cb: ERR Error ENOENT "ENOENT: no such file or directory, stat 'missing'" path:"missing"
+stat buf promise: THROW Error ENOENT "ENOENT: no such file or directory, stat 'missing'" path:"missing"
+stat u8 sync: THROW Error ENOENT "ENOENT: no such file or directory, stat 'missing'" path:"missing"
+stat u8 cb: ERR Error ENOENT "ENOENT: no such file or directory, stat 'missing'" path:"missing"
+stat u8 promise: THROW Error ENOENT "ENOENT: no such file or directory, stat 'missing'" path:"missing"
+stat url sync: THROW Error ENOENT "ENOENT: no such file or directory, stat '/W/missing'" path:"/W/missing"
+stat url cb: ERR Error ENOENT "ENOENT: no such file or directory, stat '/W/missing'" path:"/W/missing"
+stat url promise: THROW Error ENOENT "ENOENT: no such file or directory, stat '/W/missing'" path:"/W/missing"
+statfs str sync: StatFs
+statfs str cb: StatFs
+statfs str promise: StatFs
+statfs buf sync: StatFs
+statfs buf cb: StatFs
+statfs buf promise: StatFs
+statfs u8 sync: StatFs
+statfs u8 cb: StatFs
+statfs u8 promise: StatFs
+statfs url sync: StatFs
+statfs url cb: StatFs
+symlink str sync: undefined d,f,l,s
+symlink str cb: undefined d,f,l,s
+symlink str promise: undefined d,f,l,s
+symlink buf sync: undefined d,f,l,s
+symlink buf cb: undefined d,f,l,s
+symlink buf promise: undefined d,f,l,s
+symlink u8 sync: undefined d,f,l,s
+symlink u8 cb: undefined d,f,l,s
+symlink u8 promise: undefined d,f,l,s
+symlink url sync: undefined d,f,l,s
+symlink url cb: undefined d,f,l,s
+symlink url promise: undefined d,f,l,s
+truncate 1 str sync: undefined f="a"
+truncate 1 str cb: undefined f="a"
+truncate 1 str promise: undefined f="a"
+truncate 1 buf sync: undefined f="a"
+truncate 1 buf cb: undefined f="a"
+truncate 1 buf promise: undefined f="a"
+truncate 1 u8 sync: undefined f="a"
+truncate 1 u8 cb: undefined f="a"
+truncate 1 u8 promise: undefined f="a"
+truncate 1 url sync: undefined f="a"
+truncate 1 url cb: undefined f="a"
+truncate 1 url promise: undefined f="a"
+unlink str sync: undefined d,l
+unlink str cb: undefined d,l
+unlink str promise: undefined d,l
+unlink buf sync: undefined d,l
+unlink buf cb: undefined d,l
+unlink buf promise: undefined d,l
+unlink u8 sync: undefined d,l
+unlink u8 cb: undefined d,l
+unlink u8 promise: undefined d,l
+unlink url sync: undefined d,l
+unlink url cb: undefined d,l
+unlink url promise: undefined d,l
+utimes 1 2 str sync: undefined
+utimes 1 2 str cb: undefined
+utimes 1 2 str promise: undefined
+utimes 1 2 buf sync: undefined
+utimes 1 2 buf cb: undefined
+utimes 1 2 buf promise: undefined
+utimes 1 2 u8 sync: undefined
+utimes 1 2 u8 cb: undefined
+utimes 1 2 u8 promise: undefined
+utimes 1 2 url sync: undefined
+utimes 1 2 url cb: undefined
+utimes 1 2 url promise: undefined
+writeFile "w" str sync: undefined d,f,l,w
+writeFile "w" str cb: undefined d,f,l,w
+writeFile "w" str promise: undefined d,f,l,w
+writeFile "w" buf sync: undefined d,f,l,w
+writeFile "w" buf cb: undefined d,f,l,w
+writeFile "w" buf promise: undefined d,f,l,w
+writeFile "w" u8 sync: undefined d,f,l,w
+writeFile "w" u8 cb: undefined d,f,l,w
+writeFile "w" u8 promise: undefined d,f,l,w
+writeFile "w" url sync: undefined d,f,l,w
+writeFile "w" url cb: undefined d,f,l,w
+writeFile "w" url promise: undefined d,f,l,w
+exists str: sync true missing false cb true
+open str sync: number abc
+open str cb: number
+open str promise: number abc
+open str missing: Error ENOENT "ENOENT: no such file or directory, open 'missing'" path:"missing"
+open str promise missing: Error ENOENT "ENOENT: no such file or directory, open 'missing'" path:"missing"
+opendir str sync: Dir("d") Dirent("x" file "d")
+opendir str cb: Dir("d")
+opendir str promise: Dir("d")
+openAsBlob str: 3
+realpathSync.native str: "/W/f"
+realpath.native str: "/W/f"
+createReadStream str: abc path "f"
+createWriteStream str: ws path "w"
+createReadStream str missing: Error ENOENT "ENOENT: no such file or directory, open 'missing'" path:"missing"
+ReadStream str: 3 path "f"
+promises.watch str: AbortError
+watch str: FSWatcher
+watchFile str: StatWatcher
+unwatchFile str: ok
+exists buf: sync true missing false cb true
+open buf sync: number abc
+open buf cb: number
+open buf promise: number abc
+open buf missing: Error ENOENT "ENOENT: no such file or directory, open 'missing'" path:"missing"
+open buf promise missing: Error ENOENT "ENOENT: no such file or directory, open 'missing'" path:"missing"
+opendir buf sync: Dir(Buffer(d)) Dirent("x" file Buffer(d))
+opendir buf cb: Dir(Buffer(d))
+opendir buf promise: Dir(Buffer(d))
+openAsBlob buf: 3
+realpathSync.native buf: "/W/f"
+realpath.native buf: "/W/f"
+createReadStream buf: abc path Buffer(f)
+createWriteStream buf: ws path Buffer(w)
+createReadStream buf missing: Error ENOENT "ENOENT: no such file or directory, open 'missing'" path:"missing"
+ReadStream buf: 3 path Buffer(f)
+promises.watch buf: AbortError
+watch buf: FSWatcher
+watchFile buf: THROW TypeError ERR_INVALID_ARG_TYPE "The \"paths[0]\" argument must be of type string. Received an instance of Buffer"
+unwatchFile buf: THROW TypeError ERR_INVALID_ARG_TYPE "The \"paths[0]\" argument must be of type string. Received an instance of Buffer"
+exists u8: sync true missing false cb true
+open u8 sync: number abc
+open u8 cb: number
+open u8 promise: number abc
+open u8 missing: Error ENOENT "ENOENT: no such file or directory, open 'missing'" path:"missing"
+open u8 promise missing: Error ENOENT "ENOENT: no such file or directory, open 'missing'" path:"missing"
+opendir u8 sync: Dir(Uint8Array(d)) Dirent("x" file Uint8Array(d))
+opendir u8 cb: Dir(Uint8Array(d))
+opendir u8 promise: Dir(Uint8Array(d))
+openAsBlob u8: 3
+realpathSync.native u8: "/W/f"
+realpath.native u8: "/W/f"
+createReadStream u8: abc path Uint8Array(f)
+createWriteStream u8: ws path Uint8Array(w)
+createReadStream u8 missing: Error ENOENT "ENOENT: no such file or directory, open 'missing'" path:"missing"
+ReadStream u8: 3 path Uint8Array(f)
+promises.watch u8: AbortError
+watch u8: FSWatcher
+watchFile u8: THROW TypeError ERR_INVALID_ARG_TYPE "The \"paths[0]\" argument must be of type string. Received an instance of Uint8Array"
+unwatchFile u8: THROW TypeError ERR_INVALID_ARG_TYPE "The \"paths[0]\" argument must be of type string. Received an instance of Uint8Array"
+exists url: sync true missing false cb true
+open url sync: number abc
+open url cb: number
+open url promise: number abc
+open url missing: Error ENOENT "ENOENT: no such file or directory, open '/W/missing'" path:"/W/missing"
+open url promise missing: Error ENOENT "ENOENT: no such file or directory, open '/W/missing'" path:"/W/missing"
+opendir url sync: Dir("/W/d") Dirent("x" file "/W/d")
+opendir url cb: Dir("/W/d")
+opendir url promise: Dir("/W/d")
+openAsBlob url: 3
+realpathSync.native url: "/W/f"
+realpath.native url: "/W/f"
+createReadStream url: abc path "/W/f"
+createWriteStream url: ws path "/W/w"
+createReadStream url missing: Error ENOENT "ENOENT: no such file or directory, open '/W/missing'" path:"/W/missing"
+ReadStream url: 3 path "/W/f"
+promises.watch url: AbortError
+watch url: FSWatcher
+watchFile url: StatWatcher
+unwatchFile url: ok
+createReadStream fd: path undefined false
+createWriteStream fd: path undefined
+createReadStream 123: TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received type number (123)"
+createReadStream undefined: TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received undefined"
+new ReadStream url: TypeError ERR_INVALID_URL_SCHEME "The URL must be of scheme file"
+new WriteStream object: TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+readFileSync fd object: TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+readFileSync null: TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received null"
+readlinkSync hex: "66"
+readlinkSync bad encoding: TypeError ERR_INVALID_ARG_VALUE "The argument 'encoding' is invalid encoding. Received 'nope'"
+realpathSync object: "/W/f"
+existsSync number: false
+truncateSync fd: "ab"
+new ReadStream with createReadStream replaced: "true Buffer(f)"
+new WriteStream with createWriteStream replaced: "true \"/W/w3\""
+promises.readFile FileHandle: "abc"
+promises.appendFile FileHandle: abcz
+promises.writeFile FileHandle: q
+promises.readFile number: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received type number (3)"
+promises.readFile fd object: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+promises.writeFile number: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received type number (3)"
+promises.readlink buffer: Buffer(f)
+promises.readlink missing: reject Error ENOENT "ENOENT: no such file or directory, readlink 'missing'" path:"missing"
+promises.watch object: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+promises.truncate number: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received type number (3)"
+truncate fd: abc
+bad object: TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  accessSync access appendFileSync appendFile chmodSync chmod chownSync chown lchownSync lchown lstatSync lstat lutimesSync lutimes mkdirSync mkdir openSync open opendirSync opendir readdirSync readdir readFileSync readFile readlinkSync readlink rmSync rm rmdirSync rmdir statSync stat statfsSync statfs truncateSync truncate unlinkSync unlink utimesSync utimes writeFileSync writeFile symlinkSync path createReadStream createWriteStream watch watchFile unwatchFile openAsBlob realpathSync.native
+bad object: reject TypeError ERR_INVALID_ARG_TYPE "The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  promises.access promises.appendFile promises.chmod promises.chown promises.lchown promises.lstat promises.lutimes promises.mkdir promises.open promises.opendir promises.readdir promises.readFile promises.realpath promises.rm promises.rmdir promises.stat promises.truncate promises.unlink promises.utimes promises.writeFile
+bad object: TypeError ERR_INVALID_ARG_TYPE "The \"prefix\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  mkdtempSync mkdtemp
+bad object: reject TypeError ERR_INVALID_ARG_TYPE "The \"prefix\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  promises.mkdtemp
+bad object: reject TypeError ERR_INVALID_ARG_TYPE "The \"oldPath\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  promises.readlink
+bad object: Error ENOENT "ENOENT: no such file or directory, lstat '/W/[object Object]'" path:"/W/[object Object]"
+  realpathSync
+bad object: cb Error ENOENT "ENOENT: no such file or directory, lstat '/W/[object Object]'" path:"/W/[object Object]"
+  realpath
+bad object: TypeError ERR_INVALID_ARG_TYPE "The \"oldPath\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  renameSync src
+bad object: TypeError ERR_INVALID_ARG_TYPE "The \"newPath\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  renameSync dest linkSync dest
+bad object: TypeError ERR_INVALID_ARG_TYPE "The \"dest\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  copyFileSync dest cpSync dest
+bad object: TypeError ERR_INVALID_ARG_TYPE "The \"target\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  symlinkSync target
+bad object: TypeError ERR_INVALID_ARG_TYPE "The \"src\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object"
+  cpSync src
+bad object: false
+  existsSync
+bad nul string: TypeError ERR_INVALID_ARG_VALUE "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  accessSync access appendFileSync appendFile chmodSync chmod chownSync chown lchownSync lchown lstatSync lstat lutimesSync lutimes mkdirSync mkdir openSync open opendirSync opendir readdirSync readdir readFileSync readFile readlinkSync readlink realpathSync realpath rmSync rm rmdirSync rmdir statSync stat statfsSync statfs truncateSync truncate unlinkSync unlink utimesSync utimes writeFileSync writeFile symlinkSync path createReadStream createWriteStream watch watchFile unwatchFile openAsBlob realpathSync.native
+bad nul string: reject TypeError ERR_INVALID_ARG_VALUE "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  promises.access promises.appendFile promises.chmod promises.chown promises.lchown promises.lstat promises.lutimes promises.mkdir promises.open promises.opendir promises.readdir promises.readFile promises.realpath promises.rm promises.rmdir promises.stat promises.truncate promises.unlink promises.utimes promises.writeFile
+bad nul string: TypeError ERR_INVALID_ARG_VALUE "The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  mkdtempSync mkdtemp
+bad nul string: reject TypeError ERR_INVALID_ARG_VALUE "The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  promises.mkdtemp
+bad nul string: reject TypeError ERR_INVALID_ARG_VALUE "The argument 'oldPath' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  promises.readlink
+bad nul string: TypeError ERR_INVALID_ARG_VALUE "The argument 'oldPath' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  renameSync src
+bad nul string: TypeError ERR_INVALID_ARG_VALUE "The argument 'newPath' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  renameSync dest linkSync dest
+bad nul string: TypeError ERR_INVALID_ARG_VALUE "The argument 'dest' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  copyFileSync dest cpSync dest
+bad nul string: TypeError ERR_INVALID_ARG_VALUE "The argument 'target' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  symlinkSync target
+bad nul string: TypeError ERR_INVALID_ARG_VALUE "The argument 'src' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  cpSync src
+bad nul string: false
+  existsSync
+bad nul buffer: TypeError ERR_INVALID_ARG_VALUE "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  accessSync access appendFileSync appendFile chmodSync chmod chownSync chown lchownSync lchown lstatSync lstat lutimesSync lutimes mkdirSync mkdir openSync open opendirSync opendir readdirSync readdir readFileSync readFile readlinkSync readlink rmSync rm rmdirSync rmdir statSync stat statfsSync statfs truncateSync truncate unlinkSync unlink utimesSync utimes writeFileSync writeFile symlinkSync path createReadStream createWriteStream watch watchFile unwatchFile openAsBlob realpathSync.native
+bad nul buffer: reject TypeError ERR_INVALID_ARG_VALUE "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  promises.access promises.appendFile promises.chmod promises.chown promises.lchown promises.lstat promises.lutimes promises.mkdir promises.open promises.opendir promises.readdir promises.readFile promises.realpath promises.rm promises.rmdir promises.stat promises.truncate promises.unlink promises.utimes promises.writeFile
+bad nul buffer: TypeError ERR_INVALID_ARG_VALUE "The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  mkdtempSync mkdtemp
+bad nul buffer: reject TypeError ERR_INVALID_ARG_VALUE "The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  promises.mkdtemp
+bad nul buffer: reject TypeError ERR_INVALID_ARG_VALUE "The argument 'oldPath' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  promises.readlink
+bad nul buffer: TypeError ERR_INVALID_ARG_VALUE "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'a\\x00b'"
+  realpathSync realpath
+bad nul buffer: TypeError ERR_INVALID_ARG_VALUE "The argument 'oldPath' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  renameSync src
+bad nul buffer: TypeError ERR_INVALID_ARG_VALUE "The argument 'newPath' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  renameSync dest linkSync dest
+bad nul buffer: TypeError ERR_INVALID_ARG_VALUE "The argument 'dest' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  copyFileSync dest cpSync dest
+bad nul buffer: TypeError ERR_INVALID_ARG_VALUE "The argument 'target' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  symlinkSync target
+bad nul buffer: TypeError ERR_INVALID_ARG_VALUE "The argument 'src' must be a string, Uint8Array, or URL without null bytes. Received <Buffer 61 00 62>"
+  cpSync src
+bad nul buffer: false
+  existsSync
+bad nul url: TypeError ERR_INVALID_ARG_VALUE "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  accessSync access appendFileSync appendFile chmodSync chmod chownSync chown lchownSync lchown lstatSync lstat lutimesSync lutimes mkdirSync mkdir openSync open opendirSync opendir readdirSync readdir readFileSync readFile readlinkSync readlink realpathSync realpath rmSync rm rmdirSync rmdir statSync stat statfsSync statfs truncateSync truncate unlinkSync unlink utimesSync utimes writeFileSync writeFile symlinkSync path createReadStream createWriteStream watch watchFile unwatchFile openAsBlob realpathSync.native
+bad nul url: reject TypeError ERR_INVALID_ARG_VALUE "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  promises.access promises.appendFile promises.chmod promises.chown promises.lchown promises.lstat promises.lutimes promises.mkdir promises.open promises.opendir promises.readdir promises.readFile promises.realpath promises.rm promises.rmdir promises.stat promises.truncate promises.unlink promises.utimes promises.writeFile
+bad nul url: TypeError ERR_INVALID_ARG_VALUE "The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  mkdtempSync mkdtemp
+bad nul url: reject TypeError ERR_INVALID_ARG_VALUE "The argument 'prefix' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  promises.mkdtemp
+bad nul url: reject TypeError ERR_INVALID_ARG_VALUE "The argument 'oldPath' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  promises.readlink
+bad nul url: TypeError ERR_INVALID_ARG_VALUE "The argument 'oldPath' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  renameSync src
+bad nul url: TypeError ERR_INVALID_ARG_VALUE "The argument 'newPath' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  renameSync dest linkSync dest
+bad nul url: TypeError ERR_INVALID_ARG_VALUE "The argument 'dest' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  copyFileSync dest cpSync dest
+bad nul url: TypeError ERR_INVALID_ARG_VALUE "The argument 'target' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  symlinkSync target
+bad nul url: TypeError ERR_INVALID_ARG_VALUE "The argument 'src' must be a string, Uint8Array, or URL without null bytes. Received '/W/a\\x00b'"
+  cpSync src
+bad nul url: false
+  existsSync
+bad http url: TypeError ERR_INVALID_URL_SCHEME "The URL must be of scheme file"
+  accessSync access appendFileSync appendFile chmodSync chmod chownSync chown lchownSync lchown lstatSync lstat lutimesSync lutimes mkdirSync mkdir mkdtempSync mkdtemp openSync open opendirSync opendir readdirSync readdir readFileSync readFile readlinkSync readlink realpathSync realpath rmSync rm rmdirSync rmdir statSync stat statfsSync statfs truncateSync truncate unlinkSync unlink utimesSync utimes writeFileSync writeFile renameSync src renameSync dest copyFileSync dest linkSync dest symlinkSync target symlinkSync path cpSync src cpSync dest createReadStream createWriteStream watch watchFile unwatchFile openAsBlob realpathSync.native
+bad http url: reject TypeError ERR_INVALID_URL_SCHEME "The URL must be of scheme file"
+  promises.access promises.appendFile promises.chmod promises.chown promises.lchown promises.lstat promises.lutimes promises.mkdir promises.mkdtemp promises.open promises.opendir promises.readdir promises.readFile promises.readlink promises.realpath promises.rm promises.rmdir promises.stat promises.truncate promises.unlink promises.utimes promises.writeFile
+bad http url: false
+  existsSync
+bad url host: TypeError ERR_INVALID_FILE_URL_HOST "File URL host must be \"localhost\" or empty on PLATFORM"
+  accessSync access appendFileSync appendFile chmodSync chmod chownSync chown lchownSync lchown lstatSync lstat lutimesSync lutimes mkdirSync mkdir mkdtempSync mkdtemp openSync open opendirSync opendir readdirSync readdir readFileSync readFile readlinkSync readlink realpathSync realpath rmSync rm rmdirSync rmdir statSync stat statfsSync statfs truncateSync truncate unlinkSync unlink utimesSync utimes writeFileSync writeFile renameSync src renameSync dest copyFileSync dest linkSync dest symlinkSync target symlinkSync path cpSync src cpSync dest createReadStream createWriteStream watch watchFile unwatchFile openAsBlob realpathSync.native
+bad url host: reject TypeError ERR_INVALID_FILE_URL_HOST "File URL host must be \"localhost\" or empty on PLATFORM"
+  promises.access promises.appendFile promises.chmod promises.chown promises.lchown promises.lstat promises.lutimes promises.mkdir promises.mkdtemp promises.open promises.opendir promises.readdir promises.readFile promises.readlink promises.realpath promises.rm promises.rmdir promises.stat promises.truncate promises.unlink promises.utimes promises.writeFile
+bad url host: false
+  existsSync
+bad url slash: TypeError ERR_INVALID_FILE_URL_PATH "File URL path must not include encoded / characters"
+  accessSync access appendFileSync appendFile chmodSync chmod chownSync chown lchownSync lchown lstatSync lstat lutimesSync lutimes mkdirSync mkdir mkdtempSync mkdtemp openSync open opendirSync opendir readdirSync readdir readFileSync readFile readlinkSync readlink realpathSync realpath rmSync rm rmdirSync rmdir statSync stat statfsSync statfs truncateSync truncate unlinkSync unlink utimesSync utimes writeFileSync writeFile renameSync src renameSync dest copyFileSync dest linkSync dest symlinkSync target symlinkSync path cpSync src cpSync dest createReadStream createWriteStream watch watchFile unwatchFile openAsBlob realpathSync.native
+bad url slash: reject TypeError ERR_INVALID_FILE_URL_PATH "File URL path must not include encoded / characters"
+  promises.access promises.appendFile promises.chmod promises.chown promises.lchown promises.lstat promises.lutimes promises.mkdir promises.mkdtemp promises.open promises.opendir promises.readdir promises.readFile promises.readlink promises.realpath promises.rm promises.rmdir promises.stat promises.truncate promises.unlink promises.utimes promises.writeFile
+bad url slash: false
+  existsSync

@@ -129,7 +129,10 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 
 The sync forms run on the kernel's synchronous calls, the callback and promise forms on its async ones. Pending async calls keep the program alive.
 
-**Paths.** Every path argument may be a `file:` URL (`fs.writeFileSync(new URL('./x', import.meta.url))`): sync, callback, promise and stream forms. A URL with another scheme, a host, or an encoded `/` gets Node's errors.
+**Paths.** Every path argument may be a string, a `Buffer` (or `Uint8Array`) or a `file:` URL (`fs.writeFileSync(new URL('./x', import.meta.url))`), in the sync, callback, promise and stream forms, and in `watch`, `cp`, `rm`, `mkdtemp` and `realpath` (golden `fs-path-forms-node22`). `fs.promises.readFile`, `writeFile` and `appendFile` take a `FileHandle` too.
+- As in Node 22, a `Buffer` path comes back as one where Node keeps it: a `Dirent`'s `parentPath`, a `Dir`'s `path` and a stream's `path`. `encoding: 'buffer'` makes `readdir`, `readlink`, `realpath` and `mkdtemp` return `Buffer`s. Errors name the path as a string.
+- Bad paths get Node's errors. Another type is `ERR_INVALID_ARG_TYPE`, and a NUL byte is `ERR_INVALID_ARG_VALUE`. A URL with another scheme is `ERR_INVALID_URL_SCHEME`, one with a host is `ERR_INVALID_FILE_URL_HOST`, and one with an encoded `/` is `ERR_INVALID_FILE_URL_PATH`. Node 22's own quirks are kept: `realpath` and `realpathSync` turn a non-string into a string first, and `promises.readlink` calls its argument `oldPath`.
+- `cp`'s callback and promise forms and recursive `readdir` throw in Node 22 for a `Buffer` path, but work in jsh. `watchFile` and `unwatchFile` refuse a `Buffer`, with Node 22's `ERR_INVALID_ARG_TYPE`.
 
 **Constants.** `fs.constants` is Node 22's set for Linux x86_64, in Node's order, and numeric `open` flags are read by those bits. `require('constants')` (deprecated in Node) is `os`'s dlopen, errno, priority and signals constants plus `fs`'s and `crypto`'s, frozen.
 

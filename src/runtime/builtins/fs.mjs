@@ -69,6 +69,7 @@ function validateId(id, name) {
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const pathString = (p) => (p instanceof Uint8Array ? decoder.decode(p) : p);
 
 // libuv's error names, numbers (Linux) and messages, as Node's fs errors carry them.
 const ERRNO = Object.fromEntries(UV_ERRORS.map(([n, name]) => [name, n]));
@@ -76,6 +77,8 @@ const ERRNO_NAMES = Object.fromEntries(UV_ERRORS.map(([n, name]) => [n, name]));
 const DESCRIPTIONS = Object.fromEntries(UV_ERRORS.map(([, name, msg]) => [name, msg]));
 
 function nodeFsError(code, syscall, pathArg, err, dest) {
+  pathArg = pathString(pathArg);
+  dest = pathString(dest);
   const c = typeof code === 'string' ? code : err?.code || 'EIO';
   const desc = DESCRIPTIONS[c] || c;
   let msg;
@@ -289,6 +292,7 @@ for (const name of Reflect.ownKeys(Dirent.prototype)) {
 export function createFs({ ctx, path, process, Buffer, handles, getStream, timers = globalThis }) {
   const abs = (p) => {
     if (typeof p === 'number') return p;
+    p = pathString(p);
     return path.isAbsolute(p) ? path.normalize(p) : path.resolve(process.cwd(), p);
   };
 
@@ -400,6 +404,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       return out;
     }
     return Buffer ? Buffer.from(bytes).toString(enc) : decoder.decode(bytes);
+  };
+  const pathEncoder = (options) => {
+    const encoding = optEncoding(options);
+    checkEncoding(encoding);
+    if (encoding === 'buffer') return (str) => wrapBuffer(encoder.encode(str));
+    return encoding && !/^utf-?8$/i.test(encoding) ? (str) => Buffer.from(str).toString(encoding) : (str) => str;
   };
   /** Data to write, as Node encodes a string with `encoding`. */
   const encodeAs = (data, encoding) => {
@@ -1113,7 +1123,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     }
     if (!options?.recursive) {
       if (options?.withFileTypes) {
-        return names.map((name) => dirent(name, typeAt(path.join(target, name)), String(pathArg)));
+        return names.map((name) => dirent(name, typeAt(path.join(target, name)), pathArg instanceof Uint8Array ? pathArg : String(pathArg)));
       }
       return names.map(asName);
     }
@@ -1371,8 +1381,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     },
     /** Node's JS realpath: every symlink along the path resolved. */
     realpathSync(p, options) {
-      const real = getCp().realpathSync(abs(p));
-      return optEncoding(options) === 'buffer' ? wrapBuffer(encoder.encode(real)) : real;
+      const encode = pathEncoder(options);
+      return encode(getCp().realpathSync(abs(p)));
     },
     readdirSync,
     mkdirSync,
@@ -1656,9 +1666,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         throw nodeFsError(err?.code || 'EIO', 'symlink', target, err, p);
       }
     },
-    readlinkSync(p) {
+    readlinkSync(p, options) {
+      const encode = pathEncoder(options);
       try {
-        return syncFs.readlink(abs(p));
+        return encode(syncFs.readlink(abs(p)));
       } catch (err) {
         throw nodeFsError(err?.code || 'ENOENT', 'readlink', p, err);
       }
@@ -1891,7 +1902,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     const opts = typeof options === 'string' ? { encoding: options } : (options ?? {});
     let entries;
     try {
-      entries = readdirSync(p instanceof Uint8Array ? decoder.decode(p) : p, { withFileTypes: true, recursive: opts.recursive === true, encoding: opts.encoding }, { followLinks: false });
+      entries = readdirSync(p, { withFileTypes: true, recursive: opts.recursive === true, encoding: opts.encoding }, { followLinks: false });
     } catch (err) {
       if (isArgError(err)) throw err;
       throw nodeFsError(err?.code || 'ENOENT', 'opendir', errPath, err);
@@ -1992,8 +2003,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     };
   }
 
+  const fileHandles = new WeakSet();
   const promises = {
     readFile(p, options) {
+      if (fileHandles.has(p)) return p.readFile(options);
       return track(
         (async () => {
           const encoding = optEncoding(options);
@@ -2011,6 +2024,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     // The write happens when the call is made, as Node's open does in call
     // order: a later `flag: 'wx'` sees the file an earlier writeFile made.
     writeFile(p, data, options) {
+      if (fileHandles.has(p)) return p.writeFile(data, options);
       let result;
       try {
         syncApi.writeFileSync(p, data, options);
@@ -2021,6 +2035,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       return track(result);
     },
     appendFile(p, data, options) {
+      if (fileHandles.has(p)) return p.appendFile(data, options);
       let result;
       try {
         syncApi.appendFileSync(p, data, options);
@@ -2149,10 +2164,15 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         })()
       );
     },
-    readlink(p) {
+    readlink(p, options) {
       return track(
         (async () => {
-          return asyncFs.readlink(abs(p));
+          const encode = pathEncoder(options);
+          try {
+            return encode(await asyncFs.readlink(abs(p)));
+          } catch (err) {
+            throw nodeFsError(err?.code || 'ENOENT', 'readlink', p, err);
+          }
         })()
       );
     },
@@ -2260,6 +2280,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         if (!closed) await handle.close();
       },
     };
+    fileHandles.add(handle);
     return handle;
   }
 
@@ -2338,7 +2359,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         }
       },
     });
-    r.path = p;
+    if (options?.fd == null) r.path = p;
     // Node's ReadStream: an encoding is the stream's (strings, a character never split).
     if (encoding) r.setEncoding(encoding);
     Object.defineProperty(r, 'fd', {
@@ -2432,7 +2453,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     });
     // Node's WriteStream: strings are written in its encoding.
     if (options?.encoding) w.setDefaultEncoding(options.encoding);
-    w.path = p;
+    if (options?.fd == null) w.path = p;
     w.bytesWritten = 0;
     // Node's: the descriptor once open (null before), and pending until then.
     Object.defineProperty(w, 'fd', {
@@ -2471,12 +2492,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
 
   // fs.ReadStream / fs.WriteStream: callable like Node's, and `instanceof`
   // holds for the streams createReadStream / createWriteStream make.
+  const streamPath = (p, options) => (options?.fd != null ? p : getValidatedPath(p, 'path', { keepBuffer: true }));
   function ReadStream(p, options) {
-    return createReadStream(p, options);
+    return createReadStream(streamPath(p, options), options);
   }
   Object.defineProperty(ReadStream, Symbol.hasInstance, { value: (x) => !!x?.[FS_READ_STREAM] });
   function WriteStream(p, options) {
-    return createWriteStream(p, options);
+    return createWriteStream(streamPath(p, options), options);
   }
   Object.defineProperty(WriteStream, Symbol.hasInstance, { value: (x) => !!x?.[FS_WRITE_STREAM] });
 
@@ -2671,7 +2693,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       validatePathType(p);
       let data;
       try {
-        data = syncApi.readFileSync(p instanceof Uint8Array ? decoder.decode(p) : p);
+        data = syncApi.readFileSync(p);
       } catch {
         throw nodeError(TypeError, 'ERR_INVALID_ARG_VALUE', 'Unable to open file as blob');
       }
@@ -2778,11 +2800,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
           stat: (target) => statView(syncFs.stat(target)),
           errno: (code) => ERRNO[code] ?? ERRNO.EIO,
           uvException: (errno, syscall, pathArg) => nodeFsError(ERRNO_NAMES[errno] ?? 'EIO', syscall, pathArg),
-          validatedPath: (value, name) => {
-            value = toPathArg(value, name);
-            if (typeof value !== 'string' && !(value instanceof Uint8Array)) throw ERR_INVALID_ARG_TYPE(name, ['string', 'Buffer', 'URL'], value);
-            return value;
-          },
+          validatedPath: (value, name) => getValidatedPath(value, name, { keepBuffer: true }),
           getOptions: (options) => {
             if (options == null || typeof options === 'function') return {};
             if (typeof options === 'string') options = { encoding: options };
@@ -2812,7 +2830,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
   }
   promises.constants = fsModule.constants;
   acceptFileUrls(fsModule);
-  acceptFileUrls(promises, { async: true });
+  acceptFileUrls(promises, { async: true, isHandle: (v) => fileHandles.has(v) });
   const Glob = () => process._nodeLib().fsGlob.Glob;
   fsModule.glob = function glob(pattern, options, callback) {
     if (typeof options === 'function') {
@@ -2864,7 +2882,12 @@ const PATH_NAMES = {
   symlink: ['target', 'path'],
   copyFile: ['src', 'dest'],
   cp: ['src', 'dest'],
+  mkdtemp: ['prefix'],
 };
+const PATHLESS = /^(f[a-z]+|close|read|readv|write|writev|glob|lchmod|_toUnixTimestamp)(Sync)?$/;
+const KEEPS_BUFFER = /^(readdir|opendir|createReadStream|createWriteStream|watchFile|unwatchFile)(Sync)?$/;
+const TAKES_FD = /^(readFile|writeFile|appendFile|truncate)(Sync)?$/;
+const STREAMS = /^create(Read|Write)Stream$/;
 
 /**
  * Node's getValidatedPath / toPathIfFileURL: a path argument may be a
@@ -2884,11 +2907,22 @@ function toPathArg(value, name) {
   fileURLToPath ??= globalThis.process?._builtin?.('url').fileURLToPath;
   return nullCheck(fileURLToPath(value), name);
 }
+function getValidatedPath(value, name, { keepBuffer = false, fd = false, isHandle = null } = {}) {
+  value = toPathArg(value, name);
+  if ((fd && typeof value === 'number') || isHandle?.(value)) return value;
+  if (typeof value !== 'string' && !(value instanceof Uint8Array)) throw ERR_INVALID_ARG_TYPE(name, ['string', 'Buffer', 'URL'], value);
+  return keepBuffer ? value : pathString(value);
+}
 
-function acceptFileUrls(api, { async = false } = {}) {
-  const toPath = toPathArg;
-  const wrap = (name, fn) => {
-    const count = TWO_PATHS.has(name.replace(/Sync$/, '')) ? 2 : 1;
+function acceptFileUrls(api, { async = false, isHandle = null } = {}) {
+  const wrap = (name, fn, native = false) => {
+    const base = name.replace(/Sync$/, '');
+    const count = PATHLESS.test(name) ? 0 : TWO_PATHS.has(base) ? 2 : 1;
+    const fd = TAKES_FD.test(name);
+    const opts = { keepBuffer: KEEPS_BUFFER.test(name), fd: fd && !async, isHandle: fd && async ? isHandle : null };
+    const stream = STREAMS.test(name);
+    const coerces = !async && !native && base === 'realpath';
+    const toPath = (value, argName) => getValidatedPath(coerces && !isURL(value) && typeof value !== 'string' ? `${value}` : value, argName, opts);
     // A path Node can't take: fs.promises rejects; exists / existsSync say
     // false (Node: callback(false)); the rest throw, as Node's do.
     const onBadPath = async
@@ -2903,8 +2937,9 @@ function acceptFileUrls(api, { async = false } = {}) {
     const wrapped = {
       [name](...args) {
         try {
-          const names = PATH_NAMES[name.replace(/Sync$/, '')] ?? ['path'];
-          for (let i = 0; i < count && i < args.length; i++) args[i] = toPath(args[i], names[i]);
+          const names = (async && base === 'readlink' ? ['oldPath'] : PATH_NAMES[base]) ?? ['path'];
+          const own = stream && args[1]?.fd != null;
+          for (let i = 0; i < count && i < args.length && !own; i++) args[i] = toPath(args[i], names[i]);
         } catch (err) {
           return onBadPath(err, args);
         }
@@ -2917,7 +2952,7 @@ function acceptFileUrls(api, { async = false } = {}) {
       try {
         const d = Object.getOwnPropertyDescriptor(fn, key);
         // realpath.native / realpathSync.native take URLs too.
-        if (key === 'native' && typeof d.value === 'function') d.value = wrap(name, d.value);
+        if (key === 'native' && typeof d.value === 'function') d.value = wrap(name, d.value, true);
         Object.defineProperty(wrapped, key, d);
       } catch {
         /* non-configurable */
