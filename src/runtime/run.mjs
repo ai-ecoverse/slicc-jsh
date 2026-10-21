@@ -29,6 +29,7 @@ import { createWebSocket } from './web/websocket.mjs';
 import { createPorts } from './web/broadcast-channel.mjs';
 import { setupChildChannel } from './builtins/ipc-channel.mjs';
 import { createRemotePorts, mailboxSerdes } from './web/remote-ports.mjs';
+import { createMessageEvent, installMessageEvent } from './web/message-event.mjs';
 
 // The platform's MessageChannel, before the program's own (jsh's) takes the
 // global: worker_threads' ports between threads are its ports.
@@ -472,6 +473,9 @@ export async function runNode(ctx, options = {}) {
     schedule: (fn) => timers.setImmediateUnheld(fn),
     delivering,
   });
+  // Node 22's MessageEvent, for the ports' and channels' messages (the
+  // platform's costs an undici load on Node: #566).
+  const restoreMessageEvent = installMessageEvent(createMessageEvent({ MessagePort: ports.MessagePort }));
   const JshBroadcastChannel = ports.BroadcastChannel;
   const BroadcastChannel =
     bcSlot && bcSlot.value === undefined && !bcSlot.get && (bcSlot.writable || bcSlot.configurable) ? JshBroadcastChannel : undefined;
@@ -1246,6 +1250,7 @@ export async function runNode(ctx, options = {}) {
       restoreGlobals();
       restoreFunctionImport();
       restorePlatform();
+      restoreMessageEvent();
       removeJshHandoff();
     } catch {
       /* ignore */

@@ -1,0 +1,68 @@
+global true false true true
+class MessageEvent 1 true length,name,prototype
+  constructor value,writable,enumerable,configurable false true MessageEvent/1
+  data get,set,enumerable,configurable true true get data/0
+  origin get,set,enumerable,configurable true true get origin/0
+  lastEventId get,set,enumerable,configurable true true get lastEventId/0
+  source get,set,enumerable,configurable true true get source/0
+  ports get,set,enumerable,configurable true true get ports/0
+  initMessageEvent value,writable,enumerable,configurable true true initMessageEvent/1
+tag [object MessageEvent] MessageEvent
+no args THROW TypeError undefined "MessageEvent constructor: 1 argument required, but 0 found."
+Symbol type THROW TypeError undefined "MessageEvent constructor: type is a symbol, which cannot be converted to a DOMString."
+init null => [ undefined, undefined, undefined, undefined, undefined ]
+init undefined => [ null, '', [] ]
+init number THROW TypeError undefined "MessageEvent constructor: Expected 5 to be one of: Null, Undefined, Object."
+init string THROW TypeError undefined "MessageEvent constructor: Expected x to be one of: Null, Undefined, Object."
+ports 1 THROW TypeError undefined "MessageEvent constructor: eventInitDict.ports (1) is not iterable."
+ports [1] THROW TypeError undefined "MessageEvent constructor: Expected eventInitDict.ports[0] (\"1\") to be an instance of MessagePort."
+ports ["a"] THROW TypeError undefined "MessageEvent constructor: Expected eventInitDict.ports[0] (\"\"a\"\") to be an instance of MessagePort."
+ports [{}] THROW TypeError undefined "MessageEvent constructor: Expected eventInitDict.ports[0] (\"{ a: 1 }\") to be an instance of MessagePort."
+ports null THROW TypeError undefined "MessageEvent constructor: eventInitDict.ports (null) is not iterable."
+ports Symbol THROW TypeError undefined "MessageEvent constructor: eventInitDict.ports (Symbol(p)) is not iterable."
+ports not iterable THROW TypeError undefined "MessageEvent constructor: eventInitDict.ports is not iterable."
+ports a Set => []
+source 1 THROW TypeError undefined "MessageEvent constructor: Expected eventInitDict.source (\"1\") to be an instance of MessagePort."
+source {} THROW TypeError undefined "MessageEvent constructor: Expected eventInitDict.source (\"{}\") to be an instance of MessagePort."
+source null => null
+source port => true
+ports port => [ 1, true, true, true, false ]
+defaults => [
+  null,  '',    '',
+  null,  [],    'm',
+  false, false, false,
+  false
+]
+coerce => [
+  '1',   '2',
+  '3',   null,
+  true,  true,
+  false
+]
+null fields => [ null, 'null', 'null' ]
+init read order => "bubbles cancelable composed data origin lastEventId source ports"
+lone surrogate origin => 2
+origin symbol THROW TypeError undefined "Cannot convert a Symbol value to a string"
+lastEventId symbol THROW TypeError undefined "MessageEvent constructor: eventInitDict.lastEventId is a symbol, which cannot be converted to a DOMString."
+brand data THROW TypeError ERR_INVALID_THIS "Illegal invocation"
+brand origin THROW TypeError ERR_INVALID_THIS "Illegal invocation"
+brand lastEventId THROW TypeError ERR_INVALID_THIS "Illegal invocation"
+brand source THROW TypeError ERR_INVALID_THIS "Illegal invocation"
+brand ports THROW TypeError ERR_INVALID_THIS "Illegal invocation"
+brand on an Event THROW TypeError ERR_INVALID_THIS "Illegal invocation"
+initMessageEvent => [
+  false, true, 'n',
+  true,  true, 7,
+  'o',   'l',  'm'
+]
+initMessageEvent defaults => [ null, '', [] ]
+initMessageEvent no args THROW TypeError undefined "MessageEvent.initMessageEvent: 1 argument required, but 0 found."
+initMessageEvent brand THROW TypeError ERR_INVALID_THIS "Illegal invocation"
+inspect => "MessageEvent {\n  type: 'm',\n  defaultPrevented: false,\n  cancelable: false,\n  timeStamp: N\n}"
+inspect nested => "{ a: [Object] }"
+keys => []
+json => "{}"
+call THROW TypeError undefined "Class constructor _MessageEvent cannot be invoked without 'new'"
+subclass => [ 2, true, 'S', '[object MessageEvent]' ]
+dispatch => [ 'x', true, true ]
+port message true true hello 0 true
