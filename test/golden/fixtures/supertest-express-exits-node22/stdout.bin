@@ -1,0 +1,11 @@
+get 200 {"id":"7","q":{"x":"1"}}
+post 201 {"got":{"a":1}}
+expectation failed: expected 404 "Not Found", got 200 "OK"
+error handler 500 {"error":"nope"}
+end cb null 200 9
+shared a,b
+agent cookie: sid=abc
+own server own still listening true
+done
+own server closed
+exit 0

@@ -1,0 +1,6 @@
+closed with a connection open, listening false
+listening again true
+old connection gone, listening true
+close event, listening false
+close callback 1
+close callback 2

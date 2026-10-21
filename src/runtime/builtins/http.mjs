@@ -1256,6 +1256,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     self.on('connection', (socket) => {
       handleConnection(socket, self[kRequestListener], self);
     });
+    self.on('listening', () => {
+      self._closing = false;
+    });
     return self;
   }
   Object.setPrototypeOf(Server.prototype, net.Server.prototype);

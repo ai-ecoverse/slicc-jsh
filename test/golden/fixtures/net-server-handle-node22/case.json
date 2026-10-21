@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#723: net.Server's _handle is null until it listens, an object while it does and null again from close(); listening follows it, from a getter on the prototype as in Node; address() is null outside that and its keys are in Node's order; it listens again after close(); ref() and unref() chain, before and after listen(), and a server unref'd before it listens doesn't keep the program alive",
+  "argv": ["main.js"],
+  "shim": true
+}

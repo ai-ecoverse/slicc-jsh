@@ -1,5 +1,5 @@
 {
-  "description": "cluster races: a worker that disconnects while its listen() is being set up exits, and one that closes its server before the primary has set it up gives the address back, so the primary can listen on it",
+  "description": "cluster races: a worker that disconnects while its listen() is being set up exits, and one that closes its server before the primary has set it up gives the address back, so the primary can listen on it; a worker that closes and listens again, exclusive or before the primary has set up the first listen, serves its own address() and the primary sees one 'listening' for it",
   "argv": [
     "script.js"
   ],

@@ -60,4 +60,33 @@ a.listen(0, '127.0.0.1', () => {
     const r = await jsh.run(['node', '/os/relisten.js']);
     assert.equal(r.stdout, 'b listening\nb closed\n');
   });
+
+  it('an http.Server that listens again after close() answers a Connection: close request as one that never closed', async () => {
+    await jsh.kernel.writeFile(
+      '/os/http-relisten.js',
+      `const http = require('http');
+const net = require('net');
+const s = http.createServer((req, res) => res.end('ok'));
+s.listen(0, '127.0.0.1', () => {
+  s.close(() => {
+    s.listen(0, '127.0.0.1', () => {
+      let serverSocket;
+      s.once('connection', (sock) => (serverSocket = sock));
+      const c = net.connect({ port: s.address().port, host: '127.0.0.1', allowHalfOpen: true });
+      c.write('GET / HTTP/1.1\\r\\nHost: x\\r\\nConnection: close\\r\\n\\r\\n');
+      c.resume();
+      c.on('end', () => {
+        console.log('server socket destroyed at the client end', serverSocket.destroyed);
+        c.destroy();
+        s.close(() => console.log('closed'));
+      });
+    });
+  });
+});
+`
+    );
+    const r = await jsh.run(['node', '/os/http-relisten.js']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.stdout, 'server socket destroyed at the client end true\nclosed\n');
+  });
 });

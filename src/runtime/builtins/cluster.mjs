@@ -411,7 +411,7 @@ function createChild({ process }) {
           },
         });
         server.once('listening', () => {
-          if (!indexes.has(indexesKey)) return;
+          if (!indexes.has(indexesKey) || !handles.has(reply.key)) return;
           cluster.worker.state = 'listening';
           const address = server.address();
           send({ ...message, act: 'listening', port: address?.port || options.port });

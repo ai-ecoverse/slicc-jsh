@@ -1,0 +1,15 @@
+listening getter function undefined true true
+own listening false
+new null false null
+ref chains true true true
+right after listen null false
+listening object true true
+address [ 'address', 'family', 'port' ] 127.0.0.1 IPv4 number
+unref, ref true true
+right after close null false null
+closed null false null
+listening again object true true
+http listening object true true
+http closed null false
+unref before listen: listening true object
+exit 0
