@@ -128,8 +128,13 @@ const exitOf = (w) => (w.threadId === -1 ? Promise.resolve() : once(w, 'exit'));
     "const { parentPort } = require('worker_threads'); try { parentPort.postMessage({ port: parentPort }, [parentPort]); parentPort.postMessage('posted'); } catch (e) { parentPort.postMessage('posting itself: ' + e.name + ' ' + e.message); } parentPort.postMessage('still connected');",
     { eval: true }
   );
-  console.log(await once(selfSender, 'message'));
-  console.log('then:', await once(selfSender, 'message'));
+  // Both its messages, on one listener: Node may emit them in one turn.
+  const [first, second] = await new Promise((resolve) => {
+    const got = [];
+    selfSender.on('message', (m) => got.push(m) === 2 && resolve(got));
+  });
+  console.log(first);
+  console.log('then:', second);
   await selfSender.terminate();
 
   class Box {

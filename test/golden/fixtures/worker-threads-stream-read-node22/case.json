@@ -1,0 +1,1 @@
+{ "description": "a ReadableStream transferred to a worker holds it while a read is pending (a late chunk, by for await or pipeTo, still gets there), and one never read does not", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }

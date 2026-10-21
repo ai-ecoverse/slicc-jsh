@@ -488,6 +488,7 @@ export async function runNode(ctx, options = {}) {
         NativeMessageChannel,
         // The structured clone's own algorithm (V8's ValueSerializer), for the mailboxes.
         serdes: mailboxSerdes(process),
+        handles,
       })
     : null;
   if (options.worker) {
