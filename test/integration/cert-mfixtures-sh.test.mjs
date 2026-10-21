@@ -43,27 +43,28 @@ function baseNeeding(range) {
   return dest;
 }
 
-function mfixtures(leg, base, modules = null) {
+function mfixtures(leg, base, modules = null, name = 'signal.js') {
   const work = mkdtempSync(join(scratch, `work-${leg.id}-`));
   const staged = modules ?? shadowModules(base, leg.dir, leg.version, join(work, 'nm', leg.id, 'node_modules'));
   const fx = join(work, 'mfx', leg.id, 'fx');
   mkdirSync(fx, { recursive: true });
   cpSync(join(root, 'test/fixtures/cert-review/fx/cp'), join(fx, 'cp'), { recursive: true });
+  writeFileSync(join(fx, 'cp', 'long.js'), "console.log('x'.repeat(5000) + ' tail ' + (process.versions.openssl ? 'node' : 'jsh'));\n");
   writeFileSync(join(fx, '.staged'), '');
   const kernel = { id: leg.id, names: [leg.id], version: leg.version, plain: leg.dir, modules: staged };
   writeFileSync(join(work, 'stage.json'), JSON.stringify({ kernels: [kernel], published: { dir: jsh }, previous: { dir: jsh }, trees: { base } }));
-  const r = spawnSync(process.execPath, [join(root, 'scripts/cert-review/mfixtures.mjs'), '--work', work, '--kernel', leg.id, '--pkg', 'new', '--case', 'cp/signal.js'], {
+  const r = spawnSync(process.execPath, [join(root, 'scripts/cert-review/mfixtures.mjs'), '--work', work, '--kernel', leg.id, '--pkg', 'new', '--case', `cp/${name}`], {
     encoding: 'utf8',
     env: { ...process.env, NODE22: process.execPath },
     timeout: 100_000,
   });
   const reruns = join(work, 'fixtures', leg.id, 'reruns');
-  let jshOut = null;
+  let res = null;
   try {
     const [file] = readdirSync(reruns);
-    jshOut = JSON.parse(readFileSync(join(reruns, file), 'utf8'))['new cp/signal.js'].jsh;
+    res = JSON.parse(readFileSync(join(reruns, file), 'utf8'))[`new cp/${name}`];
   } catch {}
-  return { status: r.status, out: `${r.stdout}${r.stderr}`, jsh: jshOut };
+  return { status: r.status, out: `${r.stdout}${r.stderr}`, jsh: res?.jsh ?? null, node: res?.node ?? null };
 }
 
 describe("the m-fixtures boot each kernel with the wasm-bash its stage picked, and fail a kernel whose sh won't start", () => {
@@ -80,6 +81,13 @@ describe("the m-fixtures boot each kernel with the wasm-bash its stage picked, a
     assert.equal(r.status, 0, r.out);
     assert.doesNotMatch(r.out, /needs slicc-kernel >=99\.0\.0/);
     assert.ok(r.jsh?.includes(EXEC_TIMEOUT), `${r.jsh}\n${r.out}`);
+  });
+
+  it("a case's saved outputs keep their tail past 4000 characters, so a difference there still shows", () => {
+    const r = mfixtures(newest, nm, null, 'long.js');
+    assert.equal(r.status, 0, r.out);
+    assert.match(r.jsh ?? '', /x{5000} tail jsh\n+\[rc=0\]$/, r.out.slice(-300));
+    assert.match(r.node ?? '', /x{5000} tail node\n+\[rc=0\]$/, r.out.slice(-300));
   });
 
   it("a kernel that refuses its wasm-bash fails the run, naming both, before any case reports a verdict", () => {

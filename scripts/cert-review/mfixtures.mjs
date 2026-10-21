@@ -231,7 +231,7 @@ async function runDirs(pkgName, pkgDir, pick = null) {
       const a = render(c, r, normCase);
       const b = render(c, h, normCase);
       const same = a === b && r.status !== 'TIMEOUT';
-      results[`${dir}/${c.name}`] = { status: same ? 'same' : 'diff', jsh: a.slice(0, 4000), node: same ? undefined : b.slice(0, 4000), ...(r.why ? { timeout: r.why } : {}) };
+      results[`${dir}/${c.name}`] = { status: same ? 'same' : 'diff', jsh: a, node: same ? undefined : b, ...(r.why ? { timeout: r.why } : {}) };
       if (r.status === 'TIMEOUT' || String(r.status).startsWith('ERROR')) {
         try {
           await k.terminate();
