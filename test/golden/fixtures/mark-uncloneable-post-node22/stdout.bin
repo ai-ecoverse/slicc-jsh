@@ -6,8 +6,21 @@ port: a MessageEvent true DataCloneError 25 Cannot clone object of unsupported t
 port: a MessageEvent, nested true DataCloneError 25 Cannot clone object of unsupported type.
 port: marked array, Map, Date, Uint8Array, ArrayBuffer posted
 port: a primitive marked posted
+port: marked, from a getter true DataCloneError 25 Cannot clone object of unsupported type.
+port: the getter read 1
+port: marked, an Error's cause true DataCloneError 25 Cannot clone object of unsupported type.
+port: marked, an Error's cause getter posted
+port: marked, an array's own true DataCloneError 25 Cannot clone object of unsupported type.
+port: marked, a Date's own posted
+port: marked, a RegExp's own posted
+port: marked, a Uint8Array's own posted
+port: marked, a Map's own posted
+port: marked, a Error's own posted
+port: a port, from a getter true DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
+port: a port, a Date's own posted
 port: got true true true 7 2
 port: then got 1
+port: then [object Error] [], [object Date] [], [object RegExp] [], [object Uint8Array] ["0"], [object Map] [], [object Error] [], [object Date] []
 channel: marked true DataCloneError 25 Cannot clone object of unsupported type.
 channel: a MessageEvent true DataCloneError 25 Cannot clone object of unsupported type.
 channel: a port true DataCloneError 25 Object that needs transfer was found in message but not listed in transferList

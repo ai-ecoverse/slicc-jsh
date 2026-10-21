@@ -10,7 +10,7 @@ import { isOrdinaryObject } from '../builtins/v8-serdes.mjs';
 
 const marked = new WeakSet();
 
-const isError = (value) => (Error.isError ? Error.isError(value) : Object.prototype.toString.call(value) === '[object Error]');
+export const isError = (value) => (Error.isError ? Error.isError(value) : Object.prototype.toString.call(value) === '[object Error]');
 
 /**
  * Node's: any object may be marked, but only an ordinary one (a plain
