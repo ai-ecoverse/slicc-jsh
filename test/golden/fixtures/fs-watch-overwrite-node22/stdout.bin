@@ -1,0 +1,37 @@
+-- recursive: overwrite
+change c.txt, change c.txt
+-- recursive: overwrite in a subdirectory
+change sub/o.txt, change sub/o.txt
+-- recursive: empty overwrite
+change c.txt
+-- recursive: append
+change c.txt
+-- file: overwrite
+change f.txt
+-- file: empty overwrite
+change f.txt
+-- file: append
+change f.txt
+-- file: overwrite, then append
+change f.txt
+-- directory: overwrite
+change d.txt
+-- two watchers on one file: overwrite
+A change t.txt, B change t.txt
+-- two watchers on one file: append
+A change t.txt, B change t.txt
+-- two watchers on one file: the second closed, then an append
+A change t.txt
+-- two watchers on one directory: a file created
+A rename n.txt, B rename n.txt, A change n.txt, B change n.txt
+-- a file and its directory: overwrite
+dir change v.txt, file change v.txt, dir change v.txt, file change v.txt
+-- a file and its directory: append
+dir change v.txt, file change v.txt
+-- a file and its directory: the file removed
+file change v.txt, file rename v.txt, file rename v.txt, dir rename v.txt
+-- a directory watched before its parent: the directory removed
+dir rename w, dir rename w, parent rename w
+-- a directory with an entry of its own name: both removed
+rename w, rename w, rename w
+done

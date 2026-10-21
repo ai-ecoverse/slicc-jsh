@@ -88,6 +88,13 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
     #queue = [];
     #flush = false;
     #entry = { kind: 'FSEventWrap' };
+    #wd = '';
+    #order = 0;
+    static #started = 0;
+    static #heard = [];
+    static #ready = [];
+    static #reading = false;
+    static #delivering = false;
     initialized = false;
 
     start(filename, persistent, recursive, encoding) {
@@ -95,13 +102,17 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
       const at = target(filename);
       this.#base = path.basename(at);
       this.#encoding = encoding;
+      this.#wd = at;
+      this.#order = FSEvent.#started++;
       try {
         this.#watch = kernelWatch(at, {}, (note) => this.#note(note));
       } catch (err) {
         return errno(err?.code);
       }
       try {
-        this.#file = !stat(at).isDirectory();
+        const stats = stat(at);
+        this.#file = !stats.isDirectory();
+        if (stats.ino) this.#wd = `${stats.dev}:${stats.ino}`;
       } catch {
         /* gone already: the watch says so */
       }
@@ -113,15 +124,70 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
 
     #note(note) {
       if (this.#closed || note.overflow) return;
+      const heard = (rank, eventType, filename, own) => {
+        if (typeof note.seq !== 'number') this.#push(eventType, filename, own);
+        else FSEvent.#hear({ seq: note.seq, rank, wd: this.#wd, order: this.#order, target: this, eventType, filename, own });
+      };
       if (note.ended) {
+        const removed = FSEvent.#heard.findLast((item) => item.target === this && item.seq === note.seq && !item.own);
+        if (removed) Object.assign(removed, { rank: 1, own: true });
         // IN_IGNORED, after the IN_DELETE_SELF the watch's own name was.
-        this.#push('rename', this.#base, true);
-      } else if (note.moved) this.#push('rename', this.#base, true);
+        heard(2, 'rename', this.#base, true);
+      } else if (note.moved) heard(4, 'rename', this.#base, true);
       else if (this.#file && note.type === 'rename') {
         // The link count, then IN_DELETE_SELF.
-        this.#push('change', this.#base, true);
-        this.#push('rename', this.#base, true);
-      } else this.#push(note.type, note.filename, false);
+        heard(0, 'change', this.#base, true);
+        heard(1, 'rename', this.#base, true);
+      } else heard(this.#file ? 4 : 3, note.type, note.filename, false);
+    }
+
+    static #hear(item) {
+      FSEvent.#heard.push(item);
+      if (FSEvent.#reading) return;
+      FSEvent.#reading = true;
+      const later = (fn) => timers.setImmediate(fn).unref?.();
+      later(() => {
+        const read = () => later(() => FSEvent.#read());
+        Promise.resolve(barrier()).then(read, read);
+      });
+    }
+
+    static #read() {
+      FSEvent.#reading = false;
+      const ready = FSEvent.#ready;
+      const same = new Map();
+      const heard = FSEvent.#heard.splice(0).sort((a, b) => a.seq - b.seq || a.rank - b.rank || a.order - b.order);
+      for (const item of heard) {
+        const key = [item.seq, item.rank, item.wd, item.own, item.eventType, item.filename].join('\0');
+        const last = ready.at(-1);
+        let entry = same.get(key);
+        if (!entry && last && !last.started && !last.own && !item.own && last.wd === item.wd && last.eventType === item.eventType && last.filename === item.filename) entry = last;
+        if (!entry) {
+          entry = { wd: item.wd, own: item.own, eventType: item.eventType, filename: item.filename, targets: [], started: false };
+          ready.push(entry);
+        }
+        same.set(key, entry);
+        if (!entry.targets.includes(item.target)) entry.targets.push(item.target);
+      }
+      if (FSEvent.#delivering) return;
+      FSEvent.#delivering = true;
+      FSEvent.#handOut();
+    }
+
+    static #handOut() {
+      const ready = FSEvent.#ready;
+      while (ready.length) {
+        const entry = ready[0];
+        entry.started = true;
+        const target = entry.targets.shift();
+        if (!entry.targets.length) ready.shift();
+        if (target.#closed) continue;
+        if (ready.length) timers.setImmediate(() => FSEvent.#handOut()).unref?.();
+        else FSEvent.#delivering = false;
+        target.onchange(0, entry.eventType, encode(entry.filename, target.#encoding));
+        return;
+      }
+      FSEvent.#delivering = false;
     }
 
     #push(eventType, filename, own) {
