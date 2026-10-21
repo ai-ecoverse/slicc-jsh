@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fakeUplink } from '@ai-ecoverse/slicc-kernel/testing';
 import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
@@ -227,6 +228,40 @@ for (const [name, members] of Object.entries(packages)) {
       'ssh2 object Client:function Server:function',
       'superagent function get:function post:function',
       'googleapis-common object GoogleAuth:function createAPIRequest:function',
+      '',
+    ]);
+  });
+});
+
+describe('dns (kernel): an uplink that fails to resolve', { skip: !kernelAtLeast('1.143.3') && 'slicc-kernel before 1.143.3 answers a failed uplink lookup with ENOTFOUND' }, () => {
+  let jsh;
+  before(async () => {
+    const uplink = fakeUplink({});
+    const failing = new Proxy(uplink, {
+      get: (target, key) => (key === 'resolve' ? async () => { throw Object.assign(new Error('uplink down'), { code: 'EAI_AGAIN' }); } : Reflect.get(target, key)),
+    });
+    jsh = await withJsh({ nodeTransport: false, uplink: failing });
+  });
+  after(() => jsh?.close());
+
+  it("lookup is Node's getaddrinfo EAI_AGAIN, and resolve4 c-ares' queryA ETIMEOUT", async () => {
+    await jsh.kernel.writeFile(
+      '/os/dns-eai-again.mjs',
+      `import dns from 'node:dns';
+const show = (label, e) => console.log(label, [e.message, e.code, e.errno, e.syscall, e.hostname, Object.keys(e).join()].join(' | '));
+await new Promise((resolve) => dns.lookup('db.example.test', (e) => resolve(show('lookup', e))));
+await dns.promises.lookup('db.example.test', { all: true }).catch((e) => show('promises', e));
+await new Promise((resolve) => dns.resolve4('db.example.test', (e) => resolve(show('resolve4', e))));
+`
+    );
+    const r = await jsh.run(['node', 'dns-eai-again.mjs']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    const again = 'getaddrinfo EAI_AGAIN db.example.test | EAI_AGAIN | -3001 | getaddrinfo | db.example.test | errno,code,syscall,hostname';
+    assert.deepEqual(r.stdout.split('\n'), [
+      `lookup ${again}`,
+      `promises ${again}`,
+      'resolve4 queryA ETIMEOUT db.example.test | ETIMEOUT |  | queryA | db.example.test | errno,code,syscall,hostname',
       '',
     ]);
   });
