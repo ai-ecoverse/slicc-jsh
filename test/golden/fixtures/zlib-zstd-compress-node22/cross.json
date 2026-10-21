@@ -1,0 +1,78 @@
+[
+ {
+  "name": "text level 19",
+  "offset": 0,
+  "length": 14212,
+  "params": {
+   "100": 19
+  },
+  "dict": false
+ },
+ {
+  "name": "json level -5 checksum",
+  "offset": 14212,
+  "length": 13012,
+  "params": {
+   "100": -5,
+   "201": 1
+  },
+  "dict": false
+ },
+ {
+  "name": "binary level 1",
+  "offset": 27224,
+  "length": 20010,
+  "params": {
+   "100": 1
+  },
+  "dict": false
+ },
+ {
+  "name": "mixed level 3",
+  "offset": 47234,
+  "length": 387422,
+  "params": {
+   "100": 3
+  },
+  "dict": false
+ },
+ {
+  "name": "mixed level 12 windowLog 16",
+  "offset": 434656,
+  "length": 384483,
+  "params": {
+   "100": 12,
+   "101": 16
+  },
+  "dict": false
+ },
+ {
+  "name": "mixed level 22",
+  "offset": 819139,
+  "length": 334310,
+  "params": {
+   "100": 22
+  },
+  "dict": false
+ },
+ {
+  "name": "mixed ldm nbWorkers 2",
+  "offset": 1153449,
+  "length": 390538,
+  "params": {
+   "160": 1,
+   "400": 2,
+   "401": 262144
+  },
+  "dict": false
+ },
+ {
+  "name": "record 7 dictionary",
+  "offset": 1543987,
+  "length": 70,
+  "params": {
+   "100": 5
+  },
+  "dict": true
+ }
+]

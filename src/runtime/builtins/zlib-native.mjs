@@ -1,18 +1,22 @@
 /**
- * zlib's Brotli and Zstd decompression: Node 22.22.0's ZlibBase, Brotli,
- * BrotliDecompress, Zstd and ZstdDecompress (lib/zlib.js) and the
- * convenience methods, over the decoders in src/brotli and src/zstd (Google's
- * and Facebook's C decoders ported to JavaScript; dist/vendor/brotli.cjs and
- * zstd.cjs, evaluated on first use). BrotliHandle and ZstdHandle stand in for
- * the native binding.BrotliDecoder and binding.ZstdDecompress
- * (src/node_zlib.cc): an async write decodes at once, as Node's thread pool
- * starts on it, and calls back after the current turn of the loop.
+ * zlib's Brotli and Zstd streams: Node 22.22.0's ZlibBase, Brotli,
+ * BrotliCompress, BrotliDecompress, Zstd, ZstdCompress and ZstdDecompress
+ * (lib/zlib.js) and the convenience methods, over the decoders in src/brotli
+ * and src/zstd (Google's and Facebook's C decoders ported to JavaScript;
+ * dist/vendor/brotli.cjs and zstd.cjs, evaluated on first use) and the
+ * encoders of zlib-wasm.mjs. BrotliHandle, BrotliEncoderHandle, ZstdHandle
+ * and ZstdCompressHandle stand in for the native binding.BrotliDecoder,
+ * BrotliEncoder, ZstdDecompress and ZstdCompress (src/node_zlib.cc): an async
+ * write does its work at once, as Node's thread pool starts on it, and calls
+ * back after the current turn of the loop.
  */
 import { ZLIB_CONSTANTS } from './zlib-constants.mjs';
 import { ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE, nativeError, nodeError, validateFunction, validateNumber } from '../node-errors.mjs';
 
 const {
   BROTLI_DECODE,
+  BROTLI_ENCODE,
+  ZSTD_COMPRESS,
   ZSTD_DECOMPRESS,
   ZSTD_e_continue,
   ZSTD_e_flush,
@@ -47,6 +51,10 @@ const kMaxZstdDParam = Math.max(
   ...Object.keys(ZLIB_CONSTANTS).map((key) => (key.startsWith('ZSTD_d_') ? ZLIB_CONSTANTS[key] : 0))
 );
 const zstdInitDParamsArray = new Uint32Array(kMaxZstdDParam + 1);
+const kMaxZstdCParam = Math.max(
+  ...Object.keys(ZLIB_CONSTANTS).map((key) => (key.startsWith('ZSTD_c_') ? ZLIB_CONSTANTS[key] : 0))
+);
+const zstdInitCParamsArray = new Uint32Array(kMaxZstdCParam + 1);
 
 const FLUSH_BOUND_BROTLI = [BROTLI_OPERATION_PROCESS, BROTLI_OPERATION_EMIT_METADATA];
 const FLUSH_BOUND_ZSTD = [ZSTD_e_continue, ZSTD_e_end];
@@ -91,7 +99,17 @@ const maxFlush = (a, b) => (flushiness[a] > flushiness[b] ? a : b);
  * The stream classes, given the runtime and the decoder modules
  * (src/brotli/decode.mjs, src/zstd/decompress.mjs) to load on first use.
  */
-export function createNative({ Buffer, getStream, process, util, setImmediate, loadBrotli, loadZstd }) {
+export function createNative({
+  Buffer,
+  getStream,
+  process,
+  util,
+  setImmediate,
+  loadBrotli,
+  loadZstd,
+  loadBrotliEncoder,
+  loadZstdCompress,
+}) {
   const { Transform, finished } = getStream();
   const kFlushFlag = Symbol('kFlushFlag');
   const kError = Symbol('kError');
@@ -112,6 +130,10 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
   const brotli = () => (brotliModule ??= loadBrotli());
   let zstdModule;
   const zstd = () => (zstdModule ??= loadZstd());
+  let brotliEncoderModule;
+  const brotliEncoder = () => (brotliEncoderModule ??= loadBrotliEncoder(brotli()));
+  let zstdCompressModule;
+  const zstdCompress = () => (zstdCompressModule ??= loadZstdCompress());
   const bytes = (view) => (view ? new Uint8Array(view.buffer, view.byteOffset, view.byteLength) : new Uint8Array(0));
 
   /** CompressionStream<…Context>: the native handle's write, close and error paths. */
@@ -137,6 +159,7 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
       }
       this.pendingClose = false;
       this.closed = true;
+      this.state?.destroy?.();
       this.state = null;
     }
 
@@ -244,6 +267,52 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
     }
   }
 
+  class BrotliEncoderHandle extends NativeHandle {
+    init(params, writeResult, writeCallback) {
+      this.writeResult = writeResult;
+      this.writeCallback = writeCallback;
+      this.reset();
+      if (!this.state.ok) {
+        this.emitError('Could not initialize Brotli instance', -1, 'ERR_ZLIB_INITIALIZATION_FAILED');
+        throw ERR_ZLIB_INITIALIZATION_FAILED('Initialization failed');
+      }
+      for (let i = 0; i < params.length; i++) {
+        if (params[i] === 0xffffffff) continue;
+        if (!this.state.setParameter(i, params[i])) {
+          this.emitError('Setting parameter failed', -1, 'ERR_BROTLI_PARAM_SET_FAILED');
+          throw ERR_ZLIB_INITIALIZATION_FAILED('Initialization failed');
+        }
+      }
+    }
+
+    reset() {
+      this.state?.destroy();
+      this.state = new (brotliEncoder().BrotliEncoder)();
+    }
+
+    doWork() {
+      const s = this.state;
+      try {
+        this.lastResult = s.compressStream(this.flush, this.input, this.inOff, this.inLen, this.out, this.outOff, this.outLen);
+      } catch (err) {
+        if (!(err instanceof WebAssembly.RuntimeError)) throw err;
+        this.lastResult = false;
+      }
+      this.availIn = s.availIn;
+      this.availOut = s.availOut;
+      this.input = null;
+      this.out = null;
+    }
+
+    checkError() {
+      if (!this.lastResult) {
+        this.emitError('Compression failed', -1, 'ERR_BROTLI_COMPRESSION_FAILED');
+        return false;
+      }
+      return true;
+    }
+  }
+
   /** binding.ZstdDecompress (ZstdStream<ZstdDecompressContext>). */
   class ZstdHandle extends NativeHandle {
     init(params, pledgedSrcSize, writeResult, writeCallback, dictionary) {
@@ -304,6 +373,66 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
     }
   }
 
+  const toInt64 = (n) => (Number.isNaN(n) ? 0 : Math.max(-(2 ** 63), Math.min(2 ** 63 - 1, Math.trunc(n))));
+
+  class ZstdCompressHandle extends ZstdHandle {
+    init(params, pledgedSrcSize, writeResult, writeCallback, dictionary) {
+      this.writeResult = writeResult;
+      this.writeCallback = writeCallback;
+      this.pledgedSrcSize = 2n ** 64n - 1n;
+      if (typeof pledgedSrcSize === 'number') {
+        const size = toInt64(pledgedSrcSize);
+        if (size < 0) throw nativeError(TypeError, 'ERR_INVALID_ARG_VALUE', 'pledgedSrcSize may not be negative');
+        this.pledgedSrcSize = BigInt(size);
+      }
+      const message = this.initContext(dictionary);
+      if (message) throw ERR_ZLIB_INITIALIZATION_FAILED(message);
+      for (let i = 0; i < params.length; i++) {
+        if (params[i] === 0xffffffff) continue;
+        if (this.state.setParameter(i, params[i]) !== 0) {
+          this.emitError('Setting parameter failed', -1, 'ERR_ZSTD_PARAM_SET_FAILED');
+          throw ERR_ZLIB_INITIALIZATION_FAILED('Setting parameter failed');
+        }
+      }
+    }
+
+    initContext(dictionary) {
+      this.state?.destroy();
+      const s = new (zstdCompress().CCtx)();
+      this.state = s;
+      let failure;
+      if (!s.ok) failure = ['Could not initialize zstd instance', 'ERR_ZLIB_INITIALIZATION_FAILED'];
+      else if (dictionary !== undefined && dictionary.byteLength !== 0 && s.loadDictionary(bytes(dictionary)) !== 0) {
+        failure = ['Failed to load zstd dictionary', 'ERR_ZLIB_DICTIONARY_LOAD_FAILED'];
+      } else if (s.setPledgedSrcSize(this.pledgedSrcSize) !== 0) {
+        failure = ['Could not set pledged src size', 'ERR_ZLIB_INITIALIZATION_FAILED'];
+      }
+      if (!failure) return null;
+      this.emitError(failure[0], -1, failure[1]);
+      return failure[0];
+    }
+
+    reset() {
+      this.initContext();
+    }
+
+    doWork() {
+      const s = this.state;
+      let error;
+      try {
+        error = s.compressStream2(this.flush, this.input, this.inOff, this.inLen, this.out, this.outOff, this.outLen);
+      } catch (err) {
+        if (!(err instanceof WebAssembly.RuntimeError)) throw err;
+        error = 64;
+      }
+      if (error !== 0) this.errorCode = error;
+      this.availIn = s.availIn;
+      this.availOut = s.availOut;
+      this.input = null;
+      this.out = null;
+    }
+  }
+
   function zlibOnError(message, errno, code) {
     const self = this[owner];
     // There is no way to cleanly recover. Continuing only obscures problems.
@@ -324,7 +453,7 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
   function ZlibBase(opts, mode, handle, { flush, finishFlush, fullFlush }) {
     let chunkSize = Z_DEFAULT_CHUNK;
     let maxOutputLength = kMaxLength;
-    const flushBound = mode === ZSTD_DECOMPRESS ? FLUSH_BOUND_ZSTD : FLUSH_BOUND_BROTLI;
+    const flushBound = mode === ZSTD_DECOMPRESS || mode === ZSTD_COMPRESS ? FLUSH_BOUND_ZSTD : FLUSH_BOUND_BROTLI;
     if (opts) {
       chunkSize = opts.chunkSize;
       if (!validateFiniteNumber(chunkSize, 'options.chunkSize')) {
@@ -402,7 +531,14 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
   });
 
   ZlibBase.prototype.reset = function () {
-    if (!this._handle) throw new Error('zlib binding closed');
+    if (!this._handle) {
+      throw nodeError(
+        Error,
+        'ERR_INTERNAL_ASSERTION',
+        'zlib binding closed\nThis is caused by either a bug in Node.js or incorrect usage of Node.js internals.\n' +
+          'Please open an issue with this stack trace at https://github.com/nodejs/node/issues\n'
+      );
+    }
     return this._handle.reset();
   };
 
@@ -653,13 +789,20 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
         brotliInitParamsArray[key] = value;
       });
     }
-    const handle = new BrotliHandle(mode);
+    const handle = mode === BROTLI_ENCODE ? new BrotliEncoderHandle() : new BrotliHandle(mode);
     this._writeState = new Uint32Array(2);
     handle.init(brotliInitParamsArray, this._writeState, processCallback);
     ZlibBase.call(this, opts, mode, handle, brotliDefaultOpts);
   }
   Object.setPrototypeOf(Brotli.prototype, Zlib.prototype);
   Object.setPrototypeOf(Brotli, Zlib);
+
+  function BrotliCompress(opts) {
+    if (!(this instanceof BrotliCompress)) return new BrotliCompress(opts);
+    Brotli.call(this, opts, BROTLI_ENCODE);
+  }
+  Object.setPrototypeOf(BrotliCompress.prototype, Brotli.prototype);
+  Object.setPrototypeOf(BrotliCompress, Brotli);
 
   function BrotliDecompress(opts) {
     if (!(this instanceof BrotliDecompress)) return new BrotliDecompress(opts);
@@ -690,7 +833,7 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
           initParamsArray[key] = value;
         });
       }
-      const handle = new ZstdHandle();
+      const handle = mode === ZSTD_COMPRESS ? new ZstdCompressHandle() : new ZstdHandle();
       const pledgedSrcSize = opts?.pledgedSrcSize ?? undefined;
       const writeState = new Uint32Array(2);
       handle.init(
@@ -702,6 +845,12 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
       );
       super(opts, mode, handle, zstdDefaultOpts);
       this._writeState = writeState;
+    }
+  }
+
+  class ZstdCompress extends Zstd {
+    constructor(opts) {
+      super(opts, ZSTD_COMPRESS, zstdInitCParamsArray, kMaxZstdCParam);
     }
   }
 
@@ -798,10 +947,18 @@ export function createNative({ Buffer, getStream, process, util, setImmediate, l
   }
 
   return {
+    BrotliCompress,
+    brotliCompress: createConvenienceMethod(BrotliCompress, false),
+    brotliCompressSync: createConvenienceMethod(BrotliCompress, true),
+    createBrotliCompress: createProperty(BrotliCompress),
     BrotliDecompress,
     brotliDecompress: createConvenienceMethod(BrotliDecompress, false),
     brotliDecompressSync: createConvenienceMethod(BrotliDecompress, true),
     createBrotliDecompress: createProperty(BrotliDecompress),
+    ZstdCompress,
+    zstdCompress: createConvenienceMethod(ZstdCompress, false),
+    zstdCompressSync: createConvenienceMethod(ZstdCompress, true),
+    createZstdCompress: createProperty(ZstdCompress),
     ZstdDecompress,
     zstdDecompress: createConvenienceMethod(ZstdDecompress, false),
     zstdDecompressSync: createConvenienceMethod(ZstdDecompress, true),

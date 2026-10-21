@@ -109,11 +109,16 @@ Node.js license reproduced in the node-inspect-extracted section below
 ("This project contains parts of Node.js").
 
 It also includes Brotli's decoder (https://github.com/google/brotli), ported to
-JavaScript in src/brotli, and Brotli's static dictionary, under the license in
-the Brotli section below.
+JavaScript in src/brotli, Brotli's static dictionary, and Brotli's encoder,
+compiled to WebAssembly (src/brotli/encoder.wasm), under the license in the
+Brotli section below.
 
 It also includes Zstandard's decoder (https://github.com/facebook/zstd), ported
-to JavaScript in src/zstd, under the license in the Zstandard section below.
+to JavaScript in src/zstd, and Zstandard's compressor, compiled to WebAssembly
+(src/zstd/compress.wasm), under the license in the Zstandard section below.
+
+The WebAssembly encoders include Zig's C library (malloc and log2, the latter
+ported from musl), under the licenses in the Zig and musl sections below.
 `;
 
   const missing = [];
@@ -124,6 +129,12 @@ to JavaScript in src/zstd, under the license in the Zstandard section below.
     `--------------------------------------------------------------------------------\n` +
       `This product includes Zstandard (ported from github.com/facebook/zstd). License text follows:\n\n` +
       `${readFileSync(join(root, 'src/zstd/LICENSE'), 'utf8').trim()}\n`,
+    `--------------------------------------------------------------------------------\n` +
+      `This product includes parts of Zig's C library (github.com/ziglang/zig), compiled to WebAssembly. License text follows:\n\n` +
+      `${readFileSync(join(root, 'scripts/wasm/zig.LICENSE'), 'utf8').trim()}\n`,
+    `--------------------------------------------------------------------------------\n` +
+      `This product includes code ported from musl (musl.libc.org), compiled to WebAssembly. License text follows:\n\n` +
+      `${readFileSync(join(root, 'scripts/wasm/musl.COPYRIGHT'), 'utf8').trim()}\n`,
   ];
   const names = [...pkgRoots.keys()].sort((a, b) => a.localeCompare(b));
   for (const name of names) {

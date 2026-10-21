@@ -1,0 +1,5 @@
+{
+  "description": "zlib Brotli compression against Node's (#419): brotli 1.1.0's encoder, compressing to Node 22's very bytes at qualities 0-11, windows 10-30 with large windows, modes, lgblock, size hint, npostfix/ndirect and literal context modeling, a 1 MB mixed payload, params and options validation, sync, callback, promisify and stream forms with flush/params/reset/close, and cross-compatibility: node.br (Node 22's encoder) and jsh.br (jsh's, from make-data.mjs, run with Node 22.22.0 from this directory) decode on both",
+  "argv": ["script.js"],
+  "shim": true
+}

@@ -37,11 +37,12 @@ describe('builtins without the global timers: what jsh has no Node output for (k
   after(() => jsh?.close());
 
   for (const name of ['generateKeyPair', 'generatePrime', 'checkPrime', 'brotliCompress', 'zstdCompress']) {
-    it(`${name}: its unavailable callback form reports on a later turn, on jsh's own setImmediate`, async () => {
+    it(`${name}: its callback form reports on a later turn, on jsh's own setImmediate`, async () => {
       const r = await jsh.run(['node', 'unavailable.js', name]);
       assert.equal(r.stderr, '');
       assert.equal(r.status, 0);
-      assert.equal(r.stdout, `${name} ERR_FEATURE_UNAVAILABLE_ON_PLATFORM later\nthe program ends\n`);
+      const code = name.endsWith('Compress') ? undefined : 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM';
+      assert.equal(r.stdout, `${name} ${code} later\nthe program ends\n`);
     });
   }
 });

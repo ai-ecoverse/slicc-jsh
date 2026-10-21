@@ -1,0 +1,5 @@
+{
+  "description": "zlib Zstd compression against Node's (#419): zstd 1.5.7's compressor, compressing to Node 22's very bytes at levels -131072 to 23, windows 2**10 to 2**30, every strategy, hash/chain/search logs, minMatch, targetLength, long distance matching, checksums, content size, multithreaded jobs (nbWorkers, jobSize, overlapLog), trained and raw dictionaries (dict.bin), pledgedSrcSize, a 1 MB mixed payload, params and options validation, sync, callback, promisify and stream forms with flush/reset/close, ZSTD_error_* codes, and cross-compatibility: node.zst (Node 22's encoder) and jsh.zst (jsh's, from make-data.mjs, run with Node 22.22.0 from this directory) decode on both",
+  "argv": ["script.js"],
+  "shim": true
+}
