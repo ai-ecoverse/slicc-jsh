@@ -36,8 +36,11 @@ const kPortMark = '\u0000slicc-jsh port';
 const randomUUID = typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID.bind(globalThis.crypto) : null;
 const random = Math.random;
 // A Map's and a Set's own entries, as structured clone reads them: by the
-// builtins (a program's own iterator, set or add on one isn't run).
-const call = (fn, self, ...args) => Reflect.apply(fn, self, args);
+// builtins (a program's own iterator, set or add on one isn't run), taken
+// before the program runs, as is how they're called.
+const { apply } = Reflect;
+const arrayFrom = Array.from;
+const call = (fn, self, ...args) => apply(fn, self, args);
 const sizeOf = (getter, value) => {
   try {
     call(getter, value);
@@ -52,8 +55,8 @@ const isMap = (value) => sizeOf(mapSizeGetter, value);
 const isSet = (value) => sizeOf(setSizeGetter, value);
 const { entries: mapEntries, set: mapSet, clear: mapClear } = Map.prototype;
 const { values: setValues, add: setAdd, clear: setClear } = Set.prototype;
-const entriesOf = (map) => Array.from({ [Symbol.iterator]: () => call(mapEntries, map) });
-const valuesOf = (set) => Array.from({ [Symbol.iterator]: () => call(setValues, set) });
+const entriesOf = (map) => arrayFrom({ [Symbol.iterator]: () => call(mapEntries, map) });
+const valuesOf = (set) => arrayFrom({ [Symbol.iterator]: () => call(setValues, set) });
 export const newPortNonce = () => randomUUID?.() ?? `${random()}`.slice(2);
 export const portMark = (nonce, i) => ({ [kPortMark]: `${nonce}:${i}` });
 export function markIndex(value, nonce) {
