@@ -130,15 +130,15 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
       };
       if (note.ended) {
         const removed = FSEvent.#heard.findLast((item) => item.target === this && item.seq === note.seq && !item.own);
-        if (removed) Object.assign(removed, { rank: 2, own: true });
+        if (removed) Object.assign(removed, { rank: 1, own: true });
         // IN_IGNORED, after the IN_DELETE_SELF the watch's own name was.
-        heard(3, 'rename', this.#base, true);
-      } else if (note.moved) heard(2, 'rename', this.#base, true);
+        heard(2, 'rename', this.#base, true);
+      } else if (note.moved) heard(4, 'rename', this.#base, true);
       else if (this.#file && note.type === 'rename') {
         // The link count, then IN_DELETE_SELF.
         heard(0, 'change', this.#base, true);
-        heard(2, 'rename', this.#base, true);
-      } else heard(this.#file ? 2 : 1, note.type, note.filename, false);
+        heard(1, 'rename', this.#base, true);
+      } else heard(this.#file ? 4 : 3, note.type, note.filename, false);
     }
 
     static #hear(item) {

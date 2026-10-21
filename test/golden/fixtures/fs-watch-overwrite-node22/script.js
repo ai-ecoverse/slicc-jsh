@@ -89,6 +89,7 @@ setTimeout(() => {
   const dir = watch('dir', at('v'));
   await step('a file and its directory: overwrite', () => fs.writeFileSync(at('v', 'v.txt'), 'vv'));
   await step('a file and its directory: append', () => fs.appendFileSync(at('v', 'v.txt'), 'x'));
+  await step('a file and its directory: the file removed', () => fs.unlinkSync(at('v', 'v.txt')));
   file.close();
   dir.close();
 
