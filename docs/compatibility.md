@@ -147,6 +147,8 @@ The sync forms run on the kernel's synchronous calls, the callback and promise f
 
 **`/dev`.** On slicc-kernel 1.69 and later, devices (`/dev/null`, `/dev/zero`, `/dev/urandom`, `/dev/stdout`, `/dev/fd/N`, …) open as kernel descriptors and are read and written as streams, never whole. A link to a device is followed first. `/dev/stdin` and `/dev/fd/0` are `process.stdin`.
 
+**Descriptors.** On slicc-kernel 1.143.4 and later, a descriptor open for writing holds the file it opened, as on Linux: once that file is unlinked, renamed away, or replaced by another renamed over its path, `writeSync`, `ftruncate`, appends and write streams still go to it, and never to the file now at the path (golden `fs-fd-holds-its-file-node22`). Each write is synced, so it is one `'change'`. Before 1.143.4, it writes by its path.
+
 **Modes.** On slicc-kernel 1.86.0 and later, `chmod`, `fchmod` (and `FileHandle.chmod`, both by the descriptor's path) change the mode in the kernel:
 - They follow a symlink, and only the permission bits count (`mode & 0o7777`, as Linux masks the rest).
 - Only the file's owner or root may change a mode: anyone else gets `EPERM`, with Node's error (`code`, `syscall` `chmod`, `path`).

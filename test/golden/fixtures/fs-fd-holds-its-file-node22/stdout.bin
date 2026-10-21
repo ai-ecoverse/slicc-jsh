@@ -1,0 +1,6 @@
+unlinked: the path is back false the descriptor reads "XYc" nlink 0 size 3
+unlinked: ftruncate "X" false
+replaced: the path "new file" the descriptor reads "XY" nlink 0
+replaced, appending: the path "new"
+renamed away while open for w: "to the moved one" false
+a write stream renamed away: "stream after rename" false
