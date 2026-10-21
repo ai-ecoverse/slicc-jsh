@@ -13,6 +13,9 @@ asyncDispose function
 instances true true true false
 defaults 0 5000 60000 300000 null false
 ALPN <Buffer 08 68 74 74 70 2f 31 2e 31>
+ALPNCallback undefined function
+ALPNProtocols <Buffer 02 68 32>
+both ERR_TLS_ALPN_CALLBACK_WITH_PROTOCOLS
 listeners [ 0, 1, 1 ]
 createServer true true
 without new true 1000 500 1
@@ -36,4 +39,8 @@ methods [
   'function', 'function'
 ]
 destroyed request [ 'error stop', 'close' ]
+sent true "GET /p?q HTTP/1.1\r\nHost: 127.0.0.1:PORT\r\nConnection: keep-alive\r\n\r\n"
+after end ERR_HTTP_HEADERS_SENT
+after end ERR_HTTP_HEADERS_SENT
+after end ERR_HTTP_HEADERS_SENT
 refused [ 'error ECONNREFUSED connect ECONNREFUSED 127.0.0.1:PORT', 'close' ] true

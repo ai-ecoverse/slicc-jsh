@@ -1,5 +1,5 @@
 {
-  "description": "ai-ecoverse/slicc-jsh#724: https's own exports are Node's (no http classes), https.Server chains to tls.Server with http.Server's connection methods, Node's http defaults and ALPN, and https.request with no agent of its own is an http.ClientRequest on https.globalAgent with OutgoingMessage's header API; one destroyed before it goes out, and one to a port nothing listens on, end with Node's events",
+  "description": "ai-ecoverse/slicc-jsh#724: https's own exports are Node's (no http classes), https.Server chains to tls.Server with http.Server's connection methods, Node's http defaults and ALPN (http/1.1 unless ALPNProtocols or an ALPNCallback is given), and https.request with no agent of its own is an http.ClientRequest on https.globalAgent with OutgoingMessage's header API, its headers sent from end() on; one destroyed before it goes out, and one to a port nothing listens on, end with Node's events",
   "argv": ["main.js"],
   "shim": true
 }

@@ -2055,10 +2055,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       const method = (opts.method ?? 'GET').toUpperCase();
       const body = Buffer.concat(this[kChunks]);
       this[kChunks] = [];
+      const headers = this.getHeaders();
       this._headerSent = true;
+      this._header ||= this[kRenderHead]().toString('latin1');
       this[kFetchAbort] = new AbortController();
       const send = this[kFetchVia]?.send ?? ((request) => getFetchClient().send({ protocol: 'http:', ...request }));
-      const pending = send({ host, port, path: opts.path ?? '/', method, headers: this.getHeaders(), body, signal: this[kFetchAbort].signal, req: this })
+      const pending = send({ host, port, path: opts.path ?? '/', method, headers, body, signal: this[kFetchAbort].signal, req: this })
         .then(
           (res) => {
             if (this.destroyed) {

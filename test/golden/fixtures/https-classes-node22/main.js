@@ -15,6 +15,14 @@ const s = new https.Server();
 console.log('instances', s instanceof https.Server, s instanceof tls.Server, s instanceof net.Server, s instanceof http.Server);
 console.log('defaults', s.timeout, s.keepAliveTimeout, s.headersTimeout, s.requestTimeout, s.maxHeadersCount, s.httpAllowHalfOpen);
 console.log('ALPN', s.ALPNProtocols);
+const withCallback = new https.Server({ ALPNCallback: () => 'http/1.1' });
+console.log('ALPNCallback', withCallback.ALPNProtocols, typeof withCallback.ALPNCallback);
+console.log('ALPNProtocols', new https.Server({ ALPNProtocols: ['h2'] }).ALPNProtocols);
+try {
+  new https.Server({ ALPNCallback: () => 'h2', ALPNProtocols: ['h2'] });
+} catch (err) {
+  console.log('both', err.code);
+}
 console.log('listeners', ['request', 'secureConnection', 'tlsClientError'].map((e) => s.listenerCount(e)));
 const handler = () => {};
 const created = https.createServer(handler);
@@ -52,7 +60,16 @@ function refused() {
     const { port } = probe.address();
     probe.close(() => {
       const seen = [];
-      const r = https.get(`https://127.0.0.1:${port}/`, () => seen.push('response'));
+      const r = https.get(`https://127.0.0.1:${port}/p?q`, () => seen.push('response'));
+      console.log('sent', r.headersSent, JSON.stringify(r._header.replace(String(port), 'PORT')));
+      for (const change of [() => r.setHeader('x-late', '1'), () => r.removeHeader('host'), () => r.appendHeader('x-late', '2')]) {
+        try {
+          change();
+          console.log('changed after end');
+        } catch (err) {
+          console.log('after end', err.code);
+        }
+      }
       r.on('error', (err) => seen.push(`error ${err.code} ${err.message.replace(String(port), 'PORT')}`));
       r.on('close', () => {
         seen.push('close');

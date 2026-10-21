@@ -51,7 +51,8 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
     }
     const httpOptions = {};
     storeHttpOptions(httpOptions, options);
-    const self = Reflect.construct(tls.Server, [{ noDelay: true, ALPNProtocols: ['http/1.1'], ...options }], new.target);
+    const alpn = options.ALPNProtocols || options.ALPNCallback ? {} : { ALPNProtocols: ['http/1.1'] };
+    const self = Reflect.construct(tls.Server, [{ noDelay: true, ...alpn, ...options }], new.target);
     Object.assign(self, httpOptions);
     self.httpAllowHalfOpen = false;
     self.on('secureConnection', (socket) => handleConnection(socket, undefined, self));
