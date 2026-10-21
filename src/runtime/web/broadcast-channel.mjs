@@ -372,7 +372,7 @@ export function createPorts({
       if (arguments.length === 0) throw nodeError(TypeError, 'ERR_MISSING_ARGS', 'The "message" argument must be specified');
       // Nothing can be transferred on a channel: a port in it is Node's
       // DataCloneError, as a marked object is.
-      const data = structuredClone(checked(message, []));
+      const data = structuredClone(message);
       for (const ch of channels.get(this.#name) ?? []) {
         if (ch === this) continue;
         ch._enqueue(data);

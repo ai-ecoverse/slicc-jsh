@@ -1,10 +1,10 @@
 /**
  * node:worker_threads' markAsUncloneable, honoured where jsh posts a message
- * (a port's, a BroadcastChannel's, a worker's and its workerData): a marked
- * object in one is Node's DataCloneError. Node marks its MessageEvents too.
+ * (a port's, a worker's and its workerData): a marked object in one is
+ * Node's DataCloneError. Node marks its MessageEvents too.
  *
  * The platform's structuredClone is not jsh's: it clones a marked object as
- * any other (docs/compatibility.md).
+ * any other, as does a BroadcastChannel's post (docs/compatibility.md).
  */
 import { isOrdinaryObject } from '../builtins/v8-serdes.mjs';
 

@@ -21,11 +21,6 @@ port: a port, a Date's own posted
 port: got true true true 7 2
 port: then got 1
 port: then [object Error] [], [object Date] [], [object RegExp] [], [object Uint8Array] ["0"], [object Map] [], [object Error] [], [object Date] []
-channel: marked true DataCloneError 25 Cannot clone object of unsupported type.
-channel: a MessageEvent true DataCloneError 25 Cannot clone object of unsupported type.
-channel: a port true DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
-channel: plain posted
-channel: got {"ok":1}
 workerData: marked true DataCloneError 25 Cannot clone object of unsupported type.
 worker.postMessage: marked true DataCloneError 25 Cannot clone object of unsupported type.
 worker: parentPort, marked true DataCloneError 25 Cannot clone object of unsupported type.

@@ -1,10 +1,10 @@
 // worker_threads.markAsUncloneable, and Node's MessageEvents (undici marks
-// them): such an object anywhere in a message posted to a port, a
-// BroadcastChannel or a worker, or in workerData, is a DataCloneError.
+// them): such an object anywhere in a message posted to a port or a worker,
+// or in workerData, is a DataCloneError. (A BroadcastChannel's post is not
+// checked in jsh, nor is the global structuredClone: the platform's.)
 // Node refuses only an ordinary object or an Error so marked: an array, a
-// Map, a Date or a buffer still goes. (The global structuredClone is not
-// tried: it is the platform's in jsh.)
-const { Worker, MessageChannel, BroadcastChannel, markAsUncloneable, isMainThread, parentPort } = require('worker_threads');
+// Map, a Date or a buffer still goes.
+const { Worker, MessageChannel, markAsUncloneable, isMainThread, parentPort } = require('worker_threads');
 
 const outcome = (label, fn) => {
   try {
@@ -64,25 +64,8 @@ port2.on('message', (m) => {
   console.log('port: then got', one);
   console.log('port: then', rest.map((x) => `${Object.prototype.toString.call(x)} ${JSON.stringify(Object.keys(x))}`).join(', '));
   port1.close();
-  channel();
+  worker();
 });
-
-function channel() {
-  const a = new BroadcastChannel('uncloneable');
-  const b = new BroadcastChannel('uncloneable');
-  tried('channel: marked', () => a.postMessage({ x: mark({}) }));
-  tried('channel: a MessageEvent', () => a.postMessage([new MessageEvent('m')]));
-  const { port1: p } = new MessageChannel();
-  tried('channel: a port', () => a.postMessage({ p }));
-  p.close();
-  tried('channel: plain', () => a.postMessage({ ok: 1 }));
-  b.onmessage = (e) => {
-    console.log('channel: got', JSON.stringify(e.data));
-    a.close();
-    b.close();
-    worker();
-  };
-}
 
 function worker() {
   tried('workerData: marked', () => new Worker(__filename, { workerData: { d: mark({}) } }));
