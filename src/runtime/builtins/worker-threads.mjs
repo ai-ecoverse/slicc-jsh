@@ -208,6 +208,8 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     #native;
     #name = '';
     #threadId;
+    // Its 'exit' has been emitted: threadId is -1 from then on, as Node's.
+    #exitEmitted = false;
 
     constructor(filename, options = {}) {
       super();
@@ -424,6 +426,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       // timers (not the program's setImmediate, or require('timers')'s,
       // which it may replace).
       timers.setImmediate(() => {
+        this.#exitEmitted = true;
         this.emit('exit', code);
         for (const resolve of this.#exitWaiters.splice(0)) resolve(code);
       });
@@ -463,9 +466,9 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       return this.#exited ? {} : { ...this.#limits };
     }
 
-    // -1 once it has exited (from its 'exit' on), as Node's.
+    // -1 from its 'exit' on (its last messages still see its id), as Node's.
     get threadId() {
-      return this.#exited ? -1 : this.#threadId;
+      return this.#exitEmitted ? -1 : this.#threadId;
     }
 
     get threadName() {

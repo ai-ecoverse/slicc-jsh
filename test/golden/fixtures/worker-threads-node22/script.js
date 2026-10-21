@@ -14,6 +14,11 @@ function events(worker, label) {
   worker.on('error', (e) => seen.push(`error ${e instanceof Error ? err(e) : json(e)}`));
   return new Promise((resolve) =>
     worker.on('exit', (code) => {
+      // Node orders only its messages among themselves (and 'exit' last):
+      // 'online', the messages and 'error' come on different ports, so
+      // they are listed by kind, the messages in their order.
+      const rank = (e) => ['online', 'message', 'error'].indexOf(e.split(' ')[0]);
+      seen.sort((a, b) => rank(a) - rank(b));
       seen.push(`exit ${code}`);
       log(label, seen.join(' | '));
       resolve(code);
