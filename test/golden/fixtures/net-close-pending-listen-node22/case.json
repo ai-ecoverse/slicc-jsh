@@ -1,0 +1,1 @@
+{ "description": "a net server closed before it is listening gives its address back at once: another listen on the port right after works, and the closed one never emits listening", "argv": ["script.js"], "shim": true }

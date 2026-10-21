@@ -1,0 +1,6 @@
+the closed server: close
+another server listens on its port
+the twice-listened server: close
+another server listens on its first port
+another server listens on its second port
+the program ends
