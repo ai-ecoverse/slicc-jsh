@@ -76,7 +76,7 @@ server.listen(0, '127.0.0.1', () => {
   // checked as Node checks it (tls-kernel.test.mjs).
   const kernelCerts = kernelAtLeast('1.124.13');
   const overSocket = kernelTls ? 'no throw' : `ERR_NOT_SUPPORTED slicc-jsh: '${transportTls ? 'tls.connect over a socket' : 'tls.connect'}' is not supported yet (no TLS on ctx.net)`;
-  it('a handshake throws ERR_NOT_SUPPORTED when it is called: connect, listen, a TLSSocket over a socket, key material', async () => {
+  it('a handshake throws ERR_NOT_SUPPORTED when it is called: connect, listen, an https.Server\'s listen, a TLSSocket over a socket, key material', async () => {
     const r = await jsh.run([
       'node',
       '-e',
@@ -105,6 +105,9 @@ t('createSecureContext ca', () => tls.createSecureContext({ ca: ['c'] }));
 t('createServer key', () => tls.createServer({ key: 'k', cert: 'c' }));
 t('createSecurePair', () => tls.createSecurePair());
 t('https.createServer', () => https.createServer());
+t('https listen', () => https.createServer().listen(0));
+const httpsServer = new https.Server();
+console.log('https.Server', httpsServer instanceof tls.Server, Object.getPrototypeOf(https.Server.prototype) === tls.Server.prototype, https.Server !== require('http').Server, httpsServer.listening);
 `,
     ]);
     assert.equal(r.status, 0, r.stderr);
@@ -128,7 +131,9 @@ t('https.createServer', () => https.createServer());
         ? 'createServer key ERR_OSSL_PEM_NO_START_LINE error:0480006C:PEM routines::no start line'
         : `createServer key ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'cert'' is not supported yet ${why}`,
       `createSecurePair ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecurePair' is not supported yet ${why}`,
-      `https.createServer ERR_NOT_SUPPORTED slicc-jsh: 'https.createServer' is not supported yet ${why}`,
+      'https.createServer no throw',
+      `https listen ERR_NOT_SUPPORTED slicc-jsh: 'tls.Server.listen' is not supported yet ${why}`,
+      'https.Server true true true false',
       '',
     ]);
     // tls.createSecurePair is deprecated (DEP0064), as in Node.
