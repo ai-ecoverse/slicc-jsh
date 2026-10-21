@@ -10,3 +10,6 @@ fork exit 0
 ref-again number ["ProcessWrap"]
 ref-again held
 ref-again exit 3
+grandchild number ["Timeout"]
+grandchild child exit 0
+grandchild exit 0
