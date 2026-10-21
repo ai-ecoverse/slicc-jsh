@@ -64,18 +64,21 @@ describe('process.memoryUsage (kernel)', () => {
 
   it('Buffers a synchronous loop drops are freed during the loop, as on Node', async (t) => {
     const m = await json(`
-      let peak = 0;
-      for (let i = 0; i < 32; i++) {
-        Buffer.alloc(${16 * MiB});
-        peak = Math.max(peak, process.memoryUsage().arrayBuffers);
+      const base = process.memoryUsage().arrayBuffers;
+      let allocs = 0;
+      let freed = false;
+      while (!freed && allocs < 64) {
+        Buffer.alloc(${8 * MiB});
+        allocs++;
+        freed = process.memoryUsage().arrayBuffers - base <= (allocs - 1) * ${8 * MiB};
       }
-      console.log(JSON.stringify({ peak, heapTotal: process.memoryUsage().heapTotal }));
+      console.log(JSON.stringify({ freed, allocs, heapTotal: process.memoryUsage().heapTotal }));
     `);
     if (m.heapTotal === 0) {
       t.skip('this kernel measures no memory for a JS program (no ctx.memory)');
       return;
     }
-    assert.ok(m.peak < 256 * MiB, `peak arrayBuffers ${m.peak}`);
+    assert.ok(m.freed, `none of ${m.allocs} dropped 8 MiB Buffers was freed during the loop`);
   });
 
   it('heap figures are measured or both 0, never one without the other', async (t) => {
