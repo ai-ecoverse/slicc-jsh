@@ -3,18 +3,19 @@ import assert from 'node:assert/strict';
 import * as nodeStream from 'node:stream';
 import { Readable } from 'node:stream';
 import { createHttps } from '../../src/runtime/builtins/https.mjs';
+import { kIncomingDestroy, kIncomingRead } from '../../src/runtime/builtins/http-fetch.mjs';
 
 function makeHttpStub() {
-  return {
-    IncomingMessage(_socket, body) {
-      const r = Readable.from([body ?? Buffer.alloc(0)]);
-      r.statusCode = 0;
-      r.statusMessage = '';
-      r.headers = Object.create(null);
-      r.rawHeaders = [];
-      return r;
-    },
-  };
+  class IncomingMessage extends Readable {
+    _read(n) {
+      this[kIncomingRead]?.(n);
+    }
+    _destroy(err, callback) {
+      if (this[kIncomingDestroy]) this[kIncomingDestroy](err, callback);
+      else callback(err);
+    }
+  }
+  return { IncomingMessage };
 }
 
 describe('https client (ctx.fetch)', () => {

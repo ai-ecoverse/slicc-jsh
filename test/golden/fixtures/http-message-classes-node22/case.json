@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#713: http's IncomingMessage, OutgoingMessage, ServerResponse, ClientRequest, Server and Agent are Node's function constructors with Node's prototype chains and methods on their prototypes; new IncomingMessage(socket) and new ServerResponse(req) stand alone; ServerResponse.call on a util.inherits subclass with its own socket, as light-my-request does; the header API; a live request and response keep working after their prototypes are swapped, as Express does",
+  "argv": ["main.js"],
+  "shim": true
+}

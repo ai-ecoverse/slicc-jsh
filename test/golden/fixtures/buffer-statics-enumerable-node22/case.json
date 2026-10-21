@@ -1,0 +1,5 @@
+{
+  "description": "Buffer's static methods are own enumerable properties, as in Node, so safer-buffer's for-in copy (iconv-lite, raw-body, body-parser, express.json()) has isBuffer, from, alloc, concat, byteLength, isEncoding and compare",
+  "argv": ["main.js"],
+  "shim": true
+}

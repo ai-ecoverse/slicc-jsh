@@ -1,0 +1,3 @@
+from:true alloc:true allocUnsafe:true allocUnsafeSlow:true concat:true byteLength:true isBuffer:true isEncoding:true compare:true
+from:function alloc:function allocUnsafe:undefined allocUnsafeSlow:undefined concat:function byteLength:function isBuffer:function isEncoding:function compare:function
+true 5 caféaa true 1

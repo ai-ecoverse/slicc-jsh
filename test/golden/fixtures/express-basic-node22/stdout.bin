@@ -1,0 +1,56 @@
+GET / -> 200 OK
+  content-type=text/html; charset=utf-8 | content-length=4 | x-chain=one, two | x-powered-by=Express
+  body: "home"
+GET /users/42?sort=desc&tags=a&tags=b -> 200 OK
+  content-type=application/json; charset=utf-8 | content-length=79 | x-chain=one, two | x-powered-by=Express
+  body: "{\"id\":\"42\",\"query\":{\"sort\":\"desc\",\"tags\":[\"a\",\"b\"]},\"classes\":[true,true,true]}"
+POST /echo -> 201 Created
+  content-type=application/json; charset=utf-8 | content-length=79 | x-chain=one, two | x-powered-by=Express
+  body: "{\"got\":{\"name\":\"jsh\",\"list\":[1,2,3]},\"type\":\"application/json\",\"isJson\":\"json\"}"
+POST /echo -> 400 Bad Request
+  content-type=application/json; charset=utf-8 | content-length=31 | x-chain=one, two | x-powered-by=Express
+  body: "{\"error\":\"entity.parse.failed\"}"
+GET /text -> 202 Accepted
+  content-type=text/plain; charset=utf-8 | content-length=10 | x-chain=one, two | x-powered-by=Express
+  body: "plain text"
+GET /html -> 200 OK
+  content-type=text/html; charset=utf-8 | content-length=11 | x-chain=one, two | x-powered-by=Express
+  body: "<p>html</p>"
+GET /buffer -> 200 OK
+  content-type=application/octet-stream | content-length=5 | x-chain=one, two | x-powered-by=Express
+  body: "bytes"
+GET /old -> 302 Found
+  content-type=text/plain; charset=utf-8 | content-length=39 | location=/users/7?from=old | x-chain=one, two | x-powered-by=Express
+  body: "Found. Redirecting to /users/7?from=old"
+GET /moved -> 301 Moved Permanently
+  content-type=text/plain; charset=utf-8 | content-length=35 | location=/ | x-chain=one, two | x-powered-by=Express
+  body: "Moved Permanently. Redirecting to /"
+GET /boom -> 500 Internal Server Error
+  content-type=application/json; charset=utf-8 | content-length=16 | x-chain=one, two | x-powered-by=Express
+  body: "{\"error\":\"boom\"}"
+GET /async-boom -> 500 Internal Server Error
+  content-type=application/json; charset=utf-8 | content-length=22 | x-chain=one, two | x-powered-by=Express
+  body: "{\"error\":\"async boom\"}"
+GET /next-err -> 418 I'm a Teapot
+  content-type=application/json; charset=utf-8 | content-length=18 | x-chain=one, two | x-powered-by=Express
+  body: "{\"error\":\"teapot\"}"
+GET /stream -> 200 OK
+  content-type=text/plain; charset=utf-8 | x-chain=one, two | transfer-encoding=chunked | x-powered-by=Express
+  body: "a;b;c"
+GET /end -> 204 No Content
+  x-chain=one, two | x-powered-by=Express
+  body: ""
+HEAD /head -> 200 OK
+  content-type=text/html; charset=utf-8 | content-length=8 | x-chain=one, two | x-head=yes | x-powered-by=Express
+  body: ""
+GET /static/hello.txt -> 200 OK
+  content-type=text/plain; charset=utf-8 | content-length=25 | x-chain=one, two | x-powered-by=Express
+  body: "hello from a static file\n"
+GET /static/nope.txt -> 404 Not Found
+  content-type=application/json; charset=utf-8 | content-length=30 | x-chain=one, two | x-powered-by=Express
+  body: "{\"missing\":\"/static/nope.txt\"}"
+GET /nowhere?x=1 -> 404 Not Found
+  content-type=application/json; charset=utf-8 | content-length=26 | x-chain=one, two | x-powered-by=Express
+  body: "{\"missing\":\"/nowhere?x=1\"}"
+seen GET /, GET /users/42, POST /echo, POST /echo, GET /text, GET /html, GET /buffer, GET /old, GET /moved, GET /boom, GET /async-boom, GET /next-err, GET /stream, GET /end, HEAD /head, GET /static/hello.txt, GET /static/nope.txt, GET /nowhere
+closed

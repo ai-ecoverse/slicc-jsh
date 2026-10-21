@@ -256,6 +256,15 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 
 **`net`.** Servers and sockets, `allowHalfOpen`, `end()` as a half-close. Unix domain sockets (`path`) and `new net.Socket({ fd })` throw `ERR_NOT_SUPPORTED`.
 
+**`http`'s classes.** `http.IncomingMessage`, `OutgoingMessage`, `ServerResponse`, `ClientRequest`, `Server` and `Agent` are function constructors with Node 22's prototype chains: `IncomingMessage` on `stream.Readable`, `OutgoingMessage` on the legacy `Stream`, `ServerResponse` and `ClientRequest` on `OutgoingMessage`, `Server` on `net.Server` and `Agent` on `EventEmitter`. Their methods are on the prototypes, as Node's, so the request and response a server gets are built from them (golden `http-message-classes-node22`).
+- A prototype swap keeps everything working, as **Express** does with `app.request` and `app.response`. Express 5 runs: routing, `express.json()`, `res.json`, `res.send`, `res.redirect`, `express.static` and error handlers (golden `express-basic-node22`). **Koa** and **Fastify** run too.
+- `new http.IncomingMessage(socket)` and `new http.ServerResponse(req)` stand alone, and `http.ServerResponse.call(this, req)` works for a `util.inherits` subclass with a socket of its own (`assignSocket`). That's what light-my-request, and so Fastify's `inject`, does.
+- `OutgoingMessage` has Node's header API: `setHeader` (with Node's checks), `appendHeader`, `setHeaders`, `getHeader`, `getHeaders`, `getHeaderNames`, `getRawHeaderNames`, `hasHeader`, `removeHeader`, `addTrailers`, and the `writable*`, `headersSent` and `errored` getters. A value is kept as given (`getHeader` of a number is the number).
+- `ClientRequest` has `setNoDelay`, `setSocketKeepAlive` and `clearTimeout` (superagent calls them), and `req.socket` once it has one. `http.Server()` and `http.Agent()` work without `new`.
+- The `headers` of a request and of a response join a repeated field as Node does (`, `, `; ` for `cookie`; `set-cookie` is a list).
+- Not there: `_addHeaderLine` and its kin, `writeEarlyHints`, `writeProcessing`, the deprecated `_headers`/`_headerNames`, and `https.Agent`'s session cache. `res.writeHead()` doesn't render the head yet, so an `end(body)` after it is sent with a `Content-Length`, where Node's is chunked.
+- `https.Server` throws `ERR_NOT_SUPPORTED`, as `https.createServer` does.
+
 **`http` server.**
 - Request bodies are read whole before the `'request'` handler runs. A body over 64 MiB gets `413 Payload Too Large`.
 - Responses stream, as Node's: a `write()` before `end()` (or `flushHeaders()`) sends the head and each chunk as it comes, chunked unless a `Content-Length` is set. SSE and long-poll servers work. `end()` alone sends one framed response.
@@ -486,6 +495,7 @@ Where it differs:
 - Buffer views share memory with their source, as in Node.
 - `Buffer.allocUnsafe` and `allocUnsafeSlow` zero-fill, and `Buffer.poolSize` is `0` (no pool).
 - Encodings are as in Node 22's `lib/buffer.js`. `from`, `toString`, `write`, `fill` and `indexOf`/`lastIndexOf`/`includes` throw `ERR_UNKNOWN_ENCODING` for an encoding Node doesn't know; `byteLength` counts it as UTF-8, as Node does. base64 decoding is forgiving, `ascii` drops the high bit, and `write` never writes part of a character. A string that is too long is `ERR_STRING_TOO_LONG`.
+- `Buffer`'s static methods (`from`, `alloc`, `concat`, `byteLength`, `isBuffer`, …) are own enumerable properties, as in Node, so **safer-buffer**'s copy of `Buffer` has them (golden `buffer-statics-enumerable-node22`). That's what iconv-lite, raw-body and body-parser use.
 - `require('buffer')` has Node 22's exports: `transcode`, `isUtf8`, `isAscii`, `constants`, `kMaxLength`, `Blob`, `File`, ….
 
 ## `events`
