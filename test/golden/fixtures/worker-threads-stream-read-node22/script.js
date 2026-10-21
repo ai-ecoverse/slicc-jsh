@@ -40,4 +40,12 @@ const late = (ms) =>
   w.postMessage({ a: twice, b: twice }, [twice]);
   console.log('a stream twice, the global gone:', await once(w, 'message'));
   await exited;
+
+  // A TransformStream with its readable side beside it: one stream there too.
+  const both = new Worker("const { parentPort } = require('worker_threads'); parentPort.once('message', ({ t, r }) => parentPort.postMessage(String(t.readable === r)));", { eval: true });
+  const bothExited = once(both, 'exit');
+  const t = new TransformStream();
+  both.postMessage({ t, r: t.readable }, [t]);
+  console.log("a TransformStream and its readable side, one:", await once(both, 'message'));
+  await bothExited;
 })();

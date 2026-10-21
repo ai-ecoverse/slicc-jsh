@@ -246,14 +246,20 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
   }
   // A port that isn't listed (jsh's or the platform's), or a stream, is
   // Node's DataCloneError: it would only go by being transferred.
-  const swapPorts = (value, marks, listed) =>
-    mapPorts(value, (v) => {
+  const transformWritable = getterOf(globalThis.TransformStream, 'writable');
+  // What's listed, with a listed TransformStream's two sides (they go with it).
+  const withSides = (listed) =>
+    listed.flatMap((x) => (isTransform(x) ? [x, apply(transformReadable, x, []), apply(transformWritable, x, [])] : [x]));
+  const swapPorts = (value, marks, listed) => {
+    const known = withSides(listed);
+    return mapPorts(value, (v) => {
       const mark = marks.get(v);
       if (mark) return mark;
-      if (listed.includes(v)) return v;
+      if (known.includes(v)) return v;
       if (v instanceof MessagePort || brands.some((get) => hasBrand(get, v))) throw unlisted();
       return undefined;
     });
+  };
 
   /**
    * `message` and its transfer list as the platform can clone them: the
@@ -295,10 +301,12 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
       if (!message.streams) return undefined;
       // A TransformStream's readable side is read the same way: its
       // chunks come back from the other thread (where its other end is).
+      // (One wrapper for its readable side, which may be in the message too.)
       if (isTransform(v) && !wrappers.has(v)) {
         wrappers.set(v, v);
-        const readable = heldWhileRead(apply(transformReadable, v, []));
-        defineProperty(v, 'readable', { value: readable, configurable: true, enumerable: false });
+        const raw = apply(transformReadable, v, []);
+        if (!wrappers.has(raw)) wrappers.set(raw, heldWhileRead(raw));
+        defineProperty(v, 'readable', { value: wrappers.get(raw), configurable: true, enumerable: false });
       }
       if (!isReadable(v)) return undefined;
       if (!wrappers.has(v)) wrappers.set(v, heldWhileRead(v));
