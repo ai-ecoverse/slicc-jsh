@@ -566,8 +566,8 @@ export function createCjs({
       compile(mod, source, filename);
     } else {
       // File entry: go through extensions['.js'] so CallSites include Object..js
-      // below Module._compile (Node's Module.load path).
-      Module._extensions['.js'].call(Module._extensions, mod, filename);
+      // below Module._compile (Node's Module.load path); a .json one is parsed.
+      Module._extensions[filename.endsWith('.json') ? '.json' : '.js'].call(Module._extensions, mod, filename);
     }
     mod.loaded = true;
     return mod.exports;
@@ -588,6 +588,8 @@ export function createCjs({
       if (resolved.type === 'builtin') return builtins.load(resolved.id);
       return loadFile(resolved.filename, preloadParent);
     },
+    /** The entry's file (an absolute path): as given, else with an extension, or a directory's main; null when there is none. */
+    resolveMain: (filename) => resolver.loadAsFileOrDir(filename, true),
     setRequireEsmHook,
     setImportModuleHook,
     findPackageType,

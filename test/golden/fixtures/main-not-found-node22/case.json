@@ -1,0 +1,7 @@
+{
+  "description": "A main script that isn't there, by `node x` and by fork('x'): Node's MODULE_NOT_FOUND from its loader (header, frames, props), exit 1; and a main named without its extension, or a directory, resolves as require() would",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true
+}
