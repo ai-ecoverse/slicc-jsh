@@ -319,6 +319,7 @@ The kernel does the TLS, by one of two paths ([slicc-kernel#914](https://github.
     - `ERR_OSSL_BAD_DECRYPT` for a wrong passphrase, and for an encrypted key without one (OpenSSL decrypts with an empty one), as Node gives. Its `opensslErrorStack` is PKCS#8's (`pkcs12 cipherfinal error`) or a traditional PEM key's (`PEM routines::bad decrypt`);
     - `ERR_OSSL_UNSUPPORTED` when a wrong decrypt passes the padding check but isn't a key (about one key in 270), as Node gives. Its `opensslErrorStack` is OpenSSL's ASN.1 errors for the decrypted bytes (`header too long`, `wrong tag`, `too long`, `sequence not constructed`, `field missing`, …), through the first field's header. Past that, jsh can't reproduce OpenSSL's decoder, and the error has no `opensslErrorStack` (golden `tls-wrong-passphrase-node22`);
     - `ERR_OSSL_UNSUPPORTED` for a key that isn't one, and for any DER key, as Node's `tls` reads only PEM;
+    - for a PKCS#8 key's PBKDF2 parameters, OpenSSL's errors whatever the passphrase: `ERR_OSSL_EVP_UNSUPPORTED_KEYLENGTH` for a key length that isn't the cipher's, and for an iteration count (OpenSSL keeps its low 32 bits, as a signed int) `ERR_OSSL_INVALID_ITERATION_COUNT` for 0 and `ERR_OSSL_CRYPTO_PARAM_UNSIGNED_INTEGER_NEGATIVE_VALUE_UNSUPPORTED` for a negative one;
     - `ERR_OSSL_X509_KEY_VALUES_MISMATCH` for another certificate's key;
     - `ERR_OSSL_PEM_NO_START_LINE` or `ERR_OSSL_PEM_BAD_END_LINE` for a certificate that isn't one.
   - One key per context: a list of more than one key (Node's RSA plus EC) is `ERR_NOT_SUPPORTED`.

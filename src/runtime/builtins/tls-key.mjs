@@ -155,9 +155,9 @@ function children(b) {
 
 const hex = (Buffer, field) => Buffer.from(field.body).toString('hex');
 
-function unsignedInt(field) {
-  need(field.tag === 0x02 && field.body.length > 0 && field.body.length <= 6 && !(field.body[0] & 0x80));
-  return field.body.reduce((n, x) => n * 256 + x, 0);
+function signedInt(field) {
+  need(field.tag === 0x02 && field.body.length > 0 && field.body.length <= 8);
+  return BigInt.asIntN(field.body.length * 8, field.body.reduce((n, x) => n * 256n + BigInt(x), 0n));
 }
 
 function pbes2(Buffer, envelope) {
@@ -173,8 +173,8 @@ function pbes2(Buffer, envelope) {
   need(kdfOid?.tag === 0x06 && hex(Buffer, kdfOid) === OIDS.pbkdf2 && kdfParams?.tag === 0x30);
   const [salt, iterations, ...rest] = children(kdfParams.body);
   need(salt?.tag === 0x04 && iterations !== undefined);
-  const count = unsignedInt(iterations);
-  const keyLength = rest[0]?.tag === 0x02 ? unsignedInt(rest.shift()) : undefined;
+  const count = Number(BigInt.asIntN(32, signedInt(iterations)));
+  const keyLength = rest[0]?.tag === 0x02 ? signedInt(rest.shift()) : undefined;
   need(rest.length <= 1);
   let digest = 'sha1';
   if (rest.length) {
@@ -184,10 +184,10 @@ function pbes2(Buffer, envelope) {
   }
   const [cipherOid, iv] = children(scheme.body);
   const cipher = cipherOid?.tag === 0x06 ? CIPHERS[hex(Buffer, cipherOid)] : undefined;
-  need(digest && cipher && iv?.tag === 0x04 && iv.body.length === 16 && count > 0);
-  need(keyLength === undefined || keyLength === cipher[1]);
+  need(digest && cipher && iv?.tag === 0x04 && iv.body.length === 16);
   need(data.body.length > 0 && data.body.length % 16 === 0);
-  return { cipher: cipher[0], keyLength: cipher[1], salt: salt.body, count, digest, iv: iv.body, data: data.body };
+  const keyLengthError = keyLength !== undefined && keyLength !== BigInt(cipher[1]);
+  return { cipher: cipher[0], keyLength: cipher[1], keyLengthError, salt: salt.body, count, digest, iv: iv.body, data: data.body };
 }
 
 function unpadded(crypto, Buffer, cipher, key, iv, data) {
@@ -229,6 +229,9 @@ export function lockedKeyError(key, passphrase, crypto, Buffer) {
     } catch {
       return null;
     }
+    if (info.keyLengthError) return { code: 'ERR_OSSL_EVP_UNSUPPORTED_KEYLENGTH' };
+    if (info.count < 0) return { code: 'ERR_OSSL_CRYPTO_PARAM_UNSIGNED_INTEGER_NEGATIVE_VALUE_UNSUPPORTED' };
+    if (info.count === 0) return { code: 'ERR_OSSL_INVALID_ITERATION_COUNT' };
     const k = crypto.pbkdf2Sync(pass, info.salt, info.count, info.keyLength, info.digest);
     const plain = unpadded(crypto, Buffer, info.cipher, k, info.iv, info.data);
     if (!plain) return { code: 'ERR_OSSL_BAD_DECRYPT', stack: PKCS8_BAD_DECRYPT };
