@@ -94,7 +94,7 @@ export function enterFrame(frame) {
 /** `fn`, called in the frame of now, with the previous frame put back after. */
 export function bindToCurrent(fn) {
   if (typeof fn !== 'function') return fn;
-  const frame = current;
+  const frame = currentFrame();
   return function bound(...args) {
     return runInFrame(frame, fn, this, args);
   };
