@@ -831,7 +831,6 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, g
       return;
     }
     const after = (child._stdioPumps ?? Promise.resolve()).then(() => Promise.all([child.stdout, child.stderr].map(streamClosed)));
-    trackPromise(handles, after);
     after.finally(() => {
       if (child._ipcClosed) {
         // The channel holds the program while it's open (it is ref'd).
