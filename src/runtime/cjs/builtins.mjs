@@ -285,6 +285,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
         remote: process._remotePorts,
         getStream,
         Buffer,
+        timers,
       })),
     buffer: () => (bufferExports ??= bufferModule(Buffer)),
     console: () => console,

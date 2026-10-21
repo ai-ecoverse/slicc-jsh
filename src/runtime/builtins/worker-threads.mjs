@@ -148,7 +148,7 @@ export function workerContext(ctx, data) {
   };
 }
 
-export function createWorkerThreads({ ctx, process, handles, ports, remote, getStream, Buffer }) {
+export function createWorkerThreads({ ctx, process, handles, ports, remote, getStream, Buffer, timers }) {
   const worker = workerDataOf(ctx);
   const environmentData = new Map(worker?.environmentData ?? []);
   // Thread ids: one counter for the program, shared with every thread.
@@ -420,8 +420,10 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       this.stderr.push(null);
       this[kPublicPort]._remoteClosed();
       handles.delete(this.#handle);
-      // After the last of the worker's messages and output.
-      setImmediate(() => {
+      // After the last of the worker's messages and output, on jsh's own
+      // timers (not the program's setImmediate, or require('timers')'s,
+      // which it may replace).
+      timers.setImmediate(() => {
         this.emit('exit', code);
         for (const resolve of this.#exitWaiters.splice(0)) resolve(code);
       });
