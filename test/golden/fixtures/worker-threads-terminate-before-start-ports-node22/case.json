@@ -1,0 +1,1 @@
+{ "description": "the ports in what was posted to a Worker terminated before its thread is up, and the ports queued on them, are closed once it exits, so their other ends get 'close' and don't hold the program, as in Node 22", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }
