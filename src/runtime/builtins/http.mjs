@@ -182,12 +182,14 @@ const kHighWaterMark = Symbol('kHighWaterMark');
 const kWriteBody = Symbol('kWriteBody');
 const kEndBody = Symbol('kEndBody');
 const kFinish = Symbol('kFinish');
-const kServer = Symbol('kServer');
-const kOnKeptAlive = Symbol('kOnKeptAlive');
-const kChunked = Symbol('kChunked');
 const kEmitClose = Symbol('kEmitClose');
-const kSendHead = Symbol('kSendHead');
-const kCloseAfter = Symbol('kCloseAfter');
+const kBytesWritten = Symbol('kBytesWritten');
+const kChunkedBuffer = Symbol('kChunkedBuffer');
+const kChunkedLength = Symbol('kChunkedLength');
+const kBatch = Symbol('kBatch');
+const kSocketWrite = Symbol('kSocketWrite');
+const kUncorkWire = Symbol('kUncorkWire');
+const kDrainWait = Symbol('kDrainWait');
 const kOnFree = Symbol('kOnFree');
 const kHandoff = Symbol('kHandoff');
 const kOpts = Symbol('kOpts');
@@ -302,6 +304,8 @@ function parseHead(buf, Buffer) {
 export const MAX_HTTP_BODY = 64 * 1024 * 1024;
 
 const CRLF = new Uint8Array([13, 10]);
+const RE_CONN_CLOSE = /(?:^|\W)close(?:$|\W)/i;
+const RE_TE_CHUNKED = /(?:^|\W)chunked(?:$|\W)/i;
 
 function decodeChunked(body, Buffer, maxBytes = MAX_HTTP_BODY) {
   const parts = [];
@@ -486,15 +490,151 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
 
   function socketWrite(msg, socket, data, callback) {
     const ok = socket.write(data, callback);
-    if (!ok && !msg[kNeedDrain]) {
+    if (!ok) {
       msg[kNeedDrain] = true;
-      socket.once('drain', () => {
-        if (!msg[kNeedDrain]) return;
-        msg[kNeedDrain] = false;
-        msg.emit('drain');
-      });
+      if (!msg[kDrainWait]) {
+        msg[kDrainWait] = true;
+        socket.once('drain', () => {
+          msg[kDrainWait] = false;
+          if (!msg[kNeedDrain]) return;
+          msg[kNeedDrain] = false;
+          msg.emit('drain');
+        });
+      }
     }
     return ok;
+  }
+
+  function wire(data, encoding) {
+    if (typeof data === 'string') return Buffer.from(data, encoding || 'utf8');
+    return Buffer.isBuffer(data) ? data : Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+  }
+
+  function byteLength(chunk, encoding) {
+    return typeof chunk === 'string' ? Buffer.byteLength(chunk, encoding || 'utf8') : chunk.byteLength;
+  }
+
+  function onError(msg, err, callback) {
+    if (msg.destroyed) return;
+    process.nextTick(() => {
+      callback(err);
+      if (!msg.destroyed) msg.emit('error', err);
+    });
+  }
+
+  function strictContentLength(msg) {
+    return (
+      msg.strictContentLength &&
+      msg._contentLength != null &&
+      msg._hasBody &&
+      !msg._removedContLen &&
+      !msg.chunkedEncoding &&
+      !msg.hasHeader('transfer-encoding')
+    );
+  }
+
+  function contentLengthMismatch(actual, expected) {
+    return nodeError(
+      Error,
+      'ERR_HTTP_CONTENT_LENGTH_MISMATCH',
+      `Response body's content-length of ${actual} byte(s) does not match the content-length of ${expected} byte(s) set in header`
+    );
+  }
+
+  function writeChunk(msg, chunk, encoding, callback, fromEnd) {
+    if (typeof callback !== 'function') callback = nop;
+    if (chunk === null) throw nodeError(TypeError, 'ERR_STREAM_NULL_VALUES', 'May not write null values to stream');
+    if (typeof chunk !== 'string' && !(chunk instanceof Uint8Array)) {
+      throw ERR_INVALID_ARG_TYPE('chunk', ['string', 'Buffer', 'Uint8Array'], chunk);
+    }
+    let err;
+    if (msg.finished) err = nodeError(Error, 'ERR_STREAM_WRITE_AFTER_END', 'write after end');
+    else if (msg.destroyed) err = nodeError(Error, 'ERR_STREAM_DESTROYED', 'Cannot call write after a stream was destroyed');
+    if (err) {
+      if (!msg.destroyed) onError(msg, err, callback);
+      else process.nextTick(callback, err);
+      return false;
+    }
+    let len;
+    if (msg.strictContentLength) {
+      len = byteLength(chunk, encoding);
+      const total = msg[kBytesWritten] + len;
+      if (strictContentLength(msg) && (fromEnd ? total !== msg._contentLength : total > msg._contentLength)) {
+        throw contentLengthMismatch(total, msg._contentLength);
+      }
+      msg[kBytesWritten] = total;
+    }
+    if (!msg._header) {
+      if (fromEnd) msg._contentLength = len ??= byteLength(chunk, encoding);
+      msg._implicitHeader();
+    }
+    if (!msg._hasBody) {
+      process.nextTick(callback);
+      return true;
+    }
+    if (msg.chunkedEncoding && chunk.length !== 0) {
+      len ??= byteLength(chunk, encoding);
+      if (msg[kCorked] && msg._headerSent) {
+        msg[kChunkedBuffer].push(chunk, encoding, callback);
+        msg[kChunkedLength] += len;
+        return msg[kChunkedLength] < msg[kHighWaterMark];
+      }
+      return msg._send(Buffer.concat([Buffer.from(`${len.toString(16)}\r\n`, 'latin1'), wire(chunk, encoding), CRLF]), null, callback);
+    }
+    return msg._send(chunk, encoding, callback);
+  }
+
+  function matchHeader(self, state, field, value) {
+    if (field.length < 4 || field.length > 17) return;
+    field = field.toLowerCase();
+    switch (field) {
+      case 'connection':
+        state.connection = true;
+        self._removedConnection = false;
+        if (RE_CONN_CLOSE.test(value)) self._last = true;
+        else self.shouldKeepAlive = true;
+        break;
+      case 'transfer-encoding':
+        state.te = true;
+        self._removedTE = false;
+        if (RE_TE_CHUNKED.test(value)) self.chunkedEncoding = true;
+        break;
+      case 'content-length':
+        state.contLen = true;
+        self._contentLength = +value;
+        self._removedContLen = false;
+        break;
+      case 'date':
+      case 'expect':
+      case 'trailer':
+        state[field] = true;
+        break;
+      case 'keep-alive':
+        self._defaultKeepAlive = false;
+        break;
+    }
+  }
+
+  function storeHeader(self, state, key, value, validate) {
+    if (validate) validateHeaderValue(key, value);
+    state.header += `${key}: ${value}\r\n`;
+    matchHeader(self, state, key, value);
+  }
+
+  function processHeader(self, state, key, value, validate) {
+    if (validate) validateHeaderName(key);
+    if (self._contentLength && key.length === 19 && key.toLowerCase() === 'content-disposition') {
+      if (Array.isArray(value)) for (let i = 0; i < value.length; i++) value[i] = Buffer.from(value[i], 'latin1');
+      else value = Buffer.from(value, 'latin1');
+    }
+    if (Array.isArray(value)) {
+      if (value.length < 2 || key.length !== 6 || key.toLowerCase() !== 'cookie') {
+        for (const item of value) storeHeader(self, state, key, item, validate);
+        return;
+      }
+      value = value.join('; ');
+    }
+    storeHeader(self, state, key, value, validate);
   }
 
   function headerLines(entries) {
@@ -540,6 +680,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     this[kWritableFinished] = false;
     this[kNeedDrain] = false;
     this[kCorked] = 0;
+    this[kBytesWritten] = 0;
+    this[kChunkedBuffer] = [];
+    this[kChunkedLength] = 0;
+    this[kBatch] = null;
     this[kHighWaterMark] = options?.highWaterMark ?? 16384;
   }
   Object.setPrototypeOf(OutgoingMessage.prototype, Stream.prototype);
@@ -557,7 +701,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     }),
     writableObjectMode: getter(() => false),
     writableLength: getter(function () {
-      return this.outputSize + (this.socket ? this.socket.writableLength : 0);
+      return this.outputSize + this[kChunkedLength] + (this.socket ? this.socket.writableLength : 0);
     }),
     writableHighWaterMark: getter(function () {
       return this.socket ? this.socket.writableHighWaterMark : this[kHighWaterMark];
@@ -603,6 +747,20 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     uncork() {
       if (this[kCorked]) this[kCorked]--;
       this.socket?.uncork?.();
+      if (this[kCorked] || this[kChunkedBuffer].length === 0) return;
+      const buf = this[kChunkedBuffer];
+      const parts = [Buffer.from(`${this[kChunkedLength].toString(16)}\r\n`, 'latin1')];
+      const callbacks = [];
+      for (let n = 0; n < buf.length; n += 3) {
+        parts.push(wire(buf[n], buf[n + 1]));
+        callbacks.push(buf[n + 2]);
+      }
+      parts.push(CRLF);
+      this[kChunkedBuffer] = [];
+      this[kChunkedLength] = 0;
+      this._send(Buffer.concat(parts), null, (err) => {
+        for (const callback of callbacks) callback(err);
+      });
     },
     setTimeout(msecs, callback) {
       if (typeof callback === 'function') this.on('timeout', callback);
@@ -706,32 +864,144 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     pipe() {
       this.emit('error', nodeError(Error, 'ERR_STREAM_CANNOT_PIPE', 'Cannot pipe, not readable'));
     },
+    _send(data, encoding, callback) {
+      if (!this._headerSent && this._header !== null) {
+        if (typeof data === 'string' && (encoding === 'utf8' || encoding === 'latin1' || !encoding)) {
+          data = this._header + data;
+        } else {
+          data = Buffer.concat([Buffer.from(this._header, 'latin1'), wire(data, encoding)]);
+          encoding = null;
+        }
+        this._headerSent = true;
+      }
+      return this._writeRaw(data, encoding, callback);
+    },
     _writeRaw(data, encoding, callback) {
+      const socket = this.socket;
+      if (socket?.destroyed) return false;
       if (typeof encoding === 'function') {
         callback = encoding;
-        encoding = undefined;
+        encoding = null;
       }
-      const buf = typeof data === 'string' ? Buffer.from(data, encoding || 'latin1') : data;
-      const socket = this.socket;
-      if (socket) {
-        this._flushOutput(socket);
-        return socketWrite(this, socket, buf, callback ?? nop);
+      if (socket && socket._httpMessage === this && socket.writable) {
+        if (this.outputData.length) this._flushOutput(socket);
+        return this[kSocketWrite](socket, wire(data, encoding), callback);
       }
-      this.outputData.push({ data: buf, callback });
-      this.outputSize += buf.length;
+      this.outputData.push({ data, encoding, callback });
+      this.outputSize += data.length;
+      this._onPendingData(data.length);
       return this.outputSize < this[kHighWaterMark];
     },
+    [kSocketWrite](socket, buf, callback) {
+      const batch = this[kBatch];
+      if (batch) {
+        batch.socket = socket;
+        batch.push(buf, callback);
+        return true;
+      }
+      return socketWrite(this, socket, buf, callback ?? nop);
+    },
+    [kUncorkWire]() {
+      const batch = this[kBatch];
+      this[kBatch] = null;
+      if (!batch?.length) return undefined;
+      const bufs = [];
+      const callbacks = [];
+      for (let i = 0; i < batch.length; i += 2) {
+        if (batch[i].length) bufs.push(batch[i]);
+        if (batch[i + 1]) callbacks.push(batch[i + 1]);
+      }
+      const data = bufs.length === 1 ? bufs[0] : Buffer.concat(bufs);
+      if (!data.length && !callbacks.length) return true;
+      return socketWrite(this, batch.socket, data, (err) => {
+        for (const callback of callbacks) callback(err);
+      });
+    },
     _flushOutput(socket) {
-      if (!this.outputData.length) return false;
       const pending = this.outputData;
+      if (!pending.length) return undefined;
       this.outputData = [];
+      const own = !this[kBatch];
+      if (own) this[kBatch] = [];
+      let ret;
+      for (const { data, encoding, callback } of pending) ret = this[kSocketWrite](socket, wire(data, encoding), callback);
+      if (own) ret = this[kUncorkWire]();
+      this._onPendingData(-this.outputSize);
       this.outputSize = 0;
-      let ok = true;
-      for (const { data, callback } of pending) ok = socketWrite(this, socket, data, callback ?? nop);
-      return ok;
+      return ret;
     },
     _flush() {
-      if (this.socket?.writable) this._flushOutput(this.socket);
+      const socket = this.socket;
+      if (!socket?.writable) return;
+      const ret = this._flushOutput(socket);
+      if (this.finished) this._finish();
+      else if (ret && this[kNeedDrain]) {
+        this[kNeedDrain] = false;
+        this.emit('drain');
+      }
+    },
+    _finish() {
+      this.emit('prefinish');
+    },
+    _storeHeader(firstLine, headers) {
+      const state = { connection: false, contLen: false, te: false, date: false, expect: false, trailer: false, header: firstLine };
+      if (headers) {
+        if (headers === this[kOutHeaders]) {
+          for (const key in headers) processHeader(this, state, headers[key][0], headers[key][1], false);
+        } else if (Array.isArray(headers)) {
+          if (headers.length && Array.isArray(headers[0])) {
+            for (const entry of headers) processHeader(this, state, entry[0], entry[1], true);
+          } else {
+            if (headers.length % 2 !== 0) throw ERR_INVALID_ARG_VALUE('headers', headers);
+            for (let n = 0; n < headers.length; n += 2) processHeader(this, state, headers[n], headers[n + 1], true);
+          }
+        } else {
+          for (const key in headers) if (Object.hasOwn(headers, key)) processHeader(this, state, key, headers[key], true);
+        }
+      }
+      let { header } = state;
+      if (this.sendDate && !state.date) header += `Date: ${new Date().toUTCString()}\r\n`;
+      if (this.chunkedEncoding && (this.statusCode === 204 || this.statusCode === 304)) {
+        this.chunkedEncoding = false;
+        this.shouldKeepAlive = false;
+      }
+      if (this._removedConnection) {
+        this._last = !this.shouldKeepAlive;
+      } else if (!state.connection) {
+        const shouldSendKeepAlive = this.shouldKeepAlive && (state.contLen || this.useChunkedEncodingByDefault || this.agent);
+        if (shouldSendKeepAlive && this.maxRequestsOnConnectionReached) {
+          header += 'Connection: close\r\n';
+        } else if (shouldSendKeepAlive) {
+          header += 'Connection: keep-alive\r\n';
+          if (this._keepAliveTimeout && this._defaultKeepAlive) {
+            const max = ~~this._maxRequestsPerSocket > 0 ? `, max=${this._maxRequestsPerSocket}` : '';
+            header += `Keep-Alive: timeout=${Math.floor(this._keepAliveTimeout / 1000)}${max}\r\n`;
+          }
+        } else {
+          this._last = true;
+          header += 'Connection: close\r\n';
+        }
+      }
+      if (!state.contLen && !state.te) {
+        if (!this._hasBody) {
+          this.chunkedEncoding = false;
+        } else if (!this.useChunkedEncodingByDefault) {
+          this._last = true;
+        } else if (!state.trailer && !this._removedContLen && typeof this._contentLength === 'number') {
+          header += `Content-Length: ${this._contentLength}\r\n`;
+        } else if (!this._removedTE) {
+          header += 'Transfer-Encoding: chunked\r\n';
+          this.chunkedEncoding = true;
+        } else {
+          this._last = true;
+        }
+      }
+      if (this.chunkedEncoding !== true && state.trailer) {
+        throw nodeError(Error, 'ERR_HTTP_TRAILER_INVALID', 'Trailers are invalid with this transfer encoding');
+      }
+      this._header = `${header}\r\n`;
+      this._headerSent = false;
+      if (state.expect) this._send('');
     },
     write(chunk, encoding, callback) {
       if (typeof encoding === 'function') {
@@ -788,10 +1058,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     this.sendDate = true;
     this._sent100 = false;
     this._expect_continue = false;
-    if (req && (req.httpVersionMajor < 1 || req.httpVersionMinor < 1)) this.shouldKeepAlive = false;
-    this[kServer] = null;
-    this[kOnKeptAlive] = null;
-    this[kChunked] = false;
+    if (req && (req.httpVersionMajor < 1 || req.httpVersionMinor < 1)) {
+      this.useChunkedEncodingByDefault = RE_TE_CHUNKED.test(req.headers?.te);
+      this.shouldKeepAlive = false;
+    }
   }
   Object.setPrototypeOf(ServerResponse.prototype, OutgoingMessage.prototype);
   Object.setPrototypeOf(ServerResponse, OutgoingMessage);
@@ -811,27 +1081,111 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     _implicitHeader() {
       this.writeHead(this.statusCode);
     },
-    writeHead(statusCode, statusMessage, headers) {
+    writeHead(statusCode, reason, obj) {
       if (this._header) throw headersSentError('write');
-      this.statusCode = statusCode;
-      if (typeof statusMessage === 'string') this.statusMessage = statusMessage;
-      else if (statusMessage && typeof statusMessage === 'object') headers = statusMessage;
-      if (Array.isArray(headers)) {
-        const flat = !this[kOutHeaders] && Array.isArray(headers[0]) ? headers.flat() : headers;
-        if (flat.length % 2 !== 0) throw ERR_INVALID_ARG_VALUE('headers', headers);
-        for (let i = 0; i < flat.length; i += 2) this.removeHeader(flat[i]);
-        for (let i = 0; i < flat.length; i += 2) if (flat[i]) this.appendHeader(flat[i], flat[i + 1]);
-      } else if (headers) {
-        for (const [k, v] of Object.entries(headers)) if (k) this.setHeader(k, v);
+      const originalStatusCode = statusCode;
+      statusCode |= 0;
+      if (statusCode < 100 || statusCode > 999) {
+        throw nodeError(RangeError, 'ERR_HTTP_INVALID_STATUS_CODE', `Invalid status code: ${originalStatusCode}`);
       }
+      if (typeof reason === 'string') {
+        this.statusMessage = reason;
+      } else {
+        this.statusMessage ||= STATUS_CODES[statusCode] || 'unknown';
+        obj ??= reason;
+      }
+      this.statusCode = statusCode;
+      let headers;
+      if (this[kOutHeaders]) {
+        if (Array.isArray(obj)) {
+          if (obj.length % 2 !== 0) throw ERR_INVALID_ARG_VALUE('headers', obj);
+          for (let n = 0; n < obj.length; n += 2) this.removeHeader(obj[n]);
+          for (let n = 0; n < obj.length; n += 2) if (obj[n]) this.appendHeader(obj[n], obj[n + 1]);
+        } else if (obj) {
+          for (const k of Object.keys(obj)) if (k) this.setHeader(k, obj[k]);
+        }
+        headers = this[kOutHeaders];
+      } else {
+        headers = obj;
+      }
+      if (headerCharRegex.test(this.statusMessage)) throw nodeError(TypeError, 'ERR_INVALID_CHAR', 'Invalid character in statusMessage');
+      const statusLine = `HTTP/1.1 ${statusCode} ${this.statusMessage}\r\n`;
+      if (statusCode === 204 || statusCode === 304 || (statusCode >= 100 && statusCode <= 199)) this._hasBody = false;
+      if (this._expect_continue && !this._sent100) this.shouldKeepAlive = false;
+      this._storeHeader(statusLine, headers);
       return this;
     },
     flushHeaders() {
-      if (!this._header) this[kSendHead](true);
+      if (!this._header) this._implicitHeader();
+      this._send('');
     },
     writeContinue(callback) {
       this._writeRaw('HTTP/1.1 100 Continue\r\n\r\n', 'ascii', callback);
       this._sent100 = true;
+    },
+    write(chunk, encoding, callback) {
+      if (typeof encoding === 'function') {
+        callback = encoding;
+        encoding = null;
+      }
+      const ret = writeChunk(this, chunk, encoding, callback, false);
+      if (!ret) this[kNeedDrain] = true;
+      return ret;
+    },
+    end(chunk, encoding, callback) {
+      if (typeof chunk === 'function') {
+        callback = chunk;
+        chunk = null;
+        encoding = null;
+      } else if (typeof encoding === 'function') {
+        callback = encoding;
+        encoding = null;
+      }
+      if (chunk) {
+        if (this.finished) {
+          onError(this, nodeError(Error, 'ERR_STREAM_WRITE_AFTER_END', 'write after end'), typeof callback !== 'function' ? nop : callback);
+          return this;
+        }
+      } else if (this.finished) {
+        if (typeof callback === 'function') {
+          if (!this.writableFinished) this.on('finish', callback);
+          else callback(nodeError(Error, 'ERR_STREAM_ALREADY_FINISHED', 'Cannot call end after a stream was finished'));
+        }
+        return this;
+      }
+      const own = !this[kBatch];
+      if (own) this[kBatch] = [];
+      try {
+        if (chunk) {
+          writeChunk(this, chunk, encoding, null, true);
+        } else if (!this._header) {
+          this._contentLength = 0;
+          this._implicitHeader();
+        }
+        if (typeof callback === 'function') this.once('finish', callback);
+        if (strictContentLength(this) && this[kBytesWritten] !== this._contentLength) {
+          throw contentLengthMismatch(this[kBytesWritten], this._contentLength);
+        }
+        const finish = () => {
+          if (this.socket?._hadError) return;
+          this[kFinish]();
+        };
+        if (this._hasBody && this.chunkedEncoding) this._send(`0\r\n${this._trailer}\r\n`, 'latin1', finish);
+        else if (!this._headerSent || this.writableLength || chunk) this._send('', 'latin1', finish);
+        else process.nextTick(finish);
+      } finally {
+        if (own) this[kUncorkWire]();
+      }
+      const state = this.socket?._writableState;
+      if (state?.corked) {
+        state.corked = 1;
+        this.socket.uncork();
+      }
+      this[kCorked] = 1;
+      this.uncork();
+      this.finished = true;
+      if (this.outputData.length === 0 && this.socket && this.socket._httpMessage === this) this._finish();
+      return this;
     },
     destroy(error) {
       if (this.destroyed) return this;
@@ -845,109 +1199,24 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       this._closed = true;
       this.emit('close');
     },
-    [kSendHead](streaming, autoLength = null) {
-      const noBody = responseHasNoBody(this.req?.method, this.statusCode);
-      const http10 = this.req?.httpVersion === '1.0';
-      let autoChunked = false;
-      if (streaming && !noBody && !http10 && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding')) autoChunked = true;
-      if (http10) autoLength = null;
-      const auto = [];
-      if (this.sendDate && !this.hasHeader('date')) auto.push(['Date', new Date().toUTCString()]);
-      const framed =
-        noBody || autoChunked || autoLength != null || this.hasHeader('content-length') || /chunked/i.test(String(this.getHeader('transfer-encoding') ?? ''));
-      if (!framed || /close/i.test(String(this.getHeader('connection') ?? ''))) this.shouldKeepAlive = false;
-      if (!this.hasHeader('connection')) {
-        auto.push(['Connection', this.shouldKeepAlive ? 'keep-alive' : 'close']);
-        if (this.shouldKeepAlive && this._keepAliveTimeout) auto.push(['Keep-Alive', `timeout=${Math.floor(this._keepAliveTimeout / 1000)}`]);
-      }
-      if (autoLength != null) auto.push(['Content-Length', String(autoLength)]);
-      if (autoChunked) auto.push(['Transfer-Encoding', 'chunked']);
-      if (autoChunked || String(this.getHeader('transfer-encoding') || '').toLowerCase() === 'chunked') this[kChunked] = true;
-      this.chunkedEncoding = this[kChunked];
-      const reason = this.statusMessage ?? (STATUS_CODES[this.statusCode] || 'unknown');
-      const head = `HTTP/1.1 ${this.statusCode} ${reason}\r\n${headerLines(Object.values(this[kOutHeaders] ?? {}))}${headerLines(auto)}\r\n`;
-      this._header = head;
-      this._headerSent = true;
-      const buf = Buffer.from(head, 'latin1');
-      if (streaming) this._writeRaw(buf);
-      return buf;
-    },
-    [kWriteBody](buf, callback) {
-      if (!this._header) this[kSendHead](true);
-      if (buf.length === 0 || responseHasNoBody(this.req?.method, this.statusCode)) {
-        process.nextTick(callback);
-        return true;
-      }
-      const framed = this[kChunked] ? Buffer.concat([Buffer.from(`${buf.length.toString(16)}\r\n`), buf, CRLF]) : buf;
-      return this._writeRaw(framed, () => callback());
-    },
-    [kEndBody](buf) {
-      const noBody = responseHasNoBody(this.req?.method, this.statusCode);
-      if (this._header) {
-        const parts = [];
-        if (buf?.length && !noBody) parts.push(this[kChunked] ? Buffer.concat([Buffer.from(`${buf.length.toString(16)}\r\n`), buf, CRLF]) : buf);
-        if (this[kChunked] && !noBody) parts.push(Buffer.from(`0\r\n${this._trailer}\r\n`, 'latin1'));
-        this[kCloseAfter](Buffer.concat(parts));
-        return;
-      }
-      const wouldBeBody = buf ?? Buffer.alloc(0);
-      const body = noBody ? Buffer.alloc(0) : wouldBeBody;
-      const noAutoLength = this.statusCode === 204 || this.statusCode === 304;
-      const autoLength = !noAutoLength && !this.hasHeader('content-length') && !this.hasHeader('transfer-encoding') ? wouldBeBody.length : null;
-      if (this.statusCode === 204) this.removeHeader('content-length');
-      const head = this[kSendHead](false, autoLength);
-      let payload;
-      if (this[kChunked] && !noBody) {
-        const parts = [head];
-        if (body.length) parts.push(Buffer.from(`${body.length.toString(16)}\r\n`), body, CRLF);
-        parts.push(Buffer.from(`0\r\n${this._trailer}\r\n`, 'latin1'));
-        payload = Buffer.concat(parts);
-      } else {
-        payload = Buffer.concat([head, body]);
-      }
-      this[kCloseAfter](payload);
-    },
-    [kCloseAfter](payload) {
-      this._writeRaw(payload, () => {
-        const socket = this.socket;
-        this[kFinish]();
-        if (socket?._httpMessage === this) socket._httpMessage = null;
-        const server = this[kServer];
-        if (server && socket) {
-          if (this.shouldKeepAlive && typeof this[kOnKeptAlive] === 'function' && !socket.destroyed) {
-            this[kOnKeptAlive]();
-          } else if (server._closing && !socket.destroyed) {
-            const done = () => {
-              clearTimeout(timer);
-              try {
-                socket.destroy();
-              } catch {
-                /* ignore */
-              }
-            };
-            const timer = setTimeout(done, 2000);
-            timer.unref?.();
-            socket.once('end', done);
-            socket.once('close', done);
-            try {
-              socket.end();
-            } catch {
-              done();
-            }
-          } else {
-            try {
-              socket.unref?.();
-              socket.destroy();
-            } catch {
-              /* ignore */
-            }
-          }
-          process.nextTick(() => this[kEmitClose]());
-        }
-      });
-    },
   });
   ServerResponse.prototype.writeHeader = ServerResponse.prototype.writeHead;
+
+  function closeGracefully(socket) {
+    const done = () => {
+      clearTimeout(timer);
+      socket.destroy();
+    };
+    const timer = setTimeout(done, 2000);
+    timer.unref?.();
+    socket.once('end', done);
+    socket.once('close', done);
+    try {
+      socket.end();
+    } catch {
+      done();
+    }
+  }
 
   function rejectPayloadTooLarge(socket, onData) {
     // Stop reading; flush 413 via end(); then destroy so the socket does not sit
@@ -1149,10 +1418,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       // below maxRequestsPerSocket. A connection that is open when close()
       // is called keeps serving as before (Node 22): it closes when idle.
       const max = server.maxRequestsPerSocket;
-      res.shouldKeepAlive =
-        parsed.httpVersion !== '1.0' && !/\bclose\b/.test(connectionTokens) && !(max > 0 && served >= max);
+      const tokens = connectionTokens.split(',').map((token) => token.trim());
+      const persistent = req.httpVersionMajor > 0 && req.httpVersionMinor > 0 ? !tokens.includes('close') : tokens.includes('keep-alive');
+      res.shouldKeepAlive = persistent && !(max > 0 && served >= max);
       res._keepAliveTimeout = server.keepAliveTimeout;
-      res[kServer] = server;
+      res._maxRequestsPerSocket = max;
       // The client gone before the response ended (an aborted SSE or
       // long-poll): Node's 'close' on both, so the handler can stop.
       const gone = () => {
@@ -1175,20 +1445,27 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       };
       socket.once('close', gone);
       socket.once('end', onEnd);
-      res[kOnKeptAlive] = () => {
+      const keptAlive = () => {
         socket.off('close', gone);
         socket.off('end', onEnd);
         busy = false;
         conn.idle = true;
         // The request's 'close' (Node emits it once the response is done).
         if (!req.destroyed) req.destroy();
-        if (socket.destroyed) {
-          destroy();
-          return;
-        }
         armIdle();
         queueMicrotask(pump);
       };
+      res.on('finish', () => {
+        res.detachSocket(socket);
+        process.nextTick(() => res[kEmitClose]());
+        if (socket.destroyed) return;
+        if (!res._last) keptAlive();
+        else if (server._closing) closeGracefully(socket);
+        else {
+          socket.unref?.();
+          destroy();
+        }
+      });
       server.emit('request', req, res);
       if (typeof requestListener === 'function') requestListener(req, res);
     };

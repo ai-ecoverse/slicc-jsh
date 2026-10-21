@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#725: res.writeHead renders the head into _header as Node 22's does, and the framing follows from what is known then: writeHead then end(body) is chunked, end(body) alone has a Content-Length; HEAD, 204 and 304, Connection: close, an explicit Content-Length or Transfer-Encoding, removed headers, trailers and HTTP/1.0 clients; the head goes out with the first write, end or flushHeaders; headersSent, _headerSent, writableEnded, finished, the prefinish, finish and close order, read off a raw socket",
+  "argv": ["main.js"],
+  "shim": true
+}

@@ -1,0 +1,529 @@
+writeHead, then end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbody\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+writeHead with headers, then the header API
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  returns res true, statusMessage Created
+  getHeader undefined names []
+  setHeader Error ERR_HTTP_HEADERS_SENT Cannot set headers after they are sent to the client
+  removeHeader Error ERR_HTTP_HEADERS_SENT Cannot remove headers after they are sent to the client
+  writeHead again Error ERR_HTTP_HEADERS_SENT Cannot write headers after they are sent to the client
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 201 Created\r\nX-A: 1\r\nContent-Type: text/plain\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 201 Created\r\nX-A: 1\r\nContent-Type: text/plain\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+setHeader, writeHead, then end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  getHeaders {"x-b":"2","x-a":"1"}
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nX-B: 2\r\nX-A: 1\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nX-B: 2\r\nX-A: 1\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbody\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+end(body) alone
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nX-B: 2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 4\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nX-B: 2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 4\r\n\r\nbodyHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+end() alone
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 0\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+writeHead, then end()
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+an explicit Content-Length
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  write: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nbodyHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+an explicit Transfer-Encoding
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n1\r\na\r\n1\r\nb\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+write, then end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  write: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n1\r\na\r\n1\r\nb\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+HEAD, writeHead, then end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+HEAD, end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+HEAD, an explicit Content-Length
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+204, writeHead, then end()
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 204 No Content\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 204 No Content\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+204, end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 204 No Content\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 204 No Content\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+304, writeHead with Transfer-Encoding
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=false _last=true
+    _header "HTTP/1.1 304 Not Modified\r\nTransfer-Encoding: chunked\r\nDate: <date>\r\nConnection: close\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true writableFinished=true
+  kept alive false
+  req close after the response
+  wire "HTTP/1.1 304 Not Modified\r\nTransfer-Encoding: chunked\r\nDate: <date>\r\nConnection: close\r\n\r\n"
+304, end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 304 Not Modified\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 304 Not Modified\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+the response says Connection: close
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=true
+    _header "HTTP/1.1 200 OK\r\nConnection: close\r\nDate: <date>\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=true
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=true
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=true writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=true writableFinished=true
+  kept alive false
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nConnection: close\r\nDate: <date>\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nx\r\n0\r\n\r\n"
+the request says Connection: close
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=false _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=false _last=true
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=false _last=true
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=false _last=true
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=false _last=true writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=false _last=true writableFinished=true
+  kept alive false
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nx\r\n0\r\n\r\n"
+HTTP/1.0, writeHead, then end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=false _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=false _last=true
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true writableFinished=true
+  kept alive false
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\n\r\nbody"
+HTTP/1.0, end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=false _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true writableFinished=true
+  kept alive false
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\n\r\nbody"
+HTTP/1.0 keep-alive, an explicit Content-Length
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nokHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+HTTP/1.0 keep-alive, end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=true
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=true
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=true writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=true writableFinished=true
+  kept alive false
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\n\r\nok"
+HTTP/1.0 with TE: chunked, end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=false _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=false _last=true writableFinished=true
+  kept alive false
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nbody"
+HTTP/1.0 with TE: chunked, writeHead, then end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=false _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=false _last=true
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=false _last=true
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=false _last=true writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=false _last=true writableFinished=true
+  kept alive false
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbody\r\n0\r\n\r\n"
+writeHead, flushHeaders, then write and end
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nX-A: 1\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  flushHeaders: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+  client has "HTTP/1.1 200 OK\r\nX-A: 1\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  write: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nX-A: 1\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n1\r\na\r\n1\r\nb\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+flushHeaders alone, then end()
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  flushHeaders: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  client has "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+flushHeaders twice
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  flushHeaders: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nx\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+Content-Length removed, end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbody\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+Content-Length and Transfer-Encoding removed, end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=true
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=true
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=true writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=true writableFinished=true
+  kept alive false
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nbody"
+Connection removed, end(body)
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nContent-Length: 4\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nContent-Length: 4\r\n\r\nbodyHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+a Trailer with a Content-Length
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead Error ERR_HTTP_TRAILER_INVALID Trailers are invalid with this transfer encoding
+  writeHead: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+a Trailer, chunked
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nTrailer: X-T\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nTrailer: X-T\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n1\r\na\r\n0\r\nX-T: 1\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+an unknown status
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  statusMessage unknown
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 299 unknown\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+an invalid status
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead RangeError ERR_HTTP_INVALID_STATUS_CODE Invalid status code: 99
+  writeHead RangeError ERR_HTTP_INVALID_STATUS_CODE Invalid status code: 1000
+  writeHead: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+a statusMessage set before writeHead
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  statusMessage Fine
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 Fine\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+cork after the head, two writes, uncork
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  corked: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+cork before the head, two writes, uncork
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  corked: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n1\r\na\r\n2\r\nbc\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+strictContentLength
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  write Error ERR_HTTP_CONTENT_LENGTH_MISMATCH Response body's content-length of 3 byte(s) does not match the content-length of 2 byte(s) set in header
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nokHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+strictContentLength, end short
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  end Error ERR_HTTP_CONTENT_LENGTH_MISMATCH Response body's content-length of 2 byte(s) does not match the content-length of 3 byte(s) set in header
+  after: headersSent=true _headerSent=true writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nabcHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+writeHead with a list
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nX-A: 1\r\nX-A: 2\r\nContent-Length: 2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nX-A: 1\r\nX-A: 2\r\nContent-Length: 2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\nokHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+writeHead with a list of pairs
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  writeHead: headersSent=true _headerSent=false writableEnded=false finished=false chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nX-A: 1\r\nCookie: a=1; b=2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nX-A: 1\r\nCookie: a=1; b=2\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nok\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+end(buffer) and end(string), non-ASCII
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nX-N: é\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nX-N: Ã©\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nÃ¼HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+end(), a non-ASCII header
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nX-N: é\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 0\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nX-N: é\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+end(buffer), a non-ASCII header
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nX-N: é\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nX-N: é\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nÃ¼HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+write(string, latin1), a non-ASCII header
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nX-N: é\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nü\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+Content-Disposition with a Content-Length
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nContent-Disposition: attachment; filename=\"�\"\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 1\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nContent-Disposition: attachment; filename=\"ï¿½\"\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 1\r\n\r\nxHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+the response says Connection: keep-alive to a client that said close
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=false _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nDate: <date>\r\nContent-Length: 1\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nDate: <date>\r\nContent-Length: 1\r\n\r\nx"
+write after end
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  write returns false
+  end() callback
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  write callback ERR_STREAM_WRITE_AFTER_END
+  end callback ERR_STREAM_WRITE_AFTER_END
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 1\r\n\r\nxHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+an end callback
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  end callback headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=true shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nx\r\n0\r\n\r\nHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
+maxRequestsPerSocket
+  start: headersSent=false _headerSent=false writableEnded=false finished=false chunkedEncoding=false shouldKeepAlive=true _last=false
+  prefinish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+  end: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false
+    _header "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5, max=2\r\nContent-Length: 1\r\n\r\n"
+  finish: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  close: headersSent=true _headerSent=true writableEnded=true finished=true chunkedEncoding=false shouldKeepAlive=true _last=false writableFinished=true
+  kept alive true
+  req close after the response
+  wire "HTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5, max=2\r\nContent-Length: 1\r\n\r\nxHTTP/1.1 200 OK\r\nDate: <date>\r\nConnection: close\r\nContent-Length: 4\r\n\r\nnext"
