@@ -149,12 +149,9 @@ export function createAsyncHooks() {
 
     exit(callback, ...args) {
       if (!this.enabled) return Reflect.apply(callback, null, args);
-      this.disable();
-      try {
-        return Reflect.apply(callback, null, args);
-      } finally {
-        this._enable();
-      }
+      const frame = new Map(currentFrame() ?? []);
+      frame.delete(this);
+      return runInFrame(frame.size ? frame : null, callback, null, args);
     }
 
     getStore() {

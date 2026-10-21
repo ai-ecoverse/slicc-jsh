@@ -18,7 +18,12 @@ als.run('A', () => {
   other.run('O', () => note('nested other'));
   als.run('A2', () => note('nested same'));
   note('after nested');
-  als.exit(() => note('exit'));
+  als.exit(() => {
+    note('exit');
+    setTimeout(() => note('exit > setTimeout'), 1);
+    process.nextTick(() => note('exit > nextTick'));
+    Promise.resolve().then(() => note('exit > then'));
+  });
   process.nextTick(() => note('nextTick'));
   setTimeout(() => note('setTimeout'), 1);
   const iv = setInterval(() => {
