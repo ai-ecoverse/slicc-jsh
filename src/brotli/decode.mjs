@@ -322,6 +322,10 @@ function dictionary() {
   return dictionaryData;
 }
 
+export function staticDictionary() {
+  return dictionary();
+}
+
 /* huffman.c */
 const kReverseBits = new Uint8Array(256);
 for (let i = 0; i < 256; i++) {

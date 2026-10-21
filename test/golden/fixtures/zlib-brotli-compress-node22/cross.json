@@ -1,0 +1,66 @@
+[
+ {
+  "name": "text q11",
+  "offset": 0,
+  "length": 14084,
+  "params": {
+   "1": 11
+  },
+  "large": false
+ },
+ {
+  "name": "json q5 font",
+  "offset": 14084,
+  "length": 7346,
+  "params": {
+   "0": 2,
+   "1": 5
+  },
+  "large": false
+ },
+ {
+  "name": "binary q1",
+  "offset": 21430,
+  "length": 20004,
+  "params": {
+   "1": 1
+  },
+  "large": false
+ },
+ {
+  "name": "mixed q0",
+  "offset": 41434,
+  "length": 463784,
+  "params": {
+   "1": 0
+  },
+  "large": false
+ },
+ {
+  "name": "mixed q7 lgwin 16",
+  "offset": 505218,
+  "length": 385378,
+  "params": {
+   "1": 7,
+   "2": 16
+  },
+  "large": false
+ },
+ {
+  "name": "mixed q9 lgwin 26 large",
+  "offset": 890596,
+  "length": 349734,
+  "params": {
+   "1": 9,
+   "2": 26,
+   "6": 1
+  },
+  "large": true
+ },
+ {
+  "name": "utf8 default",
+  "offset": 1240330,
+  "length": 87,
+  "large": false
+ }
+]

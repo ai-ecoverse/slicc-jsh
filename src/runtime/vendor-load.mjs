@@ -28,11 +28,12 @@ function evalCjs(source, filename, requires = {}, scope = {}) {
   return module.exports;
 }
 
-function readVendorFile(ctx, packageRoot, name) {
+function readVendorFile(ctx, packageRoot, file, text = true) {
   if (!ctx?.sync?.fs?.readFile) return null;
-  const path = `${packageRoot}/dist/vendor/${name}.cjs`;
+  const path = `${packageRoot}/dist/vendor/${file}`;
   try {
     const bytes = ctx.sync.fs.readFile(path);
+    if (!text) return bytes instanceof Uint8Array ? bytes : null;
     return typeof bytes === 'string' ? bytes : decoder.decode(bytes);
   } catch {
     return null;
@@ -57,11 +58,11 @@ function packageRoots(packageRoot, process) {
   return { roots, homes };
 }
 
-function findOnDisk(ctx, packageRoot, name, process) {
+function findOnDisk(ctx, packageRoot, file, process, text = true) {
   const { roots, homes } = packageRoots(packageRoot, process);
   for (const root of roots) {
-    const source = readVendorFile(ctx, root, name);
-    if (source != null) return { source, path: `${root}/dist/vendor/${name}.cjs` };
+    const source = readVendorFile(ctx, root, file, text);
+    if (source != null) return { source, path: `${root}/dist/vendor/${file}` };
   }
   const syncFs = ctx?.sync?.fs;
   if (!syncFs?.readdir || !syncFs?.exists) return null;
@@ -75,8 +76,8 @@ function findOnDisk(ctx, packageRoot, name, process) {
     }
     for (const hash of hashes) {
       const root = `${v11}/${hash}/node_modules/@ai-ecoverse/slicc-jsh`;
-      const source = readVendorFile(ctx, root, name);
-      if (source != null) return { source, path: `${root}/dist/vendor/${name}.cjs` };
+      const source = readVendorFile(ctx, root, file, text);
+      if (source != null) return { source, path: `${root}/dist/vendor/${file}` };
     }
   }
   return null;
@@ -86,11 +87,12 @@ function findOnDisk(ctx, packageRoot, name, process) {
  * Unbundled (tests importing src/ under host Node, where the embedded map is
  * the placeholder): the build's dist/vendor/<name>.cjs next to this file.
  */
-function fromBuildTree(name) {
+function fromBuildTree(file, text = true) {
   const fs = globalThis.process?.getBuiltinModule?.('node:fs');
   if (!fs || !import.meta.url.startsWith('file:')) return null;
   try {
-    return fs.readFileSync(new URL(`../../dist/vendor/${name}.cjs`, import.meta.url), 'utf8');
+    const bytes = fs.readFileSync(new URL(`../../dist/vendor/${file}`, import.meta.url));
+    return text ? bytes.toString('utf8') : new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   } catch {
     return null;
   }
@@ -111,9 +113,9 @@ export function loadVendorCjs({ ctx, packageRoot, name, globals = {}, process, r
 
   let source = VENDOR[name];
   let path = `embedded:${name}`;
-  if (source == null) source = fromBuildTree(name);
+  if (source == null) source = fromBuildTree(`${name}.cjs`);
   if (source == null) {
-    const found = findOnDisk(ctx, packageRoot, name, process ?? globals.process);
+    const found = findOnDisk(ctx, packageRoot, `${name}.cjs`, process ?? globals.process);
     if (!found) {
       const err = new Error(
         `slicc-jsh: vendor bundle ${name} is not embedded and was not found on disk`
@@ -140,4 +142,12 @@ export function loadVendorCjs({ ctx, packageRoot, name, globals = {}, process, r
       else globalThis[k] = v;
     }
   }
+}
+
+export function loadVendorBinary({ ctx, packageRoot, file, process } = {}) {
+  const key = `binary:${file}`;
+  if (cache.has(key)) return cache.get(key);
+  const bytes = fromBuildTree(file, false) ?? findOnDisk(ctx, packageRoot, file, process, false)?.source ?? null;
+  if (bytes) cache.set(key, bytes);
+  return bytes;
 }

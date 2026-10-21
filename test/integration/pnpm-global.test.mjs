@@ -115,4 +115,13 @@ describe('pnpm add -g @ai-ecoverse/slicc-jsh in the kernel', () => {
     assert.equal(r.stdout.trim(), 'cb 7');
     assert.equal(r.stderr, '');
   });
+
+  it('Brotli and Zstd compress from the global/v11 install: their WebAssembly is read from it', async () => {
+    const r = await run([
+      'node',
+      '-e',
+      `const z=require('zlib'); const s='global '.repeat(100); console.log(z.brotliDecompressSync(z.brotliCompressSync(s)).toString()===s, z.zstdDecompressSync(z.zstdCompressSync(s)).toString()===s)`,
+    ]);
+    assert.deepEqual(r, { status: 0, stdout: 'true true\n', stderr: '' });
+  });
 });

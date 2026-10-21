@@ -9,7 +9,7 @@
  * global installs live under $PNPM_HOME/global/v11/<hash>/).
  * NOTICE is regenerated from esbuild metafiles (every bundled package → LICENSE).
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -408,6 +408,9 @@ const brotli = await esbuild.build({
   keepNames: true,
   legalComments: 'inline',
 });
+
+copyFileSync(join(root, 'src/brotli/encoder.wasm'), join(dist, 'vendor/brotli-enc.wasm'));
+copyFileSync(join(root, 'src/zstd/compress.wasm'), join(dist, 'vendor/zstd-enc.wasm'));
 
 const vendorEmbeddedPath = join(root, 'src/runtime/vendor-embedded.mjs');
 const vendorEmbeddedPlaceholder = `/**

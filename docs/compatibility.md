@@ -99,7 +99,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
   - `heapTotal` and `heapUsed`: `0`, both together, unless the program runs where `performance.memory` exists. When they are measured, `heapUsed` ≤ `heapTotal`.
   - `arrayBuffers`: the bytes of the live ArrayBuffers that this program's Buffers allocated (`alloc`, `allocUnsafe`, the copies `from` and `concat` make). The count drops once the garbage collector frees them. Views on existing memory (`subarray`, `Buffer.from(arrayBuffer)`) add nothing. Buffers under 4 KiB aren't counted either, because tracking each one would slow down allocation-heavy code. A plain `new Uint8Array(n)` and WebAssembly memory aren't Buffers, so jsh doesn't see them, and the figure is a lower bound of Node's.
   - `external`: `arrayBuffers`, which Node's `external` includes. It's a lower bound for the same reason.
-- `process.versions` lists what the runtime has or mirrors: `brotli` and `zstd` (their decoders: `got` then asks for `br` and `zstd`), no openssl, ….
+- `process.versions` lists what the runtime has or mirrors: `brotli` and `zstd` (their decoders and encoders: `got` then asks for `br` and `zstd`), no openssl, ….
 - `argv0`, `pid`, `version`, `versions`, `arch`, `platform`, `release`, `config` and `features` are read-only, as in Node. `argv[0]` is `execPath`.
 - `process.report` is Node's API (`getReport`, `writeReport`, the `--report-*` options). It writes on an uncaught exception and on its signal, as Node does. Its header has Linux's fields.
 - `process.execve` runs the command to its end on this program's stdio, and the program then ends as the command did (its status, or the signal it died of), with no `'exit'` event. It needs slicc-kernel 1.65.0.
@@ -460,7 +460,20 @@ Golden `zlib-zstd-node22` decodes frames Node 22's encoder made, across levels a
 
 `fetch` doesn't decode `zstd`, as undici in Node 22 doesn't: it doesn't ask for it, and a `zstd` body comes as it was sent.
 
-**Not available:** Brotli and Zstd compression (`brotliCompress`, `createBrotliCompress`, `zstdCompress`, `createZstdCompress`, …) throw `ERR_FEATURE_UNAVAILABLE_ON_PLATFORM`. Their callback forms (`brotliCompress(buf, cb)`, …) pass it to the callback.
+**Brotli and Zstd compression.** `brotliCompress`, `brotliCompressSync`, `createBrotliCompress`, `BrotliCompress`, `zstdCompress`, `zstdCompressSync`, `createZstdCompress` and `ZstdCompress` are Node 22's own `zlib.js` code for them over the C libraries Node links, compiled to WebAssembly: Google's encoder (brotli 1.1.0, `src/brotli/encoder.wasm`) and Facebook's compressor (zstd 1.5.7, `src/zstd/compress.wasm`), built by `scripts/wasm/build.sh` from the release tarballs with zig 0.16 and dlmalloc. A stream compresses as in Node:
+- to the same bytes, write for write and flush for flush, at every quality, level, window and parameter;
+- `params` (every `BROTLI_PARAM_*` and `ZSTD_c_*`, including Brotli's large window, zstd's long distance matching and its multithreaded jobs, `nbWorkers`), `dictionary` and `pledgedSrcSize` for zstd, `flush`, `finishFlush`, `chunkSize`, `maxOutputLength` and `info`, validated with Node's errors (`ERR_BROTLI_INVALID_PARAM`, `ERR_ZSTD_INVALID_PARAM`, `Setting parameter failed`, `pledgedSrcSize may not be negative`, …);
+- zstd's errors with Node's `ZSTD_error_*` code and zstd's number (`ZSTD_error_srcSize_wrong` for a stream that doesn't match its `pledgedSrcSize`), and Brotli's `Compression failed` (`ERR_BROTLI_COMPRESSION_FAILED`);
+- `flush()`, `reset()` (which drops the parameters, and zstd's dictionary, as in Node) and `close()`.
+
+Goldens `zlib-brotli-compress-node22` and `zlib-zstd-compress-node22` compress across qualities, levels, windows and parameters, in the sync, callback, promisify and stream forms, and decode what Node 22 compressed and what jsh compressed; integration `zlib-compress.test.mjs` has got decode a server's streamed and flushed `br` and `zstd` responses, the bytes Node 22 sends.
+
+The WebAssembly (546 KB for Brotli, 369 KB for zstd; 242 KB and 95 KB gzipped) isn't in the bundle: it is read from the package's `dist/vendor/` and compiled on the first compressing stream (about 15 ms for Brotli, which also decodes the static dictionary it shares with the decoder, and 2–3 ms for zstd), so a process that doesn't compress starts as before. On 1 MB of mixed text, JSON and random bytes, jsh compresses 1.1–2.2× slower than Node 22 (Brotli quality 11 in 1.04 s against 0.98 s, quality 5 in 33 ms against 15 ms; zstd level 3 in 3.9 ms against 2.7 ms, level 19 in 227 ms against 181 ms).
+
+Where it differs:
+- the work is done when it's written, on the JavaScript thread, and its callback comes on a later turn of the loop in the order of the writes. On Node it runs on the thread pool, and the callbacks of work running at once come in the order it finishes: for `brotliCompress('x', cb)` then `zstdCompress('x', cb)`, macOS calls Brotli's first most of the time and Linux zstd's;
+- the WebAssembly is 32-bit: a zstd `windowLog` of 31 or a `chainLog` of 30 is `Setting parameter failed`, where Node takes it, a `jobSize` over 512 MB is taken as 512 MB (Node: 1 GB), and a Brotli window of 2**30 (`BROTLI_PARAM_LGWIN` 30, large window) can't get its 2 GB ring buffer: `Compression failed`;
+- zstd's multithreaded jobs (`nbWorkers` 1 and up) run one after the other, each at once, and give Node's bytes. Node's own async forms lose output with them (its stream ends before the workers do); jsh's are whole, as Node's sync form is.
 
 ## Streams and `Buffer`
 

@@ -3,13 +3,13 @@
  * 1.0.11 (MIT AND Zlib), bundled lazily as dist/vendor/zlib.cjs. Its streams
  * are this runtime's readable-stream Transform, its Buffer ours.
  *
- * On top of the port: Node 22's `constants` and `codes`, `crc32`, Brotli and
- * Zstd decompression (zlib-native.mjs, over the decoders in src/brotli and
- * src/zstd), and the Brotli and Zstd compression entry points, which throw
- * ERR_FEATURE_UNAVAILABLE_ON_PLATFORM.
+ * On top of the port: Node 22's `constants` and `codes`, `crc32`, and Brotli
+ * and Zstd (zlib-native.mjs, over the decoders in src/brotli and src/zstd and
+ * the encoders of zlib-wasm.mjs).
  */
-import { loadVendorCjs } from '../vendor-load.mjs';
+import { loadVendorBinary, loadVendorCjs } from '../vendor-load.mjs';
 import { createNative } from './zlib-native.mjs';
+import { brotliEncoderModule, zstdCompressModule } from './zlib-wasm.mjs';
 import { ZLIB_CODES, ZLIB_CONSTANTS } from './zlib-constants.mjs';
 
 const PACKAGE_ROOT = '/node_modules/@ai-ecoverse/slicc-jsh';
@@ -145,39 +145,7 @@ function zlibOptionsHelpers(Buffer) {
   };
 }
 
-function unavailableError(name) {
-  const what = name.toLowerCase().includes('brotli') ? 'no Brotli compression' : 'no Zstd compression';
-  const err = new Error(`zlib.${name} is not available in slicc-jsh (${what})`);
-  err.code = 'ERR_FEATURE_UNAVAILABLE_ON_PLATFORM';
-  return err;
-}
-
-function unavailable(name, setImmediate) {
-  // The callback forms (brotliCompress(buffer[, options], callback), …)
-  // check their arguments as Node's zlibBuffer does, then report through the
-  // callback, as a failing engine would.
-  if (/^(brotli|zstd)(Compress|Decompress)$/.test(name)) {
-    return function notAvailable(buffer, opts, callback) {
-      if (typeof opts === 'function') callback = opts;
-      if (typeof callback !== 'function') {
-        throw typeError('callback', 'of type function', callback);
-      }
-      const isBytes =
-        typeof buffer === 'string' ||
-        ArrayBuffer.isView(buffer) ||
-        Object.prototype.toString.call(buffer) === '[object ArrayBuffer]';
-      if (!isBytes) {
-        throw typeError('chunk', 'of type string or an instance of Buffer, TypedArray, or DataView', buffer);
-      }
-      setImmediate(() => callback(unavailableError(name)));
-    };
-  }
-  return function notAvailable() {
-    throw unavailableError(name);
-  };
-}
-
-const UNAVAILABLE = [
+const NATIVE = [
   'BrotliCompress',
   'BrotliDecompress',
   'ZstdCompress',
@@ -195,6 +163,14 @@ const UNAVAILABLE = [
   'createZstdCompress',
   'createZstdDecompress',
 ];
+
+function wasmBytes(ctx, process, file) {
+  const bytes = loadVendorBinary({ ctx, packageRoot: PACKAGE_ROOT, file, process });
+  if (bytes) return bytes;
+  const err = new Error(`slicc-jsh: ${file} was not found on disk`);
+  err.code = 'ENOENT';
+  throw err;
+}
 
 export function createZlib({ ctx, process, Buffer, getStream, util, assert, timers }) {
   const port = loadVendorCjs({
@@ -223,8 +199,11 @@ export function createZlib({ ctx, process, Buffer, getStream, util, assert, time
     setImmediate: (fn) => timers.setImmediate(fn),
     loadBrotli: () => loadVendorCjs({ ctx, packageRoot: PACKAGE_ROOT, name: 'brotli', process }),
     loadZstd: () => loadVendorCjs({ ctx, packageRoot: PACKAGE_ROOT, name: 'zstd', process }),
+    loadBrotliEncoder: (brotli) =>
+      brotliEncoderModule(wasmBytes(ctx, process, 'brotli-enc.wasm'), brotli.staticDictionary()),
+    loadZstdCompress: () => zstdCompressModule(wasmBytes(ctx, process, 'zstd-enc.wasm')),
   });
-  for (const name of UNAVAILABLE) zlib[name] = native[name] ?? unavailable(name, timers.setImmediate);
+  for (const name of NATIVE) zlib[name] = native[name];
   // Node 22's deprecated top-level copies of the constants (all but
   // BROTLI_*): read-only and non-enumerable.
   for (const [key, value] of Object.entries(ZLIB_CONSTANTS)) {
