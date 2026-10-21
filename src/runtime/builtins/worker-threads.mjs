@@ -365,7 +365,6 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     #started(thread) {
       this.#thread = thread;
       if (this.#early) {
-        this.#pending.length = 0;
         this.#native.close();
         thread.exited.then(() => this.#end(0));
         thread.terminate().catch(() => {});
@@ -453,6 +452,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
         this.#exitEmitted = true;
         this.emit('exit', code);
         for (const resolve of this.#exitWaiters.splice(0)) resolve(code);
+        for (const [held] of this.#pending.splice(0)) if (held) remote.discard(held);
       };
       timers.setImmediate(exit);
     }

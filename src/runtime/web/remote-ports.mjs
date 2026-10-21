@@ -578,6 +578,10 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
     });
   }
 
+  function discard([, list]) {
+    for (const item of list) if (NativePort && item instanceof NativePort) item.close();
+  }
+
   // A linked port transferred within this thread: exported and imported
   // again, a new port on the same channel.
   ports.setLinkedMover?.((port) => {
@@ -586,5 +590,5 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
     return importPort(structuredClone(envelope, { transfer: natives }));
   });
 
-  return { link, pack, hold, receive, exportPort, importPort, mailboxPair, NativeMessageChannel };
+  return { link, pack, hold, discard, receive, exportPort, importPort, mailboxPair, NativeMessageChannel };
 }
