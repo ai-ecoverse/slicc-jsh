@@ -63,6 +63,12 @@ ran <cwd>/pkg/index.js argv[1] <cwd>/pkg main true
 ran <cwd>/pkg/index.js argv[1] <cwd>/pkg main true
 --- node withmain: exit 0 null
 ran <cwd>/withmain/lib/start.js argv[1] <cwd>/withmain main true
+--- node ex: exit 0 null
+ran <cwd>/ex/lib/start.js argv[1] <cwd>/ex main true
+--- node ex2: exit 0 null
+ran <cwd>/ex2/index.js argv[1] <cwd>/ex2 main true
+--- node data: exit 0 null
+--- node data.json: exit 0 null
 --- fork('./missing.js'): exit 1 null
 node:internal/modules/cjs/loader:1386
   throw err;

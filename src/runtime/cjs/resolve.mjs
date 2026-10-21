@@ -70,11 +70,13 @@ export function createResolver({
     return null;
   };
 
-  const loadAsDirectory = (dir) => {
+  // `entry`: the program's own entry, a directory whose package.json
+  // "exports" Node never reads (only "main", else index).
+  const loadAsDirectory = (dir, entry = false) => {
     const pkgPath = path.join(dir, 'package.json');
     if (tryFile(pkgPath)) {
       const pkg = readPackageJson(pkgPath);
-      if (pkg?.exports !== undefined) {
+      if (pkg?.exports !== undefined && !entry) {
         const resolved = resolveExports(pkg.exports, '.', pkgPath, dir);
         if (resolved) return resolved;
       }
@@ -82,7 +84,7 @@ export function createResolver({
         const mainPath = path.resolve(dir, pkg.main);
         const asFile = tryExtensions(mainPath);
         if (asFile) return asFile;
-        const asDir = loadAsDirectory(mainPath);
+        const asDir = loadAsDirectory(mainPath, entry);
         if (asDir) return asDir;
       }
     }
@@ -97,12 +99,12 @@ export function createResolver({
     throw esmFail('module', p);
   };
 
-  const loadAsFileOrDir = (p) => {
+  const loadAsFileOrDir = (p, entry = false) => {
     if (esm) return exactFile(p);
     const asFile = tryExtensions(p);
     if (asFile) return asFile;
     const st = tryStat(p);
-    if (st?.isDirectory) return loadAsDirectory(p);
+    if (st?.isDirectory) return loadAsDirectory(p, entry);
     return null;
   };
 
