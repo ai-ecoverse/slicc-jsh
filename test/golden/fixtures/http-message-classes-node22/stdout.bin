@@ -1,0 +1,44 @@
+IncomingMessage: name=IncomingMessage length=1 class=false chain=Readable>Stream>EventEmitter>Object
+OutgoingMessage: name=OutgoingMessage length=1 class=false chain=Stream>EventEmitter>Object
+ServerResponse: name=ServerResponse length=2 class=false chain=OutgoingMessage>Stream>EventEmitter>Object
+ClientRequest: name=ClientRequest length=3 class=false chain=OutgoingMessage>Stream>EventEmitter>Object
+Server: name=Server length=2 class=false chain=net.Server>EventEmitter>Object
+Agent: name=Agent length=1 class=false chain=EventEmitter>Object
+IncomingMessage.prototype own: setTimeout=true _read=true _destroy=true _dump=true
+OutgoingMessage.prototype own: setHeader=true appendHeader=true setHeaders=true getHeader=true getHeaders=true getHeaderNames=true getRawHeaderNames=true hasHeader=true removeHeader=true write=true end=true destroy=true flushHeaders=true addTrailers=true cork=true uncork=true pipe=true setTimeout=true
+ServerResponse.prototype own: writeHead=true writeHeader=true writeContinue=true assignSocket=true detachSocket=true _implicitHeader=true
+ClientRequest.prototype own: abort=true destroy=true onSocket=true setNoDelay=true setSocketKeepAlive=true clearTimeout=true setTimeout=true
+IncomingMessage.prototype headers: function
+IncomingMessage.prototype trailers: function
+IncomingMessage.prototype connection: function
+OutgoingMessage.prototype headersSent: function
+OutgoingMessage.prototype writableEnded: function
+OutgoingMessage.prototype writableFinished: function
+OutgoingMessage.prototype socket: function
+OutgoingMessage.prototype connection: function
+ServerResponse.prototype.statusCode 200
+new IncomingMessage: true true true {"method":null,"url":"","headers":{},"rawHeaders":[],"statusCode":null,"complete":false,"httpVersion":null,"trailers":{},"aborted":false}
+new ServerResponse: true false true {"statusCode":200,"headersSent":false,"finished":false,"writableEnded":false,"sendDate":true,"header":null,"destroyed":false,"writable":true,"socket":null}
+headers {"x-one":[1,"two"],"content-type":"text/plain","set-cookie":["a=1","b=2"]} [ 'x-one', 'content-type', 'set-cookie' ] [ 'X-One', 'Content-Type', 'set-cookie' ] true [ 1, 'two' ]
+removed false null
+throws ERR_INVALID_HTTP_TOKEN
+throws ERR_HTTP_INVALID_HEADER_VALUE
+throws ERR_INVALID_ARG_TYPE
+OutgoingMessage write ERR_METHOD_NOT_IMPLEMENTED
+without new: true 80 http: true true
+mock finished 203 true mocked "HTTP/1.1 203 Non-Authoritative Information\r\nX-Mock: yes\r\nConnection: keep-alive\r\nTransfer-Encoding: chunked\r\n\r\n"
+request true true true
+live true true true
+swapped req-extra res-extra function function true true
+res finish true true
+res close
+client true 201 text/plain true
+client body got hello
+closed
+writeHead /merge "HTTP/1.1 200 OK\r\nX-Keep: k\r\nSet-Cookie: b=2\r\nSet-Cookie: c=3\r\nX-New: n\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone"
+writeHead /pairs "HTTP/1.1 200 OK\r\nX-P: 1\r\nX-Q: 2\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone"
+writeHead /odd throws ERR_INVALID_ARG_VALUE
+writeHead /odd "HTTP/1.1 500 Failed\r\nConnection: close\r\nContent-Length: 4\r\n\r\ndone"
+writeHead /pairs-after throws ERR_INVALID_ARG_VALUE
+writeHead /pairs-after "HTTP/1.1 500 Failed\r\nX-Old: o\r\nConnection: close\r\nContent-Length: 4\r\n\r\ndone"
+writeHead /object "HTTP/1.1 201 Made\r\nX-Old: replaced\r\nX-More: 1\r\nX-More: 2\r\nContent-Length: 4\r\nConnection: close\r\n\r\ndone"

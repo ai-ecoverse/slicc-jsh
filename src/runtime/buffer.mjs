@@ -1472,6 +1472,9 @@ export function createBuffer({ track = true } = {}) {
   }
   // The bundler may rename the class (Buffer2); its name is Node's.
   Object.defineProperty(Buffer, 'name', { value: 'Buffer', configurable: true });
+  for (const key of ['from', 'alloc', 'allocUnsafe', 'allocUnsafeSlow', 'concat', 'byteLength', 'isBuffer', 'isEncoding', 'compare']) {
+    Object.defineProperty(Buffer, key, { enumerable: true });
+  }
   allocated.set(Buffer, () => held);
 
   return Buffer;

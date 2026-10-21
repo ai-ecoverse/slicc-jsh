@@ -31,6 +31,9 @@ const FETCH_OWNED = new Set([
   'proxy-connection',
 ]);
 
+export const kIncomingRead = Symbol('kIncomingRead');
+export const kIncomingDestroy = Symbol('kIncomingDestroy');
+
 /** Methods the Fetch standard forbids (a Request with one throws). */
 const FETCH_FORBIDDEN_METHODS = new Set(['CONNECT', 'TRACE', 'TRACK']);
 
@@ -107,7 +110,7 @@ function isManualRedirectUnsupported(err) {
  * (web/fetch.mjs), which reaches the real machine's loopback
  * (host.slicc.internal) through the kernel's proxy as `fetch()` does.
  */
-export function createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODES = {}, getFetch }) {
+export function createFetchClient({ ctx, Buffer, handles, STATUS_CODES = {}, getFetch, IncomingMessage }) {
   const doFetch = (url, init) => (getFetch?.() ?? ctx.fetch)(url, init);
   // The kernel rejects redirect: 'manual' with ENOTSUP before it sends when
   // the transport can't do it (a browser's fetchTransport): then follow,
@@ -137,46 +140,42 @@ export function createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODE
 
   /** An IncomingMessage-like Readable over a fetch Response, its body streamed. */
   function incomingFrom(res, method, req) {
-    const { Readable } = getStream();
     let reader = null;
     let done = false;
-    const msg = new Readable({
-      async read() {
-        if (done) return;
-        try {
-          reader ??= res.body?.getReader?.() ?? null;
-          if (!reader) {
-            done = true;
-            msg.complete = true;
-            msg.push(null);
-            return;
-          }
-          // A pending read keeps the program alive, as Node's open socket does.
-          const pending = reader.read();
-          const { value, done: end } = await (handles ? trackPromise(handles, pending) : pending);
-          if (end) {
-            done = true;
-            msg.complete = true;
-            msg.push(null);
-          } else msg.push(Buffer.from(value));
-        } catch (err) {
+    const msg = new IncomingMessage(null);
+    msg[kIncomingRead] = async () => {
+      if (done) return;
+      try {
+        reader ??= res.body?.getReader?.() ?? null;
+        if (!reader) {
           done = true;
-          msg.emit('aborted');
-          msg.destroy(Object.assign(new Error('aborted'), { code: 'ECONNRESET', cause: err }));
-        } finally {
-          handles?.notify?.();
+          msg.complete = true;
+          msg.push(null);
+          return;
         }
-      },
-      destroy(err, cb) {
-        if (!done) {
+        // A pending read keeps the program alive, as Node's open socket does.
+        const pending = reader.read();
+        const { value, done: end } = await (handles ? trackPromise(handles, pending) : pending);
+        if (end) {
           done = true;
-          (reader ?? res.body)?.cancel?.().catch?.(() => {});
-        }
-        cb(err);
-      },
-    });
-    msg.socket = null;
-    msg.connection = null;
+          msg.complete = true;
+          msg.push(null);
+        } else msg.push(Buffer.from(value));
+      } catch (err) {
+        done = true;
+        msg.emit('aborted');
+        msg.destroy(Object.assign(new Error('aborted'), { code: 'ECONNRESET', cause: err }));
+      } finally {
+        handles?.notify?.();
+      }
+    };
+    msg[kIncomingDestroy] = (err, cb) => {
+      if (!done) {
+        done = true;
+        (reader ?? res.body)?.cancel?.().catch?.(() => {});
+      }
+      cb(err);
+    };
     msg.httpVersion = '1.1';
     msg.httpVersionMajor = 1;
     msg.httpVersionMinor = 1;
@@ -195,13 +194,7 @@ export function createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODE
       msg.headers['set-cookie'] = cookies;
       for (const c of cookies) msg.rawHeaders.push('set-cookie', c);
     }
-    msg.trailers = {};
-    msg.rawTrailers = [];
-    msg.method = undefined;
-    msg.url = undefined;
-    msg.complete = false;
     msg.req = req;
-    msg.setTimeout = () => msg;
     if (method === 'HEAD' || [204, 304].includes(res.status) || (res.status >= 100 && res.status < 200)) {
       done = true;
       res.body?.cancel?.().catch?.(() => {});

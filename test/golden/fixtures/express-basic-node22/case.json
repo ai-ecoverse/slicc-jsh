@@ -1,0 +1,6 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#713: a basic Express 5 app on http's real IncomingMessage and ServerResponse prototypes: a middleware chain, routing, params, query, express.json() bodies and their errors, res.json, res.send, res.status, res.type, res.redirect, a streamed response, sendStatus, HEAD, express.static, a thrown and an async error handler, a 404",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["express"]
+}

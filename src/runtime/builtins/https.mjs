@@ -45,10 +45,16 @@ function headersToObject(headers) {
 
 export function createHttps({ ctx, Buffer, http, handles, getStream, timers = globalThis, getTls }) {
   const { setTimeout, clearTimeout } = timers;
-  const client = createFetchClient({ ctx, Buffer, getStream, handles, STATUS_CODES: http?.STATUS_CODES });
+  const client = createFetchClient({ ctx, Buffer, handles, STATUS_CODES: http?.STATUS_CODES, IncomingMessage: http?.IncomingMessage });
 
   function createServer() {
     throw notSupported('https.createServer');
+  }
+
+  function Server(options, requestListener) {
+    void options;
+    void requestListener;
+    throw notSupported('https.Server');
   }
 
   class ClientRequest extends EventEmitter {
@@ -327,6 +333,7 @@ export function createHttps({ ctx, Buffer, http, handles, getStream, timers = gl
     ...http,
     Agent,
     globalAgent,
+    Server,
     createServer,
     request,
     get,
