@@ -85,6 +85,21 @@ export function createPorts({
   let moveLinked = null;
   const portError = (message) => new DOMException(message, 'DataCloneError');
   /**
+   * What structured clone reads of an object: 'props' (an array's or an
+   * ordinary object's own enumerable properties), a Map's or Set's items,
+   * an Error's cause, or nothing more ('other': a Date, a buffer, a
+   * platform object). A plain object or an array is told by its prototype,
+   * the costly brand checks left for the rest.
+   */
+  const cloneKind = (value) => {
+    const proto = Object.getPrototypeOf(value);
+    if (proto === Object.prototype || proto === Array.prototype || proto === null) return 'props';
+    if (isMap(value)) return 'map';
+    if (isSet(value)) return 'set';
+    if (isError(value)) return 'error';
+    return Array.isArray(value) || isOrdinaryObject(value) ? 'props' : 'other';
+  };
+  /**
    * A jsh port in `value` that isn't in `listed`, found where structured
    * clone looks: a Map's or Set's items, an Error's own `cause`, an array's or
    * an ordinary object's own enumerable properties (a Date's, a buffer's, a
@@ -98,13 +113,14 @@ export function createPorts({
     if (value instanceof MessagePort) return !listed.includes(value);
     seen.add(value);
     const inner = (v) => hasUnlisted(v, listed, seen, scan);
-    if (isMap(value)) return entriesOf(value).some(([k, v]) => inner(k) || inner(v));
-    if (isSet(value)) return valuesOf(value).some(inner);
-    if (isError(value)) {
+    const kind = cloneKind(value);
+    if (kind === 'map') return entriesOf(value).some(([k, v]) => inner(k) || inner(v));
+    if (kind === 'set') return valuesOf(value).some(inner);
+    if (kind === 'error') {
       const cause = Object.getOwnPropertyDescriptor(value, 'cause');
       return cause !== undefined && 'value' in cause && inner(cause.value);
     }
-    if (!Array.isArray(value) && !isOrdinaryObject(value)) return false;
+    if (kind !== 'props') return false;
     return Object.values(Object.getOwnPropertyDescriptors(value)).some((d) => {
       if (!d.enumerable) return false;
       if ('value' in d) return inner(d.value);
@@ -122,19 +138,20 @@ export function createPorts({
     // A port or a marked object stays itself, for hasUnlisted to find.
     if (value === null || typeof value !== 'object' || value instanceof MessagePort || isUncloneable(value)) return value;
     if (seen.has(value)) return seen.get(value);
-    if (isMap(value)) {
+    const kind = cloneKind(value);
+    if (kind === 'map') {
       const out = new Map();
       seen.set(value, out);
       for (const [k, v] of entriesOf(value)) call(mapSet, out, settled(k, seen), settled(v, seen));
       return out;
     }
-    if (isSet(value)) {
+    if (kind === 'set') {
       const out = new Set();
       seen.set(value, out);
       for (const v of valuesOf(value)) call(setAdd, out, settled(v, seen));
       return out;
     }
-    if (isError(value)) {
+    if (kind === 'error') {
       const cause = Object.getOwnPropertyDescriptor(value, 'cause');
       if (cause === undefined || !('value' in cause)) return value;
       const out = new Error(value.message);
@@ -144,7 +161,7 @@ export function createPorts({
       out.cause = settled(cause.value, seen);
       return out;
     }
-    if (!Array.isArray(value) && !isOrdinaryObject(value)) return value;
+    if (kind !== 'props') return value;
     const out = Array.isArray(value) ? new Array(value.length) : {};
     seen.set(value, out);
     for (const key of Object.keys(value)) out[key] = settled(value[key], seen);
