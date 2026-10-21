@@ -382,10 +382,10 @@ The golden `http2-node22` checks these against Node 22.22.0.
 
 ## `dns`
 
-`require('dns')`, `require('dns/promises')` and their ESM forms load with Node 22.22.0's exports, argument checks and errors. So do the packages that require `dns` at load: **pg**, **mongodb**, **ioredis**, **redis**, **undici**, **nodemailer**, **fastify**, and **got** (which also needs `http2`).
+`require('dns')`, `require('dns/promises')` and their ESM forms load with Node 22.22.0's exports, argument checks and errors. So do the packages that require `dns` at load: **pg**, **mongodb**, **ioredis**, **redis**, **undici**, **nodemailer**, **fastify**, **nats**, **ssh2**, and **got** (which also needs `http2`). `test/integration/dns.test.mjs` loads pg, nodemailer, undici, fastify, nats, ssh2, superagent and googleapis-common (googleapis' client) in a kernel program, and runs got and ioredis.
 
 **`lookup`** (callback and promise forms, `all`, `family`, `order`/`verbatim`, `hints`) is getaddrinfo. An IP literal answers at once.
-- **On slicc-kernel 1.113.0 and later**, jsh asks the kernel's resolver (`ctx.net.resolve`). It answers from `/etc/hosts`, then the kernel's own names, then the uplink, the same answers WASI programs get. A name it doesn't know is `getaddrinfo ENOTFOUND <name>`, and one it can't answer for now is `getaddrinfo EAI_AGAIN`.
+- **On slicc-kernel 1.113.0 and later**, jsh asks the kernel's resolver (`ctx.net.resolve`). It answers from `/etc/hosts`, then the kernel's own names, then the uplink, the same answers WASI programs get. A name it doesn't know is `getaddrinfo ENOTFOUND <name>`. The resolver also gives no addresses when the uplink fails or times out (slicc-kernel 1.143.1 still does), so that's `getaddrinfo ENOTFOUND` too, where Node says `getaddrinfo EAI_AGAIN`. A resolver that rejects with `EAI_AGAIN` gets Node's `getaddrinfo EAI_AGAIN <name>` (`errno` -3001) from `lookup`, and `queryA ETIMEOUT` / `queryAaaa ETIMEOUT` from `resolve4` / `resolve6` (test `dns-eai-again`).
 - **On older kernels**, jsh answers the kernel's names as its hosts file has them:
   - `localhost`, `localhost.localdomain`, `ip6-localhost` and `*.localhost` are `127.0.0.1` and `::1`, IPv4 first (`order: 'ipv6first'` swaps them);
   - the kernel's own hostname (`slicc`) is `127.0.1.1` and `::1`;

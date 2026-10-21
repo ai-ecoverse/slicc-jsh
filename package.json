@@ -96,6 +96,8 @@
     "embedded-postgres": "18.4.0-beta.17",
     "esbuild": "0.28.2",
     "eslint": "10.12.0",
+    "fastify": "5.12.7",
+    "googleapis-common": "9.3.1",
     "got": "16.1.0",
     "http-proxy-agent": "9.1.0",
     "https-proxy-agent": "9.1.0",
@@ -107,6 +109,7 @@
     "lefthook": "2.2.2",
     "minimatch": "10.2.6",
     "monocart-coverage-reports": "2.13.2",
+    "nats": "2.29.3",
     "node-inspect-extracted": "3.3.4",
     "nodemailer": "10.1.2",
     "nodemon": "3.1.14",
@@ -119,8 +122,11 @@
     "readable-stream": "4.8.0",
     "semantic-release": "25.0.9",
     "smtp-server": "3.19.23",
+    "ssh2": "1.17.0",
     "string_decoder": "1.3.0",
+    "superagent": "10.4.1",
     "tinypool": "2.2.0",
+    "undici": "8.12.3",
     "ws": "8.22.0",
     "yargs": "18.2.0"
   }
