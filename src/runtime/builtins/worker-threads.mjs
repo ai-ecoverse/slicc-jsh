@@ -425,12 +425,27 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
       handles.delete(this.#handle);
       // After the last of the worker's messages and output, on jsh's own
       // timers (not the program's setImmediate, or require('timers')'s,
-      // which it may replace).
-      timers.setImmediate(() => {
+      // which it may replace). Messages its port still holds (they came
+      // with its end) are dispatched first, a turn at a time: while their
+      // count falls. A port that stops delivering (three turns without one)
+      // doesn't hold the 'exit' back.
+      let last = Infinity;
+      let still = 0;
+      const exit = () => {
+        const pending = this[kPublicPort]._pending();
+        if (pending > 0) {
+          still = pending < last ? 0 : still + 1;
+          last = pending;
+          if (still < 3) {
+            timers.setImmediate(exit);
+            return;
+          }
+        }
         this.#exitEmitted = true;
         this.emit('exit', code);
         for (const resolve of this.#exitWaiters.splice(0)) resolve(code);
-      });
+      };
+      timers.setImmediate(exit);
     }
 
     postMessage(message, transfer) {

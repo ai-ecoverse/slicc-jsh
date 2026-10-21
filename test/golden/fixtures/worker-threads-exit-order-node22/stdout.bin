@@ -1,0 +1,1 @@
+message: read x | message: from its exit handler | exit 0
