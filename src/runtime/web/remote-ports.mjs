@@ -34,6 +34,7 @@ import { isOrdinaryObject, kHostObjects } from '../builtins/v8-serdes.mjs';
 import { markIndex, newPortNonce, portMark } from './broadcast-channel.mjs';
 import { createMailbox, mailboxReader, mailboxWriter } from './mailbox.mjs';
 import { queueMicrotask } from '../async-context.mjs';
+import { isUncloneable, uncloneable } from './uncloneable.mjs';
 
 const CLOSE = Symbol('close');
 const arrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get;
@@ -256,6 +257,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
       const mark = marks.get(v);
       if (mark) return mark;
       if (known.includes(v)) return v;
+      if (isUncloneable(v)) throw uncloneable();
       if (v instanceof MessagePort || brands.some((get) => hasBrand(get, v))) throw unlisted();
       return undefined;
     });
@@ -425,6 +427,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
           checkTransferList(list, MessagePort, brands);
           const hosts = [];
           const bytes = serdes().serialize(message, (object) => {
+            if (isUncloneable(object)) throw uncloneable();
             if (object instanceof MessagePort || brands.some((get) => hasBrand(get, object))) throw unlisted();
             return isPlatformObject(object) ? hosts.push(object) - 1 : undefined;
           });

@@ -27,6 +27,8 @@
  */
 import { nodeError } from '../node-errors.mjs';
 import { queueMicrotask } from '../async-context.mjs';
+import { isOrdinaryObject } from '../builtins/v8-serdes.mjs';
+import { isError, isUncloneable, uncloneable } from './uncloneable.mjs';
 
 const kInspect = Symbol.for('nodejs.util.inspect.custom');
 const kCreate = Symbol('MessagePort');
@@ -84,14 +86,99 @@ export function createPorts({
   // (./remote-ports.mjs's export and import): set by it.
   let moveLinked = null;
   const portError = (message) => new DOMException(message, 'DataCloneError');
-  /** A jsh port in `value` that isn't in `listed`, found through its own data properties (no getter runs). */
-  const hasUnlisted = (value, listed, seen = new Set()) => {
+  /**
+   * What structured clone reads of an object: 'props' (an array's or an
+   * ordinary object's own enumerable properties), a Map's or Set's items,
+   * an Error's cause, or nothing more ('other': a Date, a buffer, a
+   * platform object). A plain object or an array is told by its prototype,
+   * the costly brand checks left for the rest.
+   */
+  const cloneKind = (value) => {
+    const proto = Object.getPrototypeOf(value);
+    if (proto === Object.prototype || proto === Array.prototype || proto === null) return 'props';
+    if (isMap(value)) return 'map';
+    if (isSet(value)) return 'set';
+    if (isError(value)) return 'error';
+    return Array.isArray(value) || isOrdinaryObject(value) ? 'props' : 'other';
+  };
+  /**
+   * A jsh port in `value` that isn't in `listed`, found where structured
+   * clone looks: a Map's or Set's items, an Error's own `cause`, an array's or
+   * an ordinary object's own enumerable properties (a Date's, a buffer's, a
+   * Map's own are not cloned). A marked object (markAsUncloneable) on the way
+   * is a DataCloneError. Data properties only, no getter runs: `scan.getter`
+   * is set when one would.
+   */
+  const hasUnlisted = (value, listed, seen = new Set(), scan = {}) => {
     if (value === null || typeof value !== 'object' || seen.has(value)) return false;
+    if (isUncloneable(value)) throw uncloneable();
     if (value instanceof MessagePort) return !listed.includes(value);
     seen.add(value);
-    if (isMap(value)) return entriesOf(value).some(([k, v]) => hasUnlisted(k, listed, seen) || hasUnlisted(v, listed, seen));
-    if (isSet(value)) return valuesOf(value).some((v) => hasUnlisted(v, listed, seen));
-    return Object.values(Object.getOwnPropertyDescriptors(value)).some((d) => d.enumerable && 'value' in d && hasUnlisted(d.value, listed, seen));
+    const inner = (v) => hasUnlisted(v, listed, seen, scan);
+    const kind = cloneKind(value);
+    if (kind === 'map') return entriesOf(value).some(([k, v]) => inner(k) || inner(v));
+    if (kind === 'set') return valuesOf(value).some(inner);
+    if (kind === 'error') {
+      const cause = Object.getOwnPropertyDescriptor(value, 'cause');
+      return cause !== undefined && 'value' in cause && inner(cause.value);
+    }
+    if (kind !== 'props') return false;
+    return Object.values(Object.getOwnPropertyDescriptors(value)).some((d) => {
+      if (!d.enumerable) return false;
+      if ('value' in d) return inner(d.value);
+      scan.getter = true;
+      return false;
+    });
+  };
+  /**
+   * `value` with each getter structured clone would run read once, here (as
+   * the clone would), into a copy: an ordinary object or array (a plain copy,
+   * which is what the clone makes of it), and what a Map, Set or Error's
+   * cause holds. The rest as it is.
+   */
+  const settled = (value, seen = new Map()) => {
+    // A port or a marked object stays itself, for hasUnlisted to find.
+    if (value === null || typeof value !== 'object' || value instanceof MessagePort || isUncloneable(value)) return value;
+    if (seen.has(value)) return seen.get(value);
+    const kind = cloneKind(value);
+    if (kind === 'map') {
+      const out = new Map();
+      seen.set(value, out);
+      for (const [k, v] of entriesOf(value)) call(mapSet, out, settled(k, seen), settled(v, seen));
+      return out;
+    }
+    if (kind === 'set') {
+      const out = new Set();
+      seen.set(value, out);
+      for (const v of valuesOf(value)) call(setAdd, out, settled(v, seen));
+      return out;
+    }
+    if (kind === 'error') {
+      const cause = Object.getOwnPropertyDescriptor(value, 'cause');
+      if (cause === undefined || !('value' in cause)) return value;
+      const out = new Error(value.message);
+      Object.setPrototypeOf(out, Object.getPrototypeOf(value));
+      seen.set(value, out);
+      if (Object.hasOwn(value, 'stack')) out.stack = value.stack;
+      out.cause = settled(cause.value, seen);
+      return out;
+    }
+    if (kind !== 'props') return value;
+    const out = Array.isArray(value) ? new Array(value.length) : {};
+    seen.set(value, out);
+    for (const key of Object.keys(value)) out[key] = settled(value[key], seen);
+    return out;
+  };
+  /** The checks of a message (hasUnlisted), its getters first run once where they would hide what's in it. */
+  const checked = (message, listed) => {
+    const scan = {};
+    let unlisted = hasUnlisted(message, listed, new Set(), scan);
+    if (scan.getter && !unlisted) {
+      message = settled(message);
+      unlisted = hasUnlisted(message, listed);
+    }
+    if (unlisted) throw portError('Object that needs transfer was found in message but not listed in transferList');
+    return message;
   };
 
   // The ports this turn still visits (in the order they were made), the one
@@ -219,7 +306,7 @@ export function createPorts({
     if (source && ports.includes(source)) throw portError('Transfer list contains source port');
     if (ports.some((port) => port._unusable())) throw portError('MessagePort in transfer list is already detached');
     if (new Set(ports).size !== ports.length) throw portError('Transfer list contains duplicate MessagePort');
-    if (hasUnlisted(message, ports)) throw portError('Object that needs transfer was found in message but not listed in transferList');
+    message = checked(message, ports);
     const nonce = newPortNonce();
     const marks = new Map(ports.map((port, i) => [port, portMark(nonce, i)]));
     const seen = new Set();
@@ -305,6 +392,8 @@ export function createPorts({
     postMessage(message) {
       if (!this.#open) throw new DOMException('BroadcastChannel is closed.', 'InvalidStateError');
       if (arguments.length === 0) throw nodeError(TypeError, 'ERR_MISSING_ARGS', 'The "message" argument must be specified');
+      // Nothing can be transferred on a channel: a port in it is Node's
+      // DataCloneError, as a marked object is.
       const data = structuredClone(message);
       for (const ch of channels.get(this.#name) ?? []) {
         if (ch === this) continue;
