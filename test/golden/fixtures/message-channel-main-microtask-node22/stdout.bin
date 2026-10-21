@@ -1,0 +1,8 @@
+main, long microtask after the posts: timer 60 | mc x | mc y | imm | imm from x | imm from y
+timer, long microtask before the posts: mc x | mc y | imm | imm from x | imm from y | timer 60
+timer, busy after the posts: mc x | mc y | imm | imm from x | imm from y | timer 60
+immediate, long microtask after the posts: timer 60 | mc x | mc y | imm | imm from x | imm from y
+immediate, long microtask before the posts: timer 60 | mc x | mc y | imm | imm from x | imm from y
+immediate, busy after the posts: timer 60 | mc x | mc y | imm | imm from x | imm from y
+immediate, busy before the timer: mc x | mc y | imm | imm from x | imm from y | timer 60
+immediate, another queued before it ran: imm queued before | mc x | mc y | imm | imm from x | imm from y

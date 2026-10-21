@@ -16,9 +16,15 @@ export function createTimers(
   // hold(due): whether a timeout that became due at `due` must wait (one
   // task at a time) for what runs before it: the message ports' turn being
   // delivered, for a timeout that became due after the turn started.
-  // holdImmediate(): whether the program's immediates must wait (Node's
-  // check phase comes after the poll phase that delivers port messages).
+  // holdImmediate(seq): whether the program's immediate made `seq`th must
+  // wait (Node's check phase comes after the poll phase that delivers port
+  // messages).
   let inImmediate = 0;
+  let checkCut = 0;
+  let timerAt = null;
+  const endTimerPhase = () => {
+    timerAt = null;
+  };
   // The check phase that follows a message ports' turn (Node runs the
   // immediates queued by the end of the poll phase before its next timers
   // phase): the immediates pending when the turn ended. While any of them
@@ -46,6 +52,7 @@ export function createTimers(
   const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
   const nativeSetInterval = globalThis.setInterval.bind(globalThis);
   const nativeClearInterval = globalThis.clearInterval.bind(globalThis);
+  const nativeQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
 
   const byId = new Map();
   // Once the program is ending (process.exit(), a fatal error) no timer of
@@ -151,7 +158,9 @@ export function createTimers(
         state.due = Date.now() + state.delay;
         state.seq = made++;
       }
+      timerAt = Date.now();
       runMethod(handle, '_onTimeout', args, domain, frame);
+      nativeQueueMicrotask(endTimerPhase);
     };
     const fire = () => {
       if (stopped) return;
@@ -204,7 +213,7 @@ export function createTimers(
         due.set(fire, Infinity);
         return;
       }
-      if (held && holdImmediate()) {
+      if (held && holdImmediate(state.seq)) {
         state.retry = nativeSetTimeout(fire, 0);
         return;
       }
@@ -212,13 +221,17 @@ export function createTimers(
       byId.delete(state.id);
       handles.delete(state);
       check.delete(state);
-      if (held) inImmediate++;
+      if (held) {
+        if (state.seq >= checkCut) checkCut = made;
+        inImmediate++;
+      }
       try {
         runMethod(handle, '_onImmediate', args, domain, frame);
       } finally {
         if (held) inImmediate--;
       }
     };
+    state.seq = made++;
     state.id = nativeSetTimeout(fire, 0);
     byId.set(state.id, state);
     handles.add(state);
@@ -268,6 +281,8 @@ export function createTimers(
     setImmediateUnheld: (fn) => makeImmediate(fn, [], false),
     /** @internal Whether one of the program's immediates is running (Node's check phase). */
     inCheck: () => inImmediate > 0,
+    checkCut: () => checkCut,
+    timerAt: () => timerAt,
     /** @internal A message ports' turn ended: its check phase is the immediates pending now. */
     startCheck() {
       check.clear();

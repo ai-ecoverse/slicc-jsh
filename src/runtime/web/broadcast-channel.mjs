@@ -106,8 +106,9 @@ export function createPorts({
     flushing = { kind: 'port-message' };
     handles?.add(flushing);
     // Node checks its timers when an iteration starts, before the poll phase:
-    // a timer that was due when the posting task ended runs first, one
-    // that became due while the messages waited for their turn doesn't.
+    // a timer that was due when the posting task and its microtasks ended
+    // runs first, one that became due while the messages waited for their
+    // turn doesn't. From a timer, the poll phase follows its timers phase.
     let checkAt = Infinity;
     const step = (first) => {
       if (first && delivering.overdue?.(Math.min(checkAt, Date.now()))) {
@@ -160,9 +161,21 @@ export function createPorts({
       flushing = null;
       handles?.notify?.();
     };
-    queueMicrotask(() => {
-      checkAt = Date.now();
-    });
+    const timerAt = delivering.timerAt?.();
+    if (timerAt != null) checkAt = timerAt;
+    else {
+      let idle = 0;
+      const mark = () => {
+        const now = Date.now();
+        if (now === checkAt) idle += 1;
+        else {
+          checkAt = now;
+          idle = 0;
+        }
+        if (idle < 4) queueMicrotask(mark);
+      };
+      queueMicrotask(mark);
+    }
     later(() => step(true));
   };
   // A post from the main program or a callback other than an immediate or
@@ -180,7 +193,13 @@ export function createPorts({
         }
         return;
       }
-    } else if (!delivering.inCheck?.()) delivering.pending = true;
+    } else if (!delivering.inCheck?.()) {
+      delivering.pending = true;
+      delivering.cut = 0;
+    } else if (!delivering.pending) {
+      delivering.pending = true;
+      delivering.cut = delivering.checkCut();
+    }
     ready.add(port);
     flushSoon();
   };
