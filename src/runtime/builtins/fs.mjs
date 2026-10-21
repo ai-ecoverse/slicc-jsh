@@ -630,6 +630,18 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
   }
 
   function writeBytesAtPath(ent, bytes, filePosition) {
+    const inPlace = writesInPlace && openInPlace(ent.path, { write: true, append: ent.append ?? String(ent.flags).includes('a') });
+    if (inPlace) {
+      try {
+        const pos = inPlace.append ? inPlace.file.size() : filePosition == null ? ent.pos : filePosition;
+        const n = inPlace.file.write(pos, bytes);
+        const written = typeof n === 'number' ? n : bytes.length;
+        if (filePosition == null) ent.pos = pos + written;
+        return written;
+      } finally {
+        inPlace.file.close();
+      }
+    }
     let cur = new Uint8Array(0);
     try {
       cur = syncFs.readFile(ent.path);
@@ -834,7 +846,16 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
 
   const kernelRefusesDev = kernelAtLeast(ctx, '1.93.0');
   const mkdirRootEio = kernelAtLeast(ctx, '1.93.0') && !kernelAtLeast(ctx, '1.94.1');
-  const appendsInPlace = typeof ctx.sync?.open === 'function' && kernelAtLeast(ctx, '1.143.4');
+  const writesInPlace = typeof ctx.sync?.open === 'function' && kernelAtLeast(ctx, '1.143.4');
+
+  function openInPlace(target, { write, append = false }) {
+    try {
+      return { file: ctx.sync.open(target, { write, append }), append };
+    } catch (err) {
+      if (err?.code === 'ENOENT') return null;
+      throw err;
+    }
+  }
 
   /**
    * A removal the kernel answered ENOENT for, of an entry that is still there
@@ -1245,6 +1266,22 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       const existed = want != null || flag.includes('x') ? syncFs.exists(target) : true;
       if (flag.includes('x') && existed) throw nodeFsError('EEXIST', 'open', pathArg);
       if (flag.startsWith('r')) {
+        if (writesInPlace) {
+          let file;
+          try {
+            file = ctx.sync.open(target, { write: true });
+          } catch (err) {
+            throw nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
+          }
+          try {
+            file.write(0, bytes);
+          } catch (err) {
+            throw nodeFsError(err?.code || 'EIO', 'write', pathArg, err);
+          } finally {
+            file.close();
+          }
+          return;
+        }
         // r+: the file must exist; write from the start, keep what's beyond.
         let cur;
         try {
@@ -1304,7 +1341,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       try {
         let prev = new Uint8Array(0);
         existed = syncFs.exists(target);
-        if (existed && appendsInPlace) {
+        if (existed && writesInPlace) {
           const file = ctx.sync.open(target, { write: true, append: true });
           try {
             file.write(file.size(), next);
@@ -1640,9 +1677,20 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     ftruncateSync(fd, len = 0) {
       validatedFd(fd);
       validateInteger(len, 'len');
+      len = Math.max(0, len);
       const ent = fdTable.get(fd);
       if (!ent) throw nodeFsError('EBADF', 'ftruncate', undefined);
       try {
+        const inPlace = writesInPlace && openInPlace(ent.path, { write: true });
+        if (inPlace) {
+          try {
+            inPlace.file.truncate(len);
+          } finally {
+            inPlace.file.close();
+          }
+          if (ent.pos > len) ent.pos = len;
+          return;
+        }
         let cur = syncFs.readFile(ent.path);
         if (len < cur.length) cur = cur.subarray(0, len);
         else if (len > cur.length) {
