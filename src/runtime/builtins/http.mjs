@@ -215,6 +215,9 @@ const kMaybeFinish = Symbol('kMaybeFinish');
 const kPending = Symbol('kPending');
 const kFinishQueued = Symbol('kFinishQueued');
 const kRequestListener = Symbol('kRequestListener');
+const kFetchTimer = Symbol('kFetchTimer');
+export const kFetchVia = Symbol('slicc-jsh.http.fetchVia');
+export const httpInternals = new WeakMap();
 
 function setRawHeader(msg, name, value) {
   (msg[kOutHeaders] ??= Object.create(null))[name.toLowerCase()] = [name, value];
@@ -1508,6 +1511,18 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     const self = Reflect.construct(net.Server, [{ ...options, allowHalfOpen: true }], new.target);
     // Node: http.Server sockets default allowHalfOpen true (readable property).
     self.allowHalfOpen = true;
+    storeHttpOptions(self, options);
+    self[kRequestListener] = requestListener;
+    self.on('connection', (socket) => {
+      handleConnection(socket, self[kRequestListener], self);
+    });
+    self.on('listening', () => {
+      self._closing = false;
+    });
+    return self;
+  }
+
+  function storeHttpOptions(self, options) {
     // Node 22's defaults.
     self.keepAliveTimeout = 5000;
     self.keepAliveTimeoutBuffer = 1000;
@@ -1520,7 +1535,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     self._connections = new Set();
     self._closing = false;
     self._connectionGone = null;
-    self[kRequestListener] = requestListener;
     // Node's options for them (lib/_http_server.js storeHTTPOptions):
     // integers >= 0, and headersTimeout no longer than requestTimeout.
     for (const key of ['requestTimeout', 'headersTimeout', 'keepAliveTimeout', 'keepAliveTimeoutBuffer']) {
@@ -1534,13 +1548,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     if (self.requestTimeout > 0 && self.headersTimeout > 0 && self.headersTimeout > self.requestTimeout) {
       throw ERR_OUT_OF_RANGE('headersTimeout', '<= requestTimeout', self.headersTimeout);
     }
-    self.on('connection', (socket) => {
-      handleConnection(socket, self[kRequestListener], self);
-    });
-    self.on('listening', () => {
-      self._closing = false;
-    });
-    return self;
   }
   Object.setPrototypeOf(Server.prototype, net.Server.prototype);
   Object.setPrototypeOf(Server, net.Server);
@@ -1861,6 +1868,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     this[kFetchSent] = false;
     this[kFetchAbort] = null;
     this[kNoRouteError] = null;
+    this[kFetchVia] = options[kFetchVia] ?? null;
+    this[kFetchTimer] = null;
+    if (this[kFetchVia]) this[kFetchMode] = true;
     this.reusedSocket = false;
     // Node's: what the request is, readable as res.req's.
     this.method = String(options.method ?? 'GET').toUpperCase();
@@ -1896,6 +1906,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
   Object.assign(ClientRequest.prototype, {
     setTimeout(msecs, callback) {
       if (typeof callback === 'function') this.on('timeout', callback);
+      if (this[kFetchVia]) {
+        clearTimeout(this[kFetchTimer]);
+        this[kFetchTimer] = null;
+        if (msecs > 0) {
+          this[kFetchTimer] = setTimeout(() => {
+            this[kFetchTimer] = null;
+            this.emit('timeout');
+          }, msecs);
+          this[kFetchTimer].unref?.();
+        }
+      }
       return this;
     },
     abort() {
@@ -1926,6 +1947,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     },
 
     [kConnect]() {
+      if (this[kFetchVia]) return;
       const opts = this[kOpts];
       const host = opts.hostname ?? opts.host ?? '127.0.0.1';
       const port = Number(opts.port ?? (opts.protocol === 'https:' ? 443 : 80));
@@ -2310,14 +2332,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       this[kFetchSent] = true;
       const opts = this[kOpts];
       const host = opts.hostname ?? opts.host;
-      const port = Number(opts.port ?? 80);
+      const port = Number(opts.port ?? (this[kFetchVia] ? 443 : 80));
       const method = (opts.method ?? 'GET').toUpperCase();
       const body = Buffer.concat(this[kChunks]);
       this[kChunks] = [];
+      const headers = this.getHeaders();
       this._headerSent = true;
+      this._header ||= this[kRenderHead]().toString('latin1');
       this[kFetchAbort] = new AbortController();
-      const pending = getFetchClient()
-        .send({ protocol: 'http:', host, port, path: opts.path ?? '/', method, headers: this.getHeaders(), body, signal: this[kFetchAbort].signal, req: this })
+      const send = this[kFetchVia]?.send ?? ((request) => getFetchClient().send({ protocol: 'http:', ...request }));
+      const pending = send({ host, port, path: opts.path ?? '/', method, headers, body, signal: this[kFetchAbort].signal, req: this })
         .then(
           (res) => {
             if (this.destroyed) {
@@ -2325,6 +2349,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
               return;
             }
             this.res = res;
+            res.once('close', () => {
+              if (!this.destroyed) this.destroy();
+            });
             this.emit('response', res);
           },
           (err) => {
@@ -2333,6 +2360,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
             const code = err?.cause?.cause?.code ?? err?.cause?.code;
             const e = code === 'ENETUNREACH' && this[kNoRouteError] ? this[kNoRouteError] : err;
             emitError(this, e);
+            if (!this.destroyed) this.destroy();
           }
         );
       if (handles) void trackPromise(handles, pending);
@@ -2343,6 +2371,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       this.destroyed = true;
       if (err) this[kErrored] = err;
       // req.destroy(): the connection goes, and a body still coming is cut short.
+      if (this[kFetchTimer]) clearTimeout(this[kFetchTimer]);
       this[kFetchAbort]?.abort();
       this[kAbortBody]?.();
       try {
@@ -2485,7 +2514,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     return req;
   }
 
-  return {
+  const exports = {
     METHODS,
     STATUS_CODES,
     IncomingMessage,
@@ -2503,6 +2532,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     setMaxIdleHTTPParsers,
     maxHeaderSize: 16384,
   };
+  httpInternals.set(exports, { storeHttpOptions, handleConnection });
+  return exports;
 }
 
 // lib/_http_outgoing.js / _http_common.js: the header checks Node exports (got uses them).

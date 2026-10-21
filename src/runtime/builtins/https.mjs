@@ -6,12 +6,12 @@
  * instead, http's ClientRequest on tls.connect, where the kernel has TLS
  * (slicc-kernel 1.116.0).
  */
-import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 import { connectError, createFetchClient, isLoopbackHost } from './http-fetch.mjs';
+import { httpInternals, kFetchVia } from './http.mjs';
 import { noTls as notSupported } from './tls.mjs';
 import { kernelAtLeast } from '../kernel-version.mjs';
-import { queueMicrotask } from '../async-context.mjs';
+import { validateObject } from '../node-errors.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
 
@@ -27,187 +27,72 @@ function rejectTlsOptions(options, kernelTls = false, kernelCerts = false) {
   }
 }
 
-function headersToObject(headers) {
-  const out = Object.create(null);
-  if (!headers) return out;
-  if (typeof Headers !== 'undefined' && headers instanceof Headers) {
-    headers.forEach((value, key) => {
-      out[String(key).toLowerCase()] = String(value);
-    });
-    return out;
-  }
-  for (const [k, v] of Object.entries(headers)) {
-    if (v == null) continue;
-    out[String(k).toLowerCase()] = Array.isArray(v) ? v.map(String).join(', ') : String(v);
-  }
-  return out;
+function fetchHeaders(headers) {
+  if (!headers) return headers;
+  if (typeof Headers !== 'undefined' && headers instanceof Headers) return Object.fromEntries(headers);
+  return Object.fromEntries(Object.entries(headers).filter(([, v]) => v != null));
 }
 
-export function createHttps({ ctx, Buffer, http, handles, getStream, timers = globalThis, getTls }) {
-  const { setTimeout, clearTimeout } = timers;
+export function createHttps({ ctx, Buffer, http, handles, getTls }) {
   const client = createFetchClient({ ctx, Buffer, handles, STATUS_CODES: http?.STATUS_CODES, IncomingMessage: http?.IncomingMessage });
 
-  function createServer() {
-    throw notSupported('https.createServer');
-  }
+  const tls = getTls();
+  const { storeHttpOptions, handleConnection } = httpInternals.get(http);
 
   function Server(options, requestListener) {
-    void options;
-    void requestListener;
-    throw notSupported('https.Server');
+    if (!new.target) return new Server(options, requestListener);
+    if (typeof options === 'function') {
+      requestListener = options;
+      options = {};
+    } else if (options == null) {
+      options = {};
+    } else {
+      validateObject(options, 'options');
+    }
+    const httpOptions = {};
+    storeHttpOptions(httpOptions, options);
+    const alpn = options.ALPNProtocols || options.ALPNCallback ? {} : { ALPNProtocols: ['http/1.1'] };
+    const self = Reflect.construct(tls.Server, [{ noDelay: true, ...alpn, ...options }], new.target);
+    Object.assign(self, httpOptions);
+    self.httpAllowHalfOpen = false;
+    self.on('secureConnection', (socket) => handleConnection(socket, undefined, self));
+    if (requestListener) self.on('request', requestListener);
+    self.on('tlsClientError', function onTlsClientError(err, conn) {
+      if (!this.emit('clientError', err, conn)) conn.destroy(err);
+    });
+    return self;
+  }
+  Object.setPrototypeOf(Server.prototype, tls.Server.prototype);
+  Object.setPrototypeOf(Server, tls.Server);
+  Server.prototype.closeAllConnections = http.Server.prototype.closeAllConnections;
+  Server.prototype.closeIdleConnections = http.Server.prototype.closeIdleConnections;
+  Server.prototype.setTimeout = http.Server.prototype.setTimeout;
+  Server.prototype.close = function close(...args) {
+    this.closeIdleConnections();
+    return tls.Server.prototype.close.apply(this, args);
+  };
+  Server.prototype[Symbol.asyncDispose ?? Symbol.for('nodejs.asyncDispose')] = async function asyncDispose() {
+    return new Promise((resolve, reject) => this.close((err) => (err ? reject(err) : resolve())));
+  };
+
+  function createServer(options, requestListener) {
+    return new Server(options, requestListener);
   }
 
-  class ClientRequest extends EventEmitter {
-    #ended = false;
-    #sent = false;
-    #body = [];
-    #opts;
-    #headers = Object.create(null);
-    #abort = new AbortController();
-    #timeout = null;
-    #destroyed = false;
-
-    constructor(options, callback) {
-      super();
-      rejectTlsOptions(options);
-      this.#opts = options;
-      this.#headers = headersToObject(options?.headers);
-      // Node's: what the request is, readable as res.req's.
-      // The options as merged over the URL: an overriding path or hostname wins.
-      this.method = String(options?.method ?? 'GET').toUpperCase();
-      this.path = options?.path ?? '/';
-      this.host = String(options?.hostname ?? options?.host ?? 'localhost').replace(/^\[|\]$/g, '');
-      this.protocol = 'https:';
-      if (callback) this.once('response', callback);
-    }
-
-    setHeader(name, value) {
-      this.#headers[String(name).toLowerCase()] = Array.isArray(value)
-        ? value.map(String).join(', ')
-        : String(value);
-      return this;
-    }
-    getHeader(name) {
-      return this.#headers[String(name).toLowerCase()];
-    }
-    removeHeader(name) {
-      delete this.#headers[String(name).toLowerCase()];
-      return this;
-    }
-    setTimeout(ms, cb) {
-      if (this.#timeout) clearTimeout(this.#timeout);
-      if (ms > 0) {
-        this.#timeout = setTimeout(() => {
-          this.#timeout = null;
-          this.emit('timeout');
-          if (typeof cb === 'function') cb();
-        }, ms);
-        this.#timeout.unref?.();
-      }
-      return this;
-    }
-    write(chunk, encoding, cb) {
-      if (chunk != null && chunk !== '') {
-        this.#body.push(
-          typeof chunk === 'string' ? Buffer.from(chunk, encoding) : Buffer.from(chunk)
-        );
-      }
-      if (typeof encoding === 'function') encoding();
-      else if (typeof cb === 'function') cb();
-      return true;
-    }
-    end(chunk, encoding, cb) {
-      if (typeof chunk === 'function') {
-        cb = chunk;
-        chunk = undefined;
-      } else if (typeof encoding === 'function') {
-        cb = encoding;
-        encoding = undefined;
-      }
-      if (chunk != null && chunk !== '') this.write(chunk, encoding);
-      this.#ended = true;
-      if (typeof cb === 'function') this.once('finish', cb);
-      // Keep the jsh event loop alive until ctx.fetch settles (libuv-request style).
-      const pending = this.#send().then(() => {
-        if (!this.#destroyed) this.emit('finish');
-      });
-      if (handles) void trackPromise(handles, pending);
-      else void pending;
-      return this;
-    }
-    abort() {
-      this.destroy();
-    }
-    destroy(err) {
-      if (this.#destroyed) return this;
-      this.#destroyed = true;
-      if (this.#timeout) {
-        clearTimeout(this.#timeout);
-        this.#timeout = null;
-      }
+  async function send({ host, port, path, method, headers, body, signal, req }) {
+    if (typeof ctx.fetch !== 'function') throw notSupported('https.request');
+    host = String(host ?? 'localhost').replace(/^\[|\]$/g, '');
+    if (isLoopbackHost(host) && typeof ctx.net?.connect === 'function') {
+      let conn;
       try {
-        this.#abort.abort(err ?? new Error('aborted'));
-      } catch {
-        /* ignore */
-      }
-      if (err) this.emit('error', err);
-      this.emit('close');
-      return this;
-    }
-
-    async #send() {
-      if (this.#sent || this.#destroyed) return;
-      this.#sent = true;
-      try {
-        if (typeof ctx.fetch !== 'function') throw notSupported('https.request');
-        const opts = this.#opts;
-        const method = (opts.method ?? 'GET').toUpperCase();
-        // The options as merged over the URL (an overriding path, hostname
-        // or port wins, as in Node).
-        const host = String(opts.hostname ?? opts.host ?? 'localhost').replace(/^\[|\]$/g, '');
-        const port = opts.port ?? 443;
-        const path = opts.path ?? '/';
-        // The kernel's loopback has no TLS (a fetch there is refused, or on
-        // older kernels the transport answers 403): connect first, so a
-        // port nothing listens on is ECONNREFUSED, as Node's.
-        if (isLoopbackHost(host) && typeof ctx.net?.connect === 'function') {
-          let conn;
-          try {
-            conn = await ctx.net.connect({ host: /localhost\.?$/i.test(host) ? '127.0.0.1' : host, port: Number(port) });
-          } catch (err) {
-            throw connectError(err?.code ?? err?.cause?.code ?? 'ECONNREFUSED', host, port, err);
-          }
-          void conn.close?.();
-          throw notSupported("https to the kernel's own loopback (it has no TLS)");
-        }
-        const incoming = await client.send({
-          protocol: 'https:',
-          host,
-          port,
-          path,
-          method,
-          headers: this.#headers,
-          body: this.#body.length ? Buffer.concat(this.#body) : undefined,
-          signal: this.#abort.signal,
-          req: this,
-        });
-        if (this.#destroyed) {
-          incoming.destroy();
-          return;
-        }
-        this.res = incoming;
-        queueMicrotask(() => {
-          if (this.#destroyed) return;
-          this.emit('response', incoming);
-        });
+        conn = await ctx.net.connect({ host: /localhost\.?$/i.test(host) ? '127.0.0.1' : host, port: Number(port) });
       } catch (err) {
-        if (this.#destroyed || this.#abort.signal.aborted) {
-          if (!this.#destroyed) this.destroy();
-          return;
-        }
-        this.emit('error', err);
+        throw connectError(err?.code ?? err?.cause?.code ?? 'ECONNREFUSED', host, port, err);
       }
+      void conn.close?.();
+      throw notSupported("https to the kernel's own loopback (it has no TLS)");
     }
+    return client.send({ protocol: 'https:', host, port, path, method, headers, body, signal, req });
   }
 
   function normalize(input, options, callback) {
@@ -272,7 +157,18 @@ export function createHttps({ ctx, Buffer, http, handles, getStream, timers = gl
         norm.callback
       );
     }
-    return new ClientRequest(norm.options, norm.callback);
+    rejectTlsOptions(norm.options);
+    return new http.ClientRequest(
+      {
+        _defaultAgent: globalAgent,
+        defaultPort: 443,
+        ...norm.options,
+        protocol: 'https:',
+        headers: fetchHeaders(norm.options.headers),
+        [kFetchVia]: { send },
+      },
+      norm.callback
+    );
   }
 
   function get(input, options, callback) {
@@ -330,12 +226,11 @@ export function createHttps({ ctx, Buffer, http, handles, getStream, timers = gl
   }
   const globalAgent = new Agent({ keepAlive: true, scheduling: 'lifo', timeout: 5000 });
   return {
-    ...http,
     Agent,
     globalAgent,
     Server,
     createServer,
-    request,
     get,
+    request,
   };
 }
