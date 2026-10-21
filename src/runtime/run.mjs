@@ -17,7 +17,7 @@ import { isExitError } from './exit.mjs';
 import { realMainPath } from './realpath.mjs';
 import { createHandleTable } from './handles.mjs';
 import { createNextTick } from './next-tick.mjs';
-import { createProcess, NODE_SHIM_VERSION } from './process.mjs';
+import { createProcess, kernelMemory, NODE_SHIM_VERSION } from './process.mjs';
 import { probeStdio } from './stdio.mjs';
 import { installFunctionImport } from './function-import.mjs';
 import { patchReplServer } from './node-lib.mjs';
@@ -365,7 +365,7 @@ export async function runNode(ctx, options = {}) {
     return 0;
   }
 
-  const Buffer = createBuffer();
+  const Buffer = createBuffer({ track: !Number.isFinite(kernelMemory(ctx).arrayBuffers) });
   // Terminal, file or pipe, for process.stdin/stdout/stderr (Node knows it
   // synchronously; the kernel answers asynchronously, so ask up front).
   const [stdio, ppid] = await Promise.all([
