@@ -145,6 +145,9 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
   const { MessagePort, makePort } = ports;
   const readableLocked = getterOf(globalThis.ReadableStream, 'locked');
   const isReadable = (value) => !!readableLocked && hasBrand(readableLocked, value);
+  const transformReadable = getterOf(globalThis.TransformStream, 'readable');
+  const isTransform = (value) => !!transformReadable && hasBrand(transformReadable, value);
+  const { defineProperty } = Object;
   // The platform's, taken before the program runs (which may replace them).
   const NativeReadableStream = globalThis.ReadableStream;
   const { apply } = Reflect;
@@ -273,7 +276,7 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
     // The walk reads each property once; the clone takes its copy.
     const staged = structuredClone({ marked: swapPorts(message, marks, rest), rest }, { transfer: rest });
     // Whether the receiver has streams to find in it.
-    const streams = rest.some(isReadable);
+    const streams = rest.some((x) => isReadable(x) || isTransform(x));
     if (jshPorts.length === 0) return fn({ data: staged.marked, ports: [], streams }, staged.rest);
     const natives = [];
     const envelopes = jshPorts.map((port) => exportPort(port, natives));
@@ -289,7 +292,15 @@ export function createRemotePorts({ ports, NativeMessageChannel, serdes, handles
     const data = mapPorts(message.data, (v) => {
       const at = list.length ? markIndex(v, message.nonce) : -1;
       if (at >= 0) return list[at];
-      if (!message.streams || !isReadable(v)) return undefined;
+      if (!message.streams) return undefined;
+      // A TransformStream's readable side is read the same way: its
+      // chunks come back from the other thread (where its other end is).
+      if (isTransform(v) && !wrappers.has(v)) {
+        wrappers.set(v, v);
+        const readable = heldWhileRead(apply(transformReadable, v, []));
+        defineProperty(v, 'readable', { value: readable, configurable: true, enumerable: false });
+      }
+      if (!isReadable(v)) return undefined;
       if (!wrappers.has(v)) wrappers.set(v, heldWhileRead(v));
       return wrappers.get(v);
     });
