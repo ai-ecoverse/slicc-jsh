@@ -47,12 +47,13 @@ const skipAnchors = !kernelAtLeast('1.136.0') && 'slicc-kernel before 1.136.0 ha
 // slicc-kernel#1224 (1.136.4): pg SCRAM channel binding in a sealed session.
 // The kernel picks the gs2 header itself, tls-server-end-point where the
 // bundled roots verified a server offering -PLUS, and an anchored session
-// gets no binding. Its vault side, slicc-vault 1.15.1, isn't needed here:
+// gets no binding before 1.141.0. Its vault side, slicc-vault 1.15.1, isn't needed here:
 // the vault is this file's own hook.
 const skipBinding = !kernelAtLeast('1.136.4') && 'slicc-kernel before 1.136.4 has no sealed pg channel binding (slicc-kernel#1224)';
 // slicc-kernel#1278 (1.137.0): a program's own SCRAM exchange in a session
 // the kernel didn't verify passes through untouched, channel binding and all.
 const skipOwnBinding = !kernelAtLeast('1.137.0') && "slicc-kernel before 1.137.0 rewrites the program's own channel binding (slicc-kernel#1278)";
+const anchoredBinding = kernelAtLeast('1.141.0');
 
 // A placeholder as the vault makes them (fnox_proxy_<24 hex>).
 const PLACEHOLDER = 'fnox_proxy_0123456789abcdef01234567';
@@ -1123,17 +1124,22 @@ const connect = async (label, user, port, query) => {
   });
 
   // slicc-kernel#1224 binds SCRAM-SHA-256-PLUS only in a session the bundled
-  // roots verified: an anchored one gets no -PLUS (slicc-kernel#1259).
-  it("pg channel binding in an anchored session: pg's enableChannelBinding (libpq's prefer) authenticates unbound with the secret", { skip: skipAnchors || skipBinding }, async () => {
+  // roots verified; from 1.141.0 an anchored one binds too (slicc-kernel#1259).
+  it("pg channel binding in an anchored session: pg's enableChannelBinding (libpq's prefer) authenticates with the secret, unbound before 1.141.0 and bound from it", { skip: skipAnchors || skipBinding }, async () => {
     sealed.anchor({ anchors: [priv.der] });
     const out = await client([{ label: 'prefer', pg: pg('privScram', VERIFY_PRIV, { channelBinding: 'prefer' }) }]);
     assert.deepEqual(out, { prefer: 'connected, queried' });
-    assert.deepEqual(got.map((g) => g.join(' ')), [`privScram scram n,, tls ${SECRET}`]);
+    assert.deepEqual(got.map((g) => g.join(' ')), [`privScram scram ${anchoredBinding ? 'p=tls-server-end-point' : 'n'},, tls ${SECRET}`]);
   });
 
-  it("pg channel binding in an anchored session: libpq's channel_binding=require fails closed, offered no -PLUS, and nothing is sent", { skip: skipAnchors || skipBinding }, async () => {
+  it("pg channel binding in an anchored session: libpq's channel_binding=require fails closed before 1.141.0, offered no -PLUS and sending nothing, and from it binds and authenticates with the secret", { skip: skipAnchors || skipBinding }, async () => {
     sealed.anchor({ anchors: [priv.der] });
     const out = await client([{ label: 'require', pg: pg('privScram', VERIFY_PRIV, { channelBinding: 'require' }) }]);
+    if (anchoredBinding) {
+      assert.deepEqual(out, { require: 'connected, queried' });
+      assert.deepEqual(got.map((g) => g.join(' ')), [`privScram scram p=tls-server-end-point,, tls ${SECRET}`]);
+      return;
+    }
     assert.deepEqual(out, { require: 'error undefined channel binding required, offered SCRAM-SHA-256' });
     assert.deepEqual(got, []);
     assert.equal(sealed.requests.some((r) => r.op === 'sessionMaterialize'), false);
