@@ -1,5 +1,6 @@
 {
-  "description": "A request on a kept-alive socket the server has just closed (closeIdleConnections, then the next request before the client sees the FIN): the request's 'error' is ECONNRESET with reusedSocket true, as Node's (its message is the platform's), which its retry idiom checks; the kernel's own answer to the write is EPIPE",
+  "description": "A request on a kept-alive socket the server has just closed (closeIdleConnections, then the next request before the client sees the FIN): the request's 'error' is ECONNRESET with reusedSocket true, 'socket hang up' with no syscall, as Node's on Linux, which its retry idiom checks; the kernel's own answer to the write is EPIPE",
   "argv": ["script.js"],
-  "shim": true
+  "shim": true,
+  "hostPlatform": "linux"
 }
