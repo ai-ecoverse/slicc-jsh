@@ -17,6 +17,7 @@
  */
 import { nodeError, ERR_INVALID_ARG_TYPE, ERR_MISSING_ARGS, validateObject } from '../node-errors.mjs';
 import { EventEmitter } from './events.mjs';
+import { queueMicrotask } from '../async-context.mjs';
 
 const kPendingMessages = Symbol('kPendingMessages');
 const kChannelHandle = Symbol('kChannelHandle');

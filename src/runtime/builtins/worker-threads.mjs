@@ -21,6 +21,7 @@
 import { EventEmitter } from './events.mjs';
 import { nodeError, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, validateObject } from '../node-errors.mjs';
 import { workerExecArgvError, workerNodeOptionsError } from '../cli.mjs';
+import { queueMicrotask } from '../async-context.mjs';
 
 export const SHARE_ENV = Symbol.for('nodejs.worker_threads.SHARE_ENV');
 

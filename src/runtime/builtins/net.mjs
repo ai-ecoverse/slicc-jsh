@@ -5,6 +5,7 @@ import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 import { connectError } from './http-fetch.mjs';
 import { validateBoolean, validateInt32 } from '../node-errors.mjs';
+import { queueMicrotask } from '../async-context.mjs';
 
 function errnoError(err, syscall) {
   const code = err?.code ?? err?.cause?.code ?? 'EIO';
@@ -84,7 +85,8 @@ function isIP(input) {
   return 0;
 }
 
-export function createNet({ ctx, process, Buffer, handles, getStream }) {
+export function createNet({ ctx, process, Buffer, handles, getStream, timers = globalThis }) {
+  const { setTimeout, clearTimeout } = timers;
   const netOption = (name) => {
     const argv = process?._options ?? process?.execArgv ?? [];
     let value;

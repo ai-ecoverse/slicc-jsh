@@ -33,6 +33,7 @@
 import { isOrdinaryObject, kHostObjects } from '../builtins/v8-serdes.mjs';
 import { markIndex, newPortNonce, portMark } from './broadcast-channel.mjs';
 import { createMailbox, mailboxReader, mailboxWriter } from './mailbox.mjs';
+import { queueMicrotask } from '../async-context.mjs';
 
 const CLOSE = Symbol('close');
 const arrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get;

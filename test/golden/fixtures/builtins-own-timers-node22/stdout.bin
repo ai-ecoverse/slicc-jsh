@@ -1,0 +1,15 @@
+randomBytes ok 8
+randomFill ok 4
+generateKey ok secret
+pbkdf2 ok 372cc9815244c4a2
+scrypt ok 4329787752e75d1d
+gzip ok hello
+deflate stream ok stream
+readFile ok true
+execFile ok 42
+execFile missing ok ENOENT
+spawn missing ok error ENOENT, close -2
+monitorEventLoopDelay ok
+net ok hi
+http ok hello
+the program ends

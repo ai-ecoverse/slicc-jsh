@@ -1,3 +1,5 @@
+import { queueMicrotask } from './async-context.mjs';
+
 /**
  * Track an in-flight Promise as a ref'd handle so the event loop stays alive
  * (libuv-request style). Every ctx.* Promise must go through this.

@@ -26,6 +26,7 @@
  * held. Messages posted during a turn make the next one.
  */
 import { nodeError } from '../node-errors.mjs';
+import { queueMicrotask } from '../async-context.mjs';
 
 const kInspect = Symbol.for('nodejs.util.inspect.custom');
 const kCreate = Symbol('MessagePort');

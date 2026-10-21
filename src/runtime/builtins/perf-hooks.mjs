@@ -218,14 +218,16 @@ class RecordableHistogram extends Histogram {
 class ELDHistogram extends Histogram {
   #timer = null;
   #resolution;
-  constructor(state, resolution) {
+  #timers;
+  constructor(state, resolution, timers) {
     super(state);
     this.#resolution = resolution;
+    this.#timers = timers;
   }
   enable() {
     if (this.#timer) return false;
     let expected = performance.now() + this.#resolution;
-    this.#timer = setInterval(() => {
+    this.#timer = this.#timers.setInterval(() => {
       const now = performance.now();
       recordInto(this[kState], Math.max(1, Math.round((now - expected) * 1e6)));
       expected = now + this.#resolution;
@@ -235,7 +237,7 @@ class ELDHistogram extends Histogram {
   }
   disable() {
     if (!this.#timer) return false;
-    clearInterval(this.#timer);
+    this.#timers.clearInterval(this.#timer);
     this.#timer = null;
     return true;
   }
@@ -256,12 +258,6 @@ function createHistogram(options = {}) {
   return new RecordableHistogram(newState(Number(lowest), Number(highest)));
 }
 
-function monitorEventLoopDelay(options = {}) {
-  validateObject(options, 'options');
-  const { resolution = 10 } = options;
-  intIn(resolution, 'options.resolution', 1);
-  return new ELDHistogram(newState(), resolution);
-}
 
 /**
  * Node's performance extras where the platform's object lacks them (a
@@ -300,7 +296,13 @@ function addNodeExtras(perf) {
   });
 }
 
-export function createPerfHooks() {
+export function createPerfHooks(timers = globalThis) {
+  function monitorEventLoopDelay(options = {}) {
+    validateObject(options, 'options');
+    const { resolution = 10 } = options;
+    intIn(resolution, 'options.resolution', 1);
+    return new ELDHistogram(newState(), resolution, timers);
+  }
   const perf = globalThis.performance;
   if (perf) addNodeExtras(perf);
   return {

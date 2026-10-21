@@ -216,19 +216,19 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const timersPromises = createTimersPromises(timers, handles);
   let net;
   const getNet = () => {
-    if (!net) net = createNet({ ctx, process, Buffer, handles, getStream });
+    if (!net) net = createNet({ ctx, process, Buffer, handles, getStream, timers });
     return net;
   };
   let http;
   let kernelFetch;
   const getHttp = () => {
     // Its fetch fallback (no route) goes through jsh's own fetch, as fetch() does.
-    if (!http) http = createHttp({ ctx, process, Buffer, handles, getStream, net: getNet(), getFetch: () => (kernelFetch ??= createFetch(ctx, { handles, getHttp, getZlib })) });
+    if (!http) http = createHttp({ ctx, process, Buffer, handles, getStream, timers, net: getNet(), getFetch: () => (kernelFetch ??= createFetch(ctx, { handles, getHttp, getZlib })) });
     return http;
   };
   let https;
   const getHttps = () => {
-    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles, getStream, getTls: () => getTls() });
+    if (!https) https = createHttps({ ctx, Buffer, http: getHttp(), handles, getStream, timers, getTls: () => getTls() });
     return https;
   };
   let tls;
@@ -255,7 +255,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   let childProcess;
   const getChildProcess = () => {
     if (!childProcess) {
-      childProcess = createChildProcess({ ctx, process, Buffer, handles, getStream, getFs: () => fs });
+      childProcess = createChildProcess({ ctx, process, Buffer, handles, getStream, timers, getFs: () => fs });
     }
     return childProcess;
   };
@@ -322,7 +322,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     wasi: () => (wasiSupported(ctx) ? process._nodeLib().wasi : notSupported('wasi')),
     diagnostics_channel: () => process._nodeLib().diagnosticsChannel,
     'stream/consumers': () => process._nodeLib().streamConsumers,
-    perf_hooks: () => (perfHooks ??= createPerfHooks()),
+    perf_hooks: () => (perfHooks ??= createPerfHooks(timers)),
     'stream/web': () => (streamWeb ??= createStreamWeb()),
     vm: () =>
       (vm ??= createVm({
