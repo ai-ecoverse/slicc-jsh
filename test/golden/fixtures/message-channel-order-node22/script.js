@@ -11,8 +11,8 @@ const run = (name, count, setup) => new Promise((resolve) => {
   let ended = false;
   let stall = null;
   const end = () => { if (ended) return; ended = true; clearTimeout(stall); done(); console.log(name + ':', L.join(' | ')); resolve(); };
-  const watch = () => { clearTimeout(stall); stall = setTimeout(end, 2000); };
-  L.push = (...items) => { const n = Array.prototype.push.apply(L, items); if (due && !ended) { if (L.length >= count) setTimeout(end, 0); else watch(); } return n; };
+  const watch = () => { clearTimeout(stall); stall = setTimeout(end, L.length >= count ? 60 : 2000); };
+  L.push = (...items) => { const n = Array.prototype.push.apply(L, items); if (due && !ended) watch(); return n; };
   const done = setup(L);
   setTimeout(() => { due = true; if (L.length >= count) end(); else watch(); }, 60);
 });
