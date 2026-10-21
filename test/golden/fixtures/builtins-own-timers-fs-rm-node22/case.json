@@ -1,0 +1,1 @@
+{ "description": "builtins schedule on jsh's own timers: with the global timers removed, fs.rm without a callback still throws its TypeError on a later turn, as in Node 22", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }
