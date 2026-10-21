@@ -16,30 +16,29 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { after, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { commitAll, initFixtureRepo } from '@ai-ecoverse/slicc-shared-web/testing';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const tool = join(root, 'scripts/cert-review/shipped.mjs');
 const repo = mkdtempSync(join(tmpdir(), 'slicc-jsh-shipped-'));
 after(() => rmSync(repo, { recursive: true, force: true }));
-const git = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: repo, encoding: 'utf8' }).trim();
+const git = (...a) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' }).trim();
 const base = { name: '@ai-ecoverse/slicc-jsh', version: '0.0.0', scripts: { build: 'node scripts/build.mjs' }, devDependencies: { esbuild: '0.28.2' } };
 const write = (path, text) => {
   mkdirSync(dirname(join(repo, path)), { recursive: true });
   writeFileSync(join(repo, path), text);
 };
-git('init', '-q');
+initFixtureRepo(repo, { hooks: false });
 write('package.json', `${JSON.stringify(base, null, 2)}\n`);
 write('docs/guide.md', 'guide\n');
 write('README.md', 'readme\n');
-git('add', '-A');
-git('commit', '-q', '-m', 'base');
+commitAll(repo, 'base');
 const baseSha = git('rev-parse', 'HEAD');
 
 function change(name, edit) {
   git('checkout', '-q', '-B', name, baseSha);
   edit();
-  git('add', '-A');
-  git('commit', '-q', '-m', name);
+  commitAll(repo, name);
   const head = git('rev-parse', 'HEAD');
   const work = join(repo, '..', `${name}-work-${process.pid}`);
   const env = { ...process.env };
@@ -87,7 +86,7 @@ describe('cert-review scope: what takes the full review', () => {
 describe('cert-review scope: a devDependencies-only change is recorded as not behaviour', () => {
   const dev = mkdtempSync(join(tmpdir(), 'slicc-jsh-shipped-dev-'));
   after(() => rmSync(dev, { recursive: true, force: true }));
-  const g = (...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: dev, encoding: 'utf8' }).trim();
+  const g = (...a) => execFileSync('git', a, { cwd: dev, encoding: 'utf8' }).trim();
   const put = (path, text) => {
     mkdirSync(dirname(join(dev, path)), { recursive: true });
     writeFileSync(join(dev, path), text);
@@ -100,14 +99,12 @@ describe('cert-review scope: a devDependencies-only change is recorded as not be
   put('vendor/dep1/package.json', '{"name":"dep1","version":"1.0.0"}\n');
   put('vendor/dep2/package.json', '{"name":"dep2","version":"1.0.0"}\n');
   put('NOTICE', 'notice\n');
-  g('init', '-q');
+  initFixtureRepo(dev, { hooks: false });
   lock({ dep1: 'file:vendor/dep1' });
-  g('add', '-A');
-  g('commit', '-q', '-m', 'base');
+  commitAll(dev, 'base');
   const devBase = g('rev-parse', 'HEAD');
   lock({ dep1: 'file:vendor/dep1', dep2: 'file:vendor/dep2' });
-  g('add', '-A');
-  g('commit', '-q', '-m', 'chore(deps): add dep2');
+  commitAll(dev, 'chore(deps): add dep2');
   const devHead = g('rev-parse', 'HEAD');
 
   it("its why, and the job output the status is written from, start with 'not behaviour: '", () => {
@@ -134,8 +131,7 @@ describe('cert-review scope: a devDependencies-only change is recorded as not be
     g('checkout', '-q', '-B', 'pr1', devHead);
     g('checkout', '-q', '-B', 'pr2', devBase);
     put('README.md', 'readme\n');
-    g('add', '-A');
-    g('commit', '-q', '-m', 'docs');
+    commitAll(dev, 'docs');
     const pr2 = g('rev-parse', 'HEAD');
     g('checkout', '-q', 'main');
     g('merge', '-q', '--no-ff', 'pr1', '-m', 'Merge pull request #1 from x/pr1');
