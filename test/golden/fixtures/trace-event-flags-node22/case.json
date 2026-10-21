@@ -1,0 +1,5 @@
+{
+  "description": "#378: --trace-event-categories, --trace-event-file-pattern and --trace-events-enabled on the command line and in NODE_OPTIONS, as Node 22.22.0 parses them (kept in execArgv, the last categories win, getEnabledCategories has them) and its errors (requires an argument, invalid negation, as for the other valued options). Host Node writes its trace files to the temp dir (removed after each child); jsh writes none.",
+  "argv": ["main.js"],
+  "shim": true
+}

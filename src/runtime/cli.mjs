@@ -51,6 +51,8 @@ const VALUED_FLAGS = [
   '--report-directory',
   '--report-filename',
   '--report-signal',
+  '--trace-event-categories',
+  '--trace-event-file-pattern',
 ];
 const INPUT_TYPES = ['module', 'commonjs', 'module-typescript', 'commonjs-typescript'];
 
@@ -248,7 +250,8 @@ export function parseNodeOptions(text, argv0 = 'node', { watch = false, refuse }
     const raw = eq === -1 ? word : word.slice(0, eq);
     // Node's names take `_` for `-` (after the leading dashes).
     const name = raw.replace(/^(-+)(.*)$/, (m, dashes, rest) => dashes + rest.replace(/_/g, '-'));
-    if (name.startsWith('--no-') && ENV_VALUED.has(`--${name.slice(5)}`)) {
+    const negated = `--${name.slice(5)}`;
+    if (name.startsWith('--no-') && (ENV_VALUED.has(negated) || ENV_VALUED.has(ENV_ALIASES[negated]?.[0]))) {
       return { error: `${argv0}: ${raw} is an invalid negation because it is not a boolean option`, status: 9 };
     }
     if (refuse === 'drop' && inSet(WORKER_PER_PROCESS, name)) {
@@ -285,6 +288,7 @@ export function parseNodeOptions(text, argv0 = 'node', { watch = false, refuse }
 /** An option jsh's command line takes (see parseNodeArgv). */
 function jshKnows(word, watch = false) {
   const name = word.split('=')[0];
+  if (word === '--trace-events-enabled') return true;
   // The watch options, where the kernel can watch (as on the command line).
   if (watch && /^--(no-)?watch(-path|-kill-signal|-preserve-output)?$/.test(name)) return true;
   return (
@@ -542,8 +546,18 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
       i += 1;
       continue;
     }
+    if (arg === '--trace-events-enabled') {
+      flags.push(arg);
+      i += 1;
+      continue;
+    }
+    const negated = /^--no-([^=]+)/.exec(arg)?.[1];
+    if (negated && [...VALUED_FLAGS, '--trace-events-enabled'].includes(`--${negated}`)) {
+      return { error: `${argv0}: ${arg} is an invalid negation because it is not a boolean option`, status: 9 };
+    }
     const valued = VALUED_FLAGS.find((f) => arg === f || arg.startsWith(`${f}=`));
     if (valued) {
+      if (arg === `${valued}=`) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
       if (arg === valued) {
         if (missingValue(args[i + 1])) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
         flags.push(arg, args[i + 1]);

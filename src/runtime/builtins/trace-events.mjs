@@ -15,7 +15,8 @@ export function createTraceEvents({ process }) {
     const argv = process?._options ?? process?.execArgv ?? [];
     let value;
     for (let i = 0; i < argv.length; i++) {
-      if (argv[i] === '--trace-event-categories') value = argv[++i];
+      if (argv[i] === '--trace-events-enabled') value = 'v8,node,node.async_hooks';
+      else if (argv[i] === '--trace-event-categories') value = argv[++i];
       else if (argv[i].startsWith('--trace-event-categories=')) value = argv[i].slice('--trace-event-categories='.length);
     }
     return value ? value.split(',').filter(Boolean) : [];
