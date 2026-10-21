@@ -90,6 +90,15 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
   // the kernel's listen is done and its listener closed: a listen() on one
   // waits for that (Node's address is free once close() returns).
   const releasing = new Map();
+  // A listener this side drops (one that came too late, or for a listen()
+  // that failed): its close failing is no error of the program's (#686).
+  const closeQuietly = (listener) => {
+    try {
+      Promise.resolve(listener.close?.()).catch(() => {});
+    } catch {
+      /* a close that throws at once */
+    }
+  };
   const { setTimeout, clearTimeout } = timers;
   const netOption = (name) => {
     const argv = process?._options ?? process?.execArgv ?? [];
@@ -732,11 +741,11 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             });
             if (reply.cancelled) {
               // The channel to the primary went first: no listening, as in Node.
-              void listener.close();
+              closeQuietly(listener);
               return null;
             }
             if (reply.errno) {
-              void listener.close();
+              closeQuietly(listener);
               const err = new Error(`listen ${reply.errno}: ${reply.message ?? 'address already in use'} ${host}:${port}`);
               err.code = reply.errno;
               err.syscall = 'listen';
@@ -761,7 +770,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             if (this.#closed) {
               // Closed meanwhile: close() closes it (and frees its port) if
               // it took this listen() over, else it's closed here.
-              if (!this.#takenOver.has(listening)) void listener.close();
+              if (!this.#takenOver.has(listening)) closeQuietly(listener);
               // Closed while the primary set it up: it gives the address back.
               if (this.#clusterKey !== undefined) {
                 process?._clusterWorker?._closeServer(this.#clusterKey);
