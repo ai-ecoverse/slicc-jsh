@@ -102,6 +102,35 @@ describe('fs.watch in the kernel', needs, () => {
     assert.equal(await read('/tmp/gone.log'), 'watching\nchange gone.txt\nrename gone.txt\nrename gone.txt\nclose\n');
   });
 
+  const beside = kernelAtLeast('1.125.3') ? {} : { skip: `slicc-kernel ${kernelVersion} ends a watch on a write beside it (ai-ecoverse/slicc-kernel#1063)` };
+  it("the embedder's writes beside a watched directory and file, in their parent, don't end either watch", beside, async () => {
+    const made = await jsh.run(['node', '-e', "const fs = require('fs'); fs.mkdirSync('/tmp/parent/dir', { recursive: true }); fs.writeFileSync('/tmp/parent/dir/f.txt', 'f')"]);
+    assert.equal(made.status, 0, made.stderr);
+    await program('/tmp/parent.js', [
+      "const fs = require('fs');",
+      "const log = (s) => fs.appendFileSync('/tmp/parent.log', s + '\\n');",
+      "const fw = fs.watch('/tmp/parent/dir/f.txt', (type, name) => log(`file ${type} ${name}`));",
+      "const dw = fs.watch('/tmp/parent/dir', (type, name) => {",
+      "  if (name === 'f.txt') return;",
+      '  log(`dir ${type} ${name}`);',
+      '  dw.close();',
+      '  fw.close();',
+      '});',
+      "log('watching');",
+    ]);
+    const run = start(['node', '/tmp/parent.js']);
+    await lines(run, '/tmp/parent.log', 1);
+    await jsh.kernel.writeFile('/tmp/parent/x', 'new');
+    await jsh.kernel.writeFile('/tmp/parent/x', 'again');
+    await jsh.kernel.writeFile('/tmp/parent/dir.txt', 'a name that starts as the directory');
+    await jsh.kernel.writeFile('/tmp/parent/dir/f.txt', 'changed');
+    await lines(run, '/tmp/parent.log', 2);
+    await jsh.kernel.writeFile('/tmp/parent/dir/stop', '');
+    const r = await run;
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(await read('/tmp/parent.log'), 'watching\nfile change f.txt\ndir rename stop\n');
+  });
+
   it('an AbortSignal aborted on an outside change closes the watcher; nothing comes after close()', async () => {
     await mkdir('/tmp/abort');
     await program('/tmp/abort.js', [
