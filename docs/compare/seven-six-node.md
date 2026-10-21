@@ -242,7 +242,7 @@ The case name is given for every row below.
 | `exec.start()` kill | `124`, `bash: execution aborted` | `143` | `143` | six-only detail | 2 | sliccy-exec-start |
 | `http.client` | same | same (also exports `HttpError`) | same | same | 8 | sliccy-http |
 | `skill.dir`, `config()` | same | same | same | same | 27 / 20 | sliccy-skill |
-| `skill.token(id)` | runs `oauth-token <id>` | runs `jerk <id> get --reveal` (#74); `err.exitCode` is jerk's | n/a | six≠seven by design (decision 3) | 4 | sliccy-skill |
+| `skill.token(id, params)` | runs `oauth-token <id>`; no `params` | runs `jerk <id> get --reveal`, `-p k=v` per `params` entry (#74); `err.exitCode` is jerk's | n/a | six≠seven by design (decision 3) | 4 | sliccy-skill |
 | `skill.refs` / `skill.assets` for `scripts/x.jsh` | `<skill>/references`, `<skill>/assets`, plus `skill.root` | same since #80 (was `<skill>/scripts/references`, no `root`) | n/a | fixed (#80): seven=six, no Node counterpart | 2 | sliccy-skill |
 | `sliccy:browser` | the bridge (no browser here: `browser is not available in this runtime`) | unknown name unless `@ai-ecoverse/sliccy-browser` is installed | n/a | unknown for real seven | **37** | sliccy-browser |
 

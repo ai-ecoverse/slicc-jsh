@@ -149,11 +149,33 @@ export function createSkill({ argv, fs, exec }) {
     return merged;
   }
 
-  async function token(providerId) {
+  /**
+   * `params` is a bag of jerk provider parameters: `{ org: 'adobe' }` is
+   * `-p org=adobe`, in the bag's order. A value is a string, number or
+   * boolean; an `undefined` one is left out, so an unset option can pass
+   * straight through. jerk refuses a parameter its provider doesn't have.
+   */
+  async function token(providerId, params) {
     if (typeof providerId !== 'string' || !providerId.trim()) {
       throw new TypeError('skill.token(providerId): providerId must be a non-empty string');
     }
-    const { stdout, stderr, exitCode } = await exec.spawn(['jerk', providerId, 'get', '--reveal']);
+    const argv = ['jerk', providerId, 'get', '--reveal'];
+    if (params !== undefined) {
+      if (params === null || typeof params !== 'object' || Array.isArray(params)) {
+        throw new TypeError('skill.token(providerId, params): params must be a plain object');
+      }
+      for (const [key, value] of Object.entries(params)) {
+        if (value === undefined) continue;
+        if (!key || key.includes('=')) {
+          throw new TypeError(`skill.token(providerId, params): bad parameter name ${JSON.stringify(key)}`);
+        }
+        if (!['string', 'number', 'boolean'].includes(typeof value)) {
+          throw new TypeError(`skill.token(providerId, params): ${key} must be a string, number or boolean`);
+        }
+        argv.push('-p', `${key}=${value}`);
+      }
+    }
+    const { stdout, stderr, exitCode } = await exec.spawn(argv);
     if (exitCode !== 0) {
       const msg = stderr.trim() || `jerk exited with code ${exitCode}`;
       const err = new Error(`skill.token('${providerId}'): ${msg}`);

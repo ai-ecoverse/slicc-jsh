@@ -31,6 +31,13 @@ requires = "jsh-fake-auth"
 get = { run = ["jsh-fake-auth", "signed-out"], parse = "text" }
 create = { run = ["jsh-fake-auth", "login"], interactive = true }
 
+[providers.jsh-fake-params]
+name = "slicc-jsh fake, with params"
+env = ["JSH_FAKE_PARAMS_TOKEN"]
+requires = "jsh-fake-auth"
+params = { org = "", site = "main" }
+get = { run = ["jsh-fake-auth", "token", "--org", "{org}", "--site", "{site}"], parse = "text" }
+
 [providers.jsh-fake-missing]
 name = "slicc-jsh fake, CLI missing"
 env = ["JSH_FAKE_MISSING_TOKEN"]
@@ -38,9 +45,9 @@ requires = "jsh-not-installed"
 get = { run = ["jsh-not-installed", "token"], parse = "text" }
 `;
 
-// Records each call, so the test sees what jerk asked of the CLI.
+// Records each call, one argument per line, so the test sees what jerk asked of the CLI.
 const FAKE_AUTH = `#!/bin/sh
-echo "$*" >> "$JSH_FAKE_LOG"
+printf '%s\\n' "$@" >> "$JSH_FAKE_LOG"
 case "$1" in
   token) printf 'fake-token-123\\n' ;;
   signed-out) echo 'jsh-fake-auth: not signed in' >&2; exit 1 ;;
@@ -48,10 +55,12 @@ case "$1" in
 esac
 `;
 
+// Each argument is a provider id, or JSON \`[id, params]\`.
 const SCRIPT = `const skill = require('sliccy:skill');
-for (const id of process.argv.slice(2)) {
+for (const arg of process.argv.slice(2)) {
+  const [id, params] = arg.startsWith('[') ? JSON.parse(arg) : [arg];
   try {
-    console.log(JSON.stringify({ id, token: await skill.token(id) }));
+    console.log(JSON.stringify({ id, token: await skill.token(id, params) }));
   } catch (err) {
     console.log(JSON.stringify({ id, message: err.message, exitCode: err.exitCode }));
   }
@@ -103,6 +112,30 @@ describe('skill.token over jerk (host)', { skip: process.platform === 'win32' },
   it("returns the provider's token without the newline", () => {
     assert.deepEqual(run(['jsh-fake']), [{ id: 'jsh-fake', token: 'fake-token-123' }]);
     assert.equal(readFileSync(log, 'utf8'), 'token\n');
+  });
+
+  it('passes a params bag as -p key=value, in order', () => {
+    const call = (params) => JSON.stringify(['jsh-fake-params', params]);
+    assert.deepEqual(run([call({ org: 'adobe', site: 'www' })]), [{ id: 'jsh-fake-params', token: 'fake-token-123' }]);
+    assert.equal(readFileSync(log, 'utf8'), 'token\n--org\nadobe\n--site\nwww\n');
+    // No bag: jerk's defaults, and an empty param drops its flag.
+    assert.deepEqual(run(['jsh-fake-params']), [{ id: 'jsh-fake-params', token: 'fake-token-123' }]);
+    assert.equal(readFileSync(log, 'utf8'), 'token\n--site\nmain\n');
+    // One argument each, with no shell in between.
+    assert.deepEqual(run([call({ org: 'a b=c;$(x)', site: 7 })]), [{ id: 'jsh-fake-params', token: 'fake-token-123' }]);
+    assert.equal(readFileSync(log, 'utf8'), 'token\n--org\na b=c;$(x)\n--site\n7\n');
+  });
+
+  it('refuses a bad params bag, and jerk refuses a parameter its provider lacks', () => {
+    assert.deepEqual(run([JSON.stringify(['jsh-fake-params', ['org']]), JSON.stringify(['jsh-fake-params', { nope: 1 }])]), [
+      { id: 'jsh-fake-params', message: 'skill.token(providerId, params): params must be a plain object' },
+      {
+        id: 'jsh-fake-params',
+        message: "skill.token('jsh-fake-params'): jerk: jsh-fake-params has no param nope\nRun jerk --help for usage.",
+        exitCode: 2,
+      },
+    ]);
+    assert.equal(readFileSync(log, 'utf8'), '');
   });
 
   it("returns the token from the provider's env variable first, as jerk does", () => {
