@@ -35,6 +35,28 @@ const kPortMark = '\u0000slicc-jsh port';
 // random source is taken before the program runs, which can't replace it.
 const randomUUID = typeof globalThis.crypto?.randomUUID === 'function' ? globalThis.crypto.randomUUID.bind(globalThis.crypto) : null;
 const random = Math.random;
+// A Map's and a Set's own entries, as structured clone reads them: by the
+// builtins (a program's own iterator, set or add on one isn't run), taken
+// before the program runs, as is how they're called.
+const { apply } = Reflect;
+const arrayFrom = Array.from;
+const call = (fn, self, ...args) => apply(fn, self, args);
+const sizeOf = (getter, value) => {
+  try {
+    call(getter, value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const mapSizeGetter = Object.getOwnPropertyDescriptor(Map.prototype, 'size').get;
+const setSizeGetter = Object.getOwnPropertyDescriptor(Set.prototype, 'size').get;
+const isMap = (value) => sizeOf(mapSizeGetter, value);
+const isSet = (value) => sizeOf(setSizeGetter, value);
+const { entries: mapEntries, set: mapSet, clear: mapClear } = Map.prototype;
+const { values: setValues, add: setAdd, clear: setClear } = Set.prototype;
+const entriesOf = (map) => arrayFrom({ [Symbol.iterator]: () => call(mapEntries, map) });
+const valuesOf = (set) => arrayFrom({ [Symbol.iterator]: () => call(setValues, set) });
 export const newPortNonce = () => randomUUID?.() ?? `${random()}`.slice(2);
 export const portMark = (nonce, i) => ({ [kPortMark]: `${nonce}:${i}` });
 export function markIndex(value, nonce) {
@@ -64,8 +86,8 @@ export function createPorts({
     if (value === null || typeof value !== 'object' || seen.has(value)) return false;
     if (value instanceof MessagePort) return !listed.includes(value);
     seen.add(value);
-    if (value instanceof Map) return [...value].some(([k, v]) => hasUnlisted(k, listed, seen) || hasUnlisted(v, listed, seen));
-    if (value instanceof Set) return [...value].some((v) => hasUnlisted(v, listed, seen));
+    if (isMap(value)) return entriesOf(value).some(([k, v]) => hasUnlisted(k, listed, seen) || hasUnlisted(v, listed, seen));
+    if (isSet(value)) return valuesOf(value).some((v) => hasUnlisted(v, listed, seen));
     return Object.values(Object.getOwnPropertyDescriptors(value)).some((d) => d.enumerable && 'value' in d && hasUnlisted(d.value, listed, seen));
   };
 
@@ -181,14 +203,14 @@ export function createPorts({
     // Into what structured clone goes into: plain objects, arrays, and Maps
     // (keys too) and Sets, refilled in their order.
     const into = (value, fn) => {
-      if (value instanceof Map) {
-        const entries = [...value].map(([k, v]) => [fn(k), fn(v)]);
-        value.clear();
-        for (const [k, v] of entries) value.set(k, v);
-      } else if (value instanceof Set) {
-        const items = [...value].map(fn);
-        value.clear();
-        for (const item of items) value.add(item);
+      if (isMap(value)) {
+        const entries = entriesOf(value).map(([k, v]) => [fn(k), fn(v)]);
+        call(mapClear, value);
+        for (const [k, v] of entries) call(mapSet, value, k, v);
+      } else if (isSet(value)) {
+        const items = valuesOf(value).map(fn);
+        call(setClear, value);
+        for (const item of items) call(setAdd, value, item);
       } else if (Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype) {
         for (const key of Object.keys(value)) value[key] = fn(value[key]);
       }
