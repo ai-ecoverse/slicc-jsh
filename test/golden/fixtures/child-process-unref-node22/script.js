@@ -6,6 +6,8 @@ if (role === 'idle') {
   process.stdin.on('end', () => process.exit(0)).resume();
   process.on('disconnect', () => process.exit(0));
   setInterval(() => {}, 1000);
+} else if (role === 'spawner') {
+  spawn(process.execPath, [self, 'idle'], { stdio: ['inherit', 'inherit', 'ignore'] }).unref();
 } else if (role === 'case') {
   setTimeout(() => {
     console.log(name, 'held');
@@ -17,6 +19,14 @@ if (role === 'idle') {
     child.channel.unref();
     child.stdout.unref();
     child.stderr.unref();
+  } else if (name === 'grandchild') {
+    child = spawn(process.execPath, [self, 'spawner'], { stdio: ['pipe', 'pipe', 'ignore'] });
+    child.stdout.unref();
+    const keep = setInterval(() => {}, 1000);
+    child.on('exit', (code) => {
+      clearInterval(keep);
+      console.log(name, 'child exit', code);
+    });
   } else {
     const out = name.startsWith('pipe') ? 'pipe' : 'ignore';
     child = spawn(process.execPath, [self, 'idle'], { stdio: ['pipe', out, 'ignore'] });
@@ -27,7 +37,7 @@ if (role === 'idle') {
   if (name === 'ref-again') child.ref();
   console.log(name, typeof child.pid, JSON.stringify(process.getActiveResourcesInfo()));
 } else {
-  const names = ['ignore', 'pipe-unref', 'pipe-ref', 'fork', 'ref-again'];
+  const names = ['ignore', 'pipe-unref', 'pipe-ref', 'fork', 'ref-again', 'grandchild'];
   (async () => {
     for (const n of names) {
       const code = await new Promise((resolve) => spawn(process.execPath, [self, 'case', n], { stdio: ['ignore', 'inherit', 'inherit'] }).on('exit', resolve));
