@@ -1,0 +1,6 @@
+exit before it was up
+terminated with its exit code true
+up
+exit 1
+terminated 1
+the program ends 0

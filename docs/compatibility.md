@@ -644,7 +644,7 @@ How a worker runs:
 - `'online'`, `'message'`, `'error'` (its uncaught exception, as the thrown value) and `'exit'` come in Node's order. What it posts or prints before it exits comes before `'exit'`.
 - `process.exit(n)` ends the worker with `n`, an uncaught error with 1, and `terminate()` with 1. Once the worker has exited, `terminate()` resolves `undefined`.
 - Its stdout and stderr go to the parent's own unless `stdout`/`stderr` is set, in which case they are `worker.stdout`/`worker.stderr`. `stdin: true` gives `worker.stdin`.
-- `ref()` and `unref()` decide whether it holds the parent.
+- `ref()` and `unref()` decide whether it holds the parent. `terminate()` refs it, as Node's does, so the parent waits for its `'exit'` even when it was unref'd; tinypool's `destroy()` depends on that.
 - `process.chdir`, `abort`, the `set*id`/`*groups` calls and setting `umask` throw `ERR_WORKER_UNSUPPORTED_OPERATION`.
 
 How ports cross between threads:

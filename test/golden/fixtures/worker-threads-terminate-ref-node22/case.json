@@ -1,0 +1,1 @@
+{ "description": "terminate() refs the Worker, as Node 22's does: an unref'd worker being terminated, before it started or once it is up, holds the program until its 'exit', and terminate() resolves with its code", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }

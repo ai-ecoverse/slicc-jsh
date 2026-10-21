@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
+import { devPackageTree, kernelAtLeast, withJsh, wrapCommandMain } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
@@ -111,6 +111,82 @@ module.exports.never = () => new Promise(() => {});
       'child_process false [2,3,4] true boom The task has been aborted',
       'child_process true [2,3,4] true boom The task has been aborted',
     ]);
+  });
+});
+
+describe('a worker whose thread is slow to end (kernel)', { skip: !kernelAtLeast(THREADS_KERNEL) }, () => {
+  let jsh;
+  before(async () => {
+    jsh = await withJsh();
+    for (const [path, data] of devPackageTree('tinypool')) await jsh.kernel.writeFile(path, data);
+    await jsh.kernel.writeFile(
+      '/node_modules/slownode/package.json',
+      JSON.stringify({ name: 'slownode', version: '1.0.0', type: 'module', slicc: { commands: { slownode: { abi: 'js', module: 'index.mjs' } } } })
+    );
+    await jsh.kernel.writeFile(
+      '/node_modules/slownode/index.mjs',
+      wrapCommandMain(
+        'node',
+        `const later = globalThis.setTimeout.bind(globalThis);
+export default function slownode(ctx) {
+  if (ctx.thread.tid) return __main(ctx);
+  const real = ctx.thread;
+  const thread = Object.freeze({
+    tid: real.tid,
+    port: real.port,
+    data: real.data,
+    NO_MEMORY: real.NO_MEMORY,
+    CRASHED: real.CRASHED,
+    spawn: async (options) => {
+      const t = await real.spawn(options);
+      return { tid: t.tid, port: t.port, exited: t.exited, terminate: () => new Promise((resolve) => later(resolve, 50)).then(() => t.terminate()) };
+    },
+  });
+  return __main(new Proxy({}, { get: (_, key) => (key === 'thread' ? thread : ctx[key]), has: (_, key) => key in ctx }));
+}
+`
+      )
+    );
+    await jsh.kernel.writeFile(
+      '/os/slow/task.js',
+      "const { threadId } = require('worker_threads');\nmodule.exports = ({ a, b }) => ({ sum: a + b, threadId });\n"
+    );
+  });
+  after(() => jsh?.close());
+
+  const run = async (code) => {
+    await jsh.kernel.writeFile('/os/slow/main.js', code);
+    const r = await jsh.run(['slownode', 'main.js'], { cwd: '/os/slow' });
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    return r.stdout.trim().split('\n');
+  };
+
+  it('terminate() holds the program until the unref\'d worker exits', async () => {
+    const lines = await run(`const { Worker } = require('worker_threads');
+const w = new Worker('require("worker_threads").parentPort.postMessage("up"); setInterval(() => {}, 1000);', { eval: true });
+w.on('exit', (code) => console.log('exit', code));
+w.once('message', (m) => {
+  console.log(m);
+  w.unref();
+  w.terminate().then((code) => console.log('terminated', code));
+});
+`);
+    assert.deepEqual(lines, ['up', 'exit 1', 'terminated 1']);
+  });
+
+  it('tinypool destroy() holds the program until its workers exit, with and without useAtomics', async () => {
+    const lines = await run(`(async () => {
+  const { Tinypool } = await import('tinypool');
+  for (const useAtomics of [true, false]) {
+    const pool = new Tinypool({ filename: __dirname + '/task.js', minThreads: 2, maxThreads: 2, useAtomics });
+    const out = await Promise.all([1, 2, 3, 4].map((a) => pool.run({ a, b: 1 })));
+    await pool.destroy();
+    console.log(useAtomics, JSON.stringify(out.map((r) => r.sum)), new Set(out.map((r) => r.threadId)).size, 'destroyed');
+  }
+})();
+`);
+    assert.deepEqual(lines, ['true [2,3,4,5] 2 destroyed', 'false [2,3,4,5] 2 destroyed']);
   });
 });
 

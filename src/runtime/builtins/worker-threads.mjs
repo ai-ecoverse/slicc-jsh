@@ -458,6 +458,7 @@ export function createWorkerThreads({ ctx, process, handles, ports, remote, getS
     }
 
     terminate(callback) {
+      this.ref();
       if (typeof callback === 'function') {
         process.emitWarning('Passing a callback to worker.terminate() is deprecated. It returns a Promise instead.', 'DeprecationWarning', 'DEP0132');
         this.once('exit', (code) => callback(null, code));
