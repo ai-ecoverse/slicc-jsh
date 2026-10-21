@@ -3,7 +3,7 @@ const zlib = require('zlib');
 const fs = require('fs');
 const net = require('net');
 const http = require('http');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const { monitorEventLoopDelay } = require('perf_hooks');
 for (const name of ['setImmediate', 'setTimeout', 'setInterval', 'clearImmediate', 'clearTimeout', 'clearInterval', 'queueMicrotask']) {
   globalThis[name] = undefined;
@@ -21,6 +21,7 @@ const step = (name, run) => new Promise((resolve) => run((err, ...rest) => { con
   await step('readFile', (cb) => fs.readFile(__filename, (err, b) => cb(err, b.length > 0)));
   await step('execFile', (cb) => execFile(process.execPath, ['-e', 'console.log(42)'], { timeout: 10000 }, (err, out) => cb(err, out.trim())));
   await step('execFile missing', (cb) => execFile('/no/such/command', (err) => cb(null, err.code)));
+  await step('spawn missing', (cb) => { const events = []; spawn('/no/such/command').on('error', (err) => events.push(`error ${err.code}`)).on('close', (code) => { events.push(`close ${code}`); cb(null, events.join(', ')); }); });
   await step('monitorEventLoopDelay', (cb) => { const h = monitorEventLoopDelay(); h.enable(); h.disable(); cb(null); });
   await step('net', (cb) => {
     const server = net.createServer((s) => { s.setTimeout(10000); s.end('hi'); });

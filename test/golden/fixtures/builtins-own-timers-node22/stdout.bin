@@ -8,6 +8,7 @@ deflate stream ok stream
 readFile ok true
 execFile ok 42
 execFile missing ok ENOENT
+spawn missing ok error ENOENT, close -2
 monitorEventLoopDelay ok
 net ok hi
 http ok hello
