@@ -116,7 +116,8 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
       if (note.ended) {
         // IN_IGNORED, after the IN_DELETE_SELF the watch's own name was.
         this.#push('rename', this.#base, true);
-      } else if (this.#file && note.type === 'rename') {
+      } else if (note.moved) this.#push('rename', this.#base, true);
+      else if (this.#file && note.type === 'rename') {
         // The link count, then IN_DELETE_SELF.
         this.#push('change', this.#base, true);
         this.#push('rename', this.#base, true);

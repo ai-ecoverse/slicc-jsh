@@ -1,0 +1,8 @@
+{
+  "description": "fs.watch follows renames, as Node 22 reports it on Linux (inotify watches the inode): a watched file's directory renamed is no event and a later append is 'change f'; the watched file renamed is one 'rename f' (IN_MOVE_SELF), with no link-count 'change', and later changes keep its original name; a watched directory renamed, and then its parent, keeps reporting its entries; only a removal ends a watch; a recursive watch stays through its parent renamed away and back",
+  "argv": ["script.js"],
+  "shim": true,
+  "kernel": "1.143.2",
+  "hostPlatform": "linux",
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}
