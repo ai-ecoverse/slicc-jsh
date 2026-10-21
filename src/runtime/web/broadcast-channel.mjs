@@ -27,6 +27,7 @@
  */
 import { nodeError } from '../node-errors.mjs';
 import { queueMicrotask } from '../async-context.mjs';
+import { isUncloneable, uncloneable } from './uncloneable.mjs';
 
 const kInspect = Symbol.for('nodejs.util.inspect.custom');
 const kCreate = Symbol('MessagePort');
@@ -82,9 +83,10 @@ export function createPorts({
   // (./remote-ports.mjs's export and import): set by it.
   let moveLinked = null;
   const portError = (message) => new DOMException(message, 'DataCloneError');
-  /** A jsh port in `value` that isn't in `listed`, found through its own data properties (no getter runs). */
+  /** A jsh port in `value` that isn't in `listed`, found through its own data properties (no getter runs); a marked object (markAsUncloneable) on the way is a DataCloneError. */
   const hasUnlisted = (value, listed, seen = new Set()) => {
     if (value === null || typeof value !== 'object' || seen.has(value)) return false;
+    if (isUncloneable(value)) throw uncloneable();
     if (value instanceof MessagePort) return !listed.includes(value);
     seen.add(value);
     if (isMap(value)) return entriesOf(value).some(([k, v]) => hasUnlisted(k, listed, seen) || hasUnlisted(v, listed, seen));
@@ -283,6 +285,9 @@ export function createPorts({
     postMessage(message) {
       if (!this.#open) throw new DOMException('BroadcastChannel is closed.', 'InvalidStateError');
       if (arguments.length === 0) throw nodeError(TypeError, 'ERR_MISSING_ARGS', 'The "message" argument must be specified');
+      // Nothing can be transferred on a channel: a port in it is Node's
+      // DataCloneError, as a marked object is.
+      if (hasUnlisted(message, [])) throw portError('Object that needs transfer was found in message but not listed in transferList');
       const data = structuredClone(message);
       for (const ch of channels.get(this.#name) ?? []) {
         if (ch === this) continue;

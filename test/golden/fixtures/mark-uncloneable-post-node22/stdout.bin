@@ -1,0 +1,19 @@
+port: marked true DataCloneError 25 Cannot clone object of unsupported type.
+port: marked, in a Map in an array true DataCloneError 25 Cannot clone object of unsupported type.
+port: marked class instance true DataCloneError 25 Cannot clone object of unsupported type.
+port: marked Error true DataCloneError 25 Cannot clone object of unsupported type.
+port: a MessageEvent true DataCloneError 25 Cannot clone object of unsupported type.
+port: a MessageEvent, nested true DataCloneError 25 Cannot clone object of unsupported type.
+port: marked array, Map, Date, Uint8Array, ArrayBuffer posted
+port: a primitive marked posted
+port: got true true true 7 2
+port: then got 1
+channel: marked true DataCloneError 25 Cannot clone object of unsupported type.
+channel: a MessageEvent true DataCloneError 25 Cannot clone object of unsupported type.
+channel: a port true DataCloneError 25 Object that needs transfer was found in message but not listed in transferList
+channel: plain posted
+channel: got {"ok":1}
+workerData: marked true DataCloneError 25 Cannot clone object of unsupported type.
+worker.postMessage: marked true DataCloneError 25 Cannot clone object of unsupported type.
+worker: parentPort, marked true DataCloneError 25 Cannot clone object of unsupported type.
+worker: exit 0

@@ -643,7 +643,8 @@ Not as in Node:
 - `postMessageToThread`, `getHeapSnapshot` and `BroadcastChannel` between threads aren't there yet. A worker's `performance.eventLoopUtilization()` is zeros.
 
 **`MessageChannel` and `MessagePort`** are Node 22's, within one program, and are also the globals:
-- A message is a structured clone (an `ArrayBuffer` in the transfer list is transferred). A `MessagePort` in the transfer list moves: the receiver gets a new port on the same channel, in `ports`, and the one sent is detached, as in Node. A port in the message but not in the list, one listed twice, the sender itself, or one already moved or closed by the program is Node's `DataCloneError`. Its `MessageEvent` comes on a later turn.
+- A message is a structured clone (an `ArrayBuffer` in the transfer list is transferred). A `MessagePort` in the transfer list moves: the receiver gets a new port on the same channel, in `ports`, and the one sent is detached, as in Node. A port in the message but not in the list, one listed twice, the sender itself, or one already moved or closed by the program is Node's `DataCloneError`. So is an object marked with `markAsUncloneable` (an ordinary object or an Error; an array, a `Map` or a buffer still goes), or a `MessageEvent`, which Node marks, anywhere in a message posted to a port, a `BroadcastChannel` or a worker, or in `workerData`. Its `MessageEvent` comes on a later turn.
+- Not as in Node: the global `structuredClone` is the platform's, not jsh's, so it clones a marked object, or a `MessageEvent`, as it would any other (`{}` for an event), where Node's throws `DataCloneError`.
 - The first `'message'` listener (`onmessage`, `on()`, `addEventListener()`) starts the port and refs it; until then messages wait, and `receiveMessageOnPort` takes them synchronously. A started port with a listener keeps the program alive until it's closed or `unref()`'d, as in Node.
 - `close()` closes both ends: what was posted before is delivered, then each end gets `'close'`. A port that hasn't started keeps what it holds, for `receiveMessageOnPort()` or a later listener, and gets `'close'` once that is taken. A post to a closed port is still cloned, its transfers moved, then dropped. `new MessagePort()` is `ERR_CONSTRUCT_CALL_INVALID`.
 - A port is a NodeEventTarget: `on`, `once`, `off`, `emit` and the rest, where a `'message'` listener gets the data.
@@ -651,6 +652,7 @@ Not as in Node:
 **Order of port messages.** BroadcastChannel and MessageChannel share Node's order. In one turn (Node's poll phase), each port, in the order the ports were made, takes its messages one per task, with a handler's ticks and microtasks run before the next. The turn comes before the program's immediates (Node's check phase) and after a timer that was already due. A port the turn has yet to reach takes a message posted during it, and one it has passed takes it on the next turn. A message posted from an immediate waits for the immediates already queued.
 
 **`BroadcastChannel`** is Node 22's, within one program:
+- A `MessagePort` in a message is Node's `DataCloneError`, as nothing can be transferred on a channel.
 - Channels of one name get each other's messages: a structured clone, delivered as a `MessageEvent` on a later turn, to each channel in the order the channels were made. A channel never gets its own messages.
 - `close()`, `ref()`/`unref()`, `onmessage`, and Node's errors are as in Node. An open channel keeps the program alive.
 - Separate programs never hear each other, as separate Node processes don't.

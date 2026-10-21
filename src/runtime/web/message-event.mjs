@@ -7,11 +7,12 @@
  * each process and thread; the first message a port delivers paid it in every
  * worker_threads.Worker (#566).
  *
- * Unlike undici's, an event is not marked uncloneable (node:worker_threads'
- * markAsUncloneable is out of a program's reach): structuredClone of one gives
- * what the platform makes of a plain object.
+ * Marked uncloneable, as undici's are: posting one is a DataCloneError
+ * (./uncloneable.mjs). The platform's structuredClone of one still gives
+ * what it makes of a plain object.
  */
 import { inspect } from 'node-inspect-extracted';
+import { markOwnUncloneable } from './uncloneable.mjs';
 
 const exception = (header, message) => new TypeError(`${header}: ${message}`);
 
@@ -131,6 +132,8 @@ export function createMessageEvent({ MessagePort }) {
       eventInitDict = MessageEventInit(eventInitDict, prefix, 'eventInitDict');
       super(type, eventInitDict);
       this.#eventInit = eventInitDict;
+      // undici marks its events: posting one is a DataCloneError.
+      markOwnUncloneable(this);
     }
 
     get data() {

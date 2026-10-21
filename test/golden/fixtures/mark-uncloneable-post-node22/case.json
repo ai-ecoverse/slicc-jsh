@@ -1,0 +1,8 @@
+{
+  "description": "worker_threads.markAsUncloneable and Node's MessageEvents (which undici marks): a marked ordinary object or Error, or an event, in a message posted to a port, a BroadcastChannel or a worker, or in workerData, is a DataCloneError; a marked array, Map, Date or buffer still goes; a port in a BroadcastChannel message is a DataCloneError",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "kernel": "1.130.0"
+}
