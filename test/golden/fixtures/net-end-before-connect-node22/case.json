@@ -1,0 +1,1 @@
+{ "description": "a client socket's write() and end() before it has connected: the data goes out and then the FIN once it connects, so the server reads the data and 'end', and the client's 'connect' comes before its 'finish', as in Node 22, whose _final waits for 'connect'", "argv": ["script.js"], "shim": true }

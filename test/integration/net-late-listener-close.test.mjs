@@ -60,6 +60,7 @@ describe('net: a dropped listener whose close fails (src)', () => {
       const server = net.createServer();
       server.close();
       server.listen(4500, '127.0.0.1');
+      await new Promise((resolve) => process.nextTick(resolve));
       kernel.held[0]();
     });
     assert.deepEqual(seen, []);

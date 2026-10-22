@@ -216,7 +216,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
   const timersPromises = createTimersPromises(timers, handles);
   let net;
   const getNet = () => {
-    if (!net) net = createNet({ ctx, process, Buffer, handles, getStream, timers });
+    if (!net) net = createNet({ ctx, process, Buffer, handles, getStream, timers, getDns: () => getDns() });
     return net;
   };
   let http;

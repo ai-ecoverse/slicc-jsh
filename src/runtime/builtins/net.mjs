@@ -33,6 +33,7 @@ function parseListenArgs(args) {
       exclusive: opts.exclusive,
       callback,
       path: opts.path,
+      fd: opts.fd,
     };
   }
   const rest = [...args];
@@ -85,11 +86,20 @@ function isIP(input) {
   return 0;
 }
 
-export function createNet({ ctx, process, Buffer, handles, getStream, timers = globalThis }) {
+export function createNet({ ctx, process, Buffer, handles, getStream, timers = globalThis, getDns }) {
+  const lookupHost = (name) =>
+    new Promise((resolve, reject) => getDns().dns.lookup(name, (err, address) => (err ? reject(err) : resolve(address))));
   // Ports a server closed while its listen() was pending still holds until
   // the kernel's listen is done and its listener closed: a listen() on one
   // waits for that (Node's address is free once close() returns).
   const releasing = new Map();
+  const release = (port, settled) => {
+    if (!(port > 0)) return;
+    releasing.set(port, settled);
+    settled.then(() => {
+      if (releasing.get(port) === settled) releasing.delete(port);
+    });
+  };
   // A listener this side drops (one that came too late, or for a listen()
   // that failed): its close failing is no error of the program's (#686).
   const closeQuietly = (listener) => {
@@ -124,6 +134,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #writer;
     #connecting = false;
     #pending = [];
+    #pendingFinal;
     #remoteAddress;
     #remotePort;
     #localAddress;
@@ -331,6 +342,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         this._attach(secure, { quiet: true });
         for (const chunk of this.#pending) void this.#write(chunk);
         this.#pending = [];
+        this.#flushFinal();
         request.secured?.();
       };
       const go = () =>
@@ -444,6 +456,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             this._attach(conn);
             for (const chunk of this.#pending) void this.#write(chunk);
             this.#pending = [];
+            this.#flushFinal();
           })
           .catch((err) => {
             this.connecting = false;
@@ -580,6 +593,12 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       );
     }
 
+    #flushFinal() {
+      const callback = this.#pendingFinal;
+      this.#pendingFinal = undefined;
+      if (callback) this._final(callback);
+    }
+
     _final(callback) {
       this.#ended = true;
       // Half-close the send side only (Node socket.end / SHUT_WR). Raw ctx.net
@@ -587,6 +606,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       // conn.close() here races and often surfaces as EBADF on the peer instead
       // of a clean EOF (see scripts/run-raw-ctx-net-fin.mjs).
       if (!this.#writer) {
+        if (this.#connecting && !this.#startOnWrite) {
+          this.#pendingFinal = callback;
+          return;
+        }
         this.#maybeFinishConn();
         callback();
         return;
@@ -753,6 +776,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         return this;
       }
       if (parsed.callback) this.once('listening', parsed.callback);
+      if (typeof parsed.fd === 'number') {
+        nextTick(() => this.emit('error', errnoError({ code: 'EINVAL' }, 'listen')));
+        return this;
+      }
 
       this.#closed = false;
       const generation = ++this.#generation;
@@ -763,40 +790,83 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       // port of its own, and the primary listens where it asked, joining
       // each connection to it.
       const cluster = !parsed.exclusive && process?._clusterWorker;
-      const listening = cluster
-        ? ctx.net.listen({ port: 0, host: '127.0.0.1', backlog: parsed.backlog }).then(async (listener) => {
-            const reply = await cluster._getServer(this, {
-              address: parsed.host ?? null,
-              port,
-              addressType: 4,
-              fd: -1,
-              proxy: { port: listener.port },
-            });
-            if (reply.cancelled) {
-              // The channel to the primary went first: no listening, as in Node.
-              closeQuietly(listener);
-              return null;
-            }
-            if (reply.errno) {
-              closeQuietly(listener);
-              const err = new Error(`listen ${reply.errno}: ${reply.message ?? 'address already in use'} ${host}:${port}`);
-              err.code = reply.errno;
-              err.syscall = 'listen';
-              err.address = host;
-              err.port = port;
-              throw err;
-            }
-            if (generation !== this.#generation) {
-              cluster._closeServer(reply.key);
-              return listener;
-            }
-            this.#clusterKey = reply.key;
-            this.#clusterAddress = reply.sockname;
+      if (!cluster) {
+        const bindAt = (address) => {
+          if (generation !== this.#generation) return;
+          const options = { port, host: address, backlog: parsed.backlog };
+          if (port > 0 && releasing.has(port)) {
+            this.#listenAsync(generation, releasing.get(port).then(() => ctx.net.listen(options)), false, port);
+          } else if (typeof ctx.sync?.net?.listen === 'function') {
+            this.#bindNow(generation, options);
+          } else {
+            this.#listenAsync(generation, ctx.net.listen(options), false, port);
+          }
+        };
+        if (!parsed.host) bindAt(host);
+        else if (isIP(host) || !getDns) nextTick(() => bindAt(host));
+        else {
+          void trackPromise(
+            handles,
+            lookupHost(host).then(bindAt, (err) => {
+              if (generation === this.#generation) this.emit('error', err);
+            })
+          );
+        }
+        return this;
+      }
+      this.#listenAsync(
+        generation,
+        ctx.net.listen({ port: 0, host: '127.0.0.1', backlog: parsed.backlog }).then(async (listener) => {
+          const reply = await cluster._getServer(this, {
+            address: parsed.host ?? null,
+            port,
+            addressType: 4,
+            fd: -1,
+            proxy: { port: listener.port },
+          });
+          if (reply.cancelled) {
+            // The channel to the primary went first: no listening, as in Node.
+            closeQuietly(listener);
+            return null;
+          }
+          if (reply.errno) {
+            closeQuietly(listener);
+            const err = new Error(`listen ${reply.errno}: ${reply.message ?? 'address already in use'} ${host}:${port}`);
+            err.code = reply.errno;
+            err.syscall = 'listen';
+            err.address = host;
+            err.port = port;
+            throw err;
+          }
+          if (generation !== this.#generation) {
+            cluster._closeServer(reply.key);
             return listener;
-          })
-        : port > 0 && releasing.has(port)
-          ? releasing.get(port).then(() => ctx.net.listen({ port, host, backlog: parsed.backlog }))
-          : ctx.net.listen({ port, host, backlog: parsed.backlog });
+          }
+          this.#clusterKey = reply.key;
+          this.#clusterAddress = reply.sockname;
+          return listener;
+        }),
+        cluster,
+        port
+      );
+      return this;
+    }
+
+    #bindNow(generation, options) {
+      let listener;
+      try {
+        listener = ctx.sync.net.listen(options);
+      } catch (err) {
+        nextTick(() => this.emit('error', errnoError(err, 'listen')));
+        return;
+      }
+      this.#bound(listener);
+      nextTick(() => {
+        if (generation === this.#generation && this.#listener === listener) this.#announce();
+      });
+    }
+
+    #listenAsync(generation, listening, cluster, port) {
       this.#pendingListens.set(listening, port);
       void trackPromise(
         handles,
@@ -810,36 +880,43 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
               if (!this.#takenOver.has(listening)) closeQuietly(listener);
               return;
             }
-            this.#listener = listener;
-            this.#listening = true;
-            this._handle = new TCP(listener.fd, {
-              address: () => this.address(),
-              close: (callback) => this.#closeHandle(listener, callback),
-              closed: () => this.#handleClosed === listener,
-              ref: () => this.ref(),
-              unref: () => this.unref(),
-              hasRef: () => !this.#unref && !!this.#handle,
-            });
-            this.#handle = { kind: 'server', fd: listener.fd };
-            if (!this.#unref) handles.add(this.#handle);
-            try {
-              this.emit('listening');
-            } catch (err) {
-              // process.exit() already recorded didExit; do not emit listen EIO.
-              if (err?.name === 'NodeExitError') return;
-              // Other throws from the listen callback are uncaught, not listen failures.
-              nextTick(() => {
-                throw err;
-              });
-              return;
-            }
-            void this.#acceptLoop();
+            this.#bound(listener);
+            this.#announce();
           })
           .catch((err) => {
             this.emit('error', err?.syscall === 'listen' && cluster ? err : errnoError(err, 'listen'));
           })
       );
-      return this;
+    }
+
+    #bound(listener) {
+      this.#listener = listener;
+      this.#listening = true;
+      this._handle = new TCP(listener.fd, {
+        address: () => this.address(),
+        close: (callback) => this.#closeHandle(listener, callback),
+        closed: () => this.#handleClosed === listener,
+        ref: () => this.ref(),
+        unref: () => this.unref(),
+        hasRef: () => !this.#unref && !!this.#handle,
+      });
+      this.#handle = { kind: 'server', fd: listener.fd };
+      if (!this.#unref) handles.add(this.#handle);
+    }
+
+    #announce() {
+      try {
+        this.emit('listening');
+      } catch (err) {
+        // process.exit() already recorded didExit; do not emit listen EIO.
+        if (err?.name === 'NodeExitError') return;
+        // Other throws from the listen callback are uncaught, not listen failures.
+        nextTick(() => {
+          throw err;
+        });
+        return;
+      }
+      void this.#acceptLoop();
     }
 
     async #acceptLoop() {
@@ -908,18 +985,17 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             () => {}
           )
         ).catch(() => {});
-        if (port > 0) {
-          releasing.set(port, settled);
-          settled.then(() => {
-            if (releasing.get(port) === settled) releasing.delete(port);
-          });
-        }
+        release(port, settled);
         trackPromise(handles, settled).catch(() => {});
       }
       this.#pendingListens.clear();
       // The kernel's close keeps the loop alive until it is done (Node's
       // handle does, until its close callback).
-      if (listener !== this.#handleClosed) trackPromise(handles, Promise.resolve(listener?.close?.()).catch(() => {})).catch(() => {});
+      if (listener !== this.#handleClosed) {
+        const settled = Promise.resolve(listener?.close?.()).catch(() => {});
+        release(listener?.port, settled);
+        trackPromise(handles, settled).catch(() => {});
+      }
       this.#handleClosed = undefined;
       // Node: 'close' on a later tick once every connection has ended
       // (_emitCloseIfDrained), not while one is still open; it doesn't wait
@@ -946,6 +1022,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       } catch {
         closing = Promise.resolve();
       }
+      release(listener.port, closing);
       const closed = closing.then(() => {
         if (handle && this.#handle === handle) {
           handles.delete(handle);
