@@ -33,6 +33,7 @@ describe('ESM imports of CommonJS npm packages: the named exports Node finds (cj
   let jsh;
   let host;
   before(async () => {
+    mkdirSync(join(root, 'node_modules/.cache'), { recursive: true });
     host = mkdtempSync(join(root, 'node_modules/.cache/jsh-esm-cjs-'));
     writeFileSync(join(host, 'probe.mjs'), probe);
     jsh = await withJsh();
