@@ -189,7 +189,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #refed = true;
     ref() {
       this.#refed = true;
-      if (this.#handle) handles.add(this.#handle);
+      if (this.#handle && !this.#readableEof) handles.add(this.#handle);
       return this;
     }
     unref() {
@@ -368,6 +368,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #write(bytes) {
       const p = this.#writer.write(bytes);
       this.#lastWrite = p;
+      if (this.#readableEof && this.#refed) trackPromise(handles, p).catch(() => {});
       return p;
     }
 
@@ -541,6 +542,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #endRead() {
+      if (this.#handle) handles.delete(this.#handle);
       this.push(null);
       // allowHalfOpen false: auto-end AFTER 'end' listeners so
       // `s.on('end', () => s.end('bye'))` can still write (Node; endreply.js).
@@ -604,13 +606,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         callback();
         return;
       }
-      this.#writer
+      const closing = this.#writer
         .close()
         .catch(() => {})
         .finally(() => {
           this.#maybeFinishConn();
           callback();
         });
+      if (this.#readableEof && this.#refed) trackPromise(handles, closing).catch(() => {});
     }
 
     _destroy(err, callback) {

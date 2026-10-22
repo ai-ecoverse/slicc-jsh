@@ -1,0 +1,1 @@
+{ "description": "the socket an http server hands to an upgrade listener is the program's, as Node 22's: the server's end and error listeners are gone, so its errors are the program's and not clientError, and a client FIN right after the head no longer cuts an answer the program writes later", "argv": ["script.js"], "shim": true }

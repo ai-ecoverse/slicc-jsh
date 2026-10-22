@@ -259,6 +259,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - `https` goes through `fetch`, except a request with its own agent (or, on slicc-kernel 1.124.0 and later, a `ca`, and on 1.124.13 and later a client certificate), which is `http` on a `tls.connect` socket (see the `https` client below).
 
 **`net`.** Servers and sockets, `allowHalfOpen` (a server's own property, as Node's, which its connections take), `end()` as a half-close. Unix domain sockets (`path`) and `new net.Socket({ fd })` throw `ERR_NOT_SUPPORTED`.
+- A socket whose peer has ended keeps the program alive only while it still writes, as a libuv stream does: with `allowHalfOpen` and nothing more to send, the program can exit with it half open (golden `net-half-open-exit-node22`).
 - A listening server's `_handle` has the `TCP` handle's `getsockname`, `close`, `ref`, `unref` and `hasRef` (golden `net-server-tcp-handle-node22`). Its other methods aren't there.
 - Not as in Node: the kernel's listen is asynchronous, so `listening` is `false` and `address()` is `null` until `'listening'`. Node binds at once when `listen()` has no host (`listen(0)`, `listen(port)`), and code that reads `address()` right after such a `listen()` fails here: chai-http's `request(app)` throws `Server is not listening`. With a host (`listen(0, '127.0.0.1')`), Node looks it up first, so it is `null` there too. This needs a synchronous listen from slicc-kernel.
 
@@ -288,7 +289,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
   - An idle connection closes after `server.keepAliveTimeout` (5 s) plus `server.keepAliveTimeoutBuffer` (1 s), as in Node 22. `closeIdleConnections()` and `closeAllConnections()` end connections as Node's do.
   - `close()` closes the connections that are idle at that moment. One that is busy keeps serving after its response, as in Node 22: it still says `Keep-Alive`, takes further requests, and closes when it goes idle for that long or the client ends it. The callback waits until every connection has closed.
   - `maxRequestsPerSocket` is honoured. Headers that don't arrive within `headersTimeout` get `408`.
-- An `Upgrade` request goes to `'upgrade'` listeners, with the socket and what followed the head. Without a listener, it is an ordinary request.
+- An `Upgrade` request goes to `'upgrade'` listeners, with the socket and what followed the head. The socket is the program's from then on: paused, with none of the server's listeners, so its errors don't reach `'clientError'` and a client's FIN doesn't close it (golden `http-upgrade-handover-node22`). Without a listener, it is an ordinary request.
 - A `CONNECT` request goes to `'connect'` listeners (request, socket, head), never to `'request'`, and the socket is the program's from then on: the server doesn't end it on the client's FIN. Without a listener the socket closes with no status line (golden `http-connect-node22`).
 - Header names are written as they were set.
 

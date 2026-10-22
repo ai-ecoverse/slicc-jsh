@@ -1,0 +1,3 @@
+at upgrade: error listeners 0
+the program sees boom
+after a FIN right after the head: "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: x\r\n\r\nlate"

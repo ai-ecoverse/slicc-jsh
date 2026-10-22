@@ -1,0 +1,2 @@
+server: the client ended, the socket stays writable true
+exit 0
