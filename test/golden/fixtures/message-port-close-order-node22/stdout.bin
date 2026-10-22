@@ -99,6 +99,14 @@ immediate from a1
 a2 closed
 b1 closed
 b2 closed
+== posted from an immediate while a close waits: status 0
+posted
+a1 closed
+b2 closed
+== posted from the main script while a close waits: status 0
+b2 message x
+a1 closed
+b2 closed
 == held before its close: status 0
 2 message x
 2 message y

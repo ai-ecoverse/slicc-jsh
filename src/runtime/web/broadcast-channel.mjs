@@ -207,7 +207,7 @@ export function createPorts({
     later(runClosing);
   };
   const runClosing = () => {
-    if (dispatching || delivering.active || delivering.pending || delivering.immediatePending?.(closingCut())) {
+    if (dispatching || delivering.active || (delivering.pending && delivering.cut === 0) || delivering.immediatePending?.(closingCut())) {
       later(runClosing);
       return;
     }
@@ -249,7 +249,7 @@ export function createPorts({
     // turn doesn't. From a timer, the poll phase follows its timers phase.
     checkAt = Infinity;
     const step = (first) => {
-      if (first && (dispatching || delivering.overdue?.(Math.min(checkAt, Date.now())))) {
+      if (first && (dispatching || (phase && delivering.cut !== 0) || delivering.overdue?.(Math.min(checkAt, Date.now())))) {
         again(() => step(true));
         return;
       }

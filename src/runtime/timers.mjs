@@ -292,7 +292,7 @@ export function createTimers(
     /** @internal A message ports' turn ended: its check phase is the immediates pending now. */
     startCheck() {
       check.clear();
-      for (const state of byId.values()) if (state.kind === 'Immediate') check.add(state);
+      for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck) check.add(state);
     },
     /** @internal Whether the check phase after a ports' turn still has immediates to run. */
     checkPending: () => check.size > 0,

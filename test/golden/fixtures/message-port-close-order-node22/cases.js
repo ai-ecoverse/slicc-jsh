@@ -128,6 +128,33 @@ const cases = {
     b.port2.on('close', () => log('b2 closed'));
     a.port1.close();
   },
+  'posted from an immediate while a close waits': () => {
+    const a = new MessageChannel();
+    const b = new MessageChannel();
+    b.port2.on('message', (m) => log('b2 message', m));
+    b.port2.on('close', () => log('b2 closed'));
+    a.port1.on('close', () => {
+      log('a1 closed');
+      b.port2.close();
+    });
+    setImmediate(() => {
+      b.port1.postMessage('x');
+      log('posted');
+    });
+    a.port1.close();
+  },
+  'posted from the main script while a close waits': () => {
+    const a = new MessageChannel();
+    const b = new MessageChannel();
+    b.port2.on('message', (m) => log('b2 message', m));
+    b.port2.on('close', () => log('b2 closed'));
+    a.port1.on('close', () => {
+      log('a1 closed');
+      b.port2.close();
+    });
+    b.port1.postMessage('x');
+    a.port1.close();
+  },
   'held before its close': () => {
     const { port1, port2 } = new MessageChannel();
     port1.postMessage('x');
