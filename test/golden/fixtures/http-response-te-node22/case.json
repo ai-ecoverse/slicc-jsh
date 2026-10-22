@@ -1,0 +1,5 @@
+{
+  "description": "Node 22 response transfer-encoding: chunked is the last coding, otherwise the body is read until the connection closes, including chunked then gzip. A chunked response still rejects a bad size, a missing CR, and Content-Length beside Transfer-Encoding. Expect treats 100-continue as a token. A pipelined connection sees both requests, then both bodies, then both closes.",
+  "argv": ["script.js"],
+  "shim": true
+}

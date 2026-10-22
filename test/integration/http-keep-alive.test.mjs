@@ -116,6 +116,41 @@ describe('http keep-alive (kernel)', () => {
     assert.equal(r.stdout, 'options 800 800\npartial request: HTTP/1.1 408 Request Timeout within 3 s: true\nend slow done | close cb\n');
   });
 
+  it('requestTimeout starts at the first byte, and a late res.end does not follow the 408', async () => {
+    const script = [
+      "const http = require('http'); const net = require('net');",
+      'const seen = [];',
+      'const server = http.createServer({ headersTimeout: 0, requestTimeout: 40 }, (req, res) => {',
+      '  seen.push(req.url);',
+      '  req.resume();',
+      "  setTimeout(() => { try { res.end('LATE'); } catch { /* detached */ } }, 100);",
+      '});',
+      "server.listen(0, '127.0.0.1', () => {",
+      '  const port = server.address().port;',
+      "  const late = net.connect(port, '127.0.0.1', () => late.write('POST /a HTTP/1.1\\r\\nHost: x\\r\\nContent-Length: 10\\r\\n\\r\\npart'));",
+      "  let body = '';",
+      "  late.on('data', (d) => (body += d));",
+      "  late.on('close', () => {",
+      "    const first = net.connect(port, '127.0.0.1', () => first.write('PO'));",
+      "    let head = '';",
+      "    const timer = setTimeout(() => { first.destroy(); finish('still open'); }, 200);",
+      "    first.on('data', (d) => (head += d));",
+      "    first.on('close', () => { clearTimeout(timer); finish(head.split('\\r\\n')[0]); });",
+      '    function finish(stall) {',
+      "      console.log(body.split('\\r\\n')[0]);",
+      "      console.log(body.includes('LATE') ? 'LATE' : 'no late');",
+      "      console.log('seen', seen.join(','));",
+      "      console.log(stall);",
+      '      server.close();',
+      '    }',
+      '  });',
+      '});',
+    ].join('\n');
+    const r = await jsh.run(['node', '-e', script]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, 'HTTP/1.1 408 Request Timeout\nno late\nseen /a\nHTTP/1.1 408 Request Timeout\n');
+  });
+
   it("#361: a request's 'error' with no listener ends the program (Node's unhandled 'error'), never a wait for a response that can't come", async () => {
     await jsh.kernel.writeFile(
       '/os/ka-dead.js',
