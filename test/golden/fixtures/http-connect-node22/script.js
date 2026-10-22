@@ -96,6 +96,64 @@ async function clients({ proxy, proxyPort }) {
   proxy.close();
 }
 
+async function paused() {
+  let readLater;
+  const s = http.createServer();
+  s.on('connect', (req, socket) => {
+    console.log('server: the socket at connect is paused,', socket.readableFlowing);
+    socket.write('HTTP/1.1 200 OK\r\n\r\n');
+    readLater = () =>
+      setTimeout(() => {
+        let got = '';
+        socket.on('data', (d) => {
+          got += d;
+          if (got.includes('later')) socket.end(`got ${got}`);
+        });
+      }, 50);
+  });
+  const port = await listen(s);
+  const out = await new Promise((resolve) => {
+    const c = net.connect(port, '127.0.0.1', () => c.write('CONNECT x:1 HTTP/1.1\r\nHost: x:1\r\n\r\n'));
+    let text = '';
+    c.on('data', (d) => {
+      text += d;
+      if (text.endsWith('\r\n\r\n') && !text.includes('got')) c.write('later', () => readLater());
+    });
+    c.on('close', () => resolve(text));
+  });
+  console.log('server: what came before a data listener is kept:', JSON.stringify(out));
+  s.close();
+
+  const fake = net.createServer((sock) => {
+    sock.on('data', (d) => {
+      const t = String(d);
+      if (t.startsWith('CONNECT')) sock.write('HTTP/1.1 200 OK\r\n\r\n');
+      else if (t.startsWith('GET')) sock.write('HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok');
+    });
+  });
+  const fakePort = await listen(fake);
+  const agent = new http.Agent({ maxSockets: 1 });
+  await new Promise((resolve) => {
+    const req = http.request({ host: '127.0.0.1', port: fakePort, method: 'CONNECT', path: 'y:2', agent });
+    req.on('connect', (res, tunnel) => {
+      console.log('client: the tunnel at connect is paused,', tunnel.readableFlowing, 'and out of the agent:', Object.keys(agent.sockets).length, tunnel.listenerCount('free'), tunnel.listenerCount('agentRemove'));
+      http.get({ host: '127.0.0.1', port: fakePort, agent }, (r) => {
+        let body = '';
+        r.on('data', (d) => (body += d));
+        r.on('end', () => {
+          console.log('client: a GET on the same agent (maxSockets 1) while the tunnel is open:', body, !tunnel.destroyed);
+          tunnel.destroy();
+          agent.destroy();
+          fake.close();
+          resolve();
+        });
+      });
+    });
+    req.end();
+  });
+}
+
 servers()
   .then(clients)
+  .then(paused)
   .then(() => console.log('seen:', seen.join(' | ')));

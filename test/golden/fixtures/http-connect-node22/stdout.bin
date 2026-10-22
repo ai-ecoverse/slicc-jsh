@@ -6,4 +6,8 @@ client, 407: connect 407 Proxy Authentication Required fake head "from the tunne
 client, no connect listener: close
 the head the client sent: "CONNECT example:443 HTTP/1.1\r\nHost: 127.0.0.1:PORT\r\nConnection: keep-alive\r\n\r\n"
 client through the proxy: 200 "echo pingbye"
+server: the socket at connect is paused, null
+server: what came before a data listener is kept: "HTTP/1.1 200 OK\r\n\r\ngot later"
+client: the tunnel at connect is paused, null and out of the agent: 0 0 0
+client: a GET on the same agent (maxSockets 1) while the tunnel is open: ok true
 seen: connect CONNECT example:443 1.1 {"host":"example:443"} head "early" true | connect CONNECT example:80 1.1 {"host":"example:80"} head "" true | connect CONNECT inner:1 1.1 {"host":"127.0.0.1:PORT","connection":"keep-alive"} head "" true
