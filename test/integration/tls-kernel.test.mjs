@@ -533,6 +533,53 @@ const plainThenTls = (label, upgrade) => new Promise((resolve) => {
     assert.equal(shim.stderr, '');
   });
 
+  it('STARTTLS, then end(): the program lives until the plain socket closes, with nothing else to keep it (#730)', async () => {
+    const { host, shim } = await both(
+      'starttls-end.js',
+      `const tls = require('tls');
+const net = require('net');
+const fs = require('fs');
+const [host, port, dir] = process.argv.slice(2);
+const ca = fs.readFileSync(dir + '/ca.pem');
+const upgradeThenEnd = (label) => new Promise((resolve) => {
+  const plain = net.connect(Number(port), host, () => plain.write('STARTTLS\\r\\n'));
+  plain.on('end', () => console.log(label, 'plain end'));
+  plain.on('close', (hadError) => {
+    console.log(label, 'plain close', hadError);
+    resolve();
+  });
+  plain.once('data', (line) => {
+    console.log(label, 'plain', String(line).trim());
+    const s = tls.connect({ socket: plain, servername: 'secure.test', ca }, () => {
+      console.log(label, 'secureConnect', s.authorized);
+      s.write(label);
+    });
+    s.once('data', (d) => {
+      console.log(label, 'echo', String(d));
+      s.end();
+    });
+    s.on('end', () => console.log(label, 'tls end'));
+    s.on('close', (hadError) => console.log(label, 'tls close', hadError));
+    s.on('error', (e) => console.log(label, 'error', e.code));
+  });
+});
+process.on('exit', (code) => console.log('exit', code));
+(async () => {
+  for (const label of ['first', 'second', 'third']) {
+    await upgradeThenEnd(label);
+    console.log(label, 'done');
+  }
+})();
+`,
+      ports.starttls
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.match(host.stdout, /^third done$/m);
+    assert.equal(shim.stdout, host.stdout);
+    assert.equal(shim.stderr, '');
+    assert.equal(shim.status, host.status);
+  });
+
   it('the real pg: an SSLRequest, then TLS over the same socket (sslmode=verify-full with sslrootcert, and libpq-style require)', async () => {
     const { host, shim } = await both(
       'pg.js',
