@@ -1,0 +1,1 @@
+{ "description": "a socket handed to upgrade or connect, on the server or on the client, that the program ends and never reads still emits end and close once its peer ends, as Node 22's paused socket does, so server.close(cb) calls back", "argv": ["script.js"], "shim": true }

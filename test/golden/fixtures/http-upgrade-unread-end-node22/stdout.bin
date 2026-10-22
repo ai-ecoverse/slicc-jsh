@@ -1,0 +1,5 @@
+upgrade /unread client: 101 head 0 end read "" close; server: end close
+upgrade /client-unread client: 101 head 0 end close; server: end close
+connect /unread client: 200 head 0 end read "" close; server: end close
+connect /client-unread client: 200 head 0 end close; server: end close
+close cb, listening false

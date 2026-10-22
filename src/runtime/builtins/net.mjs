@@ -548,6 +548,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         if (this.#refed) trackPromise(handles, this.#lastWrite).catch(() => {});
       }
       this.push(null);
+      this.read(0);
       // allowHalfOpen false: auto-end AFTER 'end' listeners so
       // `s.on('end', () => s.end('bye'))` can still write (Node; endreply.js).
       this.#scheduleAutoEnd();
