@@ -8,5 +8,5 @@ console.log(JSON.stringify(require('fs').readFileSync(path.join(__dirname, '.con
 try {
   await skill.token('adobe');
 } catch (err) {
-  console.log(err.message);
+  console.log(err.message, err.exitCode);
 }

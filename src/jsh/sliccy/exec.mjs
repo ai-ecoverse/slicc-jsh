@@ -88,8 +88,9 @@ function joinChild(dir, name) {
 
 /**
  * `sliccy:skill`, ported from slicc's `skill-global.ts`. `fs` is the
- * engine's Node `fs`; `token(id)` runs `oauth-token <id>` and nothing else
- * (decided 2026-10-10 on slicc-jsh#22).
+ * engine's Node `fs`; `token(id)` runs `jerk <id> get --reveal` and nothing
+ * else (slicc-jsh#74; it ran v6's `oauth-token` before). The id goes to jerk
+ * as it is: jerk's provider ids are canonical, with no aliases.
  */
 /**
  * The skill folder for the Agent Skills layout, as in slicc v6
@@ -148,14 +149,38 @@ export function createSkill({ argv, fs, exec }) {
     return merged;
   }
 
-  async function token(providerId) {
+  /**
+   * `params` is a bag of jerk provider parameters: `{ org: 'adobe' }` is
+   * `-p org=adobe`, in the bag's order. A value is a string, number or
+   * boolean; an `undefined` one is left out, so an unset option can pass
+   * straight through. jerk refuses a parameter its provider doesn't have.
+   */
+  async function token(providerId, params) {
     if (typeof providerId !== 'string' || !providerId.trim()) {
       throw new TypeError('skill.token(providerId): providerId must be a non-empty string');
     }
-    const { stdout, stderr, exitCode } = await exec.spawn(['oauth-token', providerId]);
+    const argv = ['jerk', providerId, 'get', '--reveal'];
+    if (params !== undefined) {
+      if (params === null || typeof params !== 'object' || Array.isArray(params)) {
+        throw new TypeError('skill.token(providerId, params): params must be a plain object');
+      }
+      for (const [key, value] of Object.entries(params)) {
+        if (value === undefined) continue;
+        if (!key || key.includes('=')) {
+          throw new TypeError(`skill.token(providerId, params): bad parameter name ${JSON.stringify(key)}`);
+        }
+        if (!['string', 'number', 'boolean'].includes(typeof value)) {
+          throw new TypeError(`skill.token(providerId, params): ${key} must be a string, number or boolean`);
+        }
+        argv.push('-p', `${key}=${value}`);
+      }
+    }
+    const { stdout, stderr, exitCode } = await exec.spawn(argv);
     if (exitCode !== 0) {
-      const msg = stderr.trim() || `oauth-token exited with code ${exitCode}`;
-      throw new Error(`skill.token('${providerId}'): ${msg}`);
+      const msg = stderr.trim() || `jerk exited with code ${exitCode}`;
+      const err = new Error(`skill.token('${providerId}'): ${msg}`);
+      err.exitCode = exitCode;
+      throw err;
     }
     return stdout.replace(/\r?\n+$/, '');
   }

@@ -1,5 +1,5 @@
 {
   "status": 0,
-  "stdout": "keys assets,config,dir,refs,root,token\ndir $CASE/scripts\nrefs $CASE/references\nassets $CASE/assets\nconfig {\"existing\":1}\nconfig write {\"existing\":1,\"added\":true}\nconfig file { \"existing\": 1, \"added\": true } \ntoken error skill.token('compare-provider'): oauth-token: command not found\n",
+  "stdout": "keys assets,config,dir,refs,root,token\ndir $CASE/scripts\nrefs $CASE/references\nassets $CASE/assets\nconfig {\"existing\":1}\nconfig write {\"existing\":1,\"added\":true}\nconfig file { \"existing\": 1, \"added\": true } \ntoken error skill.token('compare-provider'): jerk: command not found\n",
   "stderr": ""
 }

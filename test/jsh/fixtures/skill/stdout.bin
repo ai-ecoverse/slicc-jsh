@@ -3,4 +3,4 @@ null
 {"a":1}
 {"a":1,"b":2}
 "{\n  \"a\": 1,\n  \"b\": 2\n}\n"
-skill.token('adobe'): oauth-token: command not found
+skill.token('adobe'): jerk: command not found 127

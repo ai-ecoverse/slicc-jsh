@@ -121,7 +121,7 @@ node script.mjs
 | `color` | on when stdout is a terminal; `FORCE_COLOR` and `NO_COLOR` change that |
 | `exec` | `exec(cmd)` through the shell, `exec.spawn(argv)` without one; results are `{ stdout, stderr, exitCode }` |
 | `http` | v6's `http.client`, over `fetch` |
-| `skill` | `dir` is the script's directory, and `config()` reads and writes `.config` there; `root` is the skill folder (the parent of a `scripts/` directory), with `refs` and `assets` in it; `token(id)` runs `oauth-token <id>` |
+| `skill` | `dir` is the script's directory, and `config()` reads and writes `.config` there; `root` is the skill folder (the parent of a `scripts/` directory), with `refs` and `assets` in it; `token(id, params)` runs [`jerk`](https://github.com/ai-ecoverse/slicc-jerk) `<id> get --reveal`, with `-p key=value` for each entry of the optional `params` bag (`skill.token('aem', { org, site })`), and returns the token, or throws jerk's message with `err.exitCode` (3: sign in with `jerk <id> create`) |
 
 Any other `sliccy:<name>` is the package `@ai-ecoverse/sliccy-<name>`, else `sliccy-<name>`. jsh looks for it in this order:
 
