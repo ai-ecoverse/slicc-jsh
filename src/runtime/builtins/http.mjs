@@ -1877,6 +1877,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       };
       setRequestLine(req, parsed, headers);
       let bodyDone = false;
+      let primed = false;
       let resDone = false;
       let failed = false;
       let feeding = false;
@@ -1926,8 +1927,29 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           handles?.notify?.();
           return;
         }
+        if (!res.finished && !dead && !socket.destroyed && buf.length > 0) {
+          const wasBusy = busy;
+          holding = true;
+          busy = false;
+          const before = buf.length;
+          parseOne();
+          holding = false;
+          if (buf.length === before) busy = wasBusy;
+          else primed = true;
+        }
         req.push(null);
         handles?.notify?.();
+        if (primed) {
+          if (current && current.req !== req && !current.bodyDone() && current.req._held?.length) {
+            const next = current.req;
+            const chunks = next._held;
+            next._held = [];
+            for (const chunk of chunks) {
+              if (!next.push(chunk)) socket.pause?.();
+            }
+          }
+          while (wave.length > 0) wave.shift().deliver();
+        }
         if (socket.destroyed || dead) return;
         if (resDone && res._last) {
           socket.unref?.();
@@ -2066,17 +2088,20 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       const keptAlive = () => {
         if (handed) return;
         handed = true;
-        current = null;
         socket.off('close', gone);
         socket.off('end', onEnd);
-        busy = false;
-        conn.idle = true;
+        if (!primed) {
+          current = null;
+          busy = false;
+          conn.idle = true;
+        }
         // The request's 'close' (Node emits it once the response is done).
         if (req.readableEnded) {
           if (!req.destroyed) req.destroy();
         } else req.once('end', () => req.destroy());
         const next = outgoing.shift();
         if (next && !suppressWrite && !socket.destroyed && !socket._httpMessage) next.assignSocket(socket);
+        if (primed) return;
         armIdle();
         queueMicrotask(pump);
       };
