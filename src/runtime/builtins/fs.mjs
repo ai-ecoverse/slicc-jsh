@@ -630,7 +630,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
   }
 
   function writeBytesAtPath(ent, bytes, filePosition) {
-    const inPlace = writesInPlace && writableFileOf(ent, ent.append ?? String(ent.flags).includes('a'));
+    const inPlace = writableFileOf(ent, ent.append ?? String(ent.flags).includes('a'));
     if (inPlace) {
       try {
         const pos = inPlace.append ? inPlace.file.size() : filePosition == null ? ent.pos : filePosition;
@@ -860,7 +860,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
 
   function writableFileOf(ent, append = false) {
     if (ent.file && ent.writable) return { file: ent.file, append, held: true };
-    return openInPlace(ent.path, { write: true, append });
+    return writesInPlace && openInPlace(ent.path, { write: true, append });
   }
 
   /**
@@ -1579,11 +1579,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
           pos = 0;
         }
       }
-      const ranged = !fl.writable
-        ? openHeld(target, pathArg)
-        : writesInPlace
-          ? openHeld(target, pathArg, { read: !!fl.readable, write: true, append: !!fl.append })
-          : null;
+      const ranged = openHeld(target, pathArg, fl.writable ? { read: !!fl.readable, write: true, append: !!fl.append } : undefined);
       const fd = nextFd++;
       fdTable.set(fd, {
         path: target,
@@ -1691,7 +1687,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       const ent = fdTable.get(fd);
       if (!ent) throw nodeFsError('EBADF', 'ftruncate', undefined);
       try {
-        const inPlace = writesInPlace && writableFileOf(ent);
+        const inPlace = writableFileOf(ent);
         if (inPlace) {
           try {
             inPlace.file.truncate(len);
@@ -2267,7 +2263,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         throw err;
       }
     };
-    const entPath = () => fdTable.get(fd)?.path;
 
     const handle = {
       fd,
@@ -2300,11 +2295,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       },
       async writeFile(data, options) {
         ensureOpen('writeFile');
-        syncApi.writeFileSync(entPath(), data, options);
+        syncApi.writeFileSync(fd, data, options);
       },
       async appendFile(data, options) {
         ensureOpen('appendFile');
-        syncApi.appendFileSync(entPath(), data, options);
+        syncApi.writeFileSync(fd, data, options);
       },
       async stat(options) {
         ensureOpen('stat');

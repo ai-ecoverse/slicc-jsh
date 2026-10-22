@@ -1,0 +1,1 @@
+{ "description": "a jsh file given to a child as its stdout and stderr keeps the child's output after the parent closes its descriptors and renames the file away, or replaces and unlinks it, as Node 22's child keeps the descriptor: the output lands in the file the parent opened, never at its old path", "argv": ["script.js"], "shim": true }

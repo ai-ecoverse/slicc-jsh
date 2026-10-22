@@ -1,8 +1,8 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, withJsh, wrapCommandMain } from './helpers.mjs';
+import { withJsh, wrapCommandMain } from './helpers.mjs';
 
-describe('a held descriptor whose sync fails (kernel)', { skip: !kernelAtLeast('1.143.4') }, () => {
+describe('a held descriptor whose sync fails (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();
