@@ -482,6 +482,7 @@ function readHeadLine(bytes, i, first) {
   for (let j = i; j < bytes.length; j++) {
     if (j - i > MAX_HEADER_SIZE) return { error: hpe('HPE_HEADER_OVERFLOW', 'Header overflow') };
     if (bytes[j] === 0x0a) {
+      if (!first && j === i) return { error: hpe('HPE_INVALID_HEADER_TOKEN', 'Invalid header token') };
       if (j === i || bytes[j - 1] !== 0x0d) {
         return {
           error: hpe(
@@ -2004,8 +2005,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (socket.destroyed) return;
         if (!res._last) {
           if (bodyDone) keptAlive();
-        }
-        else if (server._closing) closeGracefully(socket);
+        } else if (bodyDone && res.shouldKeepAlive && buf.length > 0) {
+          keptAlive();
+        } else if (server._closing) closeGracefully(socket);
         else {
           socket.unref?.();
           destroy();
