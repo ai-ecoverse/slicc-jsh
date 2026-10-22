@@ -286,7 +286,7 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
     }
   });
 
-  it('http server rejects oversized Content-Length with 413', async () => {
+  it('http server takes a huge Content-Length at its head, as Node does, and a 413 it answers closes both sides once', async () => {
     const { run, close } = await withJsh();
     try {
       // Fail fast: a half-open 413 used to hang until the 120s test timeout.
@@ -302,7 +302,7 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
             'const maybe=()=>{ if(got413 && clientCloses===1 && serverCloses===1) finish("ok");',
             '  else if(clientCloses>1||serverCloses>1) finish("double-close c="+clientCloses+" s="+serverCloses); };',
             'setTimeout(()=>finish("TIMEOUT c="+clientCloses+" s="+serverCloses+" 413="+got413), 4000).unref?.();',
-            "const s=http.createServer(()=>{ console.log('should-not-run'); });",
+            "const s=http.createServer((req,res)=>{ console.log('request at the head', req.headers['content-length'], req.complete); res.writeHead(413,{Connection:'close'}); res.end(); });",
             "s.on('connection',(ss)=>{",
             '  ss.on("close",()=>{ serverCloses++; console.log("server-close",serverCloses); maybe(); });',
             '});',
@@ -333,6 +333,7 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
       ]);
       assert.notEqual(r.status, 'HOST_TIMEOUT', '413 path hung past 8s host bound');
       assert.equal(r.status, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /^request at the head 999999999 false$/m);
       assert.match(r.stdout, /^413$/m);
       assert.match(r.stdout, /^server-close 1$/m);
       assert.match(r.stdout, /^client-close 1$/m);

@@ -199,6 +199,8 @@ const kConnSocket = Symbol('kConnSocket');
 const kConnected = Symbol('kConnected');
 const kEnded = Symbol('kEnded');
 const kStreaming = Symbol('kStreaming');
+const kFlushAsked = Symbol('kFlushAsked');
+const kChunkedOut = Symbol('kChunkedOut');
 const kResource = Symbol('kResource');
 const kAbortBody = Symbol('kAbortBody');
 const kFetchMode = Symbol('kFetchMode');
@@ -336,28 +338,6 @@ const CRLF = new Uint8Array([13, 10]);
 const RE_CONN_CLOSE = /(?:^|\W)close(?:$|\W)/i;
 const RE_TE_CHUNKED = /(?:^|\W)chunked(?:$|\W)/i;
 
-function decodeChunked(body, Buffer, maxBytes = MAX_HTTP_BODY) {
-  const parts = [];
-  let state = body;
-  let total = 0;
-  for (;;) {
-    const i = indexOfBytes(state, new Uint8Array([13, 10]));
-    if (i === -1) break;
-    const size = parseInt(Buffer.from(state.subarray(0, i)).toString(), 16);
-    if (Number.isNaN(size)) break;
-    const need = i + 2 + size + 2;
-    if (state.length < need) break;
-    if (size === 0) {
-      return { ok: true, body: Buffer.concat(parts), used: body.length - state.length + need };
-    }
-    total += size;
-    if (total > maxBytes) return { ok: false, tooLarge: true };
-    parts.push(Buffer.from(state.subarray(i + 2, i + 2 + size)));
-    state = state.subarray(need);
-  }
-  return { ok: false };
-}
-
 /** HEAD / 1xx / 204 / 304 never carry a response body (RFC 9110). */
 function responseHasNoBody(method, statusCode) {
   if (String(method || 'GET').toUpperCase() === 'HEAD') return true;
@@ -377,6 +357,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
 
   const Stream = stream.Stream;
   const nop = () => {};
+  const chunkFrame = (buf) => (buf.length ? Buffer.concat([Buffer.from(`${buf.length.toString(16)}\r\n`), buf, Buffer.from('\r\n')]) : buf);
 
   function IncomingMessage(socket) {
     Readable.call(this, socket ? { highWaterMark: socket.readableHighWaterMark } : undefined);
@@ -1304,6 +1285,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     const conn = { socket, idle: true };
     server._connections.add(conn);
     let requestTimer = null;
+    let pending = null;
+    let current = null;
     socket.once('close', () => {
       server._connections.delete(conn);
       clearTimeout(idleTimer);
@@ -1330,7 +1313,14 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     // Node's 408: the headers within headersTimeout (from the connection, or
     // a kept-alive one's next request), the whole request within requestTimeout.
     const timeout408 = () => {
-      if (busy || socket.destroyed) return;
+      if (socket.destroyed) return;
+      if (busy) {
+        if (!pending) return;
+        if (current?.res?.headersSent) {
+          destroy();
+          return;
+        }
+      }
       try {
         socket.end('HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n', destroy);
       } catch {
@@ -1444,48 +1434,104 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         res.end();
         return;
       }
-      let body;
-      let used;
       const headLength = buf.length - parsed.bodyPrefix.length;
       // RFC 9112: if Transfer-Encoding is present, it frames the body (ignore CL).
-      if (te.includes('chunked')) {
-        const decoded = decodeChunked(parsed.bodyPrefix, Buffer);
-        if (decoded.tooLarge) {
-          rejectPayloadTooLarge(socket, onData);
-          return;
-        }
-        if (!decoded.ok) return;
-        body = decoded.body;
-        used = headLength + decoded.used;
-      } else {
-        const cl = headers['content-length'] != null ? Number(headers['content-length']) : 0;
-        if (!Number.isFinite(cl) || cl < 0) {
+      const chunked = te.includes('chunked');
+      let left = 0;
+      if (!chunked) {
+        left = headers['content-length'] != null ? Number(headers['content-length']) : 0;
+        if (!Number.isFinite(left) || left < 0) {
           destroy();
           return;
         }
-        if (cl > MAX_HTTP_BODY) {
-          rejectPayloadTooLarge(socket, onData);
-          return;
-        }
-        if (parsed.bodyPrefix.length < cl) return;
-        body = parsed.bodyPrefix.subarray(0, cl);
-        used = headLength + cl;
       }
-      clearTimeout(requestTimer);
-      requestTimer = null;
-      // What follows this request (a pipelined one) waits its turn.
-      buf = Buffer.from(buf.subarray(used));
+      buf = Buffer.from(buf.subarray(headLength));
       busy = true;
       conn.idle = false;
       served++;
-      const req = makeIncomingMessage(socket, body);
+      const req = new IncomingMessage(socket);
       const emit = req.emit;
       req.emit = function (...args) {
         return runInResource(resource, emit, this, args);
       };
       setRequestLine(req, parsed, headers);
+      let bodyDone = false;
+      let resDone = false;
+      const chunk = { state: 'size', left: 0, trailers: null };
+      req[kIncomingRead] = () => socket.resume?.();
+      req[kIncomingDestroy] = (err, callback) => {
+        if (!req.readableEnded || !req.complete) {
+          req.aborted = true;
+          req.emit('aborted');
+        }
+        process.nextTick(() => callback(req.listenerCount('error') > 0 ? err : undefined));
+      };
+      const deliver = (bytes) => {
+        if (bytes.length && !req.push(Buffer.from(bytes))) socket.pause?.();
+      };
+      const complete = () => {
+        bodyDone = true;
+        pending = null;
+        clearTimeout(requestTimer);
+        requestTimer = null;
+        req.complete = true;
+        req.push(null);
+        handles?.notify?.();
+        if (resDone && !res._last && !socket.destroyed) keptAlive();
+      };
+      const badBody = () => {
+        pending = null;
+        bodyDone = true;
+        socketError(Object.assign(new Error('Parse Error: Invalid character in chunk size'), { code: 'HPE_INVALID_CHUNK_SIZE' }));
+      };
+      const feed = () => {
+        if (!chunked) {
+          const take = buf.subarray(0, left);
+          left -= take.length;
+          buf = Buffer.from(buf.subarray(take.length));
+          deliver(take);
+          if (left === 0) complete();
+          return;
+        }
+        for (;;) {
+          if (chunk.state === 'size' || chunk.state === 'trailer') {
+            const i = indexOfBytes(buf, CRLF);
+            if (i === -1) return;
+            const line = Buffer.from(buf.subarray(0, i)).toString('latin1');
+            buf = Buffer.from(buf.subarray(i + 2));
+            if (chunk.state === 'trailer') {
+              if (line === '') {
+                req.rawTrailers = chunk.trailers ?? [];
+                req[kTrailers] = null;
+                complete();
+                return;
+              }
+              const colon = line.indexOf(':');
+              if (colon > 0) (chunk.trailers ??= []).push(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
+              continue;
+            }
+            const size = /^[0-9a-fA-F]+/.test(line.trim()) ? parseInt(line.split(';')[0].trim(), 16) : NaN;
+            if (Number.isNaN(size)) return badBody();
+            chunk.left = size;
+            chunk.state = size === 0 ? 'trailer' : 'data';
+          } else if (chunk.state === 'data') {
+            if (buf.length === 0) return;
+            const take = buf.subarray(0, chunk.left);
+            chunk.left -= take.length;
+            buf = Buffer.from(buf.subarray(take.length));
+            deliver(take);
+            if (chunk.left > 0) return;
+            chunk.state = 'crlf';
+          } else {
+            if (buf.length < 2) return;
+            buf = Buffer.from(buf.subarray(2));
+            chunk.state = 'size';
+          }
+        }
+      };
       const res = new ServerResponse(req);
       res.assignSocket(socket);
+      current = { req, res, bodyDone: () => bodyDone };
       // Node's shouldKeepAlive: HTTP/1.1 unless the client says close, and
       // below maxRequestsPerSocket. A connection that is open when close()
       // is called keeps serving as before (Node 22): it closes when idle.
@@ -1502,11 +1548,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           res.destroyed = true;
           process.nextTick(() => res[kEmitClose]());
         }
-        if (!req.destroyed) req.destroy();
+        if (!req.destroyed) req.destroy(bodyDone ? undefined : Object.assign(new Error('aborted'), { code: 'ECONNRESET' }));
       };
       // Node (httpAllowHalfOpen false): the client's FIN aborts a response
       // still going, and the server ends its side.
       const onEnd = () => {
+        if (!bodyDone) {
+          socketError(Object.assign(new Error('Parse Error: Invalid EOF state'), { code: 'HPE_INVALID_EOF_STATE' }));
+          return;
+        }
         if (res.writableFinished) return;
         gone();
         try {
@@ -1518,32 +1568,74 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       socket.once('close', gone);
       socket.once('end', onEnd);
       const keptAlive = () => {
+        current = null;
         socket.off('close', gone);
         socket.off('end', onEnd);
         busy = false;
         conn.idle = true;
         // The request's 'close' (Node emits it once the response is done).
-        if (!req.destroyed) req.destroy();
+        if (req.readableEnded) {
+          if (!req.destroyed) req.destroy();
+        } else req.once('end', () => req.destroy());
         armIdle();
         queueMicrotask(pump);
       };
       res.on('finish', () => {
+        resDone = true;
+        if (!req._consuming && !req._readableState.resumeScheduled) req._dump();
         res.detachSocket(socket);
         process.nextTick(() => res[kEmitClose]());
         if (socket.destroyed) return;
-        if (!res._last) keptAlive();
+        if (!res._last) {
+          if (bodyDone) keptAlive();
+        }
         else if (server._closing) closeGracefully(socket);
         else {
           socket.unref?.();
           destroy();
         }
       });
+      pending = bodyDone ? null : feed;
+      const expect = headers.expect;
+      if (expect !== undefined && req.httpVersionMajor === 1 && req.httpVersionMinor === 1) {
+        if (/^100-continue$/i.test(String(expect).trim())) {
+          if (server.listenerCount('checkContinue') > 0) server.emit('checkContinue', req, res);
+          else {
+            res.writeContinue();
+            emitRequest(req, res);
+          }
+        } else if (server.listenerCount('checkExpectation') > 0) server.emit('checkExpectation', req, res);
+        else {
+          res.writeHead(417);
+          res.end();
+        }
+      } else emitRequest(req, res);
+      if (pending && !socket.destroyed) pending();
+    };
+    const emitRequest = (req, res) => {
       server.emit('request', req, res);
       if (typeof requestListener === 'function') requestListener(req, res);
     };
+    const socketError = (err) => {
+      socket.off('data', onData);
+      if (server.listenerCount('clientError') > 0) {
+        server.emit('clientError', err, socket);
+        return;
+      }
+      if (socket.writable && !(current?.res?.headersSent)) {
+        try {
+          socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n', () => socket.destroy(err));
+          return;
+        } catch {
+          /* ignore */
+        }
+      }
+      socket.destroy(err);
+    };
     const onData = (chunk) => {
       buf = Buffer.concat([buf, chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk)]);
-      pump();
+      if (pending) pending();
+      else pump();
     };
     // The client ends an idle connection: so does the server.
     const onSocketEnd = () => {
@@ -2009,6 +2101,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     clearTimeout(callback) {
       return this.setTimeout(0, callback);
     },
+    flushHeaders() {
+      if (this[kFetchVia] || this[kFetchMode]) return;
+      this[kFlushAsked] = true;
+      if (this[kConnected]) this[kFlushHead]();
+    },
     setNoDelay(noDelay) {
       this._deferToConnect('setNoDelay', [noDelay]);
     },
@@ -2127,7 +2224,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         this.emit('socket', socket);
         // With Content-Length: send headers + any buffered body and stream the rest.
         // Without: wait for end() and send one framed request (buffer until end).
-        if (rawHeader(this, 'content-length') != null || this[kEnded]) {
+        if (rawHeader(this, 'content-length') != null || this[kEnded] || this[kFlushAsked]) {
           this[kFlushHead]();
         }
       };
@@ -2510,8 +2607,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       this._headerSent = true;
       const body = Buffer.concat(this[kChunks]);
       this[kChunks] = [];
+      let framed = body;
       if (rawHeader(this, 'content-length') != null) {
         this[kStreaming] = true;
+      } else if (!this[kEnded]) {
+        this[kStreaming] = true;
+        const method = (this[kOpts].method ?? 'GET').toUpperCase();
+        if (!['GET', 'HEAD', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT'].includes(method) && rawHeader(this, 'transfer-encoding') == null) {
+          setRawHeader(this, 'Transfer-Encoding', 'chunked');
+          this[kChunkedOut] = true;
+          framed = chunkFrame(body);
+        }
       } else if (this[kEnded]) {
         // Node: a GET / HEAD / DELETE / OPTIONS / TRACE / CONNECT with no body
         // sends no Content-Length (the others send 0).
@@ -2521,11 +2627,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       }
       const head = this[kRenderHead]();
       this._header = head.toString('latin1');
-      this[kConnSocket].write(Buffer.concat([head, body]));
+      this[kConnSocket].write(Buffer.concat([head, framed]));
     },
 
     [kWriteBody](buf, callback) {
-      if (this._headerSent && this[kStreaming]) return this[kTrackWrite](buf, callback);
+      if (this._headerSent && this[kStreaming]) return this[kTrackWrite](this[kChunkedOut] ? chunkFrame(buf) : buf, callback);
       this[kChunks].push(buf);
       // Content-Length known and socket up: start streaming now.
       if (!this._headerSent && this[kConnected] && rawHeader(this, 'content-length') != null) this[kFlushHead]();
@@ -2542,6 +2648,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         // No Content-Length: buffer until end, then send with computed CL.
         if (this[kConnected]) this[kFlushHead]();
         // else: connect handler will flush once the socket is up
+      } else if (this[kChunkedOut]) {
+        const data = Buffer.concat(this[kChunks]);
+        this[kChunks] = [];
+        this[kTrackWrite](Buffer.concat([chunkFrame(data), Buffer.from('0\r\n\r\n')]), nop);
       } else if (this[kChunks].length && this[kStreaming]) {
         const data = Buffer.concat(this[kChunks]);
         this[kChunks] = [];

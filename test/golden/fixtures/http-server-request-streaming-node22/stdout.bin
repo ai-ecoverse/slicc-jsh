@@ -1,0 +1,16 @@
+early answer before the body, then the rest and a second request | client got: HTTP/1.1 200 OK / early answerHTTP/1.1 200 OK / body=ok
+early | server: request early complete false, request plain complete false, body "ok", req close
+content-length upload streamed | client got: HTTP/1.1 200 OK / 8 / ack=aa / 8 / ack=bb / 8 / ack=cc / 8 / done=1 / 0
+stream cl | server: request stream complete false, data aa, data bb, data cc, end complete true
+chunked upload streamed, with a trailer | client got: HTTP/1.1 200 OK / 8 / ack=aa / 8 / ack=bb / 8 / done=1 / 0
+stream chunked | server: request stream complete false, data aa, data bb, end complete true trailer yes
+expect 100-continue | client got: HTTP/1.1 100 Continue / HTTP/1.1 200 OK / body=body
+continue | server: request plain complete false, body "body", req close
+an expectation the server does not meet | client got: HTTP/1.1 417 Expectation Failed / 0
+expectation | server: checkExpectation something
+the client goes mid-body | client got: HTTP/1.1 400 Bad Request
+gone | server: request plain complete false, aborted, req error ECONNRESET aborted, req close
+a checkContinue listener | client got: HTTP/1.1 100 Continue / HTTP/1.1 200 OK / cc=hi
+checkContinue | server: checkContinue /up
+flushHeaders sends the head: POST / HTTP/1.1 | end() called yet: false
+closed
