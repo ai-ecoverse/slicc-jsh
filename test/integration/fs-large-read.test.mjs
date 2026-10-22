@@ -5,12 +5,22 @@ import { withJsh } from './helpers.mjs';
 
 const MIB = 1024 * 1024;
 
-async function sized(root, name, size) {
+const unreadable = () => Promise.reject(new DOMException('a stand-in for a file too large to hold', 'NotReadableError'));
+
+async function sized(root, name, size, { readable = MIB * 64 } = {}) {
   const dir = await root.getDirectoryHandle('os', { create: true });
   const handle = await dir.getFileHandle(name, { create: true });
   const mib = new Blob([new Uint8Array(MIB)]);
   const parts = [...Array(Math.ceil(size / MIB) - 1).fill(mib), mib.slice(0, size - (Math.ceil(size / MIB) - 1) * MIB)];
-  handle.getFile = async () => new File(parts, name);
+  class Large extends File {
+    slice(start = 0, end = this.size) {
+      return end > readable ? { size: end - start, arrayBuffer: unreadable } : super.slice(start, end);
+    }
+    arrayBuffer() {
+      return this.size > readable ? unreadable() : super.arrayBuffer();
+    }
+  }
+  handle.getFile = async () => new Large(parts, name);
 }
 
 describe('fs.readFile of a file over 2 GiB (kernel)', () => {
@@ -20,6 +30,7 @@ describe('fs.readFile of a file over 2 GiB (kernel)', () => {
     jsh = await withJsh({ root });
     await sized(root, 'two-gib.bin', 2 ** 31);
     await sized(root, 'four-gib.bin', 2 ** 32 + 5);
+    await sized(root, 'tail.bin', 2 ** 31, { readable: Infinity });
   });
   after(() => jsh?.close());
 
@@ -89,7 +100,7 @@ describe('fs.readFile of a file over 2 GiB (kernel)', () => {
       [
         "const fs = require('fs');",
         "const at = (fd) => { const b = Buffer.allocUnsafe(64 * 1024 * 1024); let pos = 0; while (pos < 2 ** 31 - 16) pos += fs.readSync(fd, b, 0, Math.min(b.length, 2 ** 31 - 16 - pos), null); return fd; };",
-        "const fd = at(fs.openSync('two-gib.bin', 'r'));",
+        "const fd = at(fs.openSync('tail.bin', 'r'));",
         "const tail = fs.readFileSync(fd, 'utf8');",
         "console.log(tail.length, JSON.stringify(fs.readFileSync(fd, 'utf-8')));",
         "try { fs.readFileSync(fd); } catch (e) { console.log(e.code); }",
