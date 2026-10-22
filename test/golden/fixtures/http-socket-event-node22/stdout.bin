@@ -5,3 +5,7 @@ keepAlive reused | after http.get: req.socket false, socket: connecting false, s
 keepAlive, prepended end | prepended end: res.socket set, req.destroyed false, writableFinished true; end: res.socket null, req.destroyed true, writableFinished true
 keepAlive, response before the body is sent | end: res.socket set, req.destroyed false, writableFinished false; finish: res.socket null, req.destroyed true, writableFinished true
 maxSockets 1 without keepAlive | end: res.socket null, req.destroyed true, writableFinished true, shouldKeepAlive true | sent "keep-alive"
+destroy at sync | error ECONNRESET socket hang up, close
+destroy at socket | socket, error ECONNRESET socket hang up, close
+destroy at connect | socket, error ECONNRESET socket hang up, close
+early response then FIN, still writing | response 413, end, close, destroyed true, writableFinished false

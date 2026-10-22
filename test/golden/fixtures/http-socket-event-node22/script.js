@@ -91,5 +91,44 @@ srv.listen(0, '127.0.0.1', async () => {
       resolve();
     });
   });
+  for (const when of ['sync', 'socket', 'connect']) {
+    await new Promise((resolve) => {
+      const events = [];
+      const req = http.get({ host: '127.0.0.1', port, agent: false });
+      if (when === 'sync') req.destroy();
+      req.on('socket', (s) => {
+        events.push('socket');
+        if (when === 'socket') req.destroy();
+        else if (when === 'connect') s.once('connect', () => req.destroy());
+      });
+      req.on('error', (e) => events.push(`error ${e.code} ${e.message}`));
+      req.on('close', () => {
+        console.log(`destroy at ${when} |`, events.concat('close').join(', '));
+        resolve();
+      });
+    });
+  }
+  const fin = net.createServer((s) => {
+    let got = '';
+    s.on('data', (d) => {
+      got += d;
+      if (got.includes('\r\n\r\n')) s.end('HTTP/1.1 413 Payload Too Large\r\nContent-Length: 3\r\n\r\nbig');
+    });
+  });
+  await new Promise((r) => fin.listen(0, '127.0.0.1', r));
+  await new Promise((resolve) => {
+    const events = [];
+    const req = http.request({ host: '127.0.0.1', port: fin.address().port, method: 'PUT', headers: { 'content-length': 30000 } }, (res) => {
+      events.push(`response ${res.statusCode}`);
+      res.on('end', () => events.push('end'));
+      res.resume();
+    });
+    req.on('error', (e) => events.push(`error ${e.code}`));
+    req.on('close', () => {
+      console.log('early response then FIN, still writing |', events.concat(`close, destroyed ${req.destroyed}, writableFinished ${req.writableFinished}`).join(', '));
+      fin.close(resolve);
+    });
+    req.write(Buffer.alloc(1000));
+  });
   srv.close();
 });

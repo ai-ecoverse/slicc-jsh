@@ -203,6 +203,7 @@ const kFlushAsked = Symbol('kFlushAsked');
 const kChunkedOut = Symbol('kChunkedOut');
 const kResource = Symbol('kResource');
 const kAbortBody = Symbol('kAbortBody');
+const kHangUp = Symbol('kHangUp');
 const kFetchMode = Symbol('kFetchMode');
 const kFetchSent = Symbol('kFetchSent');
 const kFetchAbort = Symbol('kFetchAbort');
@@ -2749,6 +2750,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         quietClose();
       };
       this[kAbortBody] = abortBody;
+      this[kHangUp] = () => !res && !emitted;
       const deliver = (bytes) => {
         if (bytes.length === 0 || finished) return;
         if (!res.push(bytes)) socket.pause?.();
@@ -2919,6 +2921,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           quietClose();
           return;
         }
+        if (awaitingFinish && !released) {
+          released = true;
+          this.off('finish', keepAlive);
+          quietClose();
+          this.destroy();
+          return;
+        }
         if (!res || finished) return;
         // Framed by the peer's FIN: done; any other framing: cut short.
         if (framing.kind === 'eof') finish();
@@ -3011,6 +3020,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
 
     destroy(err) {
       if (this.destroyed) return this;
+      if (!err && !this.aborted && !this[kFetchMode] && this[kHangUp]?.()) err = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
       this.destroyed = true;
       if (err) this[kErrored] = err;
       // req.destroy(): the connection goes, and a body still coming is cut short.
