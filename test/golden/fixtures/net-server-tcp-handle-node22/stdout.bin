@@ -7,6 +7,8 @@ handle unref false
 handle ref true
 still accepting hi
 close returns undefined
+closing: getsockname -9 {} address EBADF -9 address address EBADF hasRef true
+closed: getsockname -9 {} address EBADF -9 address address EBADF hasRef false
 handle closed, listening true true
 after the handle closed ECONNREFUSED
 server closed false null

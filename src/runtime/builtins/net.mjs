@@ -675,6 +675,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#ops = ops;
     }
     getsockname(out) {
+      if (this.#ops.closed()) return -9;
       Object.assign(out, this.#ops.address());
       return 0;
     }
@@ -727,6 +728,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
 
     address() {
       if (!this.#listener) return null;
+      if (this.#handleClosed === this.#listener) throw Object.assign(new Error('address EBADF'), { errno: -9, code: 'EBADF', syscall: 'address' });
       if (this.#clusterAddress) return { ...this.#clusterAddress };
       return {
         address: this.#listener.host || '127.0.0.1',
@@ -812,6 +814,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             this._handle = new TCP(listener.fd, {
               address: () => this.address(),
               close: (callback) => this.#closeHandle(listener, callback),
+              closed: () => this.#handleClosed === listener,
               ref: () => this.ref(),
               unref: () => this.unref(),
               hasRef: () => !this.#unref && !!this.#handle,
@@ -844,10 +847,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       const resource = resourceHere();
       try {
         for (;;) {
-          if (this.#closed || this.#listener !== listener) break;
+          if (this.#closed || this.#listener !== listener || this.#handleClosed === listener) break;
           // The server's handle keeps the loop alive (or not, unref'd): a
           // pending accept is not a handle of its own.
           const conn = await listener.accept({ signal: this.#acceptAbort.signal });
+          if (this.#handleClosed === listener) {
+            closeQuietly(conn);
+            break;
+          }
           const socket = new Socket({ allowHalfOpen: Boolean(this.#options.allowHalfOpen) });
           this.#connections++;
           socket[kServer] = this;
@@ -930,12 +937,22 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         return;
       }
       this.#handleClosed = listener;
-      if (this.#handle) {
-        handles.delete(this.#handle);
-        this.#handle = undefined;
-      }
       this.#acceptAbort?.abort();
-      trackPromise(handles, Promise.resolve(listener.close?.()).catch(() => {}).then(done)).catch(() => {});
+      const handle = this.#handle;
+      let closing;
+      try {
+        closing = Promise.resolve(listener.close?.()).catch(() => {});
+      } catch {
+        closing = Promise.resolve();
+      }
+      const closed = closing.then(() => {
+        if (handle && this.#handle === handle) {
+          handles.delete(handle);
+          this.#handle = undefined;
+        }
+        nextTick(done);
+      });
+      trackPromise(handles, closed).catch(() => {});
     }
 
     /** One of this server's connections went (its socket's _destroy). */
