@@ -1,0 +1,1 @@
+{ "description": "request-line, header, content-length and transfer-encoding forms Node 22 accepts or rejects, each followed by a pipelined request, compared on status, the requests seen, and whether the connection stayed open", "argv": ["script.js"], "shim": true }
