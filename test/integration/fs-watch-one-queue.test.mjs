@@ -1,8 +1,10 @@
-import { describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createFsWatch } from '../../src/runtime/builtins/fs-watch.mjs';
 import { createHandleTable } from '../../src/runtime/handles.mjs';
+import { kernelAtLeast, withJsh } from './helpers.mjs';
 
 function standInKernel(roundTrip) {
   let tail = Promise.resolve();
@@ -120,5 +122,48 @@ describe('fs.watch: one queue over watches the kernel hands out apart', () => {
     w.close();
     assert.equal(first, 'f0.txt');
     assert.ok(made < 1000, `${made} changes made before the first came out`);
+  });
+});
+
+describe('fs.watch: one queue, every round trip of the kernel transport 5 ms late (kernel)', { skip: !kernelAtLeast('1.143.4') }, () => {
+  const fixture = new URL('../golden/fixtures/fs-watch-overwrite-node22/', import.meta.url);
+  let jsh;
+  before(async () => {
+    jsh = await withJsh({ worker: new URL('./slow-process-worker.mjs', import.meta.url) });
+  });
+  after(() => jsh?.close());
+
+  it("fs-watch-overwrite-node22's rows each get their own events", async () => {
+    await jsh.kernel.writeFile('/os/overwrite.js', readFileSync(new URL('script.js', fixture)));
+    const r = await jsh.run(['node', 'overwrite.js']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, readFileSync(new URL('stdout.bin', fixture), 'utf8'));
+  });
+
+  it('a program that changes a file on every turn still hears the first change', async () => {
+    await jsh.kernel.writeFile(
+      '/os/busy.js',
+      `const fs = require('fs');
+fs.mkdirSync('busy');
+let made = 0;
+const w = fs.watch('busy', (type, name) => {
+  w.close();
+  made = Infinity;
+  console.log(type, name);
+});
+const change = () => {
+  if (made === Infinity) return;
+  if (made === 1000) return console.log('nothing heard after', made, 'changes');
+  fs.writeFileSync(\`busy/f\${made++}.txt\`, '');
+  setImmediate(change);
+};
+change();
+`
+    );
+    const r = await jsh.run(['node', 'busy.js']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, 'rename f0.txt\n');
   });
 });
