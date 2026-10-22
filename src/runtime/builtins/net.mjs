@@ -668,9 +668,27 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
   }
 
   class TCP {
-    constructor(fd) {
+    #ops;
+    constructor(fd, ops) {
       this.reading = false;
       this.fd = fd;
+      this.#ops = ops;
+    }
+    getsockname(out) {
+      Object.assign(out, this.#ops.address());
+      return 0;
+    }
+    close(callback) {
+      this.#ops.close(callback);
+    }
+    ref() {
+      this.#ops.ref();
+    }
+    unref() {
+      this.#ops.unref();
+    }
+    hasRef() {
+      return this.#ops.hasRef();
     }
   }
 
@@ -691,6 +709,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #clusterAddress;
     #unref = false;
     #generation = 0;
+    #handleClosed;
     _handle = null;
     maxConnections = Infinity;
 
@@ -790,7 +809,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             }
             this.#listener = listener;
             this.#listening = true;
-            this._handle = new TCP(listener.fd);
+            this._handle = new TCP(listener.fd, {
+              address: () => this.address(),
+              close: (callback) => this.#closeHandle(listener, callback),
+              ref: () => this.ref(),
+              unref: () => this.unref(),
+              hasRef: () => !this.#unref && !!this.#handle,
+            });
             this.#handle = { kind: 'server', fd: listener.fd };
             if (!this.#unref) handles.add(this.#handle);
             try {
@@ -831,7 +856,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           handles.notify();
         }
       } catch (err) {
-        if (!this.#closed && this.#listener === listener && err?.name !== 'AbortError') {
+        if (!this.#closed && this.#listener === listener && this.#handleClosed !== listener && err?.name !== 'AbortError') {
           runInResource(resource, this.emit, this, ['error', errnoError(err, 'accept')]);
         }
       }
@@ -886,7 +911,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#pendingListens.clear();
       // The kernel's close keeps the loop alive until it is done (Node's
       // handle does, until its close callback).
-      trackPromise(handles, Promise.resolve(listener?.close?.()).catch(() => {})).catch(() => {});
+      if (listener !== this.#handleClosed) trackPromise(handles, Promise.resolve(listener?.close?.()).catch(() => {})).catch(() => {});
+      this.#handleClosed = undefined;
       // Node: 'close' on a later tick once every connection has ended
       // (_emitCloseIfDrained), not while one is still open; it doesn't wait
       // for the kernel's close (its fd closes inside close()). The kernel
@@ -895,6 +921,21 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#listenerClosed = true;
       this.#emitCloseIfDrained();
       return this;
+    }
+
+    #closeHandle(listener, callback) {
+      const done = typeof callback === 'function' ? () => callback() : () => {};
+      if (this.#listener !== listener || this.#handleClosed === listener) {
+        nextTick(done);
+        return;
+      }
+      this.#handleClosed = listener;
+      if (this.#handle) {
+        handles.delete(this.#handle);
+        this.#handle = undefined;
+      }
+      this.#acceptAbort?.abort();
+      trackPromise(handles, Promise.resolve(listener.close?.()).catch(() => {}).then(done)).catch(() => {});
     }
 
     /** One of this server's connections went (its socket's _destroy). */
