@@ -1379,6 +1379,24 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         server.emit('upgrade', req, socket, Buffer.from(parsed.bodyPrefix));
         return;
       }
+      if (parsed.httpVersion === '1.1' && parsed.method !== 'CONNECT' && server.requireHostHeader && headers.host === undefined) {
+        clearTimeout(requestTimer);
+        requestTimer = null;
+        socket.off('data', onData);
+        busy = true;
+        buf = Buffer.alloc(0);
+        const req = makeIncomingMessage(socket, Buffer.alloc(0));
+        setRequestLine(req, parsed, headers);
+        const res = new ServerResponse(req);
+        res.assignSocket(socket);
+        res.on('finish', () => {
+          res.detachSocket(socket);
+          destroy();
+        });
+        res.writeHead(400, ['Connection', 'close']);
+        res.end();
+        return;
+      }
       let body;
       let used;
       const headLength = buf.length - parsed.bodyPrefix.length;
@@ -1473,11 +1491,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           destroy();
         }
       });
-      if (req.httpVersionMajor === 1 && req.httpVersionMinor === 1 && server.requireHostHeader && req.headers.host === undefined) {
-        res.writeHead(400, ['Connection', 'close']);
-        res.end();
-        return;
-      }
       server.emit('request', req, res);
       if (typeof requestListener === 'function') requestListener(req, res);
     };

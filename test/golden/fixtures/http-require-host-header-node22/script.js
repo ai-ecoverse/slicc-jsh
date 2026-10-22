@@ -1,8 +1,8 @@
 const http = require('http');
 const net = require('net');
-const raw = (port, text) =>
+const raw = (port, text, fin) =>
   new Promise((resolve) => {
-    const c = net.connect(port, '127.0.0.1', () => c.write(text));
+    const c = net.connect(port, '127.0.0.1', () => (fin ? c.end(text) : c.write(text)));
     let out = '';
     c.on('data', (d) => {
       out += d;
@@ -31,6 +31,25 @@ const rows = [
     console.log('handled', seen.join(' '));
     s.close();
   }
+  const early = [];
+  const e = http.createServer((req, res) => {
+    early.push(req.method + ' ' + req.url);
+    res.end('handled ' + req.url);
+  });
+  e.on('upgrade', (req, sock) => {
+    early.push('upgrade ' + req.url);
+    sock.end('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: x\r\n\r\n');
+  });
+  await new Promise((r) => e.listen(0, '127.0.0.1', r));
+  for (const [label, text, fin] of [
+    ['the head only, a length, then FIN', 'POST /h HTTP/1.1\r\nContent-Length: 3\r\n\r\n', true],
+    ['the head only, chunked, then FIN', 'POST /i HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n', true],
+    ['an absolute-form target, then FIN', 'POST http://elsewhere.example/j HTTP/1.1\r\nContent-Length: 4\r\n\r\n', true],
+    ['a large body never sent', 'POST /k HTTP/1.1\r\nContent-Length: 100000000\r\n\r\n', false],
+    ['an upgrade', 'GET /l HTTP/1.1\r\nConnection: Upgrade\r\nUpgrade: x\r\n\r\n', false],
+  ]) console.log(label, JSON.stringify(await raw(e.address().port, text, fin)));
+  console.log('before the body', early.join(' | '));
+  e.close();
   const s = http.createServer((req, res) => res.end('ok'));
   s.requireHostHeader = false;
   await new Promise((r) => s.listen(0, '127.0.0.1', r));
