@@ -1,0 +1,5 @@
+{
+  "description": "an http server's connection lifecycle, compared with Node 22 on raw sockets: pipelined requests already buffered when the client sends FIN are all parsed and their responses kept, the FIN then ends the connection or is HPE_INVALID_EOF_STATE mid-message; a pipelined response does not arm the keep-alive timeout while a request behind it is still uploading, and a partial next head does not stop it; only the response holding the socket emits close; req.destroy() on an unfinished request destroys its socket; an early Connection: close response closes without the rest of the upload",
+  "argv": ["script.js"],
+  "shim": true
+}
