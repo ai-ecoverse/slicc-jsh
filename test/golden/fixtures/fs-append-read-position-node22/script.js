@@ -15,8 +15,27 @@ fd = fs.openSync(f, 'a+');
 console.log('written', fs.writeSync(fd, 'XY'));
 console.log('after the write', JSON.stringify(read(fd, 4)));
 console.log('at 0', b.toString('latin1', 0, fs.readSync(fd, b, 0, 16, 0)));
+console.log('after a positioned read', JSON.stringify(read(fd, 4)));
 console.log('size', fs.fstatSync(fd).size);
 fs.closeSync(fd);
+fs.writeFileSync(f, 'abcdef');
+fd = fs.openSync(f, 'a+');
+read(fd, 3);
+fs.writeSync(fd, 'Z');
+console.log('a write mid-file appends', JSON.stringify(read(fd, 4)), fs.readFileSync(f, 'latin1'));
+fs.closeSync(fd);
+fs.writeFileSync(f, 'abcdef');
+fd = fs.openSync(f, 'a+');
+fs.appendFileSync(fd, '!');
+console.log('appendFileSync(fd) on a+', JSON.stringify(read(fd, 4)), fs.readFileSync(f, 'latin1'));
+fs.closeSync(fd);
+fs.writeFileSync(f, 'abcdef');
+fd = fs.openSync(f, 'r+');
+read(fd, 2);
+fs.appendFileSync(fd, '!');
+console.log('appendFileSync(fd) on r+', JSON.stringify(read(fd, 4)), fs.readFileSync(f, 'latin1'));
+fs.closeSync(fd);
+fs.writeFileSync(f, 'abcdefXY');
 fd = fs.openSync(f, 'a+');
 console.log('readFileSync(fd) fresh', JSON.stringify(fs.readFileSync(fd, 'latin1')));
 fs.closeSync(fd);
@@ -27,11 +46,27 @@ fs.closeSync(fd);
   console.log('FileHandle.readFile', JSON.stringify(await fh.readFile('latin1')));
   await fh.close();
   fd = fs.openSync(f, 'a+');
-  let streamed = '';
-  fs.createReadStream(null, { fd, encoding: 'latin1' })
-    .on('data', (d) => (streamed += d))
-    .on('close', () => {
-      console.log('read stream', JSON.stringify(streamed));
-      fs.rmSync(dir, { recursive: true, force: true });
+  read(fd, 3);
+  const streamed = (s, then) => {
+    let got = '';
+    s.on('data', (d) => (got += d)).on('end', () => then(got));
+  };
+  streamed(fs.createReadStream(null, { fd, encoding: 'latin1', autoClose: false }), (got) => {
+    console.log('read stream from the cursor', JSON.stringify(got), 'then', JSON.stringify(read(fd, 4)));
+    fs.closeSync(fd);
+    const fd2 = fs.openSync(f, 'r');
+    read(fd2, 1);
+    streamed(fs.createReadStream(null, { fd: fd2, encoding: 'latin1', end: 2 }), (got2) => {
+      console.log('read stream to end 2 from the cursor', JSON.stringify(got2));
+      streamed(fs.createReadStream(f, { flags: 'a+', encoding: 'latin1' }), (got3) => {
+        console.log('read stream a+', JSON.stringify(got3));
+        const ws = fs.createWriteStream(f, { flags: 'a+' });
+        ws.on('close', () => {
+          console.log('write stream a+', fs.readFileSync(f, 'latin1'));
+          fs.rmSync(dir, { recursive: true, force: true });
+        });
+        ws.end('MN');
+      });
     });
+  });
 })();

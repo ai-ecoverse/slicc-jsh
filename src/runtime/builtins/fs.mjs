@@ -1386,16 +1386,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         return;
       }
       if (typeof p === 'number') {
-        const ent = fdTable.get(p);
-        let end = null;
-        if (ent) {
-          try {
-            end = ent.file ? ent.file.size() : (syncFs.stat(ent.path).size ?? 0);
-          } catch {
-            end = 0;
-          }
-        }
-        syncApi.writeSync(p, next, 0, next.length, end);
+        let off = 0;
+        do off += syncApi.writeSync(p, next, off, next.length - off);
+        while (off < next.length);
         return;
       }
       const pathArg = p;
@@ -2424,7 +2417,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     const highWaterMark = options?.highWaterMark ?? 64 * 1024;
     let fd = options?.fd;
     let autoClose = options?.autoClose !== false;
-    let pos = options?.start ?? 0;
+    let pos = options?.start;
     const end = options?.end;
     let opened = fd != null;
     let openEmitted = opened;
@@ -2460,19 +2453,19 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
               r.emit('ready');
             }
           }
-          const toRead = end != null ? Math.min(size, end - pos + 1) : size;
+          const toRead = end != null ? Math.min(size, end - (pos ?? r.bytesRead) + 1) : size;
           if (toRead <= 0) {
             this.push(null);
             return;
           }
           const buf = Buffer.alloc(toRead);
-          const n = syncApi.readSync(fd, buf, 0, toRead, pos);
+          const n = syncApi.readSync(fd, buf, 0, toRead, pos ?? null);
           r.bytesRead += n;
           if (n === 0) {
             this.push(null);
             return;
           }
-          pos += n;
+          if (pos !== undefined) pos += n;
           const chunk = buf.subarray(0, n);
           this.push(chunk);
         } catch (err) {
