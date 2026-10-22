@@ -1,0 +1,18 @@
+first read "abc"
+readFileSync(fd) "def"
+at the end ""
+written 2
+after the write ""
+at 0 abcdefXY
+after a positioned read ""
+size 8
+a write mid-file appends "" abcdefZ
+appendFileSync(fd) on a+ "" abcdef!
+appendFileSync(fd) on r+ "def" ab!def
+readFileSync(fd) fresh "abcdefXY"
+FileHandle.read 4 "abcd"
+FileHandle.readFile "efXY"
+read stream from the cursor "defXY" then ""
+read stream to end 2 from the cursor "bcd"
+read stream a+ "abcdefXY"
+write stream a+ abcdefXYMN
