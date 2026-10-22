@@ -3,5 +3,6 @@
   "argv": [
     "script.js"
   ],
-  "shim": true
+  "shim": true,
+  "kernel": "1.125.11"
 }
