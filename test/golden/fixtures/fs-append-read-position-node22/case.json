@@ -1,0 +1,1 @@
+{ "description": "an 'a+' descriptor reads from offset 0 as Node 22's does (O_APPEND moves the offset only for a write): readSync with a null position, readFileSync(fd), a write then a read at the end, FileHandle.read and readFile, a read stream on the fd", "argv": ["script.js"], "shim": true }

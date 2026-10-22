@@ -1,0 +1,11 @@
+first read "abc"
+readFileSync(fd) "def"
+at the end ""
+written 2
+after the write ""
+at 0 abcdefXY
+size 8
+readFileSync(fd) fresh "abcdefXY"
+FileHandle.read 4 "abcd"
+FileHandle.readFile "efXY"
+read stream "abcdefXY"

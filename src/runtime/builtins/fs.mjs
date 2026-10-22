@@ -1633,21 +1633,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
           throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
         }
       }
-      let pos = 0;
-      if (fl.append) {
-        try {
-          pos = syncFs.stat(target).size ?? 0;
-        } catch {
-          pos = 0;
-        }
-      }
       const ranged = openHeld(target, pathArg, fl.writable ? { read: !!fl.readable, write: true, append: !!fl.append } : undefined);
       const fd = nextFd++;
       fdTable.set(fd, {
         path: target,
         flags: fl.raw,
         append: fl.append,
-        pos,
+        pos: 0,
         readable: fl.readable || fl.raw === 'r',
         writable: fl.writable,
         file: ranged?.file ?? null,
