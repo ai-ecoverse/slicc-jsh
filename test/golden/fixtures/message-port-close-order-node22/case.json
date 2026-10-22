@@ -1,0 +1,5 @@
+{
+  "description": "#760: a MessagePort's 'close' comes in Node 22's closing phase (libuv's uv__run_closing_handles), after the check phase, the last handle closed first. A port the program closes is one at once: it delivers nothing more, receiveMessageOnPort() takes what it holds until its 'close', and its other end is told then. The other end closes in a later poll phase, after what it still holds, in the order the ports were made, so the ends of ports closed in one turn get 'close' last made first. Only a ref'd handle keeps the loop going to tell it: with a 'close' listener alone (or unref'd), it never gets one unless something else runs (a timer, a beforeExit that goes on).",
+  "argv": ["main.js"],
+  "shim": true
+}

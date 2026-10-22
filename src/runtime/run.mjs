@@ -471,6 +471,7 @@ export async function runNode(ctx, options = {}) {
     inCheck: () => timers.inCheck(),
     checkCut: () => timers.checkCut(),
     timerAt: () => timers.timerAt(),
+    immediatePending: (cut) => timers.immediatePending(cut),
     endTurn: () => timers.startCheck(),
   };
   const ports = createPorts({
@@ -534,8 +535,10 @@ export async function runNode(ctx, options = {}) {
   };
 
   const timers = createTimers(handles, {
-    hold: (due) => (delivering.active || timers.checkPending()) && due > delivering.since,
-    holdImmediate: (seq) => delivering.active || (delivering.pending && seq >= delivering.cut),
+    hold: (due) =>
+      ((delivering.active || timers.checkPending()) && due > delivering.since) ||
+      (delivering.pending && delivering.cut === 0 && due > delivering.postedAt()),
+    holdImmediate: (seq) => delivering.active || (delivering.pending && seq >= delivering.cut) || seq >= delivering.closingCut(),
     afterCallback: () => flushTicks(),
     onCallbackError: (err) => {
       if (isExitError(err) || getDidExit()) {
