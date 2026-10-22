@@ -2,7 +2,7 @@
  * node:http over net (ctx.net loopback) + IncomingMessage / ServerResponse.
  */
 import { trackPromise } from '../async-handles.mjs';
-import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE, nodeError, validateInteger, validateString } from '../node-errors.mjs';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE, nodeError, validateBoolean, validateInteger, validateString } from '../node-errors.mjs';
 import { EventEmitter } from './events.mjs';
 import { createFetchClient, isLoopbackHost, kIncomingDestroy, kIncomingRead } from './http-fetch.mjs';
 import { queueMicrotask, resourceHere, runInResource } from '../async-context.mjs';
@@ -1379,6 +1379,24 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         server.emit('upgrade', req, socket, Buffer.from(parsed.bodyPrefix));
         return;
       }
+      if (parsed.httpVersion === '1.1' && parsed.method !== 'CONNECT' && server.requireHostHeader && headers.host === undefined) {
+        clearTimeout(requestTimer);
+        requestTimer = null;
+        socket.off('data', onData);
+        busy = true;
+        buf = Buffer.alloc(0);
+        const req = makeIncomingMessage(socket, Buffer.alloc(0));
+        setRequestLine(req, parsed, headers);
+        const res = new ServerResponse(req);
+        res.assignSocket(socket);
+        res.on('finish', () => {
+          res.detachSocket(socket);
+          destroy();
+        });
+        res.writeHead(400, ['Connection', 'close']);
+        res.end();
+        return;
+      }
       let body;
       let used;
       const headLength = buf.length - parsed.bodyPrefix.length;
@@ -1531,6 +1549,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     self.maxRequestsPerSocket = 0;
     self.maxHeadersCount = null;
     self.timeout = 0;
+    if (options?.requireHostHeader !== undefined) validateBoolean(options.requireHostHeader, 'options.requireHostHeader');
+    self.requireHostHeader = options?.requireHostHeader ?? true;
     /** @internal This server's connections, and whether each is between requests. */
     self._connections = new Set();
     self._closing = false;
