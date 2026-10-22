@@ -388,7 +388,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
   /** Bytes read from a file, as Node returns them for `encoding`. */
   const decodeAs = (bytes, encoding) => {
     checkEncoding(encoding);
-    if (!encoding) return Buffer ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength) : bytes;
+    if (!encoding) {
+      const whole = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength && bytes.buffer instanceof ArrayBuffer;
+      return whole && Buffer ? Buffer.from(bytes.buffer, 0, bytes.byteLength) : wrapBuffer(bytes);
+    }
     const enc = String(encoding).toLowerCase();
     if (enc === 'buffer') {
       // Node 22 accepts the name, then fails decoding with it.
