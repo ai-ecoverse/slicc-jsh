@@ -137,6 +137,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #startOnWrite = null;
     // The TLS socket that took the connection: it goes when this one does.
     #owner;
+    #closed;
     #resource = { frame: null };
 
     constructor(options = {}) {
@@ -160,6 +161,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       // Node always passes a boolean hadError to 'close'; readable-stream may omit it.
       const origEmit = this.emit.bind(this);
       this.emit = (event, ...args) => {
+        if (event === 'close') this.#closed?.();
         if (event === 'close' && (args.length === 0 || args[0] === undefined)) {
           return origEmit('close', false);
         }
@@ -622,6 +624,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
 
     _destroy(err, callback) {
       this.destroyed = true;
+      if (this._readableState?.emitClose !== false) {
+        trackPromise(handles, new Promise((resolve) => (this.#closed = resolve))).catch(() => {});
+      }
       // Node's Socket._destroy: the server's count drops now, before this
       // socket's 'close' (so a closing server's 'close' comes first).
       const server = this[kServer];
