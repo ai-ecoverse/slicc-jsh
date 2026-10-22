@@ -203,6 +203,7 @@ const kFlushAsked = Symbol('kFlushAsked');
 const kChunkedOut = Symbol('kChunkedOut');
 const kResource = Symbol('kResource');
 const kAbortBody = Symbol('kAbortBody');
+const kHangUp = Symbol('kHangUp');
 const kFetchMode = Symbol('kFetchMode');
 const kFetchSent = Symbol('kFetchSent');
 const kFetchAbort = Symbol('kFetchAbort');
@@ -2621,7 +2622,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         ? null
         : (options.agent ?? (typeof options.createConnection === 'function' ? null : defaultAgent));
     this.agent = agent ?? undefined;
-    this.shouldKeepAlive = Boolean(agent?.keepAlive);
+    this.shouldKeepAlive = Boolean(agent && (agent.keepAlive || Number.isFinite(agent.maxSockets)));
     // Node's: Host is set here, after the given headers, so an agent's
     // addRequest sees it (http-proxy-agent builds the absolute URL from it).
     if (!this[kRawHeaders] && !this.hasHeader('host') && options.setHost !== false) {
@@ -2782,7 +2783,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       });
       const onReady = () => {
         this[kConnected] = true;
-        this.emit('socket', socket);
         // With Content-Length: send headers + any buffered body and stream the rest.
         // Without: wait for end() and send one framed request (buffer until end).
         if (rawHeader(this, 'content-length') != null || this[kEnded] || this[kFlushAsked]) {
@@ -2803,6 +2803,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       let res = null;
       let finished = false;
       let released = false;
+      let awaitingFinish = false;
       let framing = null; // { kind: 'none' | 'length' | 'chunked' | 'eof', left, buf, state }
       const quietClose = () => {
         unlisten();
@@ -2819,16 +2820,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         finished = true;
         res.complete = true;
         res.push(null);
-        res.once('end', release);
       };
-      const release = () => {
-        if (released) return;
-        released = true;
-        // Keep-alive: a framed response the server didn't end the connection
-        // with goes back to the agent ('free'), for the next request.
-        const agent = this.agent;
-        const reusable =
-          agent &&
+      // Keep-alive: a framed response the server didn't end the connection
+      // with goes back to the agent ('free'), for the next request.
+      const reusable = () =>
+        Boolean(
+          this.agent &&
           this.shouldKeepAlive &&
           framing.kind !== 'eof' &&
           res.httpVersion !== '1.0' &&
@@ -2836,18 +2833,33 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           !socketEnded &&
           !socket.destroyed &&
           // An agent that didn't make the socket (its own createSocket) has no pool for it.
-          socket.listenerCount('free') > 0;
-        if (!reusable) {
-          quietClose();
-          return;
-        }
+          socket.listenerCount('free') > 0
+        );
+      const keepAlive = () => {
+        if (released) return;
+        released = true;
         unlisten();
         this[kConnSocket] = null;
-        // As Node's: the agent's 'free' handler still sees this request (and
-        // its response's Keep-Alive hint) on the socket.
-        if (!socket.destroyed) socket.emit('free');
-        if (socket._httpMessage === this) socket._httpMessage = null;
-        handles?.notify?.();
+        this.destroyed = true;
+        res.socket = null;
+        process.nextTick(() => {
+          this._closed = true;
+          this.emit('close');
+          if (!socket.destroyed) socket.emit('free');
+          if (socket._httpMessage === this) socket._httpMessage = null;
+          handles?.notify?.();
+        });
+      };
+      const onResponseEnd = () => {
+        if (released) return;
+        if (!reusable()) {
+          released = true;
+          quietClose();
+        } else if (this.writableFinished && !this.aborted) keepAlive();
+        else {
+          awaitingFinish = true;
+          this.once('finish', keepAlive);
+        }
       };
       // A body cut short (the peer gone, or req.destroy()): Node's 'aborted'.
       const abortBody = (err) => {
@@ -2858,6 +2870,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         quietClose();
       };
       this[kAbortBody] = abortBody;
+      this[kHangUp] = () => !res && !emitted;
       const deliver = (bytes) => {
         if (bytes.length === 0 || finished) return;
         if (!res.push(bytes)) socket.pause?.();
@@ -2997,7 +3010,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         // Destroying the response closes the connection (Node's).
         res[kIncomingDestroy] = (err, callback) => {
           finished = true;
-          if (!released) {
+          if (!released && !res.readableEnded) {
             released = true;
             quietClose();
           }
@@ -3015,7 +3028,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         // Node: the request closes once its response has (res 'end', res
         // 'close', then req 'close'), or was cut short.
         res.once('close', () => {
-          if (!this.destroyed) this.destroy();
+          if (!this.destroyed && !awaitingFinish) this.destroy();
         });
         if (responseHasNoBody(method, parsed.statusCode)) framing = { kind: 'none' };
         else if (parsed.chunked) framing = { kind: 'chunked', buf: Buffer.alloc(0), phase: 'size', left: 0n };
@@ -3024,6 +3037,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         // A late socket error is the body's.
         unlisten('error');
         listen('error', (err) => abortBody(err));
+        res.on('end', onResponseEnd);
         if (!this.emit('response', res)) res._dump();
         if (framing.kind === 'none' || (framing.kind === 'length' && framing.left === 0)) {
           finish();
@@ -3044,6 +3058,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           quietClose();
           return;
         }
+        if (awaitingFinish && !released) {
+          released = true;
+          this.off('finish', keepAlive);
+          quietClose();
+          this.destroy();
+          return;
+        }
         if (!res || finished) return;
         // Framed by the peer's FIN: done; any other framing: cut short.
         if (framing.kind === 'eof') finish();
@@ -3052,6 +3073,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       listen('end', onEnd);
       // Fallback: some transports deliver close without a prior readable 'end'.
       listen('close', onEnd);
+      this.emit('socket', socket);
     },
 
     /**
@@ -3135,6 +3157,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
 
     destroy(err) {
       if (this.destroyed) return this;
+      if (!err && !this.aborted && !this[kFetchMode] && this[kHangUp]?.()) err = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
       this.destroyed = true;
       if (err) this[kErrored] = err;
       // req.destroy(): the connection goes, and a body still coming is cut short.
