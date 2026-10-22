@@ -363,11 +363,6 @@ function booleanToggle(name) {
   return null;
 }
 
-/**
- * An option word as Node 22's option parser matches it: `_` is `-` in its
- * name from the third character on (not in the first two, nor in a `--`
- * option's `=` value). process.execArgv and Node's errors keep it as given.
- */
 export function normalizeOption(word) {
   if (word.length < 2 || word[0] !== '-') return word;
   const eq = word[1] === '-' ? word.indexOf('=') : -1;
