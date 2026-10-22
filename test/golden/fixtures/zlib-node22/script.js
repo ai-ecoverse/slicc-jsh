@@ -85,8 +85,9 @@ show('classes', () => ['Deflate', 'Inflate', 'Gzip', 'Gunzip', 'DeflateRaw', 'In
   await new Promise((r) => def.on('close', r));
   console.log('closed', def._handle);
   const g = zlib.createGunzip();
-  g.on('error', (e) => console.log('stream error', e.code, e.errno, e.message));
+  const failed = new Promise((r) => g.on('error', (e) => r(console.log('stream error', e.code, e.errno, e.message))));
   g.end(Buffer.from('not gzip'));
+  await failed;
   const bw = async (stream, chunks) => {
     const before = stream.bytesWritten;
     stream.on('data', () => {});
