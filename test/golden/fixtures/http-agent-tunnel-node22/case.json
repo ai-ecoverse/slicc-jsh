@@ -1,0 +1,1 @@
+{ "description": "a client CONNECT or upgrade tunnel leaves its agent as Node 22's does: its agentRemove listener is gone, a request queued behind it on maxSockets 1 is served while the tunnel is open, and agent.sockets and totalSocketCount no longer count it", "argv": ["script.js"], "shim": true }

@@ -1,0 +1,8 @@
+server upgrade /server readableFlowing null
+  readableFlowing before data null
+  server read "after-101"
+server upgrade /client readableFlowing null
+client upgrade 101 readableFlowing null
+  readableFlowing before data null
+  client read "after-go"
+closed
