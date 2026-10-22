@@ -1,0 +1,1 @@
+{ "description": "an end() waiting for a connection still calls back when the connection is refused or the socket is destroyed first, with the error Node 22 gives, with and without data, and a connection that comes after destroy() sends nothing", "argv": ["script.js"], "shim": true }

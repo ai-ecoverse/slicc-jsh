@@ -4,7 +4,7 @@
 import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 import { connectError } from './http-fetch.mjs';
-import { validateBoolean, validateInt32 } from '../node-errors.mjs';
+import { nodeError, validateBoolean, validateInt32 } from '../node-errors.mjs';
 import { queueMicrotask, resourceHere, runInResource } from '../async-context.mjs';
 
 function errnoError(err, syscall) {
@@ -308,6 +308,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
      */
     [kStartTls](parent, request) {
       this.#connecting = true;
+      this.#tlsParent = parent;
       this.#resource = resourceHere();
       const run = async () => {
         if (this.destroyed) return;
@@ -594,9 +595,31 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #flushFinal() {
+      if (this.destroyed) return;
       const callback = this.#pendingFinal;
       this.#pendingFinal = undefined;
       if (callback) this._final(callback);
+    }
+
+    #tlsParent = null;
+
+    #finalError() {
+      if (!this.#pending.length) return nodeError(Error, 'ERR_STREAM_DESTROYED', 'Cannot call end after a stream was destroyed');
+      if (this.connecting) return nodeError(Error, 'ERR_SOCKET_CLOSED_BEFORE_CONNECTION', 'Socket closed before the connection was established');
+      return nodeError(Error, 'ERR_SOCKET_CLOSED', 'Socket is closed');
+    }
+
+    #endParent(callback) {
+      const parent = this.#tlsParent;
+      this.#startOnWrite = null;
+      parent.once('end', () => {
+        this.push(null);
+        this.read(0);
+      });
+      parent.once('close', () => {
+        if (!this.destroyed) this.destroy();
+      });
+      parent.end((err) => callback(err ?? undefined));
     }
 
     _final(callback) {
@@ -606,6 +629,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       // conn.close() here races and often surfaces as EBADF on the peer instead
       // of a clean EOF (see scripts/run-raw-ctx-net-fin.mjs).
       if (!this.#writer) {
+        if (this.#startOnWrite && !this.#pending.length) {
+          this.#endParent(callback);
+          return;
+        }
         if (this.#connecting && !this.#startOnWrite) {
           this.#pendingFinal = callback;
           return;
@@ -627,6 +654,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
 
     _destroy(err, done) {
       this.destroyed = true;
+      const final = this.#pendingFinal;
+      this.#pendingFinal = undefined;
+      if (final) final(err ?? this.#finalError());
       let callback = done;
       if (this.#emitsClose) {
         let release;

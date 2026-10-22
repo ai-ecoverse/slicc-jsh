@@ -1,0 +1,8 @@
+refused end() | end cb ECONNREFUSED | error ECONNREFUSED | finish false | writableFinished false
+destroy() while connecting end() | end cb ERR_STREAM_DESTROYED | error none | finish false | writableFinished false
+destroy(err) while connecting end() | end cb boom | error boom | finish false | writableFinished false
+destroy() in connect end() | end cb ERR_STREAM_DESTROYED | error none | finish false | writableFinished false
+refused end(data) | end cb ECONNREFUSED | error ECONNREFUSED | finish false | writableFinished false
+destroy() while connecting end(data) | end cb ERR_SOCKET_CLOSED_BEFORE_CONNECTION | error none | finish false | writableFinished false
+destroy(err) while connecting end(data) | end cb boom | error boom | finish false | writableFinished false
+destroy() in connect end(data) | end cb ERR_SOCKET_CLOSED | error none | finish false | writableFinished false
