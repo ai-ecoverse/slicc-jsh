@@ -1364,6 +1364,24 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       const headers = headerObj(parsed.rawHeaders);
       const te = String(headers['transfer-encoding'] || '').toLowerCase();
       const connectionTokens = String(headers.connection || '').toLowerCase();
+      if (parsed.method === 'CONNECT') {
+        clearTimeout(requestTimer);
+        requestTimer = null;
+        socket.off('data', onData);
+        socket.off('end', onSocketEnd);
+        socket.off('error', onSocketError);
+        server._connections.delete(conn);
+        buf = Buffer.alloc(0);
+        if (server.listenerCount('connect') === 0) {
+          destroy();
+          return;
+        }
+        const req = makeIncomingMessage(socket, Buffer.alloc(0));
+        setRequestLine(req, parsed, headers);
+        socket.readableFlowing = null;
+        server.emit('connect', req, socket, Buffer.from(parsed.bodyPrefix));
+        return;
+      }
       // Node: an Upgrade request goes to 'upgrade' listeners, with what
       // followed the head; with none, it is an ordinary request.
       if (headers.upgrade && /\bupgrade\b/.test(connectionTokens) && server.listenerCount('upgrade') > 0) {
@@ -1376,6 +1394,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         const req = makeIncomingMessage(socket, Buffer.alloc(0));
         setRequestLine(req, parsed, headers);
         buf = Buffer.alloc(0);
+        socket.readableFlowing = null;
         server.emit('upgrade', req, socket, Buffer.from(parsed.bodyPrefix));
         return;
       }
@@ -1499,11 +1518,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       pump();
     };
     // The client ends an idle connection: so does the server.
-    socket.on('end', () => {
+    const onSocketEnd = () => {
       if (!busy) destroy();
-    });
+    };
+    const onSocketError = (err) => server.emit('clientError', err, socket);
+    socket.on('end', onSocketEnd);
     socket.on('data', onData);
-    socket.on('error', (err) => server.emit('clientError', err, socket));
+    socket.on('error', onSocketError);
     // A connection that sends nothing still gets headersTimeout's 408.
     armHeaders();
   }
@@ -1815,12 +1836,23 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         this.sockets[name] ||= [];
         this.sockets[name].push(s);
         this.totalSocketCount++;
-        s.once?.('close', () => this.removeSocket(s, options));
-        s.on?.('free', () => this.emit('free', s, options));
+        const onClose = () => this.removeSocket(s, options);
+        const onFree = () => this.emit('free', s, options);
         // A free socket that idles past the agent's timeout goes (Node's onTimeout).
-        s.on?.('timeout', () => {
+        const onTimeout = () => {
           if (this.freeSockets[name]?.includes(s)) s.destroy();
-        });
+        };
+        const onRemove = () => {
+          this.removeSocket(s, options);
+          s.removeListener('close', onClose);
+          s.removeListener('free', onFree);
+          s.removeListener('timeout', onTimeout);
+          s.removeListener('agentRemove', onRemove);
+        };
+        s.once?.('close', onClose);
+        s.on?.('free', onFree);
+        s.on?.('timeout', onTimeout);
+        s.on?.('agentRemove', onRemove);
         cb(null, s);
       };
 
@@ -2229,7 +2261,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         // 101 Switching Protocols: Node's 'upgrade' with the response, the
         // socket (the caller's from now on) and what came after the head;
         // with no listener the connection closes.
-        if (parsed.statusCode === 101) {
+        if (parsed.statusCode === 101 || method === 'CONNECT') {
+          const event = method === 'CONNECT' ? 'connect' : 'upgrade';
           unlisten();
           this[kConnSocket] = null;
           const up = makeIncomingMessage(socket, Buffer.alloc(0));
@@ -2238,8 +2271,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           up.httpVersion = parsed.httpVersion;
           up.rawHeaders = parsed.rawHeaders;
           up.headers = headers;
-          if (this.listenerCount('upgrade') > 0) {
-            this.emit('upgrade', up, socket, Buffer.from(parsed.bodyPrefix ?? Buffer.alloc(0)));
+          if (this.listenerCount(event) > 0) {
+            socket.emit('agentRemove');
+            socket.readableFlowing = null;
+            this.emit(event, up, socket, Buffer.from(parsed.bodyPrefix ?? Buffer.alloc(0)));
           } else {
             socket.destroy();
           }
