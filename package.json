@@ -72,7 +72,7 @@
   },
   "devDependencies": {
     "@ai-ecoverse/slicc-cdp": "1.31.9",
-    "@ai-ecoverse/slicc-jerk": "1.2.2",
+    "@ai-ecoverse/slicc-jerk": "1.2.3",
     "@ai-ecoverse/slicc-kernel": "1.146.5",
     "@ai-ecoverse/slicc-shared-web": "2.10.4",
     "@ai-ecoverse/wasi-pnpm": "12.9.1-21",
