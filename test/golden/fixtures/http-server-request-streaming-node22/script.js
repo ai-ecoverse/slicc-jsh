@@ -1,6 +1,7 @@
 const http = require('http');
 const net = require('net');
 const HEAD = (extra = '') => `POST /up HTTP/1.1\r\nHost: x\r\n${extra}\r\n`;
+const chunk = (n) => `${n.toString(16)}\r\n${'Z'.repeat(n)}\r\n`;
 const raw = (port, label, steps) =>
   new Promise((resolve) => {
     const c = net.connect(port, '127.0.0.1');
@@ -52,6 +53,11 @@ const srv = http.createServer((req, res) => {
   req.on('error', (e) => serverLog.push(`req error ${e.code} ${e.message}`));
   if (tag === 'early') {
     res.end('early answer');
+    return;
+  }
+  if (tag === 'reject') {
+    res.writeHead(413);
+    res.end('too big');
     return;
   }
   if (tag === 'stream') {
@@ -151,6 +157,12 @@ srv.listen(0, '127.0.0.1', async () => {
     { after: 'body=ok', end: true },
   ]);
   flushLog('unread');
+  await raw(port, 'an early 413 on a large chunked upload, then the next request', [
+    { send: HEAD('X-Case: reject\r\nTransfer-Encoding: chunked\r\n') + chunk(64 * 1024) },
+    { after: '413', send: chunk(64 * 1024) + chunk(64 * 1024) + '0\r\n\r\n' + HEAD('X-Case: plain\r\nContent-Length: 2\r\n') + 'ok' },
+    { after: 'body=ok', end: true },
+  ]);
+  flushLog('reject');
   srv.on('clientError', (err, socket) => {
     serverLog.push(`clientError ${err.code}`);
     socket.destroy();

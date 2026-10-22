@@ -15,6 +15,8 @@ checkContinue | server: checkContinue /up
 flushHeaders sends the head: POST / HTTP/1.1 | end() called yet: false
 an unread body larger than the high water mark, then the next request | client got: HTTP/1.1 200 OK / early answerHTTP/1.1 200 OK / body=ok
 unread | server: request early complete false, request plain complete false, body "ok", req close
+an early 413 on a large chunked upload, then the next request | client got: HTTP/1.1 413 Payload Too Large / 7 / too big / 0 / HTTP/1.1 200 OK / body=ok
+reject | server: request reject complete false, request plain complete false, body "ok", req close
 chunk size rejects junk | client got: -
 chunk size rejects junk | server: request undefined complete false, clientError HPE_INVALID_CHUNK_SIZE, aborted, req error ECONNRESET aborted, req close
 chunk size rejects a 0x prefix | client got: -

@@ -149,6 +149,28 @@ describe('http.request without a route: through ctx.fetch', () => {
     assert.equal(seen[1].headers['content-type'], 'text/plain');
   });
 
+  it('flushHeaders then the fetch fallback sends the payload, not the chunk envelope', async () => {
+    const base = `http://host.slicc.internal:${port}`;
+    await jsh.kernel.writeFile(
+      '/os/flushfetch.js',
+      program([
+        "const http = require('http');",
+        'await new Promise((resolve) => {',
+        `  const req = http.request('${base}/flush', { method: 'POST' }, (res) => { res.resume(); res.on('end', resolve); });`,
+        "  req.on('error', (e) => { console.log('error', e.code); resolve(); });",
+        '  req.flushHeaders();',
+        "  req.end('payload');",
+        '});',
+        "console.log('sent');",
+      ])
+    );
+    const r = await jsh.run(['node', 'flushfetch.js']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(r.stdout, 'sent\n');
+    const hit = seen.find((row) => row.url === '/flush');
+    assert.equal(hit?.body, 'payload');
+  });
+
   it('req.destroy() before the response aborts the fetch; a custom agent gets the connect error', async () => {
     const base = `http://host.slicc.internal:${port}`;
     await jsh.kernel.writeFile(
