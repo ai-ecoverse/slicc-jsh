@@ -2082,6 +2082,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (socket.destroyed || dead) return;
         if (res._last && !bodyDone) {
           suppressWrite = true;
+          if (socket.destroyed || dead) return;
+          socket.unref?.();
+          destroy();
           return;
         }
         if (!res._last) {
