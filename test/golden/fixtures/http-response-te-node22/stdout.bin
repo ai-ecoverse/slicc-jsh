@@ -1,0 +1,12 @@
+chunked gzip close | 200 | "hi"
+chunked gzip wire | 200 | "2\r\nhi\r\n0\r\n\r\n"
+gzip chunked | 200 | "hi"
+identity close | 200 | "hi"
+bad crlf | 0 | "HPE_CR_EXPECTED Missing expected CR after chunk data"
+cl then te | 0 | "HPE_INVALID_TRANSFER_ENCODING Transfer-Encoding can't be present with Content-Length"
+te then cl | 0 | "HPE_INVALID_CONTENT_LENGTH Content-Length can't be present with Transfer-Encoding"
+expect token | status 200
+expect glued | status 417
+expect 1.0 | HTTP/1.1 200
+pipeline | request 1.1 /a | request 1.1 /b | body /a foo | body /b bar | close /a | close /b
+server | continue 100-continue, foo | request 1.0 /e | http10 expect | body /e  | close /e

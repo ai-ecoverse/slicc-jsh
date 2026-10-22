@@ -256,16 +256,6 @@ function headerObject(pairs) {
   return out;
 }
 
-function indexOfBytes(haystack, needle, from = 0) {
-  outer: for (let i = from; i <= haystack.length - needle.length; i++) {
-    for (let j = 0; j < needle.length; j++) {
-      if (haystack[i + j] !== needle[j]) continue outer;
-    }
-    return i;
-  }
-  return -1;
-}
-
 const MAX_HEADER_SIZE = 16384;
 const CL_MAX = 0xffffffffffffffffn;
 const TCHAR = /[!#$%&'*+\-.^_`|~0-9A-Za-z]/;
@@ -605,7 +595,7 @@ function parseChunkSizeLine(text) {
 
 function readChunkLine(buf, kind) {
   for (let j = 0; j < buf.length; j++) {
-    if (j > MAX_HTTP_BODY) return { error: hpe('HPE_HEADER_OVERFLOW', 'Header overflow') };
+    if (kind !== 'size' && j > MAX_HTTP_BODY) return { error: hpe('HPE_HEADER_OVERFLOW', 'Header overflow') };
     if (buf[j] === 0x0a) {
       if (j === 0 || buf[j - 1] !== 0x0d) {
         if (kind === 'size') return { error: hpe('HPE_CR_EXPECTED', 'Missing expected CR after chunk size') };
@@ -619,8 +609,45 @@ function readChunkLine(buf, kind) {
       return { error: hpe('HPE_LF_EXPECTED', 'Missing expected LF after header value') };
     }
   }
-  if (buf.length > MAX_HTTP_BODY) return { error: hpe('HPE_HEADER_OVERFLOW', 'Header overflow') };
+  if (kind !== 'size' && buf.length > MAX_HTTP_BODY) return { error: hpe('HPE_HEADER_OVERFLOW', 'Header overflow') };
   return { wait: true };
+}
+
+function responseFraming(rawHeaders, packet, bytesParsed) {
+  const clValues = [];
+  const teValues = [];
+  let sawCL = false;
+  let sawTE = false;
+  let conflict = null;
+  for (let i = 0; i < rawHeaders.length; i += 2) {
+    const key = String(rawHeaders[i]).toLowerCase();
+    if (key === 'transfer-encoding') {
+      const value = rawHeaders[i + 1];
+      const blank = String(value).trim() === '';
+      if (sawCL && !conflict) conflict = hpe('HPE_INVALID_TRANSFER_ENCODING', "Transfer-Encoding can't be present with Content-Length", bytesParsed, packet);
+      if (blank) continue;
+      sawTE = true;
+      teValues.push(value);
+    } else if (key === 'content-length') {
+      if (sawTE && !conflict) conflict = hpe('HPE_INVALID_CONTENT_LENGTH', "Content-Length can't be present with Transfer-Encoding", bytesParsed, packet);
+      sawCL = true;
+      clValues.push(rawHeaders[i + 1]);
+    }
+  }
+  if (conflict) return { error: conflict };
+  if (clValues.length > 1) return { error: hpe('HPE_UNEXPECTED_CONTENT_LENGTH', 'Duplicate Content-Length', bytesParsed, packet) };
+  let contentLength = null;
+  if (clValues.length === 1) {
+    const parsed = parseContentLength(clValues[0]);
+    if (parsed.error) return { error: Object.assign(parsed.error, { bytesParsed, rawPacket: packet }) };
+    contentLength = parsed.n;
+  }
+  const tokens = [];
+  for (const value of teValues) {
+    for (const token of teTokens(value)) if (token !== '') tokens.push(token.toLowerCase());
+  }
+  const chunked = tokens.length > 0 && tokens[tokens.length - 1] === 'chunked';
+  return { chunked, contentLength: chunked ? null : contentLength };
 }
 
 /** Parse HTTP/1.x head from a byte buffer; returns null if incomplete. */
@@ -645,7 +672,7 @@ function parseHead(buf, Buffer) {
         if (!header.empty) rawHeaders.push(header.name, header.value);
       }
       if (statusM) {
-        const framed = requestFraming(rawHeaders, bytes, bytesParsed);
+        const framed = responseFraming(rawHeaders, bytes, bytesParsed);
         return {
           error: framed.error ?? null,
           kind: 'response',
@@ -654,6 +681,8 @@ function parseHead(buf, Buffer) {
           httpVersion: statusM.groups.version,
           rawHeaders,
           bodyPrefix,
+          chunked: framed.chunked === true,
+          contentLength: framed.contentLength ?? null,
         };
       }
       const req = parseRequestLine(requestLine);
@@ -1642,7 +1671,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     const resource = resourceHere();
     let buf = Buffer.alloc(0);
     let busy = false;
-    let mute = false;
     let served = 0;
     let idleTimer = null;
     let headersTimer = null;
@@ -1651,6 +1679,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     let requestTimer = null;
     let pending = null;
     let current = null;
+    let dead = false;
+    let holding = false;
+    let suppressWrite = false;
+    const wave = [];
+    const outgoing = [];
     socket.once('close', () => {
       server._connections.delete(conn);
       clearTimeout(idleTimer);
@@ -1677,14 +1710,20 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     // Node's 408: the headers within headersTimeout (from the connection, or
     // a kept-alive one's next request), the whole request within requestTimeout.
     const timeout408 = () => {
-      if (socket.destroyed) return;
-      if (busy) {
-        if (!pending) return;
-        if (current?.res?.headersSent) {
-          destroy();
-          return;
-        }
+      if (socket.destroyed || dead) return;
+      dead = true;
+      pending = null;
+      clearTimeout(requestTimer);
+      requestTimer = null;
+      clearTimeout(headersTimer);
+      headersTimer = null;
+      const res = current?.res;
+      if (busy && res?.headersSent) {
+        destroy();
+        return;
       }
+      if (res && !res.headersSent) res.detachSocket(socket);
+      current = null;
       try {
         socket.end('HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n', destroy);
       } catch {
@@ -1709,7 +1748,28 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     };
     const pump = () => runInResource(resource, pumpNow, null, []);
     const pumpNow = () => {
-      if (busy || socket.destroyed || buf.length === 0) return;
+      if (dead || socket.destroyed) return;
+      holding = true;
+      while (!busy && !socket.destroyed && !dead && buf.length > 0) {
+        const before = buf.length;
+        parseOne();
+        if (busy || dead || socket.destroyed || buf.length === before) break;
+      }
+      holding = false;
+      if (current && !current.bodyDone() && current.req._held?.length) {
+        const req = current.req;
+        const chunks = req._held;
+        req._held = [];
+        for (const chunk of chunks) {
+          if (!req.push(chunk)) socket.pause?.();
+        }
+      }
+      const ready = wave.splice(0);
+      for (const item of ready) item.deliver();
+    };
+    const parseOne = () => {
+      if (busy || socket.destroyed || dead || buf.length === 0) return;
+      armRequest();
       clearTimeout(idleTimer);
       idleTimer = null;
       armHeaders();
@@ -1830,6 +1890,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       };
       const pushBody = (bytes) => {
         if (bytes.length === 0 || req._dumped) return true;
+        if (holding) {
+          (req._held ??= []).push(Buffer.from(bytes));
+          return true;
+        }
         const ok = req.push(Buffer.from(bytes));
         if (!ok) socket.pause?.();
         return ok;
@@ -1852,11 +1916,19 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           handles?.notify?.();
           return;
         }
+        if (holding) {
+          handles?.notify?.();
+          return;
+        }
         req.push(null);
         handles?.notify?.();
-        if (socket.destroyed || mute) return;
-        if (resDone && res._last) closeLast();
-        else if (resDone && !res._last) keptAlive();
+        if (socket.destroyed || dead) return;
+        if (resDone && res._last) {
+          socket.unref?.();
+          destroy();
+          return;
+        }
+        if (resDone && !res._last) keptAlive();
       };
       const badBody = (code, reason) => {
         if (failed || bodyDone) return;
@@ -1945,7 +2017,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         }
       };
       const res = new ServerResponse(req);
-      if (!mute) res.assignSocket(socket);
+      if (!suppressWrite && !socket.destroyed && !socket._httpMessage) res.assignSocket(socket);
+      else outgoing.push(res);
       current = { req, res, bodyDone: () => bodyDone };
       // Node's shouldKeepAlive: HTTP/1.1 unless the client says close, and
       // below maxRequestsPerSocket. A connection that is open when close()
@@ -1984,26 +2057,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       };
       socket.once('close', gone);
       socket.once('end', onEnd);
-      const closeLast = () => {
-        if (socket.destroyed || mute) return;
-        if (bodyDone && res.shouldKeepAlive && buf.length > 0) {
-          mute = true;
-          busy = false;
-          current = null;
-          for (let n = 0; n < 8 && buf.length > 0; n++) {
-            const size = buf.length;
-            pumpNow();
-            busy = false;
-            if (buf.length === size) break;
-          }
-        }
-        if (socket.destroyed) return;
-        if (server._closing) closeGracefully(socket);
-        else {
-          socket.unref?.();
-          destroy();
-        }
-      };
       const keptAlive = () => {
         if (handed) return;
         handed = true;
@@ -2016,24 +2069,35 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (req.readableEnded) {
           if (!req.destroyed) req.destroy();
         } else req.once('end', () => req.destroy());
+        const next = outgoing.shift();
+        if (next && !suppressWrite && !socket.destroyed && !socket._httpMessage) next.assignSocket(socket);
         armIdle();
         queueMicrotask(pump);
       };
       res.on('finish', () => {
         resDone = true;
-        if (mute) return;
         if (!req._consuming && !req._readableState.resumeScheduled) req._dump();
         res.detachSocket(socket);
         process.nextTick(() => res[kEmitClose]());
-        if (socket.destroyed) return;
+        if (socket.destroyed || dead) return;
+        if (res._last && !bodyDone) {
+          suppressWrite = true;
+          return;
+        }
         if (!res._last) {
-          if (bodyDone) keptAlive();
-        } else closeLast();
+          if (bodyDone && !holding) keptAlive();
+          return;
+        }
+        if (server._closing) closeGracefully(socket);
+        else {
+          socket.unref?.();
+          destroy();
+        }
       });
       pending = parsed.teAfter || bodyDone ? null : feed;
       const expect = headers.expect;
       if (expect !== undefined && req.httpVersionMajor === 1 && req.httpVersionMinor === 1) {
-        if (/^100-continue$/i.test(String(expect).trim())) {
+        if (/(?:^|\W)100-continue(?:$|\W)/i.test(String(expect).trim())) {
           if (server.listenerCount('checkContinue') > 0) server.emit('checkContinue', req, res);
           else {
             res.writeContinue();
@@ -2051,6 +2115,22 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         return;
       }
       if (pending && !socket.destroyed) pending();
+      if (holding && bodyDone && !failed) {
+        wave.push({
+          res,
+          deliver() {
+            const chunks = req._held ?? [];
+            req._held = null;
+            for (const chunk of chunks) {
+              if (chunk.length && !req._dumped && !req.destroyed) req.push(chunk);
+            }
+            if (!req.readableEnded && !req.destroyed) req.push(null);
+          },
+        });
+        busy = false;
+        pending = null;
+        if (current && current.req === req) current = null;
+      }
     };
     const emitRequest = (req, res) => {
       server.emit('request', req, res);
@@ -2073,6 +2153,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       socket.destroy(err);
     };
     const onData = (chunk) => {
+      if (dead || socket.destroyed) return;
+      if (!busy && buf.length === 0) armRequest();
       buf = Buffer.concat([buf, chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk)]);
       if (pending) pending();
       else pump();
@@ -2756,48 +2838,63 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           deliver(bytes);
           return;
         }
-        // chunked: size line, data, CRLF, …, the 0 chunk and its trailers.
         f.buf = f.buf.length ? Buffer.concat([f.buf, bytes]) : bytes;
+        const chunk = f;
+        const chunkError = (code, reason) => {
+          const err = Object.assign(new Error(`Parse Error: ${reason}`), { code, reason });
+          if (res.listenerCount('error') === 0) res.on('error', () => {});
+          emitError(this, err);
+          abortBody(err);
+        };
         for (;;) {
-          if (f.state === 'size') {
-            const i = indexOfBytes(f.buf, CRLF);
-            if (i === -1) return;
-            const size = parseInt(Buffer.from(f.buf.subarray(0, i)).toString().split(';')[0].trim(), 16);
-            if (Number.isNaN(size)) {
-              abortBody(Object.assign(new Error('Parse Error: Invalid character in chunk size'), { code: 'HPE_INVALID_CHUNK_SIZE' }));
-              return;
+          if (chunk.phase === 'size' || chunk.phase === 'trailer') {
+            const line = readChunkLine(chunk.buf, chunk.phase === 'size' ? 'size' : 'trailer');
+            if (line.wait) return;
+            if (line.error) return chunkError(line.error.code, line.error.reason);
+            chunk.buf = line.rest;
+            if (chunk.phase === 'trailer') {
+              if (line.text === '') {
+                res.rawTrailers = chunk.rawTrailers ?? [];
+                res.trailers = trailerObj(res.rawTrailers);
+                finish();
+                return;
+              }
+              const header = parseHeaderLine(line.text, false);
+              if (header.error) return chunkError(header.error.code, header.error.reason);
+              const name = header.name.toLowerCase();
+              if (name === 'transfer-encoding') return chunkError('HPE_INVALID_TRANSFER_ENCODING', 'Invalid `Transfer-Encoding` header value');
+              if (name === 'content-length') return chunkError('HPE_INVALID_CONTENT_LENGTH', "Content-Length can't be present with Transfer-Encoding");
+              (chunk.rawTrailers ??= []).push(header.name, header.value);
+              continue;
             }
-            f.buf = f.buf.subarray(i + 2);
-            f.left = size;
-            f.state = size === 0 ? 'trailer' : 'data';
-          } else if (f.state === 'data') {
-            if (f.buf.length === 0) return;
-            const take = f.buf.subarray(0, f.left);
-            f.left -= take.length;
-            f.buf = f.buf.subarray(take.length);
+            const size = parseChunkSizeLine(line.text);
+            if (size.error) return chunkError(size.error.code, size.error.reason);
+            if (size.size === 0n) chunk.phase = 'trailer';
+            else {
+              chunk.left = size.size;
+              chunk.phase = 'data';
+            }
+          } else if (chunk.phase === 'data') {
+            if (chunk.buf.length === 0) return;
+            const n = chunk.left > BigInt(chunk.buf.length) ? chunk.buf.length : Number(chunk.left);
+            const take = chunk.buf.subarray(0, n);
+            chunk.buf = chunk.buf.subarray(n);
+            chunk.left -= BigInt(n);
             deliver(Buffer.from(take));
-            if (f.left > 0) return;
-            f.state = 'crlf';
-          } else if (f.state === 'crlf') {
-            if (f.buf.length < 2) return;
-            f.buf = f.buf.subarray(2);
-            f.state = 'size';
+            if (chunk.left === 0n) chunk.phase = 'cr';
+            else return;
+          } else if (chunk.phase === 'cr') {
+            if (chunk.buf.length === 0) return;
+            const b = chunk.buf[0];
+            if (b === 0x0a) return chunkError('HPE_CR_EXPECTED', 'Missing expected CR after chunk data');
+            if (b !== 0x0d) return chunkError('HPE_STRICT', 'Expected LF after chunk data');
+            chunk.buf = chunk.buf.subarray(1);
+            chunk.phase = 'lf';
           } else {
-            // Trailers end with an empty line.
-            const i = indexOfBytes(f.buf, CRLF);
-            if (i === -1) return;
-            const line = f.buf.subarray(0, i);
-            f.buf = f.buf.subarray(i + 2);
-            if (line.length === 0) {
-              // Node's: the trailers are the response's before its 'end'.
-              res.rawTrailers = f.rawTrailers ?? [];
-              res.trailers = trailerObj(res.rawTrailers);
-              finish();
-              return;
-            }
-            const text = Buffer.from(line).toString('latin1');
-            const colon = text.indexOf(':');
-            if (colon > 0) (f.rawTrailers ??= []).push(text.slice(0, colon).trim(), text.slice(colon + 1).trim());
+            if (chunk.buf.length === 0) return;
+            if (chunk.buf[0] !== 0x0a) return chunkError('HPE_STRICT', 'Expected LF after chunk data');
+            chunk.buf = chunk.buf.subarray(1);
+            chunk.phase = 'size';
           }
         }
       };
@@ -2809,28 +2906,30 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           return;
         }
         headBuf = Buffer.concat([headBuf, bytes]);
-        const parsed = parseHead(headBuf, Buffer);
-        if (!parsed) return;
-        if (parsed.kind !== 'response') {
-          this.emit('error', new Error(parsed.message ?? 'Parse Error'));
-          socket.destroy();
-          return;
-        }
-        if (parsed.error) {
-          emitted = true;
-          quietClose();
-          emitError(this, parsed.error);
-          if (!this.destroyed) this.destroy();
-          return;
+        let parsed = parseHead(headBuf, Buffer);
+        for (;;) {
+          if (!parsed) return;
+          if (parsed.kind !== 'response') {
+            this.emit('error', new Error(parsed.message ?? 'Parse Error'));
+            socket.destroy();
+            return;
+          }
+          if (parsed.error) {
+            emitted = true;
+            quietClose();
+            emitError(this, parsed.error);
+            if (!this.destroyed) this.destroy();
+            return;
+          }
+          if (parsed.statusCode >= 100 && parsed.statusCode < 200 && parsed.statusCode !== 101) {
+            if (parsed.statusCode === 100) this.emit('continue');
+            headBuf = Buffer.from(parsed.bodyPrefix);
+            parsed = parseHead(headBuf, Buffer);
+            continue;
+          }
+          break;
         }
         const headers = headerObj(parsed.rawHeaders);
-        const te = String(headers['transfer-encoding'] || '').toLowerCase();
-        const cl = headers['content-length'] != null ? Number(headers['content-length']) : null;
-        if (cl != null && (!Number.isFinite(cl) || cl < 0)) {
-          this.emit('error', new Error('Invalid Content-Length'));
-          socket.destroy();
-          return;
-        }
         emitted = true;
         // 101 Switching Protocols: Node's 'upgrade' with the response, the
         // socket (the caller's from now on) and what came after the head;
@@ -2881,8 +2980,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           if (!this.destroyed) this.destroy();
         });
         if (responseHasNoBody(method, parsed.statusCode)) framing = { kind: 'none' };
-        else if (te.includes('chunked')) framing = { kind: 'chunked', buf: Buffer.alloc(0), state: 'size', left: 0 };
-        else if (cl != null) framing = { kind: 'length', left: cl };
+        else if (parsed.chunked) framing = { kind: 'chunked', buf: Buffer.alloc(0), phase: 'size', left: 0n };
+        else if (parsed.contentLength != null) framing = { kind: 'length', left: Number(parsed.contentLength) };
         else framing = { kind: 'eof' };
         // A late socket error is the body's.
         unlisten('error');
