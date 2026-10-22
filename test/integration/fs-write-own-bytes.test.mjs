@@ -1,8 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
-
-const skip = !kernelAtLeast('1.146.2') && `slicc-kernel ${kernelVersion} sends a sync write's whole backing buffer per chunk (ai-ecoverse/slicc-kernel#1429)`;
+import { withJsh } from './helpers.mjs';
 
 describe('fs.writeSync of a view into a large buffer (kernel)', () => {
   let jsh;
@@ -11,7 +9,7 @@ describe('fs.writeSync of a view into a large buffer (kernel)', () => {
   });
   after(() => jsh?.close());
 
-  it('writes its own bytes, not the view\'s 2 GB buffer for each chunk', { skip }, async () => {
+  it('writes its own bytes, not the view\'s 2 GB buffer for each chunk', async () => {
     await jsh.kernel.writeFile(
       '/os/view.js',
       [
