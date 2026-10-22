@@ -1186,6 +1186,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       throw ERR_INVALID_ARG_TYPE('options', 'Object', options);
     }
     const self = Reflect.construct(net.Server, [options], new.target);
+    self.on('connection', tlsConnectionListener);
     self._contexts = [];
     self.requestCert = options.requestCert === true;
     self.rejectUnauthorized = options.rejectUnauthorized !== false;
@@ -1208,6 +1209,14 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     if (options.pskIdentityHint) validateString(options.pskIdentityHint, 'options.pskIdentityHint');
     if (listener) self.on('secureConnection', listener);
     return self;
+  }
+  function tlsConnectionListener(rawSocket) {
+    const err = noTls('tls.Server connection', 'no TLS server in slicc-kernel');
+    rawSocket.on?.('error', () => {});
+    process.nextTick(() => {
+      rawSocket.destroy?.();
+      this.emit('tlsClientError', err, rawSocket);
+    });
   }
   Object.setPrototypeOf(Server.prototype, net.Server.prototype);
   Object.setPrototypeOf(Server, net.Server);

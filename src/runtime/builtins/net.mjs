@@ -721,6 +721,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         options = {};
       }
       this.#options = options ?? {};
+      this.allowHalfOpen = this.#options.allowHalfOpen || false;
       if (connectionListener) this.on('connection', connectionListener);
     }
 
@@ -855,7 +856,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             closeQuietly(conn);
             break;
           }
-          const socket = new Socket({ allowHalfOpen: Boolean(this.#options.allowHalfOpen) });
+          const socket = new Socket({ allowHalfOpen: Boolean(this.allowHalfOpen) });
           this.#connections++;
           socket[kServer] = this;
           socket._attach(conn);

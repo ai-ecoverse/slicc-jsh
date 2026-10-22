@@ -258,7 +258,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - Without a route (no uplink, or an address outside its routes), the connect fails. `net` reports Node's error: `getaddrinfo ENOTFOUND <name>` for a name nothing resolves, else `connect <CODE> <host>:<port>`. `http.request` then sends the request through `fetch` instead (see the fetch fallback below).
 - `https` goes through `fetch`, except a request with its own agent (or, on slicc-kernel 1.124.0 and later, a `ca`, and on 1.124.13 and later a client certificate), which is `http` on a `tls.connect` socket (see the `https` client below).
 
-**`net`.** Servers and sockets, `allowHalfOpen`, `end()` as a half-close. Unix domain sockets (`path`) and `new net.Socket({ fd })` throw `ERR_NOT_SUPPORTED`.
+**`net`.** Servers and sockets, `allowHalfOpen` (a server's own property, as Node's, which its connections take), `end()` as a half-close. Unix domain sockets (`path`) and `new net.Socket({ fd })` throw `ERR_NOT_SUPPORTED`.
 - A listening server's `_handle` has the `TCP` handle's `getsockname`, `close`, `ref`, `unref` and `hasRef` (golden `net-server-tcp-handle-node22`). Its other methods aren't there.
 - Not as in Node: the kernel's listen is asynchronous, so `listening` is `false` and `address()` is `null` until `'listening'`. Node binds at once when `listen()` has no host (`listen(0)`, `listen(port)`), and code that reads `address()` right after such a `listen()` fails here: chai-http's `request(app)` throws `Server is not listening`. With a host (`listen(0, '127.0.0.1')`), Node looks it up first, so it is `null` there too. This needs a synchronous listen from slicc-kernel.
 
@@ -271,7 +271,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - As with Node 22's llhttp, a repeated `Content-Length`, one that isn't a number, or `Content-Length` with `Transfer-Encoding` is a parse error (`HPE_UNEXPECTED_CONTENT_LENGTH`, `HPE_INVALID_CONTENT_LENGTH`, `HPE_INVALID_TRANSFER_ENCODING`). A server emits `'clientError'`, or with no listener answers `400 Bad Request` and closes; a client request gets `'error'` (golden `http-content-length-framing-node22`).
 - `writeHead` with a list of headers replaces those names first and keeps repeats within the list, as Node's does; a list of an odd length throws `ERR_INVALID_ARG_VALUE`.
 - Not there: `_addHeaderLine` and its kin, `writeEarlyHints`, `writeProcessing`, the deprecated `_headers`/`_headerNames`, and `https.Agent`'s session cache.
-- `https.Server` throws `ERR_NOT_SUPPORTED`, as `https.createServer` does.
+- `https.Server` and `https.createServer` make a `tls.Server` with Node's options, listeners (`'connection'`, `'secureConnection'`, `'tlsClientError'`, `'listening'`) and `allowHalfOpen`, but its `listen()` throws `ERR_NOT_SUPPORTED`: slicc-kernel has no TLS server for programs (golden `https-classes-node22`).
 
 **`http` server.**
 - Request bodies are read whole before the `'request'` handler runs. A body over 64 MiB gets `413 Payload Too Large`.
@@ -314,13 +314,14 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 **`https` client.** `https.request` and `https.get` take the fetch fallback above, except on slicc-kernel 1.116.0 and later for a request with its own agent (an `https.Agent`, a proxy agent's) or its own `createConnection` (ws's `wss://`), and on 1.124.0 and later for a request with a `ca` (with `https.globalAgent`, or a fresh agent for `agent: false`, as in Node). On 1.124.13 and later the same goes for a request with a client certificate (`cert` and `key`). Such a request is `http`'s socket client on a `tls.connect` socket (see `tls`), with keep-alive, `rawHeaders` as sent, trailers (`rawTrailers`, `trailers`) and `'upgrade'`. It never falls back to `fetch`.
 - The request's own options reach the agent, as in Node (`addRequest` → `createSocket` → `createConnection`), so `ca`, `cert`, `key`, `passphrase`, `servername` and `rejectUnauthorized` reach `tls.connect`. An `https.Agent({ cert, key })` gives each of its sockets the certificate. The SNI is Node's `calculateServerName`: the `Host` header's name, else `host`, never an IP address.
 - `https.Agent` is Node's: `http.Agent` with TLS sockets, `defaultPort` 443, and the TLS options in its socket names.
-- The fetch fallback's `ClientRequest` is an `EventEmitter`, not a stream.
+- The fetch fallback's request is an `http.ClientRequest` on `https.globalAgent`, as Node's (golden `https-classes-node22`).
+- Its headers are Node's: a `Headers` object is ignored (it has no own keys), a `null` value is sent as `null`, and an `undefined` one throws `ERR_HTTP_INVALID_HEADER_VALUE` (golden `https-classes-node22`).
 - `pfx` throws `ERR_NOT_SUPPORTED`, and so do `cert` and `key` before slicc-kernel 1.124.13 and `ca` before 1.124.0.
 - Without an agent, `rejectUnauthorized: false` is accepted but ignored: fetch verifies. Over a socket, it's `tls.connect`'s (see `tls`).
 - Why a request without an agent stays on `fetch` on 1.124.0: to a host the uplink doesn't route, the socket would be the transport's TLS (A1) as well, with the same headers and no trailers, and a name that doesn't resolve would come back as a `502` response instead of Node's `getaddrinfo ENOTFOUND` error, which `fetch` gives.
 - Redirects: requests use `redirect: 'manual'`, so a redirect shows as `statusCode` and `Location`, as in Node. On the browser entry the transport may refuse that with `ENOTSUP`; jsh then falls back to `'follow'`, so plain requests work but a redirect is followed instead of surfaced. The Node entry's transport supports manual redirects. Embedders with `traits.redirectHops` ([slicc-kernel#315](https://github.com/ai-ecoverse/slicc-kernel/issues/315)) can surface redirects in the browser.
 
-**Not available:** `https.createServer` throws `ERR_NOT_SUPPORTED`, as does anything in `tls` that needs a handshake (below).
+**Not available:** an `https.Server`'s `listen()` throws `ERR_NOT_SUPPORTED`, as does anything in `tls` that needs a handshake (below).
 
 ## `tls`
 
@@ -369,7 +370,7 @@ The kernel does the TLS, by one of two paths ([slicc-kernel#914](https://github.
 - `tls.connect` before 1.116.0, after Node's checks of `checkServerIdentity` and `minDHSize`. Before 1.124.0, `tls.connect` over an open `socket` also throws, and so do `new tls.TLSSocket(socket)` and `createSecureContext({ ca })`.
 
 On any kernel these throw `ERR_NOT_SUPPORTED`:
-- `listen()` on a `tls.Server`, and `connect()` on a `TLSSocket`.
+- `listen()` on a `tls.Server`, and `connect()` on a `TLSSocket`. A `tls.Server` has Node's `'connection'` listener (`tlsConnectionListener`), so a socket emitted to it gets `'tlsClientError'` with `ERR_NOT_SUPPORTED` and is destroyed when nothing listens for that.
 - `createSecureContext` (and so `createServer`) with key material other than `ca`, and from slicc-kernel 1.124.13 other than `ca`, `cert` and `key`: `pfx`, `crl`, `dhparam`, a private-key engine or a client-certificate engine. Each one's type is checked first, as Node checks it.
 - `createSecurePair`, which is deprecated (DEP0064).
 

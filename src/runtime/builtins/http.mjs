@@ -1513,7 +1513,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     self.allowHalfOpen = true;
     storeHttpOptions(self, options);
     self[kRequestListener] = requestListener;
-    self.on('connection', (socket) => {
+    self.on('connection', function connectionListener(socket) {
       handleConnection(socket, self[kRequestListener], self);
     });
     self.on('listening', () => {

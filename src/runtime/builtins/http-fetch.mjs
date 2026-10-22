@@ -132,7 +132,7 @@ export function createFetchClient({ ctx, Buffer, handles, STATUS_CODES = {}, get
   function fetchHeaders(headers) {
     const out = {};
     for (const [k, v] of Object.entries(headers ?? {})) {
-      if (v == null || FETCH_OWNED.has(String(k).toLowerCase())) continue;
+      if (v === undefined || FETCH_OWNED.has(String(k).toLowerCase())) continue;
       out[k] = Array.isArray(v) ? v.map(String).join(', ') : String(v);
     }
     return out;

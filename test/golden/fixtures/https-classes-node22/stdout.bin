@@ -22,6 +22,14 @@ without new true 1000 500 1
 setTimeout true 10
 bad option ERR_OUT_OF_RANGE
 address before listen null
+events net [] false true []
+events net allowHalfOpen [] true true []
+events tls [ 'connection' ] false true [ 'tlsConnectionListener' ]
+events https [ 'connection', 'secureConnection', 'tlsClientError', 'listening' ] false true [ 'tlsConnectionListener' ]
+events http [ 'connection', 'listening' ] true true [ 'connectionListener' ]
+headers as Headers [Object: null prototype] { host: 'example.invalid' } [ 'Host' ]
+headers as null [Object: null prototype] { 'x-null': null, host: 'example.invalid' } [ 'x-null', 'Host' ]
+headers as undefined ERR_HTTP_INVALID_HEADER_VALUE Invalid value "undefined" for header "x-undef"
 ClientRequest true true true true
 agent true
 what GET /x?y=1 127.0.0.1 https:
