@@ -131,10 +131,7 @@ function listen(server) {
   );
   await new Promise((resolve) => raw.on('close', resolve));
   const piped = events.slice(mark);
-  const requests = piped.filter((event) => event.startsWith('request '));
-  const bodies = piped.filter((event) => event.startsWith('body '));
-  const closes = piped.filter((event) => event.startsWith('close '));
-  console.log(`pipeline | ${requests.concat(bodies, closes).join(' | ')}`);
+  console.log(`pipeline | ${piped.join(' | ')}`);
   console.log(`server | ${events.slice(0, mark).join(' | ')}`);
   await new Promise((resolve) => server.close(resolve));
 })().catch((error) => {

@@ -8,5 +8,5 @@ te then cl | 0 | "HPE_INVALID_CONTENT_LENGTH Content-Length can't be present wit
 expect token | status 200
 expect glued | status 417
 expect 1.0 | HTTP/1.1 200
-pipeline | request 1.1 /a | request 1.1 /b | body /a foo | body /b bar | close /a | close /b
+pipeline | request 1.1 /a | request 1.1 /b | body /a foo | close /a | body /b bar | close /b
 server | continue 100-continue, foo | request 1.0 /e | http10 expect | body /e  | close /e

@@ -1750,10 +1750,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     const pumpNow = () => {
       if (dead || socket.destroyed) return;
       holding = true;
-      while (!busy && !socket.destroyed && !dead && buf.length > 0) {
+      while (!busy && !socket.destroyed && !dead && buf.length > 0 && wave.length < 2) {
         const before = buf.length;
         parseOne();
         if (busy || dead || socket.destroyed || buf.length === before) break;
+        if (wave.length >= 1 && wave[0].res.finished) break;
+        if (wave.length >= 2) break;
       }
       holding = false;
       if (current && !current.bodyDone() && current.req._held?.length) {
@@ -1764,8 +1766,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           if (!req.push(chunk)) socket.pause?.();
         }
       }
-      const ready = wave.splice(0);
-      for (const item of ready) item.deliver();
+      if (wave.length === 0) return;
+      const first = wave.shift();
+      first.deliver();
+      if (first.res._last) {
+        while (wave.length > 0) wave.shift().deliver();
+      }
     };
     const parseOne = () => {
       if (busy || socket.destroyed || dead || buf.length === 0) return;
@@ -2080,16 +2086,20 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         res.detachSocket(socket);
         process.nextTick(() => res[kEmitClose]());
         if (socket.destroyed || dead) return;
-        if (res._last && !bodyDone) {
-          suppressWrite = true;
-          if (socket.destroyed || dead) return;
-          socket.unref?.();
-          destroy();
-          return;
-        }
         if (!res._last) {
           if (bodyDone && !holding) keptAlive();
           return;
+        }
+        suppressWrite = true;
+        if (bodyDone) {
+          holding = true;
+          while (!busy && !dead && !socket.destroyed && buf.length > 0 && wave.length < 8) {
+            const before = buf.length;
+            parseOne();
+            if (busy || buf.length === before) break;
+          }
+          holding = false;
+          while (wave.length > 0) wave.shift().deliver();
         }
         if (server._closing) closeGracefully(socket);
         else {
