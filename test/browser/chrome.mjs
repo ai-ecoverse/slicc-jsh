@@ -1,5 +1,5 @@
 /**
- * The Chromium harness for the browser suite (`npm run test:browser`):
+ * The Chromium harness for the browser suite (`test/integration/browser-*.test.mjs`):
  * slicc-shared-web's harness (as slicc-kernel's and slicc-bios's integration
  * suites use it) serves the kernel's browser build, the base packages and the
  * test page; `registry.npmjs.org` is answered from the harness's disk cache,

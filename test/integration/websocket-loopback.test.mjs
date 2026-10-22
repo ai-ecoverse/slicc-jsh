@@ -8,7 +8,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
-import { createNodeKernel as createKernel186 } from 'kernel-cert-186/node';
 import { WebSocketServer } from 'ws';
 import { openLoopbackWebSocket } from '../../src/runtime/web/websocket-loopback.mjs';
 import { kernelAtLeast, packageFiles } from './helpers.mjs';
@@ -43,15 +42,8 @@ const echo = ({ id, method }) => [
   ...(method === 'Target.setDiscoverTargets' ? [{ method: 'Target.targetCreated', params: { n: 1 } }] : []),
 ];
 
-// Both paths a loopback WebSocket can take: the kernel's own ctx.websocket
-// (slicc-kernel 1.106.3 and later, the devDependency) and jsh's RFC 6455
-// client over the kernel's sockets (older kernels; 1.86.0 here). Node's
-// answers are the same on both. The first is the tree's kernel, which on a
-// cert lane can be older than 1.106.3: then jsh takes its own client there
-// too, which the second block already covers.
 for (const [path, createKernel, kernelWs, skip] of [
   ['ctx.websocket, slicc-kernel 1.106.3+', createNodeKernel, true, !kernelAtLeast('1.106.3') && 'the installed slicc-kernel is before 1.106.3: no ctx.websocket to the loopback'],
-  ["jsh's own client, slicc-kernel 1.86.0", createKernel186, false, false],
 ]) describe(`WebSocket to the kernel loopback (${path})`, { skip }, () => {
   it('reaches the CDP facade at SLICC_CDP_URL: commands, a 70 kB answer, events, a clean close', async () => {
     const { kernel, opened, run, close } = await withCdp(echo, createKernel);

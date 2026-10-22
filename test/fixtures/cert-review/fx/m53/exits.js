@@ -1,4 +1,0 @@
-const cp = require('child_process'), path = require('path');
-for (const f of ['idle.js']) { const t = Date.now(); const r = cp.spawnSync(process.execPath, [path.join(__dirname, f)], { encoding: 'utf8', timeout: 10000 }); console.log(f, 'status', r.status, 'signal', r.signal, 'fast', Date.now() - t < 5000, JSON.stringify(r.stdout.trim())); }
-const t = Date.now(); const r = cp.spawnSync(process.execPath, ['-e', "const s=require('http').createServer((q,r)=>r.end('x')).listen(0,'127.0.0.1',()=>{const a=new (require('http').Agent)({keepAlive:true}); require('http').get({port:s.address().port,host:'127.0.0.1',agent:a},(res)=>{res.resume(); res.on('end',()=>{s.close(); console.log('closed-with-live-agent')})})})"], { encoding: 'utf8', timeout: 10000 });
-console.log('live keepAlive agent after close: status', r.status, 'signal', r.signal, 'fast', Date.now() - t < 5000, JSON.stringify(r.stdout.trim()));

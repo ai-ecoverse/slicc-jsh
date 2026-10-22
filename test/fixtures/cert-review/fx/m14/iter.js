@@ -1,1 +1,0 @@
-(async () => { let n = 0, chunks = 0; process.stdin.setEncoding('utf8'); for await (const c of process.stdin) { n += c.length; chunks++; } console.log('chars', n, 'type', typeof n, 'chunks>0', chunks > 0); })();

@@ -145,7 +145,7 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
   });
 
   it('a 0555 subdirectory of the user\'s own tree: rmSync stops at its rmdir and keeps the rest; rm and promises.rm remove its siblings, as Node (#249)', needs, async () => {
-    // test/fixtures/cert-review/fx/m51/rm.js's t6. Node's rmSync rmdir()s
+    // Node's rmSync rmdir()s
     // t6, a and b (ENOTEMPTY, so on to their entries, in readdir order),
     // then c: EACCES, b being 0555. Nothing is removed. Node's callback
     // rimraf works through each directory's entries side by side: x, ln and

@@ -1,0 +1,8 @@
+SIGUSR2 null SIGUSR2 "before\n"
+SIGALRM null SIGALRM "before\n"
+SIGVTALRM null SIGVTALRM "before\n"
+SIGXCPU null SIGXCPU "before\n"
+SIGSEGV null SIGSEGV "before\n"
+SIGPIPE 0 null "before\nret true\nfinally\nexit listener\n"
+SIGURG 0 null "before\nret true\nfinally\nexit listener\n"
+SIGCONT 0 null "before\nret true\nfinally\nexit listener\n"

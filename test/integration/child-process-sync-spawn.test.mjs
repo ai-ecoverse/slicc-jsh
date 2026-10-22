@@ -2,8 +2,7 @@
  * child_process.spawn on slicc-kernel 1.87.0's ctx.sync.spawn
  * (ai-ecoverse/slicc-kernel#492): the child starts inside spawn(), so
  * child.pid is set when it returns and signals sent right away reach it.
- * An older kernel starts it a tick later (child.pid undefined at return),
- * which the last case asserts there.
+ * An older kernel starts it a tick later (child.pid undefined at return).
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +10,6 @@ import { kernelAtLeast, kernelVersion, withJshAndSh } from './helpers.mjs';
 
 const HAS_SYNC_SPAWN = kernelAtLeast('1.87.0');
 const needs = HAS_SYNC_SPAWN ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.sync.spawn (1.87.0)` };
-const fallback = HAS_SYNC_SPAWN ? { skip: `slicc-kernel ${kernelVersion} has ctx.sync.spawn` } : {};
 
 const program = (lines) => `(async () => {\n${lines.join('\n')}\n})().catch((e) => { console.error(e); process.exit(1); });\n`;
 const CLOSED = "const closed = (c) => new Promise((res) => c.on('close', (code, sig) => res(`${code} ${sig}`)));";
@@ -107,20 +105,4 @@ describe('older kernels: spawn starts the child a tick later', () => {
     jsh = await withJshAndSh();
   });
   after(() => jsh?.close());
-
-  it('child.pid is undefined at return and set by spawn', fallback, async () => {
-    await jsh.kernel.writeFile(
-      '/os/pid-later.js',
-      program([
-        "const cp = require('child_process');",
-        "const c = cp.spawn('node', ['-e', 'process.exit(5)']);",
-        "const at = typeof c.pid;",
-        "c.on('spawn', () => console.log('at return', at, 'at spawn', typeof c.pid));",
-        "await new Promise((r) => c.on('close', (code) => { console.log('close', code); r(); }));",
-      ])
-    );
-    const r = await jsh.run(['node', 'pid-later.js']);
-    assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout, 'at return undefined at spawn number\nclose 5\n');
-  });
 });

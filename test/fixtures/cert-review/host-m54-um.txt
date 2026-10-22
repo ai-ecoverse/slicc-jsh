@@ -1,8 +1,0 @@
-umask start 22
-set 027, returned 22 now 27
-new dir/file under 027 750 640
-child umask 0027 27
-child-made 640 750
-back 022 file 644
-umask abc ERR_INVALID_ARG_VALUE
-umask octal string 22 77

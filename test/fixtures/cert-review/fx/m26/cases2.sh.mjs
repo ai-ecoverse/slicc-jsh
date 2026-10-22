@@ -1,1 +1,0 @@
-export default [{ name: 'yargs-esm', cmd: 'node yargs.mjs 2>&1' }, { name: 'yargs-cjs', cmd: 'node yargs-cjs.cjs 2>&1' }, { name: 'yaml-cli', cmd: 'echo "a: 1" | node node_modules/yaml/bin.mjs --json 2>&1 | head -5' }];
