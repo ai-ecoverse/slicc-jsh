@@ -1,0 +1,91 @@
+early answer before the body, then the rest and a second request | client got: HTTP/1.1 200 OK / early answerHTTP/1.1 200 OK / body=ok
+early | server: request early complete false, request plain complete false, body "ok", req close
+content-length upload streamed | client got: HTTP/1.1 200 OK / 8 / ack=aa / 8 / ack=bb / 8 / ack=cc / 8 / done=1 / 0
+stream cl | server: request stream complete false, data aa, data bb, data cc, end complete true
+chunked upload streamed, with a trailer | client got: HTTP/1.1 200 OK / 8 / ack=aa / 8 / ack=bb / 8 / done=1 / 0
+stream chunked | server: request stream complete false, data aa, data bb, end complete true trailer yes
+expect 100-continue | client got: HTTP/1.1 100 Continue / HTTP/1.1 200 OK / body=body
+continue | server: request plain complete false, body "body", req close
+an expectation the server does not meet | client got: HTTP/1.1 417 Expectation Failed / 0
+expectation | server: checkExpectation something
+the client goes mid-body | client got: HTTP/1.1 400 Bad Request
+gone | server: request plain complete false, aborted, req error ECONNRESET aborted, req close
+a checkContinue listener | client got: HTTP/1.1 100 Continue / HTTP/1.1 200 OK / cc=hi
+checkContinue | server: checkContinue /up
+flushHeaders sends the head: POST / HTTP/1.1 | end() called yet: false
+an unread body larger than the high water mark, then the next request | client got: HTTP/1.1 200 OK / early answerHTTP/1.1 200 OK / body=ok
+unread | server: request early complete false, request plain complete false, body "ok", req close
+an early 413 on a large chunked upload, then the next request | client got: HTTP/1.1 413 Payload Too Large / 7 / too big / 0 / HTTP/1.1 200 OK / body=ok
+reject | server: request reject complete false, request plain complete false, body "ok", req close
+chunk size rejects junk | client got: -
+chunk size rejects junk | server: request undefined complete false, clientError HPE_INVALID_CHUNK_SIZE, aborted, req error ECONNRESET aborted, req close
+chunk size rejects a 0x prefix | client got: -
+chunk size rejects a 0x prefix | server: request undefined complete false, clientError HPE_INVALID_CHUNK_SIZE, aborted, req error ECONNRESET aborted, req close
+chunk size rejects a sign | client got: -
+chunk size rejects a sign | server: request undefined complete false, clientError HPE_INVALID_CHUNK_SIZE, aborted, req error ECONNRESET aborted, req close
+chunk size rejects a trailing space | client got: -
+chunk size rejects a trailing space | server: request undefined complete false, clientError HPE_INVALID_CHUNK_SIZE, aborted, req error ECONNRESET aborted, req close
+chunk size allows an extension | client got: HTTP/1.1 200 OK
+chunk size allows an extension | server: request undefined complete false, body "hello", req close, request undefined complete false, body "", req close
+chunk extension rejects a space | client got: -
+chunk extension rejects a space | server: request undefined complete false, clientError HPE_STRICT, aborted, req error ECONNRESET aborted, req close
+chunk data must end in CRLF | client got: -
+chunk data must end in CRLF | server: request undefined complete false, clientError HPE_STRICT, aborted, req error ECONNRESET aborted, req close
+a last chunk is not any two bytes | client got: -
+a last chunk is not any two bytes | server: request undefined complete false, clientError HPE_INVALID_CHUNK_SIZE, aborted, req error ECONNRESET aborted, req close
+chunk size overflow | client got: -
+chunk size overflow | server: request undefined complete false, clientError HPE_INVALID_CHUNK_SIZE, aborted, req error ECONNRESET aborted, req close
+a trailer is kept | client got: HTTP/1.1 200 OK
+a trailer is kept | server: request undefined complete false, body "", req close, request undefined complete false, body "", req close
+a trailer without a colon is rejected | client got: -
+a trailer without a colon is rejected | server: request undefined complete false, clientError HPE_INVALID_HEADER_TOKEN, aborted, req error ECONNRESET aborted, req close
+a transfer-encoding trailer is rejected | client got: -
+a transfer-encoding trailer is rejected | server: request undefined complete false, clientError HPE_INVALID_TRANSFER_ENCODING, aborted, req error ECONNRESET aborted, req close
+chunked is the final coding | client got: HTTP/1.1 200 OK
+chunked is the final coding | server: request undefined complete false, body "", req close, request undefined complete false, body "", req close
+chunked then gzip is rejected | client got: -
+chunked then gzip is rejected | server: clientError HPE_INVALID_TRANSFER_ENCODING
+not-chunked is rejected | client got: -
+not-chunked is rejected | server: request undefined complete false, clientError HPE_INVALID_TRANSFER_ENCODING, aborted, req error ECONNRESET aborted, req close
+an empty transfer-encoding is ignored | client got: HTTP/1.1 200 OK
+an empty transfer-encoding is ignored | server: request undefined complete false, body "", req close, request undefined complete false, body "", req close
+an empty transfer-encoding after content-length is rejected | client got: -
+an empty transfer-encoding after content-length is rejected | server: clientError HPE_INVALID_TRANSFER_ENCODING
+content-length together with chunked is rejected | client got: -
+content-length together with chunked is rejected | server: clientError HPE_INVALID_CONTENT_LENGTH
+content-length before chunked is rejected | client got: -
+content-length before chunked is rejected | server: clientError HPE_INVALID_TRANSFER_ENCODING
+a duplicate content-length is rejected | client got: -
+a duplicate content-length is rejected | server: clientError HPE_UNEXPECTED_CONTENT_LENGTH
+content-length +5 is rejected | client got: -
+content-length +5 is rejected | server: clientError HPE_INVALID_CONTENT_LENGTH
+content-length 05 is five bytes | client got: HTTP/1.1 200 OK
+content-length 05 is five bytes | server: request undefined complete false, body "hello", req close, request undefined complete false, body "", req close
+content-length above 2^64 is rejected | client got: -
+content-length above 2^64 is rejected | server: clientError HPE_INVALID_CONTENT_LENGTH
+lf-only request lines are rejected | client got: -
+lf-only request lines are rejected | server: clientError HPE_INVALID_VERSION
+a bare CR in a header is rejected | client got: -
+a bare CR in a header is rejected | server: clientError HPE_LF_EXPECTED
+obs-fold is rejected | client got: -
+obs-fold is rejected | server: clientError HPE_INVALID_HEADER_TOKEN
+a space in a header name is rejected | client got: -
+a space in a header name is rejected | server: clientError HPE_INVALID_HEADER_TOKEN
+a control character in a header value is rejected | client got: -
+a control character in a header value is rejected | server: clientError HPE_INVALID_HEADER_TOKEN
+a tab in a header value is kept | client got: HTTP/1.1 200 OK
+a tab in a header value is kept | server: request undefined complete false, body "", req close, request undefined complete false, body "", req close
+a lower-case method is rejected | client got: -
+a lower-case method is rejected | server: clientError HPE_INVALID_METHOD
+HTTP/1.2 is rejected | client got: -
+HTTP/1.2 is rejected | server: clientError HPE_INVALID_VERSION
+an absolute URL is the target | client got: HTTP/1.1 200 OK
+an absolute URL is the target | server: request undefined complete false, body "", req close
+OPTIONS * is the target | client got: HTTP/1.1 200 OK
+OPTIONS * is the target | server: request undefined complete false, body "", req close, request undefined complete false, body "", req close
+HTTP/1.0 does not take a pipelined request | client got: -
+HTTP/1.0 does not take a pipelined request | server: request undefined complete false, clientError HPE_CLOSED_CONNECTION, body "", req close
+a header over the limit is rejected | client got: -
+a header over the limit is rejected | server: clientError HPE_HEADER_OVERFLOW
+flushHeaders with transfer-encoding chunked:  2 hi 1 ! 0  
+closed
