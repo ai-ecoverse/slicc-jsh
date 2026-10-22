@@ -75,8 +75,9 @@ const workers = [
     const label = JSON.stringify(options);
     try {
       const w = new Worker("import('worker_threads').then((m) => m.parentPort.postMessage(process.execArgv))", { eval: true, ...options });
+      const exited = new Promise((resolve) => w.once('exit', resolve));
       const execArgv = await new Promise((resolve) => w.once('message', resolve));
-      await new Promise((resolve) => w.once('exit', resolve));
+      await exited;
       console.log('worker', label, 'ok', JSON.stringify(execArgv));
     } catch (e) {
       console.log('worker', label, e.code, e.message);
