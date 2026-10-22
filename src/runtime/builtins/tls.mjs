@@ -1212,9 +1212,10 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
   }
   function tlsConnectionListener(rawSocket) {
     const err = noTls('tls.Server connection', 'no TLS server in slicc-kernel');
+    rawSocket.on?.('error', () => {});
     process.nextTick(() => {
-      rawSocket.on?.('error', () => {});
-      if (!this.emit('tlsClientError', err, rawSocket)) rawSocket.destroy?.();
+      rawSocket.destroy?.();
+      this.emit('tlsClientError', err, rawSocket);
     });
   }
   Object.setPrototypeOf(Server.prototype, net.Server.prototype);
