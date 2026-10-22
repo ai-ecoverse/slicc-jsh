@@ -574,13 +574,16 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
   }
 
   /** The bytes from an fd's position to its end; the position moves there. */
-  function readRestOf(ent) {
+  function readRestOf(ent, sized = () => {}) {
     if (ent.file) {
-      const rest = ent.file.read(ent.pos, Math.max(0, ent.file.size() - ent.pos));
+      const size = ent.file.size();
+      sized(size);
+      const rest = ent.file.read(ent.pos, Math.max(0, size - ent.pos));
       ent.pos += rest.length;
       return rest;
     }
     const bytes = syncFs.readFile(ent.path);
+    sized(bytes.length);
     const rest = bytes.subarray(Math.min(ent.pos, bytes.length));
     ent.pos += rest.length;
     return rest;
@@ -1210,41 +1213,76 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     rimrafConcurrent(pathArg, target, opts);
   }
 
+  const IO_MAX = 2 ** 31 - 1;
+
+  function refuseOverIoMax(size, encoding, utf8Binding) {
+    if (!(size > IO_MAX)) return;
+    if (utf8Binding && (encoding === 'utf8' || encoding === 'utf-8')) {
+      const err = new Error('Cannot create a string longer than 0x1fffffe8 characters');
+      err.code = 'ERR_STRING_TOO_LONG';
+      throw err;
+    }
+    throw nodeError(RangeError, 'ERR_FS_FILE_TOO_LARGE', `File size (${size}) is greater than 2 GiB`);
+  }
+
+  function allocationFailure(err, size) {
+    if (err instanceof RangeError) return err;
+    if (err?.code !== 'EIO') return null;
+    try {
+      void new ArrayBuffer(size);
+    } catch (refused) {
+      return refused;
+    }
+    return null;
+  }
+
+  function readWhole(p, options, utf8Binding) {
+    const encoding = optEncoding(options);
+    checkEncoding(encoding);
+    if (p === 0 || p === '0') return readStdinSync(encoding);
+    if (typeof p === 'number') {
+      const ent = fdTable.get(p);
+      if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
+      let size = 0;
+      const sized = (n) => {
+        size = n;
+        refuseOverIoMax(n, encoding, utf8Binding);
+      };
+      try {
+        return decodeAs(readRestOf(ent, sized), encoding);
+      } catch (err) {
+        if (String(err?.code).startsWith('ERR_')) throw err;
+        throw allocationFailure(err, size) ?? nodeFsError(err?.code || 'EIO', 'read', undefined, err);
+      }
+    }
+    const pathArg = p;
+    // Node: /dev/stdin (and /dev/fd/0) read the process stdin stream.
+    if (pathArg === '/dev/stdin' || pathArg === '/dev/fd/0') {
+      return readStdinSync(encoding);
+    }
+    const target = abs(p);
+    let st = null;
+    try {
+      st = syncFs.stat(target);
+      if (st.isDirectory) {
+        // Node's readFile on a dir: syscall read, no path on the error object.
+        const e = new Error('EISDIR: illegal operation on a directory, read');
+        e.code = 'EISDIR';
+        e.errno = ERRNO.EISDIR;
+        e.syscall = 'read';
+        throw e;
+      }
+      if (st.isFile) refuseOverIoMax(st.size, encoding, utf8Binding);
+      return decodeAs(syncFs.readFile(target), encoding);
+    } catch (err) {
+      if ((err?.code && err.syscall) || String(err?.code).startsWith('ERR_')) throw err;
+      throw (st?.isFile && allocationFailure(err, st.size)) || nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
+    }
+  }
+
   const syncApi = {
     readFileSync(p, options) {
-      const encoding = optEncoding(options);
-      checkEncoding(encoding);
-      if (p === 0 || p === '0') return readStdinSync(encoding);
-      if (typeof p === 'number') {
-        const ent = fdTable.get(p);
-        if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
-        try {
-          return decodeAs(readRestOf(ent), encoding);
-        } catch (err) {
-          throw nodeFsError(err?.code || 'EIO', 'read', undefined, err);
-        }
-      }
-      const pathArg = p;
-      // Node: /dev/stdin (and /dev/fd/0) read the process stdin stream.
-      if (pathArg === '/dev/stdin' || pathArg === '/dev/fd/0') {
-        return readStdinSync(encoding);
-      }
-      const target = abs(p);
-      try {
-        const st = syncFs.stat(target);
-        if (st.isDirectory) {
-          // Node's readFile on a dir: syscall read, no path on the error object.
-          const e = new Error('EISDIR: illegal operation on a directory, read');
-          e.code = 'EISDIR';
-          e.errno = ERRNO.EISDIR;
-          e.syscall = 'read';
-          throw e;
-        }
-        return decodeAs(syncFs.readFile(target), encoding);
-      } catch (err) {
-        if ((err?.code && err.syscall) || String(err?.code).startsWith('ERR_')) throw err;
-        throw nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
-      }
+      return readWhole(p, options, true);
     },
     writeFileSync(p, data, options) {
       // Node's validateStringAfterArrayBufferView, before anything else.
@@ -2074,12 +2112,16 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         (async () => {
           const encoding = optEncoding(options);
           checkEncoding(encoding);
+          const target = abs(p);
+          let st = null;
           try {
-            return decodeAs(await asyncFs.readFile(abs(p)), encoding);
+            st = syncFs.stat(target);
+            if (st.isFile) refuseOverIoMax(st.size, encoding, false);
+            return decodeAs(await asyncFs.readFile(target), encoding);
           } catch (err) {
             // Argument errors (a bad encoding) stay as they are, as in Node.
             if (String(err?.code).startsWith('ERR_')) throw err;
-            throw nodeFsError(err?.code || 'ENOENT', 'open', p, err);
+            throw (st?.isFile && allocationFailure(err, st.size)) || nodeFsError(err?.code || 'ENOENT', 'open', p, err);
           }
         })()
       );
@@ -2311,7 +2353,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       },
       async readFile(options) {
         ensureOpen('readFile');
-        return syncApi.readFileSync(fd, options);
+        return readWhole(fd, options, false);
       },
       async sync() {
         ensureOpen('fsync');
@@ -2645,7 +2687,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     WriteStream,
     createReadStream,
     createWriteStream,
-    readFile: callbackify(syncApi.readFileSync),
+    readFile: callbackify((p, options) => readWhole(p, options, false)),
     writeFile: callbackify(syncApi.writeFileSync, { minArgsBeforeCb: 2 }),
     appendFile: callbackify(syncApi.appendFileSync, { minArgsBeforeCb: 2 }),
     open: callbackify(syncApi.openSync),
