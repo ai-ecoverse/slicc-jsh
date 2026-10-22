@@ -714,14 +714,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     if (teRaw == null) setRawHeader(req, 'Transfer-Encoding', 'chunked');
     req[kChunkedOut] = true;
     req[kStreaming] = true;
-    if (req[kChunks].length) {
-      const body = Buffer.concat(req[kChunks]);
-      req[kChunks] = body.length ? [chunkFrame(body)] : [];
-    }
   };
 
   function IncomingMessage(socket) {
     Readable.call(this, socket ? { highWaterMark: socket.readableHighWaterMark } : undefined);
+    this._readableState.readingMore = true;
     this.socket = socket;
     this.httpVersionMajor = null;
     this.httpVersionMinor = null;
@@ -801,7 +798,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     return this;
   };
   IncomingMessage.prototype._read = function _read(n) {
-    this._consuming = true;
+    if (!this._consuming) {
+      this._readableState.readingMore = false;
+      this._consuming = true;
+    }
     const read = this[kIncomingRead];
     if (read) return read.call(this, n);
   };
@@ -3029,7 +3029,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       this._headerSent = true;
       let framed;
       if (this[kChunkedOut]) {
-        const parts = this[kChunks];
+        const parts = [];
+        for (const part of this[kChunks]) if (part.length) parts.push(chunkFrame(part));
         this[kChunks] = [];
         if (this[kEnded]) parts.push(Buffer.from('0\r\n\r\n'));
         framed = parts.length ? Buffer.concat(parts) : Buffer.alloc(0);
@@ -3068,7 +3069,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
 
     [kWriteBody](buf, callback) {
       if (this._headerSent && this[kStreaming]) return this[kTrackWrite](this[kChunkedOut] ? chunkFrame(buf) : buf, callback);
-      this[kChunks].push(this[kChunkedOut] ? chunkFrame(buf) : buf);
+      this[kChunks].push(buf);
       // Content-Length known and socket up: start streaming now.
       if (!this._headerSent && this[kConnected] && rawHeader(this, 'content-length') != null) this[kFlushHead]();
       process.nextTick(callback);
@@ -3085,9 +3086,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (this[kConnected]) this[kFlushHead]();
         // else: connect handler will flush once the socket is up
       } else if (this[kChunkedOut]) {
-        const data = Buffer.concat(this[kChunks]);
+        const parts = [];
+        for (const part of this[kChunks]) if (part.length) parts.push(chunkFrame(part));
         this[kChunks] = [];
-        this[kTrackWrite](Buffer.concat([chunkFrame(data), Buffer.from('0\r\n\r\n')]), nop);
+        parts.push(Buffer.from('0\r\n\r\n'));
+        this[kTrackWrite](Buffer.concat(parts), nop);
       } else if (this[kChunks].length && this[kStreaming]) {
         const data = Buffer.concat(this[kChunks]);
         this[kChunks] = [];
