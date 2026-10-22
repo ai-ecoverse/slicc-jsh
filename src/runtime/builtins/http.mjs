@@ -2662,7 +2662,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       });
       const onReady = () => {
         this[kConnected] = true;
-        this.emit('socket', socket);
         // With Content-Length: send headers + any buffered body and stream the rest.
         // Without: wait for end() and send one framed request (buffer until end).
         if (rawHeader(this, 'content-length') != null || this[kEnded] || this[kFlushAsked]) {
@@ -2699,16 +2698,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         finished = true;
         res.complete = true;
         res.push(null);
+        res.prependOnceListener('end', () => {
+          if (reusable()) res.socket = null;
+        });
         res.once('end', release);
       };
-      const release = () => {
-        if (released) return;
-        released = true;
-        // Keep-alive: a framed response the server didn't end the connection
-        // with goes back to the agent ('free'), for the next request.
-        const agent = this.agent;
-        const reusable =
-          agent &&
+      // Keep-alive: a framed response the server didn't end the connection
+      // with goes back to the agent ('free'), for the next request.
+      const reusable = () =>
+        Boolean(
+          this.agent &&
           this.shouldKeepAlive &&
           framing.kind !== 'eof' &&
           res.httpVersion !== '1.0' &&
@@ -2716,8 +2715,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           !socketEnded &&
           !socket.destroyed &&
           // An agent that didn't make the socket (its own createSocket) has no pool for it.
-          socket.listenerCount('free') > 0;
-        if (!reusable) {
+          socket.listenerCount('free') > 0
+        );
+      const release = () => {
+        if (released) return;
+        released = true;
+        if (!reusable()) {
           quietClose();
           return;
         }
@@ -2915,6 +2918,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       listen('end', onEnd);
       // Fallback: some transports deliver close without a prior readable 'end'.
       listen('close', onEnd);
+      this.emit('socket', socket);
     },
 
     /**

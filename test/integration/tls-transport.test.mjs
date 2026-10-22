@@ -115,8 +115,9 @@ const agent = new https.Agent({ keepAlive: true });
 const send = (path, body) => new Promise((resolve) => {
   const req = https.request({ host: 'api.example.test', path, method: body ? 'POST' : 'GET', agent, headers: { 'x-h': 'two' } }, (res) => {
     let b = '';
+    const encrypted = res.socket.encrypted;
     res.on('data', (c) => (b += c));
-    res.on('end', () => resolve([res.statusCode, res.rawHeaders.slice(0, 4).join(','), JSON.parse(b).url, res.socket.encrypted, req.reusedSocket].join(' ')));
+    res.on('end', () => resolve([res.statusCode, res.rawHeaders.slice(0, 4).join(','), JSON.parse(b).url, encrypted, req.reusedSocket].join(' ')));
   });
   req.on('error', (e) => resolve('error ' + e.code + ' ' + e.message));
   req.end(body);

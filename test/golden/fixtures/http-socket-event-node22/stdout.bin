@@ -1,0 +1,4 @@
+agent false | after http.get: req.socket false, socket: connecting true, same true, nextTick: req.socket true, connect, end: res.socket set
+agent | after http.get: req.socket false, socket: connecting true, same true, nextTick: req.socket true, connect, end: res.socket set
+keepAlive | after http.get: req.socket false, socket: connecting true, same true, nextTick: req.socket true, connect, end: res.socket null
+keepAlive reused | after http.get: req.socket false, socket: connecting false, same true, nextTick: req.socket true, end: res.socket null

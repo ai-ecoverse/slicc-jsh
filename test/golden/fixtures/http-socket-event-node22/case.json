@@ -1,0 +1,1 @@
+{ "description": "an http client request emits socket on the tick after its socket is assigned, while it is still connecting (a reused one already connected), and a keep-alive response has res.socket null by the program's end, as Node 22", "argv": ["script.js"], "shim": true }
