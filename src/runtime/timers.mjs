@@ -192,7 +192,7 @@ export function createTimers(
     return handle;
   };
 
-  const makeImmediate = (fn, args, held = true) => {
+  const makeImmediate = (fn, args, held = true, inCheck = held) => {
     if (stopped) return nativeSetTimeout(fn, 0, ...args);
     const state = {
       kind: 'Immediate',
@@ -200,6 +200,7 @@ export function createTimers(
       id: null,
       retry: null,
       repeating: false,
+      inCheck,
     };
     const handle = new Immediate();
     handle._onImmediate = fn;
@@ -221,14 +222,14 @@ export function createTimers(
       byId.delete(state.id);
       handles.delete(state);
       check.delete(state);
-      if (held) {
+      if (inCheck) {
         if (state.seq >= checkCut) checkCut = made;
         inImmediate++;
       }
       try {
         runMethod(handle, '_onImmediate', args, domain, frame);
       } finally {
-        if (held) inImmediate--;
+        if (inCheck) inImmediate--;
       }
     };
     state.seq = made++;
@@ -279,10 +280,15 @@ export function createTimers(
     clearImmediate: (handle) => clear(handle, nativeClearTimeout),
     /** @internal An immediate that is never held (the message ports' own steps). */
     setImmediateUnheld: (fn) => makeImmediate(fn, [], false),
+    setImmediatePoll: (fn) => makeImmediate(fn, [], true, false),
     /** @internal Whether one of the program's immediates is running (Node's check phase). */
     inCheck: () => inImmediate > 0,
     checkCut: () => checkCut,
     timerAt: () => timerAt,
+    immediatePending(cut = Infinity) {
+      for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < cut) return true;
+      return false;
+    },
     /** @internal A message ports' turn ended: its check phase is the immediates pending now. */
     startCheck() {
       check.clear();

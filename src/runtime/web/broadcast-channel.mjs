@@ -182,26 +182,75 @@ export function createPorts({
   };
 
   // The ports this turn still visits (in the order they were made), the one
-  // being visited and how many of its messages it takes, and the ports
-  // whose 'close' is due at the turn's end.
+  // being visited and how many of its messages it takes.
   let turn = [];
   let current = null;
   let left = 0;
-  let closes = [];
   const byOrder = (x, y) => x._order - y._order;
-  const flushSoon = () => {
-    if (flushing) return;
+
+  let closing = [];
+  let phase = null;
+  let dispatching = false;
+  const closingCut = () => {
+    if (dispatching) return 0;
+    if (!phase) return Infinity;
+    if (phase.cut === Infinity && delivering.checkCut?.() !== phase.seen) phase.cut = delivering.checkCut();
+    return phase.cut;
+  };
+  delivering.closingCut = closingCut;
+  const closeLater = (port) => {
+    closing.push(port);
+    if (phase) return;
+    const seen = delivering.checkCut?.();
+    phase = { cut: delivering.inCheck?.() ? seen : Infinity, seen, handle: { kind: 'port-closing' } };
+    handles?.add(phase.handle);
+    later(runClosing);
+  };
+  const runClosing = () => {
+    if (dispatching || delivering.active || delivering.pending || delivering.immediatePending?.(closingCut())) {
+      later(runClosing);
+      return;
+    }
+    const list = closing.reverse();
+    const { handle } = phase;
+    closing = [];
+    phase = null;
+    const next = () => {
+      const port = list.shift();
+      dispatching = list.length > 0;
+      port._finishClose();
+      handles?.notify?.();
+      if (dispatching) later(next);
+      else handles?.delete(handle);
+    };
+    next();
+  };
+
+  let checkAt = Infinity;
+  delivering.postedAt = () => checkAt;
+  const flushSoon = (held) => {
+    if (flushing) {
+      if (held && !flushing.held) {
+        flushing.held = true;
+        handles?.add(flushing);
+      }
+      return;
+    }
     // Hold the program until the messages are delivered, as queued port messages do.
-    flushing = { kind: 'port-message' };
-    handles?.add(flushing);
+    flushing = { kind: 'port-message', held };
+    if (held) handles?.add(flushing);
+    const again = (fn) => {
+      const task = later(fn);
+      if (!flushing?.held) task?.unref?.();
+    };
     // Node checks its timers when an iteration starts, before the poll phase:
     // a timer that was due when the posting task and its microtasks ended
     // runs first, one that became due while the messages waited for their
     // turn doesn't. From a timer, the poll phase follows its timers phase.
-    let checkAt = Infinity;
+    checkAt = Infinity;
     const step = (first) => {
-      if (first && delivering.overdue?.(Math.min(checkAt, Date.now()))) {
-        later(() => step(true));
+      if (first && (dispatching || delivering.overdue?.(Math.min(checkAt, Date.now())))) {
+        again(() => step(true));
         return;
       }
       // The turn starts when the posting task ended, not when this task got
@@ -212,7 +261,6 @@ export function createPorts({
       if (first) {
         turn = [...ready].sort(byOrder);
         ready.clear();
-        closes = [];
         current = null;
         delivering.active = turn.length > 0;
         delivering.since = startedAt;
@@ -222,28 +270,20 @@ export function createPorts({
           left -= 1;
           if (!current._deliverNext()) continue;
           handles?.notify?.();
-          later(() => step(false));
+          again(() => step(false));
           return;
         }
-        if (current?._closeDue?.()) closes.push(current);
+        if (current?._closeDue?.()) current._startClose();
         current = turn.shift() ?? null;
-        if (current) {
-          left = current._pending();
-          continue;
-        }
-        const port = closes.shift();
-        if (!port) break;
-        if (!port._dispatchClose()) continue;
-        handles?.notify?.();
-        later(() => step(false));
-        return;
+        if (!current) break;
+        left = current._pending();
       }
       delivering.active = false;
       delivering.endTurn?.();
       if (ready.size > 0) {
         // Posted from a handler: Node's next iteration, after the immediates
         // (pending is false); from elsewhere (a timer, I/O): this poll phase.
-        later(() => step(true));
+        again(() => step(true));
         return;
       }
       handles?.delete(flushing);
@@ -266,14 +306,14 @@ export function createPorts({
       };
       queueMicrotask(mark);
     }
-    later(() => step(true));
+    again(() => step(true));
   };
   // A post from the main program or a callback other than an immediate or
   // a port's handler: the immediates already queued wait for its turn
   // (Node's poll phase comes before its check phase). During a turn, a port
   // the turn has yet to reach takes it in this turn (libuv walks the ports
   // in order); one it has passed, in the next.
-  const wake = (port) => {
+  const wake = (port, held = true) => {
     if (delivering.active) {
       const at = current?._order ?? -1;
       if (port !== current && port._order > at) {
@@ -291,7 +331,7 @@ export function createPorts({
       delivering.cut = delivering.checkCut();
     }
     ready.add(port);
-    flushSoon();
+    flushSoon(held);
   };
 
   // A transferred port goes by itself (one thread): out of the value before
@@ -486,6 +526,7 @@ export function createPorts({
     #handle = { kind: 'message-port' };
     #queue = [];
     #closeDue = false;
+    #closing = false;
     #count = 0;
     #registered = new Map();
     #onmessage = null;
@@ -525,27 +566,24 @@ export function createPorts({
 
     start() {
       // A closed one starts too while its close is due: what it holds comes first.
-      if (this.#started || (!this.#open && !this.#closeDue)) return;
+      if (this.#started || this.#closing || (!this.#open && !this.#closeDue)) return;
       this.#started = true;
       if (this.#queue.length > 0 || this.#closeDue) wake(this);
     }
 
     close() {
       this.#closedHere = true;
-      if (!this.#open) return;
-      if (this.#link) {
-        const link = this.#link;
-        this._remoteClosed();
-        link.close();
-        return;
-      }
-      // What either side holds stays, for receiveMessageOnPort() or a
-      // later start(), as in Node.
-      for (const port of [this, this.#peer].filter(Boolean)) {
-        port.#open = false;
-        port.#closeDue = true;
-        wake(port);
-      }
+      if (this.#closing || (!this.#open && !this.#closeDue)) return;
+      // What it holds stays, for receiveMessageOnPort() until its
+      // 'close', as in Node.
+      this.#open = false;
+      this.#closeDue = false;
+      this.#startClosing();
+      this.#link?.close();
+    }
+    #startClosing() {
+      this.#closing = true;
+      closeLater(this);
     }
 
     ref() {
@@ -591,7 +629,7 @@ export function createPorts({
       if (!this.#open) return;
       this.#open = false;
       this.#closeDue = true;
-      wake(this);
+      wake(this, false);
     }
     /**
      * @internal This port goes to another thread: what it holds (its queue,
@@ -637,24 +675,27 @@ export function createPorts({
     }
     /** @internal */
     _pending() {
-      return this.#started ? this.#queue.length : 0;
+      return this.#started && !this.#closing ? this.#queue.length : 0;
     }
     /** @internal Its 'close', once what came before it is delivered (or taken). */
     _closeDue() {
-      return this.#closeDue && this.#queue.length === 0;
+      return this.#closeDue && !this.#closing && this.#queue.length === 0;
+    }
+    _startClose() {
+      this.#closeDue = false;
+      this.#startClosing();
     }
     /** @internal */
-    _dispatchClose() {
-      if (!this._closeDue()) return false;
-      this.#closeDue = false;
+    _finishClose() {
+      this.#closing = false;
       this.#queue.length = 0;
       this.#setRef(false);
+      if (!this.#link) this.#peer?._remoteClosed();
       this.dispatchEvent(new Event('close'));
-      return true;
     }
     /** @internal */
     _deliverNext() {
-      if (this.#detached) return false;
+      if (this.#detached || this.#closing) return false;
       if (this.#started && this.#queue.length > 0) {
         const { data, ports } = this.#queue.shift();
         // The last before a due close: the close's turn comes next.

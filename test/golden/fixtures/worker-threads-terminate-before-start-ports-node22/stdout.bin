@@ -1,3 +1,3 @@
 exit 0
 terminated 0
-closed: the port it was sent, the port queued on it ; the program ends 0
+closed: the port queued on it, the port it was sent ; the program ends 0

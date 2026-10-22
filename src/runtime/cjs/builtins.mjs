@@ -285,7 +285,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
         remote: process._remotePorts,
         getStream,
         Buffer,
-        timers,
+        timers: { setImmediate: timers.setImmediatePoll },
       })),
     buffer: () => (bufferExports ??= bufferModule(Buffer)),
     console: () => console,

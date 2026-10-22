@@ -15,4 +15,4 @@ setTimeout(() => {
   console.log('still open');
   process.exit(0);
 }, 3000).unref();
-process.on('exit', (code) => console.log('closed:', closed.sort().join(', '), '; the program ends', code));
+process.on('exit', (code) => console.log('closed:', closed.join(', '), '; the program ends', code));

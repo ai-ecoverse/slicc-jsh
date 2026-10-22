@@ -1,0 +1,114 @@
+== three m2c2: status 0
+closed 1, 0, 2
+c 2 closed
+b 2 closed
+a 2 closed
+== three c2: status 0
+closed 1, 0, 2
+== three m2c2c1: status 0
+closed 1, 0, 2
+c 1 closed
+a 1 closed
+b 1 closed
+c 2 closed
+b 2 closed
+a 2 closed
+== three c1: status 0
+closed 1, 0, 2
+c 1 closed
+a 1 closed
+b 1 closed
+== three m2c2m1c1: status 0
+closed 1, 0, 2
+c 1 closed
+a 1 closed
+b 1 closed
+c 2 closed
+b 2 closed
+a 2 closed
+== three c2c1 from2: status 0
+closed 1, 0, 2
+c 2 closed
+a 2 closed
+b 2 closed
+== three c2 t50: status 0
+closed 1, 0, 2
+c 2 closed
+b 2 closed
+a 2 closed
+timeout 50
+== three c2c1 imm: status 0
+closed 1, 0, 2
+immediate
+c 1 closed
+a 1 closed
+b 1 closed
+== three m2c2c1 post imm: status 0
+closed 1, 0, 2
+a 2 message a
+b 2 message b
+c 2 message c
+immediate
+c 1 closed
+a 1 closed
+b 1 closed
+c 2 closed
+b 2 closed
+a 2 closed
+== one of three refd: status 0
+c 2 closed
+b 2 closed
+a 2 closed
+== unref with a listener: status 0
+== beforeExit goes on: status 0
+beforeExit
+immediate from beforeExit
+2 closed
+beforeExit
+== two check phases: status 0
+b 1 closed
+a 1 closed
+c 1 closed
+c 2 closed
+b 2 closed
+a 2 closed
+== to the closing end: status 0
+immediate
+1 closed
+== a listener after close: status 0
+1 closed
+== closed from a timer: status 0
+1 message x
+2 message y
+closed in a timer
+immediate
+1 closed
+2 closed
+== closed in a handler: status 0
+2 message x
+tick
+immediate
+c1 closed
+2 closed
+immediate from its close
+c2 closed
+1 closed
+== closed in a close handler: status 0
+a1 closed
+immediate from a1
+a2 closed
+b1 closed
+b2 closed
+== held before its close: status 0
+2 message x
+2 message y
+immediate
+2 closed
+== started after its close: status 0
+timeout
+2 message x
+2 closed
+== received until its close: status 0
+at once before it closed itself
+after an immediate before its other end closed | after it closed itself
+later undefined
