@@ -1,0 +1,1 @@
+{ "description": "the socket an upgrade hands over, on the server and on the client, is paused as Node 22's: readableFlowing is null, and bytes that arrive after the head and before the program adds a data listener are kept for it", "argv": ["script.js"], "shim": true }

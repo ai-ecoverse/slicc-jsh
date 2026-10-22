@@ -1,0 +1,9 @@
+upgrade 101 agentRemove listeners 0 sockets 1 free 0 requests 0 total 1
+  upgrade: served /second, tunnel open true
+  upgrade second closed, tunnel open true sockets 0 free 0 requests 0 total 0
+  upgrade tunnel closed: sockets 0 free 0 requests 0 total 0
+connect 200 agentRemove listeners 0 sockets 1 free 0 requests 0 total 1
+  connect: served /second, tunnel open true
+  connect second closed, tunnel open true sockets 0 free 0 requests 0 total 0
+  connect tunnel closed: sockets 0 free 0 requests 0 total 0
+closed
