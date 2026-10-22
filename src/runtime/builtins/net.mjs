@@ -207,8 +207,12 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     unref() {
       this.#refed = false;
       if (this.#handle) handles.delete(this.#handle);
+      if (this.#readHold) handles.delete(this.#readHold);
+      this.#readHold = null;
       return this;
     }
+
+    #readHold = null;
 
     #idleMs = 0;
     #idleTimer = null;
@@ -516,7 +520,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           // stays ref'd and would not wake waitForProgress).
           // An unref'd socket (an idle keep-alive one) doesn't keep the program alive.
           const reading = this.#reader.read();
-          const { value, done } = await (this.#refed ? trackPromise(handles, reading) : reading);
+          const hold = this.#refed ? { kind: 'promise' } : null;
+          if (hold) handles.add(hold);
+          this.#readHold = hold;
+          const { value, done } = await reading.finally(() => {
+            if (hold) handles.delete(hold);
+            if (this.#readHold === hold) this.#readHold = null;
+          });
           if (this.#detached) return;
           if (this.#idleTimer) this._touch();
           if (done) {

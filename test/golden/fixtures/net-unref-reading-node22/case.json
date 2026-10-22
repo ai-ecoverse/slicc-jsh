@@ -1,0 +1,1 @@
+{ "description": "a socket unref()ed while it waits to read lets the program exit, on the server and on the client, as Node 22", "argv": ["script.js"], "shim": true }
