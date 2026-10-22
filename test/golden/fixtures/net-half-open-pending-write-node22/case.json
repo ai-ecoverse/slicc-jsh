@@ -1,0 +1,1 @@
+{ "description": "a socket whose peer ends while a large write or end(payload) is still in flight keeps the program alive until that write and end are done, as Node 22's pending write and shutdown requests do: the peer, a detached child that has stopped reading, reads again later and every callback runs before the exit", "argv": ["script.js"], "shim": true }

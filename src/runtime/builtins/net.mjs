@@ -542,7 +542,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #endRead() {
-      if (this.#handle) handles.delete(this.#handle);
+      if (this.#handle) {
+        handles.delete(this.#handle);
+        if (this.#refed) trackPromise(handles, this.#lastWrite).catch(() => {});
+      }
       this.push(null);
       // allowHalfOpen false: auto-end AFTER 'end' listeners so
       // `s.on('end', () => s.end('bye'))` can still write (Node; endreply.js).
@@ -613,6 +616,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           this.#maybeFinishConn();
           callback();
         });
+      this.#lastWrite = closing;
       if (this.#readableEof && this.#refed) trackPromise(handles, closing).catch(() => {});
     }
 
