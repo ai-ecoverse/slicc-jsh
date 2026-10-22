@@ -1,3 +1,0 @@
-const mode = process.argv[2];
-if (mode === 'listener') { process.on('uncaughtException', (v, origin) => { console.log('got', typeof v, JSON.stringify(v), origin); }); setTimeout(() => { throw 'a string'; }, 1); setTimeout(() => { throw 42; }, 5); setTimeout(() => console.log('alive'), 20); }
-if (mode === 'capture') { process.setUncaughtExceptionCaptureCallback((v) => console.log('captured', typeof v, String(v))); console.log('has', process.hasUncaughtExceptionCaptureCallback()); process.on('uncaughtException', () => console.log('listener (should not run)')); setTimeout(() => { throw new Error('boom'); }, 1); setTimeout(() => console.log('alive'), 20); try { process.setUncaughtExceptionCaptureCallback(() => {}); } catch (e) { console.log('second set', e.code); } }

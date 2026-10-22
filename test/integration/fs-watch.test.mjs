@@ -8,8 +8,7 @@
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createNodeKernel as createKernel186 } from 'kernel-cert-186/node';
-import { devPackageFiles, kernelAtLeast, kernelVersion, packageFiles, withJsh } from './helpers.mjs';
+import { devPackageFiles, kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
 
 const decoder = new TextDecoder();
 const needs = kernelAtLeast('1.125.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.sync.fs.watch` };
@@ -348,31 +347,5 @@ describe('chokidar 5 in the kernel (usePolling: false)', needs, () => {
       'ready true false',
       'unlink /os/project/src/new.js',
     ]);
-  });
-});
-
-describe('fs.watch on an older kernel (1.86.0): not there, as documented', () => {
-  let kernel;
-  before(async () => {
-    kernel = await createKernel186();
-    for (const [rel, data] of packageFiles()) await kernel.writeFile(`/node_modules/@ai-ecoverse/slicc-jsh/${rel}`, data);
-  });
-  after(() => kernel?.terminate());
-
-  it('fs.watch and fs.promises.watch are absent, and calling fs.watch throws', async () => {
-    await kernel.writeFile(
-      '/tmp/old.js',
-      [
-        "const fs = require('fs');",
-        "console.log(typeof fs.watch, typeof fs.promises.watch, typeof require('fs/promises').watch, typeof fs.watchFile);",
-        "try { fs.watch('/tmp', () => {}).close(); console.log('watching'); } catch (e) { console.log(e.name, e.message); }",
-      ].join('\n')
-    );
-    const r = await kernel.run(['node', '/tmp/old.js'], { cwd: '/tmp' });
-    assert.deepEqual(r, {
-      status: 0,
-      stdout: 'undefined undefined undefined function\nTypeError fs.watch is not a function\n',
-      stderr: '',
-    });
   });
 });

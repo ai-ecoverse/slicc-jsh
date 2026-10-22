@@ -1,1 +1,0 @@
-export default [{ name: 'grandchild', cmd: 'node gc.js; sleep 2; ps -eo pid,ppid,stat,comm | tail -n +2 | while read p pp s c; do case $c in yes|sleep) echo "lingering $c ppid=$pp";; esac; done; echo checked' }];

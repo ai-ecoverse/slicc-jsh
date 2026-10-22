@@ -21,8 +21,4 @@ package-lock.json.bak
 !test/compare/cases/**/node_modules/
 !test/compare/cases/**/node_modules/**
 artifacts/
-# The cert review's m-fixtures (scripts/cert-review/mfixtures.mjs) commit their hand-made packages and tarballs.
-!test/fixtures/cert-review/**/node_modules/
-!test/fixtures/cert-review/**/node_modules/**
-!test/fixtures/cert-review/**/*.tgz
 test/unit/

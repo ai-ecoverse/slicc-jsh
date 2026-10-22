@@ -2,7 +2,7 @@
  * fs.chmod* on slicc-kernel 1.86.0's ctx.sync.fs.chmod / ctx.fs.chmod
  * (ai-ecoverse/slicc-kernel#495) and non-recursive fs.mkdir* on its exclusive
  * mkdir (#514). On an older kernel jsh keeps its fallback (chmod changes
- * nothing, mkdir checks, then creates), which the second half asserts.
+ * nothing, mkdir checks, then creates).
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,7 +10,6 @@ import { kernelAtLeast, kernelVersion, withJshAndSh } from './helpers.mjs';
 
 const HAS_CHMOD = kernelAtLeast('1.86.0');
 const needs = HAS_CHMOD ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.fs.chmod (1.86.0)` };
-const fallback = HAS_CHMOD ? { skip: `slicc-kernel ${kernelVersion} has ctx.fs.chmod` } : {};
 
 const program = (lines) => `(async () => {\n${lines.join('\n')}\n})().catch((e) => { console.error(e); process.exit(1); });\n`;
 const ERR = "const err = (e) => `${e.code} ${e.syscall} ${e.path} ${e.message}`;";
@@ -218,46 +217,5 @@ describe('fs.mkdir without recursive is exclusive in the kernel', () => {
     const r = await jsh.run(['node', 'race2.js']);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, 'EEXIST EEXIST won\n');
-  });
-});
-
-describe('older kernels: the fallback (no ctx.fs.chmod)', () => {
-  let jsh;
-  before(async () => {
-    jsh = await withJshAndSh();
-  });
-  after(() => jsh?.close());
-
-  it('chmod validates, checks the path, changes nothing and warns once; mkdir checks then creates', fallback, async () => {
-    await jsh.kernel.writeFile(
-      '/os/old.js',
-      program([
-        "const fs = require('fs');",
-        ERR,
-        "fs.writeFileSync('/os/old.sh', '#!/bin/sh\\necho old\\n');",
-        "fs.chmodSync('/os/old.sh', 0o755); await fs.promises.chmod('/os/old.sh', 0o755);",
-        "const fd = fs.openSync('/os/old.sh', 'r'); fs.fchmodSync(fd, 0o755); fs.closeSync(fd);",
-        "console.log('mode', (fs.statSync('/os/old.sh').mode & 0o777).toString(8));",
-        "try { fs.chmodSync('/os/missing', 0o755); } catch (e) { console.log(err(e)); }",
-        "try { fs.chmodSync('/os/old.sh', 'x'); } catch (e) { console.log(e.code); }",
-        "fs.mkdirSync('/os/m'); try { fs.mkdirSync('/os/m'); } catch (e) { console.log(err(e)); }",
-        "console.log(fs.mkdirSync('/os/r/a', { recursive: true }));",
-      ])
-    );
-    const r = await jsh.run(['node', 'old.js']);
-    assert.equal(r.status, 0, r.stderr);
-    // Said once, not silently: three chmods, one warning.
-    assert.equal(r.stderr.match(/Warning: fs\.chmod and fs\.fchmod change nothing on this slicc-kernel/g)?.length, 1, r.stderr);
-    assert.equal(
-      r.stdout,
-      [
-        'mode 644',
-        "ENOENT chmod /os/missing ENOENT: no such file or directory, chmod '/os/missing'",
-        'ERR_INVALID_ARG_VALUE',
-        "EEXIST mkdir /os/m EEXIST: file already exists, mkdir '/os/m'",
-        '/os/r',
-        '',
-      ].join('\n')
-    );
   });
 });

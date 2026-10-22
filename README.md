@@ -7,7 +7,7 @@ slicc-jsh gives [slicc-kernel](https://github.com/ai-ecoverse/slicc-kernel) a No
 - [Node compatibility](#node-compatibility)
 - [Kernel requirements](#kernel-requirements)
 - [Develop](#develop)
-- [Release](#release)
+- [CI and releases](#ci-and-releases)
 
 ## Install
 
@@ -199,14 +199,19 @@ The kernel loads `abi: "js"` modules from `data:` URLs, where relative imports d
 
 | Command | What it covers |
 |---|---|
-| `npm test` | `test:golden`, `test:jsh` and `test:integration`; what a release runs |
-| `npm run test:golden` | each fixture in `test/golden/fixtures/` on host Node 22.22.0 and on `node` in slicc-kernel's Node entry: stdout, stderr and status, byte for byte |
-| `npm run test:jsh` | each `.jsh` case in `test/jsh/fixtures/` on the host `jsh` (the baseline) and on the kernel `jsh` |
-| `npm run test:integration` | `node:test` suites in `test/integration/` on slicc-kernel's Node entry: child processes, `pnpm add -g`, ESM, HTTP, WebSocket, exit and signals |
-| `npm run test:cert` | the differential cases in `test/integration/cert/`: host Node 22 against the shim, with the kernel loaded from a plain `dist` path |
-| `npm run test:node-parallel` | a slice of Node v22.22.0's own `test/parallel` with Node's `test/common`, in batches of 40 per process. Reports pass/fail; `STRICT=1` fails on any FAIL, `ONLY=<regex>` runs a subset |
-| `npm run test:browser` | the kernel in a Chromium tab, with slicc-jsh and `@ai-ecoverse/sliccy-browser` installed by `pnpm add -g`; `sliccy:browser` and its skills corpus, compared with the host `jsh`. `JSH_TARBALL=/path/to.tgz` and `SLICCY_BROWSER` (a version or a local tarball) pin a release |
-| `sh test/install/run.sh [node\|no-node\|pty\|uninstall]` | `install.sh` in throwaway `HOME`s, against the published package (needs curl, Node 22+, python3 and perl) |
+| `npm test` | every file in `test/integration/`, what CI runs; `pretest` installs Chrome for Testing at `config.chrome` |
+| `npm run test:golden` | each fixture in `test/golden/fixtures/` on host Node 22.22.0 and on `node` in slicc-kernel's Node entry: stdout, stderr and status, byte for byte (`golden-1` to `golden-4.test.mjs` run a quarter each) |
+| `npm run test:jsh` | each `.jsh` case in `test/jsh/fixtures/` on the host `jsh` (the baseline) and on the kernel `jsh` (`jsh-parity.test.mjs`) |
+
+The files in `test/integration/` are `node:test` suites on slicc-kernel's Node entry: child processes, `pnpm add -g`, ESM, HTTP, WebSocket, exit and signals, PostgreSQL over TLS (`tls-sealed-postgres`, through `embedded-postgres`). A few wrap a harness of their own:
+
+- `differential.test.mjs`: the cases in `test/integration/cert/`, host Node 22 against the shim, with the kernel loaded from a plain `dist` path;
+- `node-parallel.test.mjs`: a slice of Node v22.22.0's own `test/parallel` with Node's `test/common`; every file passes but the known gaps it lists;
+- `browser-*.test.mjs`: the kernel in a Chromium tab, with slicc-jsh and `@ai-ecoverse/sliccy-browser` installed by `pnpm add -g`; `sliccy:browser` and its skills corpus, compared with the host `jsh`. `JSH_TARBALL=/path/to.tgz` and `SLICCY_BROWSER` (a version or a local tarball) pin a release. Chrome runs headless unless `CI` is set; `SLICC_HEADLESS=1` or `0` overrides;
+- `install.test.mjs`: `install.sh` in throwaway `HOME`s, against the published package (needs curl, Node 22+, python3 and perl);
+- `package.test.mjs`: the tarball `npm pack` makes from a copy of the checkout: `NOTICE`, the files it ships, no `prepare` or `prepack`, and a global install running a `#!/usr/bin/env jsh` script.
+
+Run one with `node --test --test-timeout=900000 --test-global-setup=node_modules/@ai-ecoverse/slicc-shared-web/harness/global.mjs test/integration/<file>.test.mjs`.
 
 The baselines always run on Node 22.22.0: `$NODE22` if it names that version, else `npx -y node@22.22.0` fetches it once. To record baselines:
 
@@ -222,30 +227,20 @@ Design and milestones: [slicc-kernel#68](https://github.com/ai-ecoverse/slicc-ke
 **Memory.** Every test script runs with `--max-old-space-size=512`. For heavy runs, wrap the command in `scripts/mem-guard.sh`. It samples RSS every 0.5 s and kills the command's process tree (exit 137) when one process passes 2,000,000 KB (~1.9 GiB) or the whole tree passes 3,000,000 KB (~2.9 GiB). Run one Chromium at a time:
 
 ```sh
-scripts/mem-guard.sh npm run test:integration
-lockf -k /tmp/slicc-heavy.lock scripts/mem-guard.sh npm run test:browser
+scripts/mem-guard.sh npm test
+lockf -k /tmp/slicc-heavy.lock scripts/mem-guard.sh node --test test/integration/browser-corpus.test.mjs
 ```
 
-## Release
+## CI and releases
 
-[semantic-release](https://semantic-release.gitbook.io/) releases on every push to `main` (`.github/workflows/release.yml`). It runs `npm run lint` and `npm test`, then takes the version from the conventional commits since the last `v*` tag:
+`.github/workflows/ci.yml` is one caller of [slicc-shared-web's pipeline](https://github.com/ai-ecoverse/slicc-shared-web#pipeline), on Node 26 (the kernel's `engines`; the baselines bring their own Node 22.22.0):
+
+- **pull requests:** `npm run lint` (with `shellcheck` on `install.sh`), then `npm test` with the files of `test/integration/` split by timing over 4 shards, then a Claude and a Codex review. `ci / integration` and `ci / review` are the checks to require;
+- **the merge queue:** lint and the tests again, on the tree that lands;
+- **a push to `main`:** [semantic-release](https://semantic-release.gitbook.io/) takes the version from the conventional commits since the last `v*` tag and publishes to npm with provenance, through npm trusted publishing from `ci.yml`.
 
 - `feat:` gives a minor release (0.x stays 0.x until a breaking change);
 - `fix:` or `perf:` gives a patch release;
 - other types (`docs:`, `chore:`, `ci:`, `test:`, …) release nothing.
 
-**Certify in the PR, release simply.** cert-review (`.github/workflows/cert-review.yml`, called by `ci.yml` as the `cert` job) certifies the change in the pull request, so only certified changes merge:
-
-- **scope:** `scripts/cert-review/shipped.mjs` decides whether the pull request changes shipped behaviour. It's a conservative path filter: `src/`, the build and notice scripts, LICENSE, NOTICE, README, `install.sh`, `.releaserc.json`, the build and publish workflows (`release.yml`, `ci.yml`), and cert-review's own workflow and tools. A `package.json` or lockfile change counts only if a `package.json` field other than `devDependencies`, `version` and `gitHead` changes, `scripts` included (install hooks run on the consumer's `npm install`, and pack or publish hooks change what ships), or if `dist/` builds differently. So devDependency bumps (kernels, wasm-*, the cert-kernel aliases) are recorded as "not behaviour", and CI's suites still test them.
-- **review** (same-repo pull requests that change behaviour and aren't drafts, on opened, ready_for_review, reopened and every push; a draft's required check (`cert / cert-review / verdict`) is red, `draft, not reviewed`, and converted_to_draft cancels a running review; a label event re-runs CI on the head as before, so it restarts the review at full cost until cert-review v2): the candidate (the pull request merged onto current main, `refs/pull/<n>/merge`) and its base (main) are packed as the release packs. The suites and the m-fixtures run on the CI pool (`vars.CERT_RUNNER`), on the candidate's tests with its dist and with main's dist (the NEGATIVE), on four kernels under users `enforce`. Claude reviews the evidence from `test/cert-review/review.txt`. `scripts/cert-review/record.mjs` (main's copy, at the base) writes the line, a `cert-review` status on the head and a sticky comment on the pull request. A fork's pull request that changes shipped behaviour fails: it gets no review.
-- **Draft status replaces the old `merge-ok` label, and it's the author's:** whoever opens the pull request marks it ready once it is, and then queues it with `gh pr merge <n> --auto`. **Mark ready = reviewed, and merges on green**; a pull request held for anything stays a draft. No human sits in the loop. Renovate's pull requests aren't drafts, so a dependency bump that changes `dist/` is reviewed before it automerges, and the rest record "not behaviour".
-- **cert-review's own changes, and what decides whether it runs and what gets published** (`.github/workflows/cert*.yml`, `ci.yml`, `release.yml`, `scripts/cert-review/`, `scripts/release-{body,outcome}.mjs`, `.releaserc.json`, `test/cert-review/`, `test/fixtures/cert-review/`) also go through slicc-shared-web's `cert-self-guard` (a pinned `uses:`). Such a pull request fails `cert-review` with "needs coordinator review" until the lane coordinator applies `cert-review-approved` to its current head. The label is bound to the head's arrival on the server and removed on any later push, and the merge group checks it again. **Only a lane coordinator applies or removes that label**, after reading the change; workers and authors never do. Marking ready stays the author's. CODEOWNERS lists these paths as documentation; no code-owner review is required, because a required review would put a human back in the loop. **Residual:** a `pull_request` run takes its workflow YAML from the pull request, so a pull request that edits `cert-review.yml` could weaken the guard in its own run. The coordinator rule covers that.
-- **merge group:** no second review. `scripts/cert-review/group.mjs` checks that every pull request in the group has a successful `cert-review` status on the head that entered the queue, while ci's suites run on the tree that lands. It writes a `cert-review` status on the group's head, which becomes main's tip, so every main commit and every release tag carries one. The release's notes job lists every pull request in the release, with its line, in the GitHub release.
-
-Every push to main releases what landed:
-
-1. **tag** (the CI pool, `vars.CERT_RUNNER`): semantic-release computes the version, tags the commit and writes the GitHub release. `npmPublish` is off: publishing is the next job's.
-2. **publish** (hosted, the only job with `id-token: write`): `npm publish --provenance` of exactly the tagged commit, with trusted publishing.
-3. **notes** (code only, git and GitHub): `scripts/cert-review/carry.mjs` writes the cert-review section of the GitHub release, every pull request since the previous tag with its cert line. Nothing reads the registry back: a successful `npm publish --provenance` is the publish evidence, and the registry's copy lags it by minutes. A failed tag or publish job opens an issue.
-
-`version` in `package.json` stays `0.0.0`; the publish job sets it. `prepack` builds and then runs `scripts/strip-own-scripts.mjs`, which removes `prepare` and `prepack` from `package.json` in CI (or with `SLICC_JSH_STRIP_SCRIPTS=1`) before npm packs, so the published package has neither. A local `npm pack` keeps them. npm has to trust `release.yml` once: `npm run trust` (fledgling) sets that up, `npm run trust:dry` shows what it would do.
+`version` in `package.json` stays `0.0.0`; semantic-release sets it. `prepack` builds and then runs `scripts/strip-own-scripts.mjs`, which removes `prepare` and `prepack` from `package.json` in CI (or with `SLICC_JSH_STRIP_SCRIPTS=1`) before npm packs, so the published package has neither. A local `npm pack` keeps them. npm trusts `ci.yml` (`fledgling` in `package.json`): `npm run trust` sets that up, `npm run trust:dry` shows what it would do.

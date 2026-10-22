@@ -12,7 +12,6 @@ import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
 
 const needs = kernelAtLeast('1.86.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.fs.chmod (1.86.0)` };
 const has192 = kernelAtLeast('1.92.0') ? {} : { skip: `slicc-kernel ${kernelVersion}: no ctx.umask / writable BroadcastChannel slot (1.92.0)` };
-const old192 = kernelAtLeast('1.92.0') ? { skip: `slicc-kernel ${kernelVersion} leaves the BroadcastChannel slot open` } : {};
 
 describe('process.umask and new files under a user’s umask (kernel)', () => {
   let jsh;
@@ -67,16 +66,6 @@ describe('modules and globals jsh leaves out (kernel)', () => {
     ]);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, 'undefined undefined\nERR_METHOD_NOT_IMPLEMENTED The lchmod() method is not implemented\n');
-  });
-
-  it('BroadcastChannel: before slicc-kernel 1.92.0 the kernel locks the slot (undefined)', old192, async () => {
-    const r = await jsh.run([
-      'node',
-      '-e',
-      "const d = Object.getOwnPropertyDescriptor(globalThis, 'BroadcastChannel'); console.log(typeof BroadcastChannel, d && d.configurable, d && d.writable, typeof require('worker_threads').BroadcastChannel)",
-    ]);
-    assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout, 'undefined false false function\n');
   });
 
   it('BroadcastChannel (1.92.0+) is jsh’s, never the platform’s: in-process only, not across programs', has192, async () => {

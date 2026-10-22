@@ -1,0 +1,5 @@
+{
+  "description": "process.kill(process.pid, sig) for the signals process-kill-self leaves out: SIGUSR2, SIGALRM, SIGVTALRM, SIGXCPU and SIGSEGV end the program with that signal, SIGPIPE, SIGURG and SIGCONT are ignored (Node 22)",
+  "argv": ["main.js"],
+  "shim": true
+}

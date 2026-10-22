@@ -44,25 +44,6 @@ client.register.metrics().then((m) => console.log(m.split('\\n').filter((l) => l
     assert.deepEqual(r.stdout.split('\n'), ['cluster metrics ""', 'jobs_total 2', '']);
   });
 
-  it('cluster.fork throws ERR_NOT_SUPPORTED when it is called, after setupPrimary', { skip: kernelAtLeast(IPC_KERNEL) }, async () => {
-    const r = await jsh.run([
-      'node',
-      '-e',
-      `const cluster = require('cluster');
-cluster.on('setup', (s) => console.log('setup', s.silent));
-try { cluster.fork({ X: '1' }); } catch (e) { console.log(e.code, e.message); }
-console.log('workers', JSON.stringify(cluster.workers), Object.keys(cluster.settings).join());
-`,
-    ]);
-    assert.equal(r.status, 0, r.stderr);
-    assert.deepEqual(r.stdout.split('\n'), [
-      "ERR_NOT_SUPPORTED slicc-jsh: 'cluster.fork' is not supported yet (child_process.fork has no IPC channel)",
-      'workers {} args,exec,execArgv,silent',
-      'setup false',
-      '',
-    ]);
-  });
-
   // A worker that is gone while the primary still binds the address it
   // asked for: the primary neither adds it nor answers it, and its listener
   // closes, so the primary ends. (Node answers it there, and the EPIPE is an

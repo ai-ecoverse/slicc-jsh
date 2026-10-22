@@ -58,9 +58,4 @@ try {
     assert.equal(r.stdout, 'code 44\n');
     assert.equal(r.stderr, 'on stderr\n');
   });
-
-  it('without a WASI host, require("wasi") throws ERR_NOT_SUPPORTED, as before', { skip: hasWasi && `slicc-kernel ${kernelVersion} has a WASI host` }, async () => {
-    const r = await jsh.run(['node', '-e', "try { require('wasi') } catch (e) { console.log(e.code) }"]);
-    assert.equal(r.stdout, 'ERR_NOT_SUPPORTED\n');
-  });
 });
