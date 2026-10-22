@@ -32,6 +32,7 @@ import {
 
 const kFSWatchStart = Symbol('kFSWatchStart');
 const kEmptyObject = Object.freeze({ __proto__: null });
+const WINDOW_ASKS = 16;
 
 /**
  * Node's abort listeners for watchers resist stopImmediatePropagation()
@@ -146,9 +147,18 @@ export function createFsWatch({ process, path, Buffer, handles, timers, watch: k
       if (FSEvent.#reading) return;
       FSEvent.#reading = true;
       const later = (fn) => timers.setImmediate(fn).unref?.();
+      let seen = 0;
+      let quiet = 0;
+      let asks = 0;
+      const ask = () => Promise.resolve(barrier()).then(asked, asked);
+      const asked = () => {
+        quiet = FSEvent.#heard.length === seen ? quiet + 1 : 0;
+        seen = FSEvent.#heard.length;
+        later(quiet < 2 && ++asks < WINDOW_ASKS ? ask : () => FSEvent.#read());
+      };
       later(() => {
-        const read = () => later(() => FSEvent.#read());
-        Promise.resolve(barrier()).then(read, read);
+        seen = FSEvent.#heard.length;
+        ask();
       });
     }
 
