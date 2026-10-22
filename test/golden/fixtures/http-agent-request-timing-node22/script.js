@@ -48,9 +48,39 @@ const unheard = (keepAlive) =>
       });
     });
   });
+const gone = (keepAlive, how, ended) =>
+  new Promise((resolve) => {
+    let hits = 0;
+    const srv = http.createServer((req, res) => {
+      hits++;
+      res.end('ok ' + req.url);
+    });
+    srv.listen(0, '127.0.0.1', () => {
+      const agent = new http.Agent({ keepAlive, maxSockets: 1 });
+      const opts = { agent, host: '127.0.0.1', port: srv.address().port };
+      const events = [];
+      const first = http.request({ ...opts, path: '/first' });
+      first.on('error', (e) => events.push(`error ${e.code}`));
+      first.on('close', () => events.push('close'));
+      first.on('response', () => events.push('response'));
+      if (ended) first.end();
+      first[how]();
+      http.get({ ...opts, path: '/second' }, (res) => {
+        let b = '';
+        res.setEncoding('utf8');
+        res.on('data', (d) => (b += d));
+        res.on('end', () => {
+          console.log(`${keepAlive ? 'keepAlive' : 'no keepAlive'} ${how}() ${ended ? 'after end()' : 'before end()'}: second got ${JSON.stringify(b)}; first: ${events.join(', ')}; server saw ${hits}`);
+          agent.destroy();
+          srv.close(resolve);
+        });
+      });
+    });
+  });
 (async () => {
   await run(false);
   await run(true);
   await unheard(false);
   await unheard(true);
+  for (const keepAlive of [false, true]) for (const how of ['destroy', 'abort']) for (const ended of [false, true]) await gone(keepAlive, how, ended);
 })();

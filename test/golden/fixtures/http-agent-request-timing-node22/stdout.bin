@@ -8,3 +8,11 @@ keepAlive after two requests: sockets 1 free 0 requests 1 total 1
   keepAlive /b at end: ok /b, sockets 1 free 0 requests 0 total 1
 no keepAlive after a response nobody listens for: ok /next
 keepAlive after a response nobody listens for: ok /next
+no keepAlive destroy() before end(): second got "ok /second"; first: error ECONNRESET, close; server saw 1
+no keepAlive destroy() after end(): second got "ok /second"; first: error ECONNRESET, close; server saw 1
+no keepAlive abort() before end(): second got "ok /second"; first: close; server saw 1
+no keepAlive abort() after end(): second got "ok /second"; first: close; server saw 1
+keepAlive destroy() before end(): second got "ok /second"; first: error ECONNRESET, close; server saw 1
+keepAlive destroy() after end(): second got "ok /second"; first: error ECONNRESET, close; server saw 1
+keepAlive abort() before end(): second got "ok /second"; first: close; server saw 1
+keepAlive abort() after end(): second got "ok /second"; first: close; server saw 1

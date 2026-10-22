@@ -166,7 +166,7 @@ describe('http.request without a route: through ctx.fetch', () => {
     );
     const r = await jsh.run(['node', 'viafetch2.js']);
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout, 'closed\nagent ENETUNREACH connect\n');
+    assert.equal(r.stdout, 'error ECONNRESET\nclosed\nagent ENETUNREACH connect\n');
   });
 });
 

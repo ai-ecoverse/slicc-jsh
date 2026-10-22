@@ -1730,7 +1730,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         return;
       }
       const free = (this.freeSockets[name] ||= []);
-      if (socket.destroyed || !this.keepAlive || !(this.maxFreeSockets > 0) || free.length >= this.maxFreeSockets || !this.keepSocketAlive(socket)) {
+      if (socket.destroyed || !socket._httpMessage?.shouldKeepAlive || !this.keepAlive || !(this.maxFreeSockets > 0) || free.length >= this.maxFreeSockets || !this.keepSocketAlive(socket)) {
         if (!free.length) delete this.freeSockets[name];
         socket.destroy();
         return;
@@ -1952,6 +1952,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     this[kFetchTimer] = null;
     if (this[kFetchVia]) this[kFetchMode] = true;
     this.reusedSocket = false;
+    this.aborted = false;
     // Node's: what the request is, readable as res.req's.
     this.method = String(options.method ?? 'GET').toUpperCase();
     this.path = options.path ?? '/';
@@ -2002,6 +2003,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       return this;
     },
     abort() {
+      this.aborted = true;
       this.destroy();
     },
     clearTimeout(callback) {
@@ -2023,7 +2025,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     onSocket(socket, err) {
       process.nextTick(() => {
         if (err) emitError(this, err);
-        else this[kAttachSocket](socket);
+        else if (!this.destroyed) this[kAttachSocket](socket);
+        else {
+          if (this.agent && !socket.destroyed) socket.emit('free');
+          else socket.destroy();
+          if (!this.aborted && !this[kErrored]) emitError(this, Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }));
+        }
       });
     },
 
