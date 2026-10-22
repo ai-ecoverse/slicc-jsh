@@ -117,7 +117,8 @@ export function workerExecArgvError(execArgv) {
   for (let i = 0; i < execArgv.length; i++) {
     const word = execArgv[i];
     if (!word.startsWith('-') || word === '-' || word === '--') break;
-    const name = word.startsWith('--') ? word.split('=')[0] : word;
+    const norm = normalizeOption(word);
+    const name = norm.startsWith('--') ? norm.split('=')[0] : norm;
     const next = execArgv[i + 1];
     // -e, -p, --check and -i are inert in a worker, once whole (-pe is --eval's).
     if (/^(-e|--eval|-pe|-ep)$/.test(word)) {
@@ -131,7 +132,7 @@ export function workerExecArgvError(execArgv) {
       continue;
     }
     if (/^--(eval|print)=/.test(word) || /^(-c|--check|-i|--interactive)$/.test(word)) continue;
-    if (WORKER_V8_VALUED.has(name) && name === word) {
+    if (WORKER_V8_VALUED.has(name) && name === norm) {
       if (missingValue(next)) return `${word} requires an argument`;
       i++;
       invalid.push(word);
@@ -248,8 +249,7 @@ export function parseNodeOptions(text, argv0 = 'node', { watch = false, refuse }
     // A short option takes no `=` (`-C=foo` is a name of its own).
     const eq = word.startsWith('--') ? word.indexOf('=') : -1;
     const raw = eq === -1 ? word : word.slice(0, eq);
-    // Node's names take `_` for `-` (after the leading dashes).
-    const name = raw.replace(/^(-+)(.*)$/, (m, dashes, rest) => dashes + rest.replace(/_/g, '-'));
+    const name = normalizeOption(raw);
     const negated = `--${name.slice(5)}`;
     if (name.startsWith('--no-') && (ENV_VALUED.has(negated) || ENV_VALUED.has(ENV_ALIASES[negated]?.[0]))) {
       return { error: `${argv0}: ${raw} is an invalid negation because it is not a boolean option`, status: 9 };
@@ -265,7 +265,7 @@ export function parseNodeOptions(text, argv0 = 'node', { watch = false, refuse }
     const takesValue = ENV_VALUED.has(canonical);
     if (takesValue && eq === -1) {
       if (missingValue(words[i + 1])) return { error: `${argv0}: ${raw} requires an argument`, status: 9 };
-      apply.push(word, words[++i]);
+      apply.push(name, words[++i]);
     } else if (takesValue && eq === word.length - 1) {
       return { error: `${argv0}: ${word} requires an argument`, status: 9 };
     } else {
@@ -321,7 +321,7 @@ export function parseNodeArgv(argv, { nodeOptions, watch = false, refuse } = {})
       if (cli.error || cli.mode === 'version' || cli.mode === 'help') return cli;
       return {
         ...cli,
-        options: effective([...fromEnv.execArgv, ...cli.execArgv]),
+        options: effective([...fromEnv.canonical, ...cli.canonical]),
         preload: [...fromEnv.preload, ...cli.preload],
         imports: [...fromEnv.imports, ...cli.imports],
         v8Warnings: [...fromEnv.v8Warnings, ...cli.v8Warnings],
@@ -330,7 +330,7 @@ export function parseNodeArgv(argv, { nodeOptions, watch = false, refuse } = {})
     }
   }
   const parsed = parseCommandLine(argv, { watch });
-  return parsed.execArgv ? { ...parsed, options: effective(parsed.execArgv) } : parsed;
+  return parsed.execArgv ? { ...parsed, options: effective(parsed.canonical) } : parsed;
 }
 
 /** The options in effect: a boolean given a value (`--no-warnings=x`, which Node takes) as itself. */
@@ -363,6 +363,13 @@ function booleanToggle(name) {
   return null;
 }
 
+export function normalizeOption(word) {
+  if (word.length < 2 || word[0] !== '-') return word;
+  const eq = word[1] === '-' ? word.indexOf('=') : -1;
+  const end = eq === -1 ? word.length : eq;
+  return word.slice(0, 2) + word.slice(2, end).replaceAll('_', '-') + word.slice(end);
+}
+
 /** Node's: a value that looks like an option isn't one (`--require --no-warnings`). */
 const missingValue = (next) => next === undefined || next.startsWith('-');
 
@@ -386,10 +393,18 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
   let stdinScript = false;
   // Options that only set behaviour; kept in execArgv as Node does.
   const flags = [];
+  const shown = [];
   let i = 0;
+  let word;
+  let arg;
+  const keep = (name, ...values) => {
+    flags.push(name, ...values);
+    shown.push(name === arg ? word : name, ...values);
+  };
 
   while (i < args.length) {
-    const arg = args[i];
+    word = args[i];
+    arg = normalizeOption(word);
     if (arg === '--') {
       userArgs.push(...args.slice(i + 1));
       break;
@@ -403,11 +418,11 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
     if (arg === '-e' || arg === '--eval') {
       i += 1;
       if (missingValue(args[i])) {
-        return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+        return { error: `${argv0}: ${word} requires an argument`, status: 9 };
       }
       evalCode = args[i];
       print = false;
-      flags.push('-e', evalCode);
+      keep('-e', evalCode);
       i += 1;
       // Node goes on parsing options after the code, up to the first argument.
       continue;
@@ -416,37 +431,37 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
       print = true;
       i += 1;
       if (i >= args.length) {
-        return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+        return { error: `${argv0}: ${word} requires an argument`, status: 9 };
       }
       evalCode = args[i];
-      flags.push('-p', evalCode);
+      keep('-p', evalCode);
       i += 1;
       continue;
     }
     if (arg.startsWith('-e') && arg.length > 2) {
-      evalCode = arg.slice(2);
+      evalCode = word.slice(2);
       print = false;
-      flags.push('-e', evalCode);
+      keep('-e', evalCode);
       i += 1;
       continue;
     }
     if (arg.startsWith('-p') && arg.length > 2) {
       print = true;
-      evalCode = arg.slice(2);
-      flags.push('-p', evalCode);
+      evalCode = word.slice(2);
+      keep('-p', evalCode);
       i += 1;
       continue;
     }
     if (arg === '-r' || arg === '--require') {
-      if (missingValue(args[i + 1])) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      if (missingValue(args[i + 1])) return { error: `${argv0}: ${word} requires an argument`, status: 9 };
       preload.push(args[i + 1]);
-      flags.push(arg, args[i + 1]);
+      keep(arg, args[i + 1]);
       i += 2;
       continue;
     }
     if (arg.startsWith('--require=')) {
       preload.push(arg.slice(10));
-      flags.push(arg);
+      keep(arg);
       i += 1;
       continue;
     }
@@ -456,43 +471,43 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
     // report, then Node's for the flags V8 then didn't take.
     if (arg === '--stack-trace-limit' || arg.startsWith('--stack-trace-limit=')) {
       if (!/^-?\d+$/.test(arg.slice(20))) {
-        return { error: v8FlagError(argv0, [`Error: illegal value for flag ${arg} of type int`], arg), status: 9 };
+        return { error: v8FlagError(argv0, [`Error: illegal value for flag ${word} of type int`], word), status: 9 };
       }
-      flags.push(arg);
+      keep(arg);
       i += 1;
       continue;
     }
     if (arg === '--max-old-space-size' || arg.startsWith('--max-old-space-size=')) {
       const value = arg.slice(21);
-      const bounds = `Error: Value for flag ${arg} of type size_t is out of bounds [0-18446744073709551615]`;
+      const bounds = `Error: Value for flag ${word} of type size_t is out of bounds [0-18446744073709551615]`;
       // A negative size: V8 says so and goes on (with its default).
       if (/^-\d+$/.test(value)) {
         v8Warnings.push(bounds, 'Try --help for options');
-        flags.push(arg);
+        keep(arg);
         i += 1;
         continue;
       }
       if (!/^\d+$/.test(value)) {
         // Linux's V8 (strtoull doesn't take the value): just "illegal value";
         // macOS's prints the out-of-bounds line before it.
-        return { error: v8FlagError(argv0, [`Error: illegal value for flag ${arg} of type size_t`], arg), status: 9 };
+        return { error: v8FlagError(argv0, [`Error: illegal value for flag ${word} of type size_t`], word), status: 9 };
       }
-      flags.push(arg);
+      keep(arg);
       i += 1;
       continue;
     }
     // --import X / --import=X: ES modules loaded before the entry (after -r).
     if (arg === '--import') {
-      if (missingValue(args[i + 1])) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      if (missingValue(args[i + 1])) return { error: `${argv0}: ${word} requires an argument`, status: 9 };
       imports.push(args[i + 1]);
-      flags.push(arg, args[i + 1]);
+      keep(arg, args[i + 1]);
       i += 2;
       continue;
     }
     if (arg.startsWith('--import=')) {
-      if (arg === '--import=') return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      if (arg === '--import=') return { error: `${argv0}: ${word} requires an argument`, status: 9 };
       imports.push(arg.slice(9));
-      flags.push(arg);
+      keep(arg);
       i += 1;
       continue;
     }
@@ -505,7 +520,7 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
     if (arg === '-i' || arg === '--interactive') {
       // The REPL even if stdin isn't a terminal (Node's -i); kept in execArgv.
       interactive = true;
-      flags.push(arg);
+      keep(arg);
       i += 1;
       continue;
     }
@@ -515,55 +530,55 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
     const watchBoolean = watchable && /^--(no-)?watch(-preserve-output)?(=|$)/.exec(arg);
     if (watchBoolean && !(watchBoolean[1] && arg.includes('='))) {
       if (!watchBoolean[2]) watch = !watchBoolean[1];
-      flags.push(arg);
+      keep(arg);
       i += 1;
       continue;
     }
     if (watchable && /^--no-watch-(path|kill-signal)(=|$)/.test(arg)) {
-      return { error: `${argv0}: ${arg} is an invalid negation because it is not a boolean option`, status: 9 };
+      return { error: `${argv0}: ${word} is an invalid negation because it is not a boolean option`, status: 9 };
     }
     const watchValued = watchable && ['--watch-path', '--watch-kill-signal'].find((f) => arg === f || arg.startsWith(`${f}=`));
     if (watchValued) {
       if (watchValued === '--watch-path') watch = true;
       if (arg === watchValued) {
         if (missingValue(args[i + 1])) {
-          const lines = [`${argv0}: ${arg} requires an argument`];
+          const lines = [`${argv0}: ${word} requires an argument`];
           if (watchValued === '--watch-path') lines.push(`${argv0}: --watch requires specifying a file`);
           return { error: lines.join('\n'), status: 9 };
         }
-        flags.push(arg, args[i + 1]);
+        keep(arg, args[i + 1]);
         i += 2;
       } else if (arg === `${watchValued}=`) {
-        return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+        return { error: `${argv0}: ${word} requires an argument`, status: 9 };
       } else {
-        flags.push(arg);
+        keep(arg);
         i += 1;
       }
       continue;
     }
     if (BOOLEAN_FLAGS.has(arg) || (arg.startsWith('--') && booleanToggle(arg.split('=')[0]))) {
-      flags.push(arg);
+      keep(arg);
       i += 1;
       continue;
     }
     if (arg === '--trace-events-enabled') {
-      flags.push(arg);
+      keep(arg);
       i += 1;
       continue;
     }
     const negated = /^--no-([^=]+)/.exec(arg)?.[1];
     if (negated && [...VALUED_FLAGS, '--trace-events-enabled'].includes(`--${negated}`)) {
-      return { error: `${argv0}: ${arg} is an invalid negation because it is not a boolean option`, status: 9 };
+      return { error: `${argv0}: ${word} is an invalid negation because it is not a boolean option`, status: 9 };
     }
     const valued = VALUED_FLAGS.find((f) => arg === f || arg.startsWith(`${f}=`));
     if (valued) {
-      if (arg === `${valued}=`) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
+      if (arg === `${valued}=`) return { error: `${argv0}: ${word} requires an argument`, status: 9 };
       if (arg === valued) {
-        if (missingValue(args[i + 1])) return { error: `${argv0}: ${arg} requires an argument`, status: 9 };
-        flags.push(arg, args[i + 1]);
+        if (missingValue(args[i + 1])) return { error: `${argv0}: ${word} requires an argument`, status: 9 };
+        keep(arg, args[i + 1]);
         i += 2;
       } else {
-        flags.push(arg);
+        keep(arg);
         i += 1;
       }
       continue;
@@ -571,11 +586,11 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
     if (arg.startsWith('-')) {
       if (arg === '-c' || arg === '--check') {
         check = true;
-        flags.push(arg);
+        keep(arg);
         i += 1;
         continue;
       }
-      return { error: `${argv0}: bad option: ${arg}`, status: 9 };
+      return { error: `${argv0}: bad option: ${word}`, status: 9 };
     }
     // With -e / -p, the first argument and the rest are the program's.
     if (evalCode !== undefined) {
@@ -612,7 +627,8 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
     return {
       mode: 'watch',
       processArgv: [argv0, ...(stdinScript ? ['-'] : [script]), ...userArgs],
-      execArgv: [...flags],
+      execArgv: shown,
+    canonical: flags,
       preload,
       imports,
       v8Warnings,
@@ -626,7 +642,8 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
       print,
       processArgv: [argv0, ...userArgs],
       // In Node's order: the options as given, the code where it was.
-      execArgv: [...flags],
+      execArgv: shown,
+    canonical: flags,
       interactive,
       preload,
       imports,
@@ -640,7 +657,8 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
       script,
       check,
       processArgv: [argv0, script, ...userArgs],
-      execArgv: [...flags],
+      execArgv: shown,
+    canonical: flags,
       preload,
       imports,
       v8Warnings,
@@ -650,7 +668,8 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
   return {
     mode: 'empty',
     processArgv: stdinScript ? [argv0, '-', ...userArgs] : [argv0],
-    execArgv: [...flags],
+    execArgv: shown,
+    canonical: flags,
     interactive,
     preload,
     imports,
