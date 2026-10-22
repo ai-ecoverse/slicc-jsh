@@ -1416,6 +1416,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         clearTimeout(requestTimer);
         requestTimer = null;
         socket.off('data', onData);
+        socket.off('end', onSocketEnd);
+        socket.off('error', onSocketError);
         server._connections.delete(conn);
         const req = makeIncomingMessage(socket, Buffer.alloc(0));
         setRequestLine(req, parsed, headers);

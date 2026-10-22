@@ -1,0 +1,6 @@
+a write, then end() on the peer end: end callback
+a write, then end() on the peer end: the peer ended
+a write, then end() on the peer end: write callback
+end(payload): end callback
+end(payload): the peer ended
+exit 0

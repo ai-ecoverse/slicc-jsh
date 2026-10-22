@@ -1,0 +1,1 @@
+{ "description": "a socket whose peer has ended, with allowHalfOpen and nothing left to write, no longer keeps the program alive, as a libuv stream that is not reading nor writing does not: the program exits with the socket still half open and its server not yet closed, as Node 22's does", "argv": ["script.js"], "shim": true }
