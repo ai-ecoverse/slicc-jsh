@@ -546,25 +546,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       }
       this.push(null);
       this.read(0);
-      // allowHalfOpen false: auto-end AFTER 'end' listeners so
-      // `s.on('end', () => s.end('bye'))` can still write (Node; endreply.js).
-      this.#scheduleAutoEnd();
       // Wake drainLoop to flush readable-stream's deferred 'data'/'end'.
       handles.notify();
-    }
-
-    /**
-     * Node: with allowHalfOpen false, the writable side ends after the readable
-     * 'end' event is delivered — not before — so handlers may still write.
-     */
-    #scheduleAutoEnd() {
-      if (this.allowHalfOpen) return;
-      const run = () => {
-        const writableEnded = this.writableEnded === true || this._writableState?.ended;
-        if (!this.destroyed && !writableEnded && !this.#ended) this.end();
-      };
-      // After readable-stream's nextTick 'end' emission (and its listeners).
-      nextTick(() => nextTick(run));
     }
 
     #ended = false;

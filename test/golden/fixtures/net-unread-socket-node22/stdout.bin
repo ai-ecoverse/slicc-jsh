@@ -1,7 +1,7 @@
-client unread at EOF: buffered 7 readableFlowing null readableEnded false events ""
-client read late: "payload" events end close
-server unread at EOF: buffered 7 readableFlowing null readableEnded false events ""
-server read late: "payload" events end close
-never read, at EOF: buffered 7 readableFlowing null readableEnded false events ""
-never read, destroyed: buffered 7 readableFlowing null readableEnded false events "close"
-done
+client unread at EOF: buffered 7 readableFlowing null readableEnded false writableEnded false events "" peer ""
+client read late: "payload" events end finish close peer end close
+server unread at EOF: buffered 7 readableFlowing null readableEnded false writableEnded false events "" peer ""
+server read late: "payload" events end finish close peer end close
+never read, at EOF: buffered 7 readableFlowing null readableEnded false writableEnded false events "" peer ""
+never read, destroyed: buffered 7 readableFlowing null readableEnded false writableEnded false events "close" peer "end close"
+never read, at exit: buffered 7 readableEnded false writableEnded false events ""
