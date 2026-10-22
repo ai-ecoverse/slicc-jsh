@@ -55,6 +55,7 @@ export async function withJsh(options = {}) {
     ...(network || options.uplink ? { network: { ...network, ...(options.uplink ? { uplink: options.uplink } : {}) } } : {}),
     ...(options.sealed ? { sealed: options.sealed } : {}),
     ...(options.compileCache ? { compileCache: options.compileCache } : {}),
+    ...(options.root ? { root: options.root } : {}),
     ...(options.worker ? { worker: options.worker } : {}),
   });
   // `tlsEngine`: the kernel's own TLS client (slicc-kernel 1.124.0) needs
