@@ -71,7 +71,7 @@
     "chrome": "156.0.8078.4"
   },
   "devDependencies": {
-    "@ai-ecoverse/slicc-cdp": "1.31.7",
+    "@ai-ecoverse/slicc-cdp": "1.31.8",
     "@ai-ecoverse/slicc-jerk": "1.2.2",
     "@ai-ecoverse/slicc-kernel": "1.146.5",
     "@ai-ecoverse/slicc-shared-web": "2.10.4",
