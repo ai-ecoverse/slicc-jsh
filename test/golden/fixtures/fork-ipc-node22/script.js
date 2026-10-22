@@ -9,15 +9,22 @@ const json = (v) => JSON.stringify(v, (k, x) => (typeof x === 'bigint' ? `${x}n`
 const err = (e) => `${e.constructor.name} ${e.code} ${e.message}`;
 const events = (cp, label) => {
   const seen = [];
+  const ends = {};
+  const end = (event) => (code, signal) => {
+    if (!ends.disconnect && !ends.exit) seen.push(ends);
+    ends[event] = event === 'exit' ? `exit ${code} ${signal}` : event;
+  };
   cp.on('message', (m) => seen.push(`message ${json(m)}`));
-  cp.on('disconnect', () => seen.push('disconnect'));
-  cp.on('exit', (code, signal) => seen.push(`exit ${code} ${signal}`));
+  cp.on('disconnect', end('disconnect'));
+  cp.on('exit', end('exit'));
   return new Promise((resolve) =>
-    cp.on('close', (code, signal) => {
-      seen.push(`close ${code} ${signal}`);
-      log(label, seen.join(' | '));
-      resolve();
-    })
+    cp.on('close', (code, signal) =>
+      setImmediate(() => {
+        const line = seen.map((s) => (s === ends ? [ends.disconnect, ends.exit].filter(Boolean).join(' | ') : s));
+        log(label, [...line, `close ${code} ${signal}`].join(' | '));
+        resolve();
+      })
+    )
   );
 };
 
