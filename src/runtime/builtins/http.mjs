@@ -2028,8 +2028,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (socket.destroyed) return;
         if (!res._last) {
           if (bodyDone) keptAlive();
-        } else if (!bodyDone) {
-          return;
         } else closeLast();
       });
       pending = parsed.teAfter || bodyDone ? null : feed;
