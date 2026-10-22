@@ -23,8 +23,23 @@ fs.mkdirSync(at('sub'));
 fs.writeFileSync(at('sub/data.txt'), 'x');
 fs.writeFileSync(at('plain.js'), 'console.log("plain: ran", process.argv.slice(2).join(" "), typeof process.send);\n');
 
+const running = new Set();
+const stopAll = () => {
+  for (const child of running) child.kill('SIGTERM');
+  fs.rmSync(dir, { recursive: true, force: true });
+};
+process.on('exit', stopAll);
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+  process.on(signal, () => {
+    stopAll();
+    process.exit(128 + os.constants.signals[signal]);
+  });
+}
+
 function watchRun(args) {
   const child = spawn(process.execPath, args, { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+  running.add(child);
+  child.on('exit', () => running.delete(child));
   let out = '';
   const waiters = [];
   const check = () => {
