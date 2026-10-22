@@ -28,7 +28,10 @@ function attempt(label, server, args) {
     server.listen(...args);
     inside = false;
     console.log(label, 'after listen', state(server));
-    process.nextTick(() => done('nextTick'));
+    process.nextTick(() => {
+      console.log(label, 'next tick', state(server));
+      done('nextTick');
+    });
   });
 }
 
@@ -42,6 +45,7 @@ async function main() {
     ["listen(0, '127.0.0.1')", [0, '127.0.0.1']],
     ["listen(0, 'localhost')", [0, 'localhost']],
     ["listen(0, 'no-such-host.invalid')", [0, 'no-such-host.invalid']],
+    ['listen({ fd: 1000 })', [{ fd: 1000 }]],
   ]) {
     const s = net.createServer();
     await attempt(label, s, args);
@@ -65,6 +69,16 @@ async function main() {
       .on('error', reject);
   });
   console.log('connected to', got);
+  await new Promise((resolve) => second._handle.close(resolve));
+  const early = net.createServer();
+  early.on('listening', () => console.log('closed during lookup: listening'));
+  early.on('error', (e) => console.log('closed during lookup: error', e.code));
+  early.listen(port, 'localhost');
+  await closed(early);
+  console.log('closed during lookup:', state(early));
+  const again = net.createServer();
+  await attempt('listen(port) after a close during lookup', again, [port]);
+  await closed(again);
   await closed(second);
   await closed(holder);
   console.log('done');

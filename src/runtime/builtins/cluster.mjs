@@ -33,12 +33,12 @@ function notSupported(what) {
 function createMessaging() {
   const callbacks = new Map();
   let seq = 0;
-  function sendHelper(proc, message, handle, cb) {
+  function sendHelper(proc, message, handle, cb, options) {
     if (!proc.connected) return false;
     message = { cmd: 'NODE_CLUSTER', ...message, seq };
     if (typeof cb === 'function') callbacks.set(seq, cb);
     seq += 1;
-    return proc.send(message, handle);
+    return proc.send(message, handle, options);
   }
   function internal(worker, cb) {
     return function onInternalMessage(message, handle) {
@@ -241,7 +241,7 @@ function createPrimary({ process, getChildProcess, getNet, canFork }) {
       // A bind that failed isn't kept, whoever asked for it.
       if (errno) handles.delete(key);
       if (worker.exitedAfterDisconnect) return;
-      send(worker, { errno, key, ack: message.seq, data, ...reply });
+      sendHelper(worker.process, { errno, key, ack: message.seq, data, ...reply }, null, undefined, { swallowErrors: true });
     });
   }
 

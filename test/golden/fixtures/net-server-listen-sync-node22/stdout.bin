@@ -1,30 +1,48 @@
 listen(0) after listen address number listening true handle yes
 listen(0) listening later address number listening true handle yes
+listen(0) next tick address number listening true handle yes
 listen(0) order listening then nextTick
 listen({ port: 0 }) after listen address number listening true handle yes
 listen({ port: 0 }) listening later address number listening true handle yes
+listen({ port: 0 }) next tick address number listening true handle yes
 listen({ port: 0 }) order listening then nextTick
 listen() after listen address number listening true handle yes
 listen() listening later address number listening true handle yes
+listen() next tick address number listening true handle yes
 listen() order listening then nextTick
 listen(0, '127.0.0.1') after listen address null listening false handle no
+listen(0, '127.0.0.1') next tick address number listening true handle yes
 listen(0, '127.0.0.1') listening later address number listening true handle yes
 listen(0, '127.0.0.1') order nextTick then listening
 listen(0, 'localhost') after listen address null listening false handle no
+listen(0, 'localhost') next tick address null listening false handle no
 listen(0, 'localhost') listening later address number listening true handle yes
 listen(0, 'localhost') order nextTick then listening
 listen(0, 'no-such-host.invalid') after listen address null listening false handle no
+listen(0, 'no-such-host.invalid') next tick address null listening false handle no
 listen(0, 'no-such-host.invalid') error later ENOTFOUND getaddrinfo address null listening false handle no
 listen(0, 'no-such-host.invalid') order nextTick then error
+listen({ fd: 1000 }) after listen address null listening false handle no
+listen({ fd: 1000 }) error later EINVAL listen address null listening false handle no
+listen({ fd: 1000 }) next tick address null listening false handle no
+listen({ fd: 1000 }) order error then nextTick
 holder after listen address number listening true handle yes
 holder listening later address number listening true handle yes
+holder next tick address number listening true handle yes
 holder order listening then nextTick
 listen(port) in use after listen address null listening false handle no
 listen(port) in use error later EADDRINUSE listen address null listening false handle no
+listen(port) in use next tick address null listening false handle no
 listen(port) in use order error then nextTick
 listen(port) freed after listen address number listening true handle yes
 listen(port) freed listening later address number listening true handle yes
+listen(port) freed next tick address number listening true handle yes
 listen(port) freed order listening then nextTick
 same port true
 connected to second
+closed during lookup: address null listening false handle no
+listen(port) after a close during lookup after listen address number listening true handle yes
+listen(port) after a close during lookup listening later address number listening true handle yes
+listen(port) after a close during lookup next tick address number listening true handle yes
+listen(port) after a close during lookup order listening then nextTick
 done
