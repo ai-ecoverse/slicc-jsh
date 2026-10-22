@@ -36,6 +36,19 @@ try {
   console.log('bad option', err.code);
 }
 console.log('address before listen', s.address());
+for (const [name, server] of [['net', new net.Server()], ['net allowHalfOpen', new net.Server({ allowHalfOpen: true })], ['tls', new tls.Server()], ['https', s], ['http', new http.Server()]]) {
+  console.log('events', name, server.eventNames(), server.allowHalfOpen, Object.hasOwn(server, 'allowHalfOpen'), server.listeners('connection').map((f) => f.name));
+}
+for (const [label, headers] of [['Headers', new Headers({ 'x-h': 'v' })], ['null', { 'x-null': null }], ['undefined', { 'x-undef': undefined }]]) {
+  try {
+    const r = https.request('https://example.invalid/', { headers });
+    r.on('error', () => {});
+    console.log('headers as', label, r.getHeaders(), r.getRawHeaderNames());
+    r.destroy();
+  } catch (err) {
+    console.log('headers as', label, err.code, err.message);
+  }
+}
 
 const req = https.request('https://127.0.0.1:1/x?y=1', { headers: { 'X-A': 'b' } });
 const events = [];

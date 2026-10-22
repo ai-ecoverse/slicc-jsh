@@ -27,12 +27,6 @@ function rejectTlsOptions(options, kernelTls = false, kernelCerts = false) {
   }
 }
 
-function fetchHeaders(headers) {
-  if (!headers) return headers;
-  if (typeof Headers !== 'undefined' && headers instanceof Headers) return Object.fromEntries(headers);
-  return Object.fromEntries(Object.entries(headers).filter(([, v]) => v != null));
-}
-
 export function createHttps({ ctx, Buffer, http, handles, getTls }) {
   const client = createFetchClient({ ctx, Buffer, handles, STATUS_CODES: http?.STATUS_CODES, IncomingMessage: http?.IncomingMessage });
 
@@ -59,6 +53,9 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
     if (requestListener) self.on('request', requestListener);
     self.on('tlsClientError', function onTlsClientError(err, conn) {
       if (!this.emit('clientError', err, conn)) conn.destroy(err);
+    });
+    self.on('listening', () => {
+      self._closing = false;
     });
     return self;
   }
@@ -164,7 +161,6 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
         defaultPort: 443,
         ...norm.options,
         protocol: 'https:',
-        headers: fetchHeaders(norm.options.headers),
         [kFetchVia]: { send },
       },
       norm.callback
