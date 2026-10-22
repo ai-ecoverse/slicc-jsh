@@ -173,6 +173,7 @@ const kHeadersDistinct = Symbol('kHeadersDistinct');
 const kTrailers = Symbol('kTrailers');
 const kTrailersDistinct = Symbol('kTrailersDistinct');
 const kOutHeaders = Symbol('kOutHeaders');
+const kRawHeaders = Symbol('kRawHeaders');
 const kSocket = Symbol('kSocket');
 const kErrored = Symbol('kErrored');
 const kWritableFinished = Symbol('kWritableFinished');
@@ -220,11 +221,36 @@ export const kFetchVia = Symbol('slicc-jsh.http.fetchVia');
 export const httpInternals = new WeakMap();
 
 function setRawHeader(msg, name, value) {
-  (msg[kOutHeaders] ??= Object.create(null))[name.toLowerCase()] = [name, value];
+  if (msg[kRawHeaders]) msg[kRawHeaders].push([name, value]);
+  else (msg[kOutHeaders] ??= Object.create(null))[name.toLowerCase()] = [name, value];
 }
 
 function rawHeader(msg, key) {
+  if (msg[kRawHeaders]) return msg[kRawHeaders].find(([name]) => String(name).toLowerCase() === key)?.[1];
   return msg[kOutHeaders]?.[key]?.[1];
+}
+
+function headerPairs(headers) {
+  let pairs = headers;
+  if (!headers.length || !Array.isArray(headers[0])) {
+    if (headers.length % 2 !== 0) throw ERR_INVALID_ARG_VALUE('headers', headers);
+    pairs = [];
+    for (let n = 0; n < headers.length; n += 2) pairs.push([headers[n], headers[n + 1]]);
+  }
+  for (const [name, value] of pairs) {
+    validateHeaderName(name);
+    validateHeaderValue(name, value);
+  }
+  return pairs.map(([name, value]) => [name, value]);
+}
+
+function headerObject(pairs) {
+  const out = {};
+  for (const [name, value] of pairs) {
+    const key = String(name).toLowerCase();
+    out[key] = key in out ? [].concat(out[key], value) : value;
+  }
+  return out;
 }
 
 function indexOfBytes(haystack, needle, from = 0) {
@@ -1929,7 +1955,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     this.path = options.path ?? '/';
     this.host = options.hostname ?? options.host ?? 'localhost';
     this.protocol = options.protocol ?? 'http:';
-    for (const [k, v] of Object.entries(options.headers ?? {})) this.setHeader(k, v);
+    this[kRawHeaders] = Array.isArray(options.headers) ? headerPairs(options.headers) : null;
+    if (!this[kRawHeaders]) for (const [k, v] of Object.entries(options.headers ?? {})) this.setHeader(k, v);
     // Node: keep-alive when the agent keeps sockets (the global agent does).
     // With its own createConnection and no agent, a request has no agent
     // (Node's ClientRequest); https hands in its own default agent.
@@ -1942,7 +1969,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     this.shouldKeepAlive = Boolean(agent?.keepAlive);
     // Node's: Host is set here, after the given headers, so an agent's
     // addRequest sees it (http-proxy-agent builds the absolute URL from it).
-    if (!this.hasHeader('host') && options.setHost !== false) {
+    if (!this[kRawHeaders] && !this.hasHeader('host') && options.setHost !== false) {
       let hostHeader = String(options.hostname ?? options.host ?? 'localhost');
       const colon = hostHeader.indexOf(':');
       if (colon !== -1 && hostHeader.includes(':', colon + 1) && hostHeader[0] !== '[') hostHeader = `[${hostHeader}]`;
@@ -1950,6 +1977,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       if (options.port && +options.port !== defaultPort) hostHeader += `:${options.port}`;
       setRawHeader(this, 'Host', hostHeader);
     }
+    if (this[kRawHeaders]) this._header = this[kRenderHead]().toString('latin1');
     if (cb) this.once('response', cb);
     queueMicrotask(() => this[kConnect]());
   }
@@ -2391,7 +2419,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       const method = (opts.method ?? 'GET').toUpperCase();
       const body = Buffer.concat(this[kChunks]);
       this[kChunks] = [];
-      const headers = this.getHeaders();
+      const headers = this[kRawHeaders] ? headerObject(this[kRawHeaders]) : this.getHeaders();
       this._headerSent = true;
       this._header ||= this[kRenderHead]().toString('latin1');
       this[kFetchAbort] = new AbortController();
@@ -2464,8 +2492,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       const method = String(this.method ?? opts.method ?? 'GET').toUpperCase();
       const path = this.path ?? opts.path ?? '/';
       if (/\bclose\b/i.test(String(rawHeader(this, 'connection') ?? ''))) this.shouldKeepAlive = false;
-      if (!this.hasHeader('connection')) setRawHeader(this, 'Connection', this.shouldKeepAlive ? 'keep-alive' : 'close');
-      return Buffer.from(`${method} ${path} HTTP/1.1\r\n${headerLines(Object.values(this[kOutHeaders]))}\r\n`);
+      if (rawHeader(this, 'connection') == null) setRawHeader(this, 'Connection', this.shouldKeepAlive ? 'keep-alive' : 'close');
+      return Buffer.from(`${method} ${path} HTTP/1.1\r\n${headerLines(this[kRawHeaders] ?? Object.values(this[kOutHeaders]))}\r\n`);
     },
 
     [kFlushHead]() {

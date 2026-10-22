@@ -1,0 +1,1 @@
+{ "description": "http.request and https.request with headers as an array, flat or in pairs, as Node 22: written to the head as given and in order, with no Host added, Connection after them, nothing in getHeaders(), the head rendered at once so setHeader is ERR_HTTP_HEADERS_SENT, and an odd length, a bad name or an undefined value thrown", "argv": ["script.js"], "shim": true }

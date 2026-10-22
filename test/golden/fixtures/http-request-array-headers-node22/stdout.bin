@@ -1,0 +1,16 @@
+odd ERR_INVALID_ARG_VALUE The argument 'headers' is invalid. Received [ 'a', '1', 'b' ]
+bad name ERR_INVALID_HTTP_TOKEN Header name must be a valid HTTP token ["a b"]
+undefined value ERR_HTTP_INVALID_HEADER_VALUE Invalid value "undefined" for header "a"
+flat headersSent true getHeaders {} [] "GET /flat HTTP/1.1\r\nHost: example\r\nx-a: 1\r\nX-B: two\r\nConnection: close\r\n\r\n"
+flat setHeader ERR_HTTP_HEADERS_SENT Cannot set headers after they are sent to the client
+pairs headersSent true getHeaders {} [] "GET /pairs HTTP/1.1\r\nHost: example\r\nx-a: 1\r\nx-a: 2\r\nConnection: close\r\n\r\n"
+pairs setHeader ERR_HTTP_HEADERS_SENT Cannot set headers after they are sent to the client
+keep-alive headersSent true getHeaders {} [] "GET /keep-alive HTTP/1.1\r\nHost: example\r\nx-c: 3\r\nConnection: keep-alive\r\n\r\n"
+keep-alive setHeader ERR_HTTP_HEADERS_SENT Cannot set headers after they are sent to the client
+with a length headersSent true getHeaders {} [] "POST /with-a-length HTTP/1.1\r\nHost: example\r\nContent-Length: 4\r\nConnection: close\r\n\r\n"
+with a length setHeader ERR_HTTP_HEADERS_SENT Cannot set headers after they are sent to the client
+GET /flat ["Host","example","x-a","1","X-B","two","Connection","close"] ""
+GET /pairs ["Host","example","x-a","1","x-a","2","Connection","close"] ""
+GET /keep-alive ["Host","example","x-c","3","Connection","keep-alive"] ""
+POST /with-a-length ["Host","example","Content-Length","4","Connection","close"] "body"
+https headersSent true getHeaders {} "GET /p HTTP/1.1\r\nHost: example\r\nx-s: 1\r\nConnection: keep-alive\r\n\r\n"
