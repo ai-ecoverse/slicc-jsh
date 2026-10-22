@@ -219,6 +219,7 @@ const kPending = Symbol('kPending');
 const kFinishQueued = Symbol('kFinishQueued');
 const kRequestListener = Symbol('kRequestListener');
 const kFetchTimer = Symbol('kFetchTimer');
+const kDrain = Symbol('kDrain');
 export const kFetchVia = Symbol('slicc-jsh.http.fetchVia');
 export const httpInternals = new WeakMap();
 
@@ -265,70 +266,415 @@ function indexOfBytes(haystack, needle, from = 0) {
   return -1;
 }
 
-const HEAD_SEP = new Uint8Array([13, 10, 13, 10]); // \r\n\r\n
+const MAX_HEADER_SIZE = 16384;
+const CL_MAX = 0xffffffffffffffffn;
+const TCHAR = /[!#$%&'*+\-.^_`|~0-9A-Za-z]/;
 
-/** Parse HTTP/1.x head from a byte buffer; returns null if incomplete. */
-function framingError(rawHeaders, packet, bytesParsed) {
-  let lengths = 0;
-  let chunked = false;
-  let reason = null;
-  let code = null;
-  for (let i = 0; i < rawHeaders.length && !code; i += 2) {
-    const key = String(rawHeaders[i]).toLowerCase();
-    if (key === 'transfer-encoding') chunked = true;
-    if (key !== 'content-length') continue;
-    if (++lengths > 1) [code, reason] = ['HPE_UNEXPECTED_CONTENT_LENGTH', 'Duplicate Content-Length'];
-    else if (!/^\d+$/.test(rawHeaders[i + 1])) [code, reason] = ['HPE_INVALID_CONTENT_LENGTH', 'Invalid character in Content-Length'];
-  }
-  if (!code && lengths && chunked) [code, reason] = ['HPE_INVALID_TRANSFER_ENCODING', "Transfer-Encoding can't be present with Content-Length"];
-  if (!code) return null;
-  return Object.assign(new Error(`Parse Error: ${reason}`), { bytesParsed, code, reason, rawPacket: packet });
+function hpe(code, reason, bytesParsed, packet) {
+  return Object.assign(new Error(`Parse Error: ${reason}`), {
+    bytesParsed,
+    code,
+    reason,
+    rawPacket: packet,
+  });
 }
 
+function isMethodChar(c) {
+  return (c >= 'A' && c <= 'Z') || c === '-';
+}
+
+function parseContentLength(value) {
+  const v = String(value).trim();
+  if (v === '') return { error: hpe('HPE_INVALID_CONTENT_LENGTH', 'Empty Content-Length') };
+  if (!/^\d+$/.test(v)) return { error: hpe('HPE_INVALID_CONTENT_LENGTH', 'Invalid character in Content-Length') };
+  const n = BigInt(v);
+  if (n > CL_MAX) return { error: hpe('HPE_INVALID_CONTENT_LENGTH', 'Content-Length overflow') };
+  return { n };
+}
+
+function teTokens(value) {
+  const tokens = [];
+  for (const part of String(value).split(',')) tokens.push(part.trim());
+  return tokens;
+}
+
+function classifyTransferEncoding(values) {
+  let seenChunked = false;
+  let any = false;
+  for (const value of values) {
+    if (String(value).trim() === '') continue;
+    for (const token of teTokens(value)) {
+      if (token === '') {
+        if (seenChunked) return { error: hpe('HPE_INVALID_TRANSFER_ENCODING', 'Invalid `Transfer-Encoding` header value'), when: 'before' };
+        continue;
+      }
+      const lower = token.toLowerCase();
+      if (!/^[\^_`a-zA-Z\-0-9!#$%&'*+.|~]+$/.test(lower)) {
+        if (seenChunked) return { error: hpe('HPE_INVALID_TRANSFER_ENCODING', 'Invalid `Transfer-Encoding` header value'), when: 'before' };
+        return { error: hpe('HPE_INVALID_TRANSFER_ENCODING', 'Request has invalid `Transfer-Encoding`'), when: 'after' };
+      }
+      any = true;
+      if (seenChunked) return { error: hpe('HPE_INVALID_TRANSFER_ENCODING', 'Invalid `Transfer-Encoding` header value'), when: 'before' };
+      if (lower === 'chunked') seenChunked = true;
+    }
+  }
+  if (!any) {
+    const present = values.some((value) => String(value).trim() !== '');
+    if (!present) return { chunked: false };
+    return { error: hpe('HPE_INVALID_TRANSFER_ENCODING', 'Request has invalid `Transfer-Encoding`'), when: 'after' };
+  }
+  if (!seenChunked) return { error: hpe('HPE_INVALID_TRANSFER_ENCODING', 'Request has invalid `Transfer-Encoding`'), when: 'after' };
+  return { chunked: true };
+}
+
+function parseHeaderLine(line, first) {
+  if (line.length === 0) return { empty: true };
+  const c0 = line.charCodeAt(0);
+  if (c0 === 0x20 || c0 === 0x09) {
+    return {
+      error: hpe(
+        first ? 'HPE_UNEXPECTED_SPACE' : 'HPE_INVALID_HEADER_TOKEN',
+        first ? 'Unexpected space after start line' : 'Unexpected whitespace after header value',
+      ),
+    };
+  }
+  const colon = line.indexOf(':');
+  if (colon <= 0) return { error: hpe('HPE_INVALID_HEADER_TOKEN', 'Invalid header token') };
+  const name = line.slice(0, colon);
+  if (!/^[\^_`a-zA-Z\-0-9!#$%&'*+.|~]+$/.test(name)) return { error: hpe('HPE_INVALID_HEADER_TOKEN', 'Invalid header token') };
+  const rawValue = line.slice(colon + 1);
+  if (/[^\t\x20-\x7e\x80-\xff]/.test(rawValue)) return { error: hpe('HPE_INVALID_HEADER_TOKEN', 'Invalid header value char') };
+  return { name, value: rawValue.trim() };
+}
+
+const URL_CHAR = "!\"$%&'()*+,-./:;<=>@[\\]^_`{|}~";
+const USERINFO = "-_.!~*'()%;:&=+$,";
+
+function isUrlChar(c) {
+  return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || URL_CHAR.includes(c);
+}
+
+function isUserInfo(c) {
+  return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || USERINFO.includes(c);
+}
+
+function urlError(reason) {
+  return { error: hpe('HPE_INVALID_URL', reason) };
+}
+
+function parseFragment(line, i) {
+  while (i < line.length) {
+    const c = line[i];
+    if (c === ' ') return { i };
+    if (c === '\t' || c === '\f') return urlError('Invalid characters in url');
+    if (c === '?' || c === '#' || isUrlChar(c)) {
+      i++;
+      continue;
+    }
+    return urlError('Invalid char in url fragment start');
+  }
+  return { i };
+}
+
+function parseQuery(line, i) {
+  while (i < line.length) {
+    const c = line[i];
+    if (c === ' ') return { i };
+    if (c === '\t' || c === '\f') return urlError('Invalid characters in url');
+    if (c === '#') return parseFragment(line, i + 1);
+    if (c === '?' || isUrlChar(c)) {
+      i++;
+      continue;
+    }
+    return urlError('Invalid char in url query');
+  }
+  return { i };
+}
+
+function parsePath(line, i) {
+  while (i < line.length) {
+    const c = line[i];
+    if (c === ' ') return { i };
+    if (c === '\t' || c === '\f') return urlError('Invalid characters in url');
+    if (c === '?') return parseQuery(line, i + 1);
+    if (c === '#') return parseFragment(line, i + 1);
+    if (isUrlChar(c)) {
+      i++;
+      continue;
+    }
+    return urlError('Invalid char in url path');
+  }
+  return { i };
+}
+
+function parseServer(line, i) {
+  let at = false;
+  while (i < line.length) {
+    const c = line[i];
+    if (c === ' ') return { i };
+    if (c === '\t' || c === '\f') return urlError('Invalid characters in url');
+    if (c === '/') return parsePath(line, i);
+    if (c === '?') return parseQuery(line, i + 1);
+    if (c === '@') {
+      if (at) return urlError('Double @ in url');
+      at = true;
+      i++;
+      continue;
+    }
+    if (c === '[' || c === ']' || isUserInfo(c)) {
+      at = false;
+      i++;
+      continue;
+    }
+    return urlError('Unexpected char in url server');
+  }
+  return { i };
+}
+
+function parseRequestLine(line) {
+  if (line.length === 0 || !isMethodChar(line[0])) return { error: hpe('HPE_INVALID_METHOD', 'Invalid method encountered') };
+  let i = 0;
+  let method = '';
+  while (i < line.length && isMethodChar(line[i])) method += line[i++];
+  if (!METHODS.includes(method)) return { error: hpe('HPE_INVALID_METHOD', 'Invalid method encountered') };
+  if (line[i] !== ' ') return { error: hpe('HPE_INVALID_METHOD', 'Expected space after method') };
+  while (line[i] === ' ') i++;
+  if (i >= line.length) return { error: hpe('HPE_INVALID_URL', 'Invalid URL') };
+  const urlStart = i;
+  let urlEnd;
+  if (method === 'CONNECT') {
+    const got = parseServer(line, i);
+    if (got.error) return got;
+    urlEnd = got.i;
+  } else if (line[i] === '/' || line[i] === '*') {
+    const got = parsePath(line, i);
+    if (got.error) return got;
+    urlEnd = got.i;
+  } else if ((line[i] >= 'A' && line[i] <= 'Z') || (line[i] >= 'a' && line[i] <= 'z')) {
+    while (i < line.length && ((line[i] >= 'A' && line[i] <= 'Z') || (line[i] >= 'a' && line[i] <= 'z'))) i++;
+    if (i >= line.length || line[i] === ' ' || line[i] === '\t' || line[i] === '\f') return urlError('Invalid characters in url');
+    if (line[i] !== ':' || line[i + 1] !== '/' || line[i + 2] !== '/') return urlError('Unexpected char in url schema');
+    i += 3;
+    const got = parseServer(line, i);
+    if (got.error) return got;
+    urlEnd = got.i;
+  } else return urlError('Unexpected start char in url');
+  const url = line.slice(urlStart, urlEnd);
+  i = urlEnd;
+  if (i >= line.length) return { method, url, httpVersion: '0.9' };
+  if (line[i] !== ' ') return { error: hpe('HPE_INVALID_URL', 'Invalid URL') };
+  while (line[i] === ' ') i++;
+  if (!line.startsWith('HTTP/', i)) return { error: hpe('HPE_INVALID_VERSION', 'Invalid HTTP version') };
+  i += 5;
+  const maj = i;
+  while (i < line.length && line[i] >= '0' && line[i] <= '9') i++;
+  if (i === maj || line[i] !== '.') return { error: hpe('HPE_INVALID_VERSION', 'Invalid HTTP version') };
+  i++;
+  if (i >= line.length || line[i] < '0' || line[i] > '9') return { error: hpe('HPE_INVALID_VERSION', 'Invalid HTTP version') };
+  const version = `${line.slice(maj, i - 1)}.${line[i]}`;
+  i++;
+  if (i !== line.length) return { error: hpe('HPE_INVALID_VERSION', 'Expected CRLF after version') };
+  if (version !== '1.0' && version !== '1.1' && version !== '2.0') return { error: hpe('HPE_INVALID_VERSION', 'Invalid HTTP version') };
+  return { method, url, httpVersion: version };
+}
+
+function readHeadLine(bytes, i, first) {
+  for (let j = i; j < bytes.length; j++) {
+    if (j - i > MAX_HEADER_SIZE) return { error: hpe('HPE_HEADER_OVERFLOW', 'Header overflow') };
+    if (bytes[j] === 0x0a) {
+      if (j === i || bytes[j - 1] !== 0x0d) {
+        return {
+          error: hpe(
+            first ? 'HPE_INVALID_VERSION' : 'HPE_CR_EXPECTED',
+            first ? 'Expected CRLF after version' : 'Missing expected CR after header value',
+          ),
+        };
+      }
+      return { line: Buffer.from(bytes.subarray(i, j - 1)).toString('latin1'), next: j + 1 };
+    }
+    if (bytes[j] === 0x0d && j + 1 < bytes.length && bytes[j + 1] !== 0x0a) {
+      return {
+        error: hpe(
+          first ? 'HPE_STRICT' : 'HPE_LF_EXPECTED',
+          first ? 'Expected CRLF after version' : 'Missing expected LF after header value',
+        ),
+      };
+    }
+  }
+  if (bytes.length - i > MAX_HEADER_SIZE || bytes.length > MAX_HEADER_SIZE) return { error: hpe('HPE_HEADER_OVERFLOW', 'Header overflow') };
+  return { need: true };
+}
+
+function requestFraming(rawHeaders, packet, bytesParsed) {
+  const clValues = [];
+  const teValues = [];
+  let sawCL = false;
+  let sawTE = false;
+  let conflict = null;
+  for (let i = 0; i < rawHeaders.length; i += 2) {
+    const key = String(rawHeaders[i]).toLowerCase();
+    if (key === 'transfer-encoding') {
+      const value = rawHeaders[i + 1];
+      const blank = String(value).trim() === '';
+      if (sawCL && !conflict) conflict = hpe('HPE_INVALID_TRANSFER_ENCODING', "Transfer-Encoding can't be present with Content-Length", bytesParsed, packet);
+      if (blank) continue;
+      sawTE = true;
+      teValues.push(value);
+      const part = classifyTransferEncoding(teValues);
+      if (part.error && part.error.reason !== 'Request has invalid `Transfer-Encoding`' && !conflict) conflict = part.error;
+    } else if (key === 'content-length') {
+      if (sawTE && !conflict) conflict = hpe('HPE_INVALID_CONTENT_LENGTH', "Content-Length can't be present with Transfer-Encoding", bytesParsed, packet);
+      sawCL = true;
+      clValues.push(rawHeaders[i + 1]);
+    }
+  }
+  const te = sawTE ? classifyTransferEncoding(teValues) : { chunked: false };
+  if (conflict && conflict.reason !== 'Request has invalid `Transfer-Encoding`') return { error: conflict };
+  if (clValues.length > 1) return { error: hpe('HPE_UNEXPECTED_CONTENT_LENGTH', 'Duplicate Content-Length', bytesParsed, packet) };
+  let contentLength = null;
+  if (clValues.length === 1) {
+    const parsed = parseContentLength(clValues[0]);
+    if (parsed.error) return { error: Object.assign(parsed.error, { bytesParsed, rawPacket: packet }) };
+    contentLength = parsed.n;
+  }
+  if (te.error) return te.error.reason === 'Request has invalid `Transfer-Encoding`' ? { teAfter: te.error, contentLength } : { error: te.error };
+  return { chunked: te.chunked === true, contentLength: te.chunked ? null : (contentLength ?? 0n) };
+}
+
+function parseChunkExt(text, index) {
+  let i = index;
+  while (i < text.length) {
+    if (text[i] !== ';') return hpe('HPE_INVALID_CHUNK_SIZE', 'Invalid character in chunk size');
+    i++;
+    if (i >= text.length || text[i] === ' ' || text[i] === '\t') return hpe('HPE_STRICT', 'Invalid character in chunk extensions');
+    if (!TCHAR.test(text[i])) return hpe('HPE_STRICT', 'Invalid character in chunk extensions name');
+    i++;
+    while (i < text.length && TCHAR.test(text[i])) i++;
+    let valued = false;
+    if (i < text.length && text[i] === '=') {
+      valued = true;
+      i++;
+      if (i >= text.length) return hpe('HPE_STRICT', 'Invalid character in chunk extensions value');
+      if (text[i] === '"') {
+        i++;
+        let closed = false;
+        while (i < text.length) {
+          if (text[i] === '\\') {
+            if (i + 1 >= text.length) return hpe('HPE_STRICT', 'Invalid character in chunk extensions quoted value');
+            i += 2;
+            continue;
+          }
+          if (text[i] === '"') {
+            closed = true;
+            i++;
+            break;
+          }
+          const code = text.charCodeAt(i);
+          if (code === 0x7f || (code < 0x20 && code !== 0x09)) return hpe('HPE_STRICT', 'Invalid character in chunk extensions quoted value');
+          i++;
+        }
+        if (!closed) return hpe('HPE_STRICT', 'Invalid character in chunk extensions quoted value');
+      } else if (TCHAR.test(text[i])) {
+        i++;
+        while (i < text.length && TCHAR.test(text[i])) i++;
+      } else return hpe('HPE_STRICT', 'Invalid character in chunk extensions value');
+    }
+    if (i < text.length && text[i] !== ';') {
+      return hpe('HPE_STRICT', valued ? 'Invalid character in chunk extensions value' : 'Invalid character in chunk extensions name');
+    }
+  }
+  return null;
+}
+
+function parseChunkSizeLine(text) {
+  if (text.length === 0 || !/[0-9a-fA-F]/.test(text[0])) return { error: hpe('HPE_INVALID_CHUNK_SIZE', 'Invalid character in chunk size') };
+  let i = 0;
+  let n = 0n;
+  while (i < text.length && /[0-9a-fA-F]/.test(text[i])) {
+    n = n * 16n + BigInt(parseInt(text[i], 16));
+    if (n > CL_MAX) return { error: hpe('HPE_INVALID_CHUNK_SIZE', 'Chunk size overflow') };
+    i++;
+  }
+  if (i < text.length) {
+    const ext = parseChunkExt(text, i);
+    if (ext) return { error: ext };
+  }
+  return { size: n };
+}
+
+function readChunkLine(buf, kind) {
+  for (let j = 0; j < buf.length; j++) {
+    if (j > MAX_HTTP_BODY) return { error: hpe('HPE_HEADER_OVERFLOW', 'Header overflow') };
+    if (buf[j] === 0x0a) {
+      if (j === 0 || buf[j - 1] !== 0x0d) {
+        if (kind === 'size') return { error: hpe('HPE_CR_EXPECTED', 'Missing expected CR after chunk size') };
+        if (j === 0) return { error: hpe('HPE_INVALID_HEADER_TOKEN', 'Invalid header field char') };
+        return { error: hpe('HPE_CR_EXPECTED', 'Missing expected CR after header value') };
+      }
+      return { text: Buffer.from(buf.subarray(0, j - 1)).toString('latin1'), rest: Buffer.from(buf.subarray(j + 1)) };
+    }
+    if (buf[j] === 0x0d && j + 1 < buf.length && buf[j + 1] !== 0x0a) {
+      if (kind === 'size') return { error: hpe('HPE_CR_EXPECTED', 'Missing expected CR after chunk size') };
+      return { error: hpe('HPE_LF_EXPECTED', 'Missing expected LF after header value') };
+    }
+  }
+  if (buf.length > MAX_HTTP_BODY) return { error: hpe('HPE_HEADER_OVERFLOW', 'Header overflow') };
+  return { wait: true };
+}
+
+/** Parse HTTP/1.x head from a byte buffer; returns null if incomplete. */
 function parseHead(buf, Buffer) {
   const bytes = buf instanceof Uint8Array ? buf : Buffer.from(buf);
-  const idx = indexOfBytes(bytes, HEAD_SEP);
-  if (idx === -1) return null;
-  const head = Buffer.from(bytes.subarray(0, idx)).toString('latin1');
-  const bodyPrefix = Buffer.from(bytes.subarray(idx + 4));
-  const lines = head.split('\r\n');
-  const requestLine = lines[0];
-  const m = /^(?<method>\S+)\s+(?<url>\S+)\s+HTTP\/(?<version>\d+\.\d+)$/.exec(requestLine);
-  const statusM = /^HTTP\/(?<version>\d+\.\d+)\s+(?<status>\d{3})(?:\s+(?<reason>.*))?$/.exec(
-    requestLine
-  );
-  const rawHeaders = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
-    const colon = line.indexOf(':');
-    if (colon === -1) continue;
-    rawHeaders.push(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
+  const lines = [];
+  let i = 0;
+  let first = true;
+  for (;;) {
+    const got = readHeadLine(bytes, i, first);
+    if (got.need) return null;
+    if (got.error) return { kind: 'request', error: got.error, rawHeaders: [], bodyPrefix: Buffer.alloc(0) };
+    if (!first && got.line === '') {
+      const bodyPrefix = Buffer.from(bytes.subarray(got.next));
+      const bytesParsed = got.next;
+      const requestLine = lines[0];
+      const statusM = /^HTTP\/(?<version>\d+\.\d+)\s+(?<status>\d{3})(?:\s+(?<reason>.*))?$/.exec(requestLine);
+      const rawHeaders = [];
+      for (let n = 1; n < lines.length; n++) {
+        const header = parseHeaderLine(lines[n], n === 1);
+        if (header.error) return { kind: statusM ? 'response' : 'request', error: header.error, rawHeaders, bodyPrefix };
+        if (!header.empty) rawHeaders.push(header.name, header.value);
+      }
+      if (statusM) {
+        const framed = requestFraming(rawHeaders, bytes, bytesParsed);
+        return {
+          error: framed.error ?? null,
+          kind: 'response',
+          statusCode: Number(statusM.groups.status),
+          statusMessage: statusM.groups.reason ?? '',
+          httpVersion: statusM.groups.version,
+          rawHeaders,
+          bodyPrefix,
+        };
+      }
+      const req = parseRequestLine(requestLine);
+      if (req.error) return { kind: 'request', error: req.error, rawHeaders, bodyPrefix };
+      const framed = requestFraming(rawHeaders, bytes, bytesParsed);
+      return {
+        error: framed.error ?? null,
+        teAfter: framed.teAfter ?? null,
+        kind: 'request',
+        method: req.method,
+        url: req.url,
+        httpVersion: req.httpVersion,
+        rawHeaders,
+        bodyPrefix,
+        chunked: framed.chunked === true,
+        contentLength: framed.contentLength ?? null,
+      };
+    }
+    lines.push(got.line);
+    first = false;
+    i = got.next;
   }
-  const error = framingError(rawHeaders, bytes, idx + 4);
-  if (m) {
-    return {
-      error,
-      kind: 'request',
-      method: m.groups.method,
-      url: m.groups.url,
-      httpVersion: m.groups.version,
-      rawHeaders,
-      bodyPrefix,
-    };
-  }
-  if (statusM) {
-    return {
-      error,
-      kind: 'response',
-      statusCode: Number(statusM.groups.status),
-      // As the server sent it (Node's parser doesn't look it up).
-      statusMessage: statusM.groups.reason ?? '',
-      httpVersion: statusM.groups.version,
-      rawHeaders,
-      bodyPrefix,
-    };
-  }
-  return { kind: 'error', message: 'Parse Error' };
 }
 
 /** Max buffered HTTP body (request or response). Over → 413 / error. */
@@ -358,6 +704,21 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
   const Stream = stream.Stream;
   const nop = () => {};
   const chunkFrame = (buf) => (buf.length ? Buffer.concat([Buffer.from(`${buf.length.toString(16)}\r\n`), buf, Buffer.from('\r\n')]) : buf);
+  const armChunked = (req) => {
+    if (rawHeader(req, 'content-length') != null || req[kChunkedOut]) return;
+    const teRaw = rawHeader(req, 'transfer-encoding');
+    const method = String(req[kOpts].method ?? 'GET').toUpperCase();
+    const bodiless = ['GET', 'HEAD', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT'].includes(method);
+    const want = teRaw == null ? !bodiless : classifyTransferEncoding([String(teRaw)])?.chunked === true;
+    if (!want) return;
+    if (teRaw == null) setRawHeader(req, 'Transfer-Encoding', 'chunked');
+    req[kChunkedOut] = true;
+    req[kStreaming] = true;
+    if (req[kChunks].length) {
+      const body = Buffer.concat(req[kChunks]);
+      req[kChunks] = body.length ? [chunkFrame(body)] : [];
+    }
+  };
 
   function IncomingMessage(socket) {
     Readable.call(this, socket ? { highWaterMark: socket.readableHighWaterMark } : undefined);
@@ -454,6 +815,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       this._dumped = true;
       this.removeAllListeners('data');
       this.resume();
+      this[kDrain]?.();
     }
   };
 
@@ -1378,7 +1740,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       headersTimer = null;
       armRequest();
       const headers = headerObj(parsed.rawHeaders);
-      const te = String(headers['transfer-encoding'] || '').toLowerCase();
       const connectionTokens = String(headers.connection || '').toLowerCase();
       if (parsed.method === 'CONNECT') {
         clearTimeout(requestTimer);
@@ -1435,16 +1796,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         return;
       }
       const headLength = buf.length - parsed.bodyPrefix.length;
-      // RFC 9112: if Transfer-Encoding is present, it frames the body (ignore CL).
-      const chunked = te.includes('chunked');
-      let left = 0;
-      if (!chunked) {
-        left = headers['content-length'] != null ? Number(headers['content-length']) : 0;
-        if (!Number.isFinite(left) || left < 0) {
-          destroy();
-          return;
-        }
-      }
+      const chunked = parsed.chunked === true;
+      let left = chunked ? 0n : (parsed.contentLength ?? 0n);
       buf = Buffer.from(buf.subarray(headLength));
       busy = true;
       conn.idle = false;
@@ -1457,8 +1810,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       setRequestLine(req, parsed, headers);
       let bodyDone = false;
       let resDone = false;
-      const chunk = { state: 'size', left: 0, trailers: null };
-      req[kIncomingRead] = () => socket.resume?.();
+      let failed = false;
+      let feeding = false;
+      let handed = false;
+      const chunk = { phase: 'size', left: 0n, trailers: null };
+      req[kIncomingRead] = () => {
+        socket.resume?.();
+        feed();
+      };
+      req[kDrain] = () => feed();
       req[kIncomingDestroy] = (err, callback) => {
         if (!req.readableEnded || !req.complete) {
           req.aborted = true;
@@ -1466,67 +1826,120 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         }
         process.nextTick(() => callback(req.listenerCount('error') > 0 ? err : undefined));
       };
-      const deliver = (bytes) => {
-        if (bytes.length && !req.push(Buffer.from(bytes))) socket.pause?.();
+      const pushBody = (bytes) => {
+        if (bytes.length === 0 || req._dumped) return true;
+        if (req.listenerCount('data') === 0 && req._readableState?.flowing !== true) return true;
+        const ok = req.push(Buffer.from(bytes));
+        if (!ok) socket.pause?.();
+        return ok;
       };
       const complete = () => {
+        if (bodyDone) return;
         bodyDone = true;
         pending = null;
         clearTimeout(requestTimer);
         requestTimer = null;
         req.complete = true;
+        const extra = buf.length > 0 && res.shouldKeepAlive === false;
+        if (extra) {
+          failed = true;
+          socket.off('close', gone);
+          const closed = hpe('HPE_CLOSED_CONNECTION', 'Data after `Connection: close`');
+          if (server.listenerCount('clientError') > 0) server.emit('clientError', closed, socket);
+          else socketError(closed);
+          if (!req.destroyed) req.push(null);
+          handles?.notify?.();
+          return;
+        }
         req.push(null);
         handles?.notify?.();
+        if (socket.destroyed) return;
         if (resDone && !res._last && !socket.destroyed) keptAlive();
       };
-      const badBody = () => {
+      const badBody = (code, reason) => {
+        if (failed || bodyDone) return;
+        failed = true;
         pending = null;
-        bodyDone = true;
-        socketError(Object.assign(new Error('Parse Error: Invalid character in chunk size'), { code: 'HPE_INVALID_CHUNK_SIZE' }));
+        socketError(Object.assign(new Error(`Parse Error: ${reason}`), { code, reason }));
       };
-      const feed = () => {
+      const feedBody = () => {
+        if (failed || bodyDone) return;
         if (!chunked) {
-          const take = buf.subarray(0, left);
-          left -= take.length;
-          buf = Buffer.from(buf.subarray(take.length));
-          deliver(take);
-          if (left === 0) complete();
+          while (left > 0n && buf.length > 0) {
+            const n = left > BigInt(buf.length) ? buf.length : Number(left);
+            const take = buf.subarray(0, n);
+            buf = Buffer.from(buf.subarray(n));
+            left -= BigInt(n);
+            const ok = pushBody(take);
+            if (left === 0n) {
+              complete();
+              return;
+            }
+            if (!ok) return;
+          }
+          if (left === 0n) complete();
           return;
         }
         for (;;) {
-          if (chunk.state === 'size' || chunk.state === 'trailer') {
-            const i = indexOfBytes(buf, CRLF);
-            if (i === -1) return;
-            const line = Buffer.from(buf.subarray(0, i)).toString('latin1');
-            buf = Buffer.from(buf.subarray(i + 2));
-            if (chunk.state === 'trailer') {
-              if (line === '') {
+          if (failed || bodyDone) return;
+          if (chunk.phase === 'size' || chunk.phase === 'trailer') {
+            const line = readChunkLine(buf, chunk.phase === 'size' ? 'size' : 'trailer');
+            if (line.wait) return;
+            if (line.error) return badBody(line.error.code, line.error.reason);
+            buf = line.rest;
+            if (chunk.phase === 'trailer') {
+              if (line.text === '') {
                 req.rawTrailers = chunk.trailers ?? [];
                 req[kTrailers] = null;
                 complete();
                 return;
               }
-              const colon = line.indexOf(':');
-              if (colon > 0) (chunk.trailers ??= []).push(line.slice(0, colon).trim(), line.slice(colon + 1).trim());
+              const header = parseHeaderLine(line.text, false);
+              if (header.error) return badBody(header.error.code, header.error.reason);
+              const name = header.name.toLowerCase();
+              if (name === 'transfer-encoding') return badBody('HPE_INVALID_TRANSFER_ENCODING', 'Invalid `Transfer-Encoding` header value');
+              if (name === 'content-length') return badBody('HPE_INVALID_CONTENT_LENGTH', "Content-Length can't be present with Transfer-Encoding");
+              (chunk.trailers ??= []).push(header.name, header.value);
               continue;
             }
-            const size = /^[0-9a-fA-F]+/.test(line.trim()) ? parseInt(line.split(';')[0].trim(), 16) : NaN;
-            if (Number.isNaN(size)) return badBody();
-            chunk.left = size;
-            chunk.state = size === 0 ? 'trailer' : 'data';
-          } else if (chunk.state === 'data') {
+            const size = parseChunkSizeLine(line.text);
+            if (size.error) return badBody(size.error.code, size.error.reason);
+            if (size.size === 0n) chunk.phase = 'trailer';
+            else {
+              chunk.left = size.size;
+              chunk.phase = 'data';
+            }
+          } else if (chunk.phase === 'data') {
             if (buf.length === 0) return;
-            const take = buf.subarray(0, chunk.left);
-            chunk.left -= take.length;
-            buf = Buffer.from(buf.subarray(take.length));
-            deliver(take);
-            if (chunk.left > 0) return;
-            chunk.state = 'crlf';
+            const n = chunk.left > BigInt(buf.length) ? buf.length : Number(chunk.left);
+            const take = buf.subarray(0, n);
+            buf = Buffer.from(buf.subarray(n));
+            chunk.left -= BigInt(n);
+            const ok = pushBody(take);
+            if (chunk.left === 0n) chunk.phase = 'cr';
+            else if (!ok) return;
+          } else if (chunk.phase === 'cr') {
+            if (buf.length === 0) return;
+            const b = buf[0];
+            if (b === 0x0a) return badBody('HPE_CR_EXPECTED', 'Missing expected CR after chunk data');
+            if (b !== 0x0d) return badBody('HPE_STRICT', 'Expected LF after chunk data');
+            buf = Buffer.from(buf.subarray(1));
+            chunk.phase = 'lf';
           } else {
-            if (buf.length < 2) return;
-            buf = Buffer.from(buf.subarray(2));
-            chunk.state = 'size';
+            if (buf.length === 0) return;
+            if (buf[0] !== 0x0a) return badBody('HPE_STRICT', 'Expected LF after chunk data');
+            buf = Buffer.from(buf.subarray(1));
+            chunk.phase = 'size';
           }
+        }
+      };
+      const feed = () => {
+        if (feeding || failed || bodyDone) return;
+        feeding = true;
+        try {
+          feedBody();
+        } finally {
+          feeding = false;
         }
       };
       const res = new ServerResponse(req);
@@ -1553,8 +1966,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       // Node (httpAllowHalfOpen false): the client's FIN aborts a response
       // still going, and the server ends its side.
       const onEnd = () => {
+        if (failed) return;
         if (!bodyDone) {
-          socketError(Object.assign(new Error('Parse Error: Invalid EOF state'), { code: 'HPE_INVALID_EOF_STATE' }));
+          failed = true;
+          socketError(Object.assign(new Error('Parse Error: Invalid EOF state'), { code: 'HPE_INVALID_EOF_STATE', reason: 'Invalid EOF state' }));
           return;
         }
         if (res.writableFinished) return;
@@ -1568,6 +1983,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       socket.once('close', gone);
       socket.once('end', onEnd);
       const keptAlive = () => {
+        if (handed) return;
+        handed = true;
         current = null;
         socket.off('close', gone);
         socket.off('end', onEnd);
@@ -1595,7 +2012,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           destroy();
         }
       });
-      pending = bodyDone ? null : feed;
+      pending = parsed.teAfter || bodyDone ? null : feed;
       const expect = headers.expect;
       if (expect !== undefined && req.httpVersionMajor === 1 && req.httpVersionMinor === 1) {
         if (/^100-continue$/i.test(String(expect).trim())) {
@@ -1610,6 +2027,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           res.end();
         }
       } else emitRequest(req, res);
+      if (parsed.teAfter) {
+        failed = true;
+        socketError(parsed.teAfter);
+        return;
+      }
       if (pending && !socket.destroyed) pending();
     };
     const emitRequest = (req, res) => {
@@ -2104,6 +2526,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     flushHeaders() {
       if (this[kFetchVia] || this[kFetchMode]) return;
       this[kFlushAsked] = true;
+      armChunked(this);
       if (this[kConnected]) this[kFlushHead]();
     },
     setNoDelay(noDelay) {
@@ -2605,25 +3028,39 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     [kFlushHead]() {
       if (this._headerSent || !this[kConnSocket]) return;
       this._headerSent = true;
-      const body = Buffer.concat(this[kChunks]);
-      this[kChunks] = [];
-      let framed = body;
-      if (rawHeader(this, 'content-length') != null) {
+      let framed;
+      if (this[kChunkedOut]) {
+        const parts = this[kChunks];
+        this[kChunks] = [];
+        if (this[kEnded]) parts.push(Buffer.from('0\r\n\r\n'));
+        framed = parts.length ? Buffer.concat(parts) : Buffer.alloc(0);
         this[kStreaming] = true;
-      } else if (!this[kEnded]) {
-        this[kStreaming] = true;
-        const method = (this[kOpts].method ?? 'GET').toUpperCase();
-        if (!['GET', 'HEAD', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT'].includes(method) && rawHeader(this, 'transfer-encoding') == null) {
-          setRawHeader(this, 'Transfer-Encoding', 'chunked');
-          this[kChunkedOut] = true;
-          framed = chunkFrame(body);
+      } else {
+        const body = Buffer.concat(this[kChunks]);
+        this[kChunks] = [];
+        framed = body;
+        if (rawHeader(this, 'content-length') != null) {
+          this[kStreaming] = true;
+        } else if (!this[kEnded]) {
+          this[kStreaming] = true;
+          const method = (this[kOpts].method ?? 'GET').toUpperCase();
+          const teRaw = rawHeader(this, 'transfer-encoding');
+          const advertised = teRaw == null ? null : classifyTransferEncoding([String(teRaw)]);
+          if (advertised?.chunked) {
+            this[kChunkedOut] = true;
+            framed = chunkFrame(body);
+          } else if (!['GET', 'HEAD', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT'].includes(method) && teRaw == null) {
+            setRawHeader(this, 'Transfer-Encoding', 'chunked');
+            this[kChunkedOut] = true;
+            framed = chunkFrame(body);
+          }
+        } else {
+          // Node: a GET / HEAD / DELETE / OPTIONS / TRACE / CONNECT with no body
+          // sends no Content-Length (the others send 0).
+          const method = (this[kOpts].method ?? 'GET').toUpperCase();
+          const bodiless = ['GET', 'HEAD', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT'].includes(method);
+          if (body.length > 0 || !bodiless) setRawHeader(this, 'Content-Length', String(body.length));
         }
-      } else if (this[kEnded]) {
-        // Node: a GET / HEAD / DELETE / OPTIONS / TRACE / CONNECT with no body
-        // sends no Content-Length (the others send 0).
-        const method = (this[kOpts].method ?? 'GET').toUpperCase();
-        const bodiless = ['GET', 'HEAD', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT'].includes(method);
-        if (body.length > 0 || !bodiless) setRawHeader(this, 'Content-Length', String(body.length));
       }
       const head = this[kRenderHead]();
       this._header = head.toString('latin1');
@@ -2632,7 +3069,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
 
     [kWriteBody](buf, callback) {
       if (this._headerSent && this[kStreaming]) return this[kTrackWrite](this[kChunkedOut] ? chunkFrame(buf) : buf, callback);
-      this[kChunks].push(buf);
+      this[kChunks].push(this[kChunkedOut] ? chunkFrame(buf) : buf);
       // Content-Length known and socket up: start streaming now.
       if (!this._headerSent && this[kConnected] && rawHeader(this, 'content-length') != null) this[kFlushHead]();
       process.nextTick(callback);

@@ -28,7 +28,22 @@ const raw = (port, label, steps) =>
   });
 const serverLog = [];
 const flushLog = (label) => {
-  console.log(`${label} | server: ${serverLog.splice(0).join(', ')}`);
+  const events = serverLog.splice(0);
+  const requests = [];
+  const bodies = [];
+  const closes = [];
+  const other = [];
+  for (const event of events) {
+    if (event.startsWith('request ')) requests.push(event);
+    else if (event.startsWith('body ')) bodies.push(event);
+    else if (event === 'req close') closes.push(event);
+    else other.push(event);
+  }
+  let server;
+  if (other.length === 0 && requests.length > 1 && requests.length === bodies.length) {
+    server = requests.map((req, i) => [req, bodies[i], closes[i]].filter(Boolean).join(', ')).join(', ');
+  } else server = events.join(', ');
+  console.log(`${label} | server: ${server}`);
 };
 const srv = http.createServer((req, res) => {
   const tag = req.headers['x-case'];
@@ -131,5 +146,96 @@ srv.listen(0, '127.0.0.1', async () => {
     }, 50);
   });
   head.close();
+  await raw(port, 'an unread body larger than the high water mark, then the next request', [
+    { send: HEAD('X-Case: early\r\nContent-Length: 70000\r\n') + 'Z'.repeat(70000) + HEAD('X-Case: plain\r\nContent-Length: 2\r\n') + 'ok' },
+    { after: 'body=ok', end: true },
+  ]);
+  flushLog('unread');
+  srv.on('clientError', (err, socket) => {
+    serverLog.push(`clientError ${err.code}`);
+    socket.destroy();
+  });
+  const shot = (label, bytes) =>
+    new Promise((resolve) => {
+      const c = net.connect(port, '127.0.0.1');
+      let got = '';
+      c.on('connect', () => c.write(Buffer.from(bytes, 'latin1')));
+      c.on('data', (d) => {
+        got += d;
+      });
+      c.on('error', () => {});
+      c.on('close', () => {
+        const lines = got.split('\r\n').filter((l) => /^HTTP\/1\.1 /.test(l));
+        console.log(`${label} | client got: ${lines.join(' / ') || '-'}`);
+        resolve();
+      });
+    });
+  const pipe = (head, rest = '') => `${head}${rest}GET /next HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n`;
+  const post = (headers, body = '') => pipe(`POST /a HTTP/1.1\r\nHost: x\r\n${headers}\r\n\r\n`, body);
+  const strict = [
+    ['chunk size rejects junk', post('Transfer-Encoding: chunked', '5 junk\r\nhello\r\n0\r\n\r\n')],
+    ['chunk size rejects a 0x prefix', post('Transfer-Encoding: chunked', '0x5\r\nhello\r\n0\r\n\r\n')],
+    ['chunk size rejects a sign', post('Transfer-Encoding: chunked', '-5\r\nhello\r\n0\r\n\r\n')],
+    ['chunk size rejects a trailing space', post('Transfer-Encoding: chunked', '5 \r\nhello\r\n0\r\n\r\n')],
+    ['chunk size allows an extension', post('Transfer-Encoding: chunked', '5;a="q s"\r\nhello\r\n0;b\r\n\r\n')],
+    ['chunk extension rejects a space', post('Transfer-Encoding: chunked', '5; a\r\nhello\r\n0\r\n\r\n')],
+    ['chunk data must end in CRLF', post('Transfer-Encoding: chunked', '5\r\nhelloXX0\r\n\r\n')],
+    ['a last chunk is not any two bytes', post('Transfer-Encoding: chunked', '0AB')],
+    ['chunk size overflow', post('Transfer-Encoding: chunked', '10000000000000000\r\n')],
+    ['a trailer is kept', post('Transfer-Encoding: chunked', '0\r\nX-T: yes\r\n\r\n')],
+    ['a trailer without a colon is rejected', post('Transfer-Encoding: chunked', '0\r\nbad-trailer\r\n\r\n')],
+    ['a transfer-encoding trailer is rejected', post('Transfer-Encoding: chunked', '0\r\nTransfer-Encoding: chunked\r\n\r\n')],
+    ['chunked is the final coding', post('Transfer-Encoding: gzip, chunked', '0\r\n\r\n')],
+    ['chunked then gzip is rejected', post('Transfer-Encoding: chunked, gzip', '0\r\n\r\n')],
+    ['not-chunked is rejected', post('Transfer-Encoding: not-chunked', '0\r\n\r\n')],
+    ['an empty transfer-encoding is ignored', post('Transfer-Encoding:', '')],
+    ['an empty transfer-encoding after content-length is rejected', 'POST /a HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\nTransfer-Encoding:\r\n\r\n'],
+    ['content-length together with chunked is rejected', post('Transfer-Encoding: chunked\r\nContent-Length: 0', '0\r\n\r\n')],
+    ['content-length before chunked is rejected', post('Content-Length: 0\r\nTransfer-Encoding: chunked', '0\r\n\r\n')],
+    ['a duplicate content-length is rejected', post('Content-Length: 5\r\nContent-Length: 5', 'hello')],
+    ['content-length +5 is rejected', post('Content-Length: +5', 'hello')],
+    ['content-length 05 is five bytes', post('Content-Length: 05', 'hello')],
+    ['content-length above 2^64 is rejected', post('Content-Length: 18446744073709551616', '')],
+    ['lf-only request lines are rejected', 'POST /lf HTTP/1.1\nHost: x\nContent-Length: 0\n\n'],
+    ['a bare CR in a header is rejected', 'POST /cr HTTP/1.1\r\nHost: x\rX\r\nContent-Length: 0\r\n\r\n'],
+    ['obs-fold is rejected', 'POST /fold HTTP/1.1\r\nHost: x\r\nX-A: one\r\n two\r\nContent-Length: 0\r\n\r\n'],
+    ['a space in a header name is rejected', 'POST /h HTTP/1.1\r\nHost: x\r\nBad Name: y\r\nContent-Length: 0\r\n\r\n'],
+    ['a control character in a header value is rejected', 'POST /h HTTP/1.1\r\nHost: x\r\nX-A: a\x01b\r\nContent-Length: 0\r\n\r\n'],
+    ['a tab in a header value is kept', post('X-A: a\tb\r\nContent-Length: 0', '')],
+    ['a lower-case method is rejected', 'post /a HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n'],
+    ['HTTP/1.2 is rejected', 'POST /a HTTP/1.2\r\nHost: x\r\nContent-Length: 0\r\n\r\n'],
+    ['an absolute URL is the target', 'GET http://x/a HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n'],
+    ['OPTIONS * is the target', post('Content-Length: 0', '').replace('POST /a', 'OPTIONS *')],
+    ['HTTP/1.0 does not take a pipelined request', 'POST /a HTTP/1.0\r\nHost: x\r\nContent-Length: 0\r\n\r\nGET /next HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n'],
+    ['a header over the limit is rejected', `POST /a HTTP/1.1\r\nHost: x\r\nX-A: ${'b'.repeat(17000)}\r\nContent-Length: 0\r\n\r\n`],
+  ];
+  for (const [label, bytes] of strict) {
+    await shot(label, bytes);
+    flushLog(label);
+  }
+  const framed = net.createServer((s) => {
+    const parts = [];
+    s.on('data', (d) => {
+      parts.push(d);
+      const text = Buffer.concat(parts).toString('latin1');
+      if (!text.includes('0\r\n\r\n')) return;
+      console.log(`flushHeaders with transfer-encoding chunked: ${text.split('\r\n').slice(4).join(' ')}`);
+      s.end('HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n');
+    });
+  });
+  await new Promise((r) => framed.listen(0, '127.0.0.1', r));
+  await new Promise((resolve) => {
+    const req = http.request(
+      { host: '127.0.0.1', port: framed.address().port, method: 'POST', agent: false, headers: { 'Transfer-Encoding': 'chunked' } },
+      (res) => {
+        res.resume();
+        res.on('end', resolve);
+      }
+    );
+    req.flushHeaders();
+    req.write('hi');
+    req.end('!');
+  });
+  framed.close();
   srv.close(() => console.log('closed'));
 });
