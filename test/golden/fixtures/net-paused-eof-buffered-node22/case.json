@@ -1,0 +1,1 @@
+{ "description": "a paused socket that has bytes buffered at EOF keeps them and emits no end or close until the program reads them, then end and close, as Node 22", "argv": ["script.js"], "shim": true }
