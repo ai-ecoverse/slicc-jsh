@@ -1722,7 +1722,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       // A file a child is still being given (child_process hold()) keeps
       // its kernel descriptor until that is done, as a dup'd fd would.
       if (ent.holds > 0) return;
-      closeKernelFile(ent);
+      closeKernelFile(ent, true);
     },
     symlinkSync(target, p) {
       try {
@@ -2386,12 +2386,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     const r = new Readable({
       highWaterMark,
       destroy(err, cb) {
+        let closing = null;
         try {
           closeFd();
-        } catch {
-          /* already closed */
+        } catch (closeErr) {
+          if (closeErr?.code !== 'EBADF') closing = closeErr;
         }
-        cb(err);
+        cb(closing || err);
       },
       read(size) {
         try {
@@ -2487,12 +2488,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     const w = new Writable({
       highWaterMark,
       destroy(err, cb) {
+        let closing = null;
         try {
           closeFd();
-        } catch {
-          /* already closed */
+        } catch (closeErr) {
+          if (closeErr?.code !== 'EBADF') closing = closeErr;
         }
-        cb(err);
+        cb(closing || err);
       },
       write(chunk, enc, cb) {
         try {
@@ -2573,11 +2575,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
    * outlives a closeSync() of it. null when jsh has no such fd.
    */
   /** Close the kernel descriptor behind a jsh fd, if it has one. */
-  function closeKernelFile(ent) {
+  function closeKernelFile(ent, report = false) {
     try {
       (ent.device ?? ent.file)?.close();
-    } catch {
-      /* closed */
+    } catch (err) {
+      if (report && err?.code !== 'EBADF') throw nodeFsError(err?.code || 'EIO', 'close', undefined, err);
     }
   }
 
