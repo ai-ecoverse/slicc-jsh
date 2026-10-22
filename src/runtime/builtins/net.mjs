@@ -137,7 +137,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #startOnWrite = null;
     // The TLS socket that took the connection: it goes when this one does.
     #owner;
-    #closed;
+    #emitsClose;
     #resource = { frame: null };
 
     constructor(options = {}) {
@@ -147,9 +147,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       super({
         allowHalfOpen: Boolean(options.allowHalfOpen),
         autoDestroy: true,
-        // A TLS socket over another says 'close' itself, after that one's (Node's TLSWrap).
-        emitClose: options.emitClose !== false,
+        emitClose: false,
       });
+      this.#emitsClose = options.emitClose !== false;
       this.connecting = false;
       this.pending = true;
       this.destroyed = false;
@@ -161,7 +161,6 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       // Node always passes a boolean hadError to 'close'; readable-stream may omit it.
       const origEmit = this.emit.bind(this);
       this.emit = (event, ...args) => {
-        if (event === 'close') this.#closed?.();
         if (event === 'close' && (args.length === 0 || args[0] === undefined)) {
           return origEmit('close', false);
         }
@@ -622,10 +621,19 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       if (this.#readableEof && this.#refed) trackPromise(handles, closing).catch(() => {});
     }
 
-    _destroy(err, callback) {
+    _destroy(err, done) {
       this.destroyed = true;
-      if (this._readableState?.emitClose !== false) {
-        trackPromise(handles, new Promise((resolve) => (this.#closed = resolve))).catch(() => {});
+      let callback = done;
+      if (this.#emitsClose) {
+        let release;
+        trackPromise(handles, new Promise((resolve) => (release = resolve))).catch(() => {});
+        callback = (e) => {
+          done(e);
+          nextTick(() => {
+            release();
+            this.emit('close');
+          });
+        };
       }
       // Node's Socket._destroy: the server's count drops now, before this
       // socket's 'close' (so a closing server's 'close' comes first).
@@ -650,7 +658,6 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#dropHandle();
       // Match Node: destroy does not flush. Never await kernel close here —
       // conn.close() can deadlock with a peer blocked in read (fin.js).
-      // Duplex emits a single 'close' after this callback (do not emit here).
       const reader = this.#reader;
       const writer = this.#writer;
       const conn = this.#conn;
