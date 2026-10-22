@@ -1,0 +1,9 @@
+no connect listener: ""
+a tunnel, what came with the head echoed: "HTTP/1.1 200 Connection Established\r\n\r\nhead earlybye"
+FIN right after the head: "HTTP/1.1 200 Connection Established\r\n\r\nbye"
+client, 200: connect 200 Connection Established fake head "from the tunnel" true | close
+client, 407: connect 407 Proxy Authentication Required fake head "from the tunnel" true | close
+client, no connect listener: close
+the head the client sent: "CONNECT example:443 HTTP/1.1\r\nHost: 127.0.0.1:PORT\r\nConnection: keep-alive\r\n\r\n"
+client through the proxy: 200 "echo pingbye"
+seen: connect CONNECT example:443 1.1 {"host":"example:443"} head "early" true | connect CONNECT example:80 1.1 {"host":"example:80"} head "" true | connect CONNECT inner:1 1.1 {"host":"127.0.0.1:PORT","connection":"keep-alive"} head "" true
