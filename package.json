@@ -17,7 +17,7 @@
   },
   "engines": {
     "node": ">=22",
-    "slicc-kernel": ">=1.146.2"
+    "slicc-kernel": ">=1.146.5"
   },
   "publishConfig": {
     "access": "public",
