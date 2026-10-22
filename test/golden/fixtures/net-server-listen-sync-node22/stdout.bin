@@ -1,0 +1,30 @@
+listen(0) after listen address number listening true handle yes
+listen(0) listening later address number listening true handle yes
+listen(0) order listening then nextTick
+listen({ port: 0 }) after listen address number listening true handle yes
+listen({ port: 0 }) listening later address number listening true handle yes
+listen({ port: 0 }) order listening then nextTick
+listen() after listen address number listening true handle yes
+listen() listening later address number listening true handle yes
+listen() order listening then nextTick
+listen(0, '127.0.0.1') after listen address null listening false handle no
+listen(0, '127.0.0.1') listening later address number listening true handle yes
+listen(0, '127.0.0.1') order nextTick then listening
+listen(0, 'localhost') after listen address null listening false handle no
+listen(0, 'localhost') listening later address number listening true handle yes
+listen(0, 'localhost') order nextTick then listening
+listen(0, 'no-such-host.invalid') after listen address null listening false handle no
+listen(0, 'no-such-host.invalid') error later ENOTFOUND getaddrinfo address null listening false handle no
+listen(0, 'no-such-host.invalid') order nextTick then error
+holder after listen address number listening true handle yes
+holder listening later address number listening true handle yes
+holder order listening then nextTick
+listen(port) in use after listen address null listening false handle no
+listen(port) in use error later EADDRINUSE listen address null listening false handle no
+listen(port) in use order error then nextTick
+listen(port) freed after listen address number listening true handle yes
+listen(port) freed listening later address number listening true handle yes
+listen(port) freed order listening then nextTick
+same port true
+connected to second
+done

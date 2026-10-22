@@ -1,0 +1,8 @@
+get 200 {"id":"7","q":{"x":"1"}}
+post 201 {"got":{"a":1}}
+missing 404
+error handler 500 {"error":"nope"}
+agent in cookie: sid=abc
+own server 200 9 true
+own closed
+exit 0

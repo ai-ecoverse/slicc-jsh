@@ -92,6 +92,8 @@
     "browserify-des": "1.0.2",
     "browserify-zlib": "0.2.0",
     "cert-compat-wasm-bash": "npm:@ai-ecoverse/wasm-bash@5.3.0-20",
+    "chai": "6.3.0",
+    "chai-http": "5.1.2",
     "chokidar": "5.0.0",
     "cjs-module-lexer": "2.3.0",
     "embedded-postgres": "18.4.0-beta.17",
