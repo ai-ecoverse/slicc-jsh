@@ -1,0 +1,2 @@
+closed after spawn, renamed away: 0 null stdout "head\nlate out\n" stderr "late err\n" at the old paths none none
+kept open, replaced then unlinked: 0 the descriptor reads "late out\nlate err\n" the path none

@@ -4,3 +4,14 @@ replaced: the path "new file" the descriptor reads "XY" nlink 0
 replaced, appending: the path "new" the descriptor reads "old+!"
 renamed away while open for w: "to the moved one" false
 a write stream renamed away: "stream after rename" false
+unlinked: fs.write false the descriptor reads "XYc"
+replaced: fs.write at 1 "new file" the descriptor reads "oXY"
+unlinked: FileHandle.write and truncate false the handle reads "XYcd" size 4 nlink 0
+replaced: FileHandle.write and truncate "new file" the handle reads "abX"
+renamed away: FileHandle.appendFile "appended" false
+replaced: FileHandle.writeFile and appendFile "new file" the handle reads "h" "12XYZWVh"
+wx again: EEXIST open
+wx, replaced: the path "new"
+wx+, unlinked: false the descriptor reads "excl+"
+w+ truncates: size 0 ""
+w+, replaced: the path "new" the descriptor reads "trunc"
