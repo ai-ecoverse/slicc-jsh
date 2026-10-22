@@ -1,0 +1,109 @@
+== --trace_event_categories a --trace_event_file_pattern PATTERN show.js: status 0
+execArgv ["--trace_event_categories","a","--trace_event_file_pattern","PATTERN"] categories a
+== --trace_event_file_pattern=PATTERN --trace_event_categories=b,a show.js: status 0
+execArgv ["--trace_event_file_pattern=PATTERN","--trace_event_categories=b,a"] categories a,b
+== --trace_events_enabled --trace-event_file-pattern PATTERN show.js: status 0
+execArgv ["--trace_events_enabled","--trace-event_file-pattern","PATTERN"] categories node,node.async_hooks,v8
+== --trace_event_categories a --trace_event_file_pattern PATTERN -e console.log(require('trace_events').getEnabledCategories()): status 0
+a
+== --trace_event_categories -e 1: status 9
+node: --trace_event_categories requires an argument
+== --trace_event_categories= -e 1: status 9
+node: --trace_event_categories= requires an argument
+== --no-trace_event_categories -e 1: status 9
+node: --no-trace_event_categories is an invalid negation because it is not a boolean option
+== --no_trace_events_enabled -e 1: status 9
+node: --no_trace_events_enabled is an invalid negation because it is not a boolean option
+== --stack_trace_limit=5 -e console.log(Error.stackTraceLimit); console.log(JSON.stringify(process.execArgv)): status 0
+5
+["--stack_trace_limit=5","-e","console.log(Error.stackTraceLimit); console.log(JSON.stringify(process.execArgv))"]
+== --stack_trace-limit=x -e 1: status 9
+Error: illegal value for flag --stack_trace-limit=x of type int
+Try --help for options
+node: bad option: --stack_trace-limit=x
+node: bad option: --harmony-import-attributes
+node: bad option: --no-harmony-import-assertions
+node: bad option: --experimental-wasm-imported-strings
+node: bad option: --experimental-wasm-memory64
+node: bad option: --experimental-wasm-exnref
+== --input_type=module -e console.log(typeof require); console.log(JSON.stringify(process.execArgv)): status 0
+undefined
+["--input_type=module","-e","console.log(typeof require); console.log(JSON.stringify(process.execArgv))"]
+== --input_type module -e console.log(typeof require): status 0
+undefined
+== --input_type -e 1: status 9
+node: --input_type requires an argument
+== --input_type= -e 1: status 9
+node: --input_type= requires an argument
+== --input_type=module_x -e 1: status 9
+node: --input-type must be "module","commonjs", "module-typescript" or "commonjs-typescript"
+== --no-input_type -e 1: status 9
+node: --no-input_type is an invalid negation because it is not a boolean option
+== --no_input_type -e 1: status 9
+node: --no_input_type is an invalid negation because it is not a boolean option
+== --no_warnings -e process.emitWarning('w'); console.log(JSON.stringify(process.execArgv)): status 0
+["--no_warnings","-e","process.emitWarning('w'); console.log(JSON.stringify(process.execArgv))"]
+== --no-trace_warnings --trace_warnings -e console.log(JSON.stringify(process.execArgv)): status 0
+["--no-trace_warnings","--trace_warnings","-e","console.log(JSON.stringify(process.execArgv))"]
+== --preserve_symlinks --preserve_symlinks_main --enable_source_maps -e console.log(process.sourceMapsEnabled); console.log(JSON.stringify(process.execArgv)): status 0
+true
+["--preserve_symlinks","--preserve_symlinks_main","--enable_source_maps","-e","console.log(process.sourceMapsEnabled); console.log(JSON.stringify(process.execArgv))"]
+== --expose_internals -e console.log(typeof require('internal/options')): status 0
+object
+== --report_directory=/tmp/a_b --report_filename r_1.json -e console.log(process.report.directory, process.report.filename): status 0
+/tmp/a_b r_1.json
+== --title=a_b -e console.log(process.title): status 0
+a_b
+== --title -a_b -e 1: status 9
+node: --title requires an argument
+== --disable_warning=ExperimentalWarning -e console.log(JSON.stringify(process.execArgv)): status 0
+["--disable_warning=ExperimentalWarning","-e","console.log(JSON.stringify(process.execArgv))"]
+== --require ./pre_load.js -e console.log(JSON.stringify(process.execArgv)): status 0
+pre_load
+["--require","./pre_load.js","-e","console.log(JSON.stringify(process.execArgv))"]
+== --require=./pre_load.js -e console.log(JSON.stringify(process.execArgv)): status 0
+pre_load
+["--require=./pre_load.js","-e","console.log(JSON.stringify(process.execArgv))"]
+== --title=-a_b -e console.log(process.title): status 0
+-a_b
+== --title_=a -e 1: status 9
+node: bad option: --title_=a
+== --_no-warnings -e 1: status 9
+node: bad option: --_no-warnings
+== -_e 1: status 9
+node: bad option: -_e
+== --foo_bar -e 1: status 9
+node: bad option: --foo_bar
+== --require_ ./pre_load.js -e 1: status 9
+node: bad option: --require_
+== NODE_OPTIONS="--trace_event_categories q --trace_event_file_pattern PATTERN --no_warnings --stack_trace_limit=3" -e process.emitWarning('w'); console.log(require('trace_events').getEnabledCategories(), Error.stackTraceLimit); console.log(JSON.stringify(process.execArgv)): status 0
+q 3
+["-e","process.emitWarning('w'); console.log(require('trace_events').getEnabledCategories(), Error.stackTraceLimit); console.log(JSON.stringify(process.execArgv))"]
+== NODE_OPTIONS="--stack_trace_limit=3" -e console.log(Error.stackTraceLimit): status 0
+3
+== NODE_OPTIONS="--input_type=module" -e console.log(typeof require): status 0
+undefined
+== NODE_OPTIONS="--input_type" -e 1: status 9
+node: --input_type requires an argument
+== NODE_OPTIONS="--input_type=" -e 1: status 9
+node: --input_type= requires an argument
+== NODE_OPTIONS="--no-input_type" -e 1: status 9
+node: --no-input_type is an invalid negation because it is not a boolean option
+== NODE_OPTIONS="--_no-warnings" -e 1: status 9
+node: --_no-warnings is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="-_r ./pre_load.js" -e 1: status 9
+node: -_r is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="--foo_bar" -e 1: status 9
+node: --foo_bar is not allowed in NODE_OPTIONS
+== NODE_OPTIONS="--eval_=1" -e 1: status 9
+node: --eval_= is not allowed in NODE_OPTIONS
+worker {"execArgv":["--stack_trace_limit=3"]} ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --stack_trace_limit=3
+worker {"execArgv":["--title_x"]} ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --title_x
+worker {"execArgv":["--title","x"]} ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --title
+worker {"execArgv":["--trace_event_categories","x"]} ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --trace_event_categories
+worker {"execArgv":["--_no-warnings"]} ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: --_no-warnings
+worker {"execArgv":["--no_warnings"]} ok ["--no_warnings"]
+worker {"execArgv":["--input_type=module"]} ok ["--input_type=module"]
+worker {"env":{"NODE_OPTIONS":"--title_x"}} ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid NODE_OPTIONS env variable: --title_x is not allowed in NODE_OPTIONS
+worker {"env":{"NODE_OPTIONS":"--trace_event_categories x"}} ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid NODE_OPTIONS env variable: --trace_event_categories is not allowed in NODE_OPTIONS
+worker {"env":{"NODE_OPTIONS":"--no_warnings"}} ok []

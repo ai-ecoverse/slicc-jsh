@@ -1,0 +1,5 @@
+{
+  "description": "#720: Node 22.22.0's option parser takes `_` for `-` in an option's name from its third character on, on the command line, in NODE_OPTIONS and in a Worker's execArgv and env: process.execArgv and the errors keep the name as given; `_` in the first two characters (`-_e`, `--_no-warnings` is `---no-warnings`) or in a value is kept.",
+  "argv": ["main.js"],
+  "shim": true
+}
