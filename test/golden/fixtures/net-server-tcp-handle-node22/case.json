@@ -1,0 +1,1 @@
+{ "description": "a listening net.Server's _handle has the TCP handle's getsockname, close, ref, unref and hasRef, as Node 22's: getsockname fills in address(), ref and unref are the server's, close stops accepting and calls back, and an unref'd handle lets the program end", "argv": ["script.js"], "shim": true }
