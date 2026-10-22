@@ -8,11 +8,12 @@
  * The kernel's net (ctx.net) is stood in for: its listeners' close rejects
  * (EBADF), and a listen() can be held back until the test lets it answer.
  */
-import { describe, it } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import * as stream from 'node:stream';
 import { createNet } from '../../src/runtime/builtins/net.mjs';
 import { createHandleTable } from '../../src/runtime/handles.mjs';
+import { kernelAtLeast, withJsh, wrapCommandMain } from './helpers.mjs';
 
 function standInKernel() {
   const held = [];
@@ -78,5 +79,72 @@ describe('net: a dropped listener whose close fails (src)', () => {
       assert.deepEqual(seen, [], JSON.stringify(reply));
       assert.deepEqual(errors, reply.errno ? ['EADDRINUSE'] : []);
     }
+  });
+});
+
+describe('net: a dropped listener whose close fails (kernel)', { skip: !kernelAtLeast('1.125.11') }, () => {
+  let jsh;
+  before(async () => {
+    jsh = await withJsh();
+    await jsh.kernel.writeFile(
+      '/node_modules/@ai-ecoverse/slicc-jsh/dist/node.mjs',
+      wrapCommandMain(
+        'node',
+        `export default function node(ctx) {
+  const ebadf = (listener) => new Proxy(listener, {
+    get(target, key) {
+      if (key === 'close') {
+        return () => {
+          target.close().catch(() => {});
+          return Promise.reject(Object.assign(new Error('close EBADF'), { code: 'EBADF' }));
+        };
+      }
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const net = new Proxy(ctx.net, {
+    get(target, key) {
+      if (key === 'listen') return (...args) => target.listen(...args).then(ebadf);
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  return __main(new Proxy({}, { get: (_, key) => (key === 'net' ? net : ctx[key]), has: (_, key) => key in ctx }));
+}
+`
+      )
+    );
+  });
+  after(() => jsh?.close());
+
+  it("a cluster worker's own, when the primary can't listen where it asked: the worker's 'error', no unhandled rejection", async () => {
+    await jsh.kernel.writeFile(
+      '/os/inuse.js',
+      `const cluster = require('cluster');
+const net = require('net');
+if (cluster.isPrimary) {
+  const taken = net.createServer().listen(0, () => {
+    const worker = cluster.fork({ PORT: String(taken.address().port) });
+    worker.on('message', (m) => {
+      console.log('worker:', m);
+      worker.disconnect();
+    });
+    worker.on('exit', (code) => {
+      console.log('worker exit', code);
+      taken.close();
+    });
+  });
+} else {
+  const server = net.createServer();
+  server.on('error', (err) => process.send(err.code));
+  server.listen(Number(process.env.PORT));
+}
+`
+    );
+    const r = await jsh.run(['node', 'inuse.js']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, 'worker: EADDRINUSE\nworker exit 0\n');
   });
 });

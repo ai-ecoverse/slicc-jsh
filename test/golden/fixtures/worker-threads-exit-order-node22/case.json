@@ -1,1 +1,1 @@
-{ "description": "a Worker exit comes after every message the worker posted, one from its own process exit handler included (ten runs, one order)", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }
+{ "description": "a Worker exit comes after every message the worker posted, one from its own process exit handler included (ten runs, one order), and when it is queued together with the one before it at the worker's end", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }
