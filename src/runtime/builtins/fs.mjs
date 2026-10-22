@@ -385,6 +385,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     err.code = 'ERR_INVALID_ARG_VALUE';
     throw err;
   };
+  const STRING_MAX = 0x1fffffe8;
   /** Bytes read from a file, as Node returns them for `encoding`. */
   const decodeAs = (bytes, encoding) => {
     checkEncoding(encoding);
@@ -396,7 +397,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       err.code = 'ERR_UNKNOWN_ENCODING';
       throw err;
     }
-    if (enc === 'utf8' || enc === 'utf-8') return decoder.decode(bytes);
+    if (enc === 'utf8' || enc === 'utf-8') {
+      const text = decoder.decode(bytes);
+      if (text.length === 0 && bytes.length > STRING_MAX) throw new RangeError('Invalid string length');
+      return text;
+    }
     // Node's ascii decoder drops the high bit of each byte.
     if (enc === 'ascii') {
       let out = '';
@@ -574,16 +579,19 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
   }
 
   /** The bytes from an fd's position to its end; the position moves there. */
-  function readRestOf(ent, sized = () => {}) {
+  function readRestOf(ent, sized) {
     if (ent.file) {
       const size = ent.file.size();
-      sized(size);
+      sized?.(size, Math.max(0, size - ent.pos));
       const rest = ent.file.read(ent.pos, Math.max(0, size - ent.pos));
       ent.pos += rest.length;
       return rest;
     }
+    if (sized) {
+      const st = syncFs.stat(ent.path);
+      if (st.isFile) sized(st.size, Math.max(0, st.size - ent.pos));
+    }
     const bytes = syncFs.readFile(ent.path);
-    sized(bytes.length);
     const rest = bytes.subarray(Math.min(ent.pos, bytes.length));
     ent.pos += rest.length;
     return rest;
@@ -1215,14 +1223,27 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
 
   const IO_MAX = 2 ** 31 - 1;
 
-  function refuseOverIoMax(size, encoding, utf8Binding) {
-    if (!(size > IO_MAX)) return;
-    if (utf8Binding && (encoding === 'utf8' || encoding === 'utf-8')) {
-      const err = new Error('Cannot create a string longer than 0x1fffffe8 characters');
-      err.code = 'ERR_STRING_TOO_LONG';
+  function stringTooLong() {
+    const err = new Error('Cannot create a string longer than 0x1fffffe8 characters');
+    err.code = 'ERR_STRING_TOO_LONG';
+    return err;
+  }
+
+  function refuseOverIoMax(size, rest, encoding, binding) {
+    if (binding && (encoding === 'utf8' || encoding === 'utf-8')) {
+      if (Math.ceil(rest / 3) > STRING_MAX) throw stringTooLong();
+      return;
+    }
+    if (size > IO_MAX) throw nodeError(RangeError, 'ERR_FS_FILE_TOO_LARGE', `File size (${size}) is greater than 2 GiB`);
+  }
+
+  function decodeRead(bytes, encoding, strings) {
+    try {
+      return decodeAs(bytes, encoding);
+    } catch (err) {
+      if (strings && encoding && err instanceof RangeError) throw stringTooLong();
       throw err;
     }
-    throw nodeError(RangeError, 'ERR_FS_FILE_TOO_LARGE', `File size (${size}) is greater than 2 GiB`);
   }
 
   function allocationFailure(err, size) {
@@ -1236,7 +1257,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     return null;
   }
 
-  function readWhole(p, options, utf8Binding) {
+  function readWhole(p, options, { binding = false, strings = false } = {}) {
     const encoding = optEncoding(options);
     checkEncoding(encoding);
     if (p === 0 || p === '0') return readStdinSync(encoding);
@@ -1244,12 +1265,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       const ent = fdTable.get(p);
       if (!ent || !ent.readable) throw nodeFsError('EBADF', 'read', undefined);
       let size = 0;
-      const sized = (n) => {
+      const sized = (n, rest) => {
         size = n;
-        refuseOverIoMax(n, encoding, utf8Binding);
+        refuseOverIoMax(n, rest, encoding, binding);
       };
       try {
-        return decodeAs(readRestOf(ent, sized), encoding);
+        return decodeRead(readRestOf(ent, sized), encoding, strings);
       } catch (err) {
         if (String(err?.code).startsWith('ERR_')) throw err;
         throw allocationFailure(err, size) ?? nodeFsError(err?.code || 'EIO', 'read', undefined, err);
@@ -1272,8 +1293,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         e.syscall = 'read';
         throw e;
       }
-      if (st.isFile) refuseOverIoMax(st.size, encoding, utf8Binding);
-      return decodeAs(syncFs.readFile(target), encoding);
+      if (st.isFile) refuseOverIoMax(st.size, st.size, encoding, binding);
+      return decodeRead(syncFs.readFile(target), encoding, strings);
     } catch (err) {
       if ((err?.code && err.syscall) || String(err?.code).startsWith('ERR_')) throw err;
       throw (st?.isFile && allocationFailure(err, st.size)) || nodeFsError(err?.code || 'ENOENT', 'open', pathArg, err);
@@ -1282,7 +1303,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
 
   const syncApi = {
     readFileSync(p, options) {
-      return readWhole(p, options, true);
+      return readWhole(p, options, { binding: true, strings: true });
     },
     writeFileSync(p, data, options) {
       // Node's validateStringAfterArrayBufferView, before anything else.
@@ -2116,7 +2137,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
           let st = null;
           try {
             st = syncFs.stat(target);
-            if (st.isFile) refuseOverIoMax(st.size, encoding, false);
+            if (st.isFile) refuseOverIoMax(st.size, st.size, encoding, false);
             return decodeAs(await asyncFs.readFile(target), encoding);
           } catch (err) {
             // Argument errors (a bad encoding) stay as they are, as in Node.
@@ -2353,7 +2374,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       },
       async readFile(options) {
         ensureOpen('readFile');
-        return readWhole(fd, options, false);
+        return readWhole(fd, options);
       },
       async sync() {
         ensureOpen('fsync');
@@ -2687,7 +2708,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     WriteStream,
     createReadStream,
     createWriteStream,
-    readFile: callbackify((p, options) => readWhole(p, options, false)),
+    readFile: callbackify((p, options) => readWhole(p, options, { strings: true })),
     writeFile: callbackify(syncApi.writeFileSync, { minArgsBeforeCb: 2 }),
     appendFile: callbackify(syncApi.appendFileSync, { minArgsBeforeCb: 2 }),
     open: callbackify(syncApi.openSync),

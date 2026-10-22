@@ -83,4 +83,23 @@ describe('fs.readFile of a file over 2 GiB (kernel)', () => {
       ...lines(2 ** 32 + 5),
     ]);
   });
+  it("reads a short tail from an fd as Node 22's readFileSync 'utf8' does, and still refuses the buffer", async () => {
+    await jsh.kernel.writeFile(
+      '/os/tail.js',
+      [
+        "const fs = require('fs');",
+        "const at = (fd) => { const b = Buffer.allocUnsafe(64 * 1024 * 1024); let pos = 0; while (pos < 2 ** 31 - 16) pos += fs.readSync(fd, b, 0, Math.min(b.length, 2 ** 31 - 16 - pos), null); return fd; };",
+        "const fd = at(fs.openSync('two-gib.bin', 'r'));",
+        "const tail = fs.readFileSync(fd, 'utf8');",
+        "console.log(tail.length, JSON.stringify(fs.readFileSync(fd, 'utf-8')));",
+        "try { fs.readFileSync(fd); } catch (e) { console.log(e.code); }",
+        "try { fs.readFileSync(fd, 'latin1'); } catch (e) { console.log(e.code); }",
+        'fs.closeSync(fd);',
+      ].join('\n')
+    );
+    const r = await jsh.run(['node', 'tail.js']);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, '16 ""\nERR_FS_FILE_TOO_LARGE\nERR_FS_FILE_TOO_LARGE\n');
+  });
 });
