@@ -10,7 +10,7 @@ env:
   # renovate: datasource=node-version depName=node versioning=node
   NODE_VERSION: '26.12.0'
   # renovate: datasource=npm depName=@anthropic-ai/claude-code
-  CLAUDE_CODE_VERSION: '2.1.300'
+  CLAUDE_CODE_VERSION: '2.1.301'
   EVIDENCE_CHECK: |
     import { appendFileSync } from 'node:fs';
     const expect = JSON.parse(process.env.EVIDENCE_EXPECT || '{}');
