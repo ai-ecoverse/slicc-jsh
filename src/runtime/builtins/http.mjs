@@ -1828,7 +1828,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       };
       const pushBody = (bytes) => {
         if (bytes.length === 0 || req._dumped) return true;
-        if (req.listenerCount('data') === 0 && req._readableState?.flowing !== true) return true;
         const ok = req.push(Buffer.from(bytes));
         if (!ok) socket.pause?.();
         return ok;
