@@ -1,0 +1,7 @@
+client unread at EOF: buffered 7 readableFlowing null readableEnded false events ""
+client read late: "payload" events end close
+server unread at EOF: buffered 7 readableFlowing null readableEnded false events ""
+server read late: "payload" events end close
+never read, at EOF: buffered 7 readableFlowing null readableEnded false events ""
+never read, destroyed: buffered 7 readableFlowing null readableEnded false events "close"
+done

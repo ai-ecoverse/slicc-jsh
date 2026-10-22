@@ -251,9 +251,6 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#handle = { kind: 'socket', fd: conn.fd };
       handles.add(this.#handle);
       void this.#pumpRead();
-      // Node net.Socket delivers 'end'/'close' even without a 'data' listener;
-      // resume so buffered EOF from #pumpRead is consumed (fin4.js).
-      this.resume?.();
       if (quiet) return;
       runInResource(this.#resource, this.#emitConnect, this, []);
     }

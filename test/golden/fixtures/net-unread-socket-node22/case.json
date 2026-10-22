@@ -1,0 +1,1 @@
+{ "description": "a socket nothing reads, on the server and on the client, keeps what arrives in its buffer with readableFlowing null and emits no end until the program reads it, as Node 22", "argv": ["script.js"], "shim": true }
