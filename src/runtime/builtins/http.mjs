@@ -2,7 +2,7 @@
  * node:http over net (ctx.net loopback) + IncomingMessage / ServerResponse.
  */
 import { trackPromise } from '../async-handles.mjs';
-import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE, nodeError, validateInteger, validateString } from '../node-errors.mjs';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE, nodeError, validateBoolean, validateInteger, validateString } from '../node-errors.mjs';
 import { EventEmitter } from './events.mjs';
 import { createFetchClient, isLoopbackHost, kIncomingDestroy, kIncomingRead } from './http-fetch.mjs';
 import { queueMicrotask, resourceHere, runInResource } from '../async-context.mjs';
@@ -1473,6 +1473,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           destroy();
         }
       });
+      if (req.httpVersionMajor === 1 && req.httpVersionMinor === 1 && server.requireHostHeader && req.headers.host === undefined) {
+        res.writeHead(400, ['Connection', 'close']);
+        res.end();
+        return;
+      }
       server.emit('request', req, res);
       if (typeof requestListener === 'function') requestListener(req, res);
     };
@@ -1531,6 +1536,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     self.maxRequestsPerSocket = 0;
     self.maxHeadersCount = null;
     self.timeout = 0;
+    if (options?.requireHostHeader !== undefined) validateBoolean(options.requireHostHeader, 'options.requireHostHeader');
+    self.requireHostHeader = options?.requireHostHeader ?? true;
     /** @internal This server's connections, and whether each is between requests. */
     self._connections = new Set();
     self._closing = false;

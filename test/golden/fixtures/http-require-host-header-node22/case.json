@@ -1,0 +1,1 @@
+{ "description": "an http.Server answers an HTTP/1.1 request without a Host header 400 Bad Request with Connection: close and no request event, as Node 22's requireHostHeader (on by default) does; an empty Host, HTTP/1.0 and requireHostHeader: false (as an option or set later) are served, and the option is checked", "argv": ["script.js"], "shim": true }
