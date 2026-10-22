@@ -1642,6 +1642,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     const resource = resourceHere();
     let buf = Buffer.alloc(0);
     let busy = false;
+    let mute = false;
     let served = 0;
     let idleTimer = null;
     let headersTimer = null;
@@ -1853,8 +1854,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         }
         req.push(null);
         handles?.notify?.();
-        if (socket.destroyed) return;
-        if (resDone && !res._last && !socket.destroyed) keptAlive();
+        if (socket.destroyed || mute) return;
+        if (resDone && res._last) closeLast();
+        else if (resDone && !res._last) keptAlive();
       };
       const badBody = (code, reason) => {
         if (failed || bodyDone) return;
@@ -1943,7 +1945,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         }
       };
       const res = new ServerResponse(req);
-      res.assignSocket(socket);
+      if (!mute) res.assignSocket(socket);
       current = { req, res, bodyDone: () => bodyDone };
       // Node's shouldKeepAlive: HTTP/1.1 unless the client says close, and
       // below maxRequestsPerSocket. A connection that is open when close()
@@ -1982,6 +1984,26 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       };
       socket.once('close', gone);
       socket.once('end', onEnd);
+      const closeLast = () => {
+        if (socket.destroyed || mute) return;
+        if (bodyDone && res.shouldKeepAlive && buf.length > 0) {
+          mute = true;
+          busy = false;
+          current = null;
+          for (let n = 0; n < 8 && buf.length > 0; n++) {
+            const size = buf.length;
+            pumpNow();
+            busy = false;
+            if (buf.length === size) break;
+          }
+        }
+        if (socket.destroyed) return;
+        if (server._closing) closeGracefully(socket);
+        else {
+          socket.unref?.();
+          destroy();
+        }
+      };
       const keptAlive = () => {
         if (handed) return;
         handed = true;
@@ -1999,19 +2021,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       };
       res.on('finish', () => {
         resDone = true;
+        if (mute) return;
         if (!req._consuming && !req._readableState.resumeScheduled) req._dump();
         res.detachSocket(socket);
         process.nextTick(() => res[kEmitClose]());
         if (socket.destroyed) return;
         if (!res._last) {
           if (bodyDone) keptAlive();
-        } else if (bodyDone && res.shouldKeepAlive && buf.length > 0) {
-          keptAlive();
-        } else if (server._closing) closeGracefully(socket);
-        else {
-          socket.unref?.();
-          destroy();
-        }
+        } else if (!bodyDone) {
+          return;
+        } else closeLast();
       });
       pending = parsed.teAfter || bodyDone ? null : feed;
       const expect = headers.expect;

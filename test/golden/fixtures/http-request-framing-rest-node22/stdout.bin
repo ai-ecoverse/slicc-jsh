@@ -1,53 +1,53 @@
-a plain request stays open for the next one | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-connection close does not take the next request | status - | requests GET /a HTTP/1.1 "" | errors HPE_CLOSED_CONNECTION | next no
-lf-only request line | status - | requests - | errors HPE_INVALID_VERSION | next no
-lf-only header line | status - | requests - | errors HPE_CR_EXPECTED | next no
-lf-only end of headers | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-lf-only throughout | status - | requests - | errors HPE_INVALID_VERSION | next no
-a bare CR in a header | status - | requests - | errors HPE_LF_EXPECTED | next no
-a bare CR in the request line | status - | requests - | errors HPE_STRICT | next no
-obs-fold with a space | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-obs-fold with a tab | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-a space in a header name | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-a tab in a header name | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-a control character in a header value | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-a delete in a header value | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-a high byte in a header value | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-a tab in a header value | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-an empty header name | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-a quoted header name | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-duplicate content-length, same digits | status - | requests - | errors HPE_UNEXPECTED_CONTENT_LENGTH | next no
-duplicate content-length, different digits | status - | requests - | errors HPE_UNEXPECTED_CONTENT_LENGTH | next no
-duplicate content-length, different case | status - | requests - | errors HPE_UNEXPECTED_CONTENT_LENGTH | next no
-content-length with a trailing space | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-content-length with a leading space | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-content-length with a tab | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-content-length with a comma | status - | requests - | errors HPE_INVALID_CONTENT_LENGTH | next no
-content-length plus five | status - | requests - | errors HPE_INVALID_CONTENT_LENGTH | next no
-transfer-encoding chunked in upper case | status 200 | requests POST /a HTTP/1.1 "hello" || GET /next HTTP/1.1 "" | errors - | next yes
-transfer-encoding chunked with a trailing space | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-transfer-encoding with a trailing comma | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no
-transfer-encoding with a leading comma | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-transfer-encoding chunked twice | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no
-transfer-encoding gzip then chunked, mixed case | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-transfer-encoding chunked then gzip, mixed case | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no
-transfer-encoding chunked and content-length, different case | status - | requests - | errors HPE_INVALID_CONTENT_LENGTH | next no
-content-length and transfer-encoding, whitespace | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no
-two transfer-encoding headers | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-a blank transfer-encoding before content-length | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-a blank transfer-encoding after content-length | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no
-a lower-case method | status - | requests - | errors HPE_INVALID_METHOD | next no
-a tab after the method | status - | requests - | errors HPE_INVALID_METHOD | next no
-two spaces before the target | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-two spaces before the version | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-a trailing space after the version | status - | requests - | errors HPE_INVALID_VERSION | next no
-HTTP/1.10 | status - | requests - | errors HPE_INVALID_VERSION | next no
-HTTP/2.0 | status - | requests GET /a HTTP/2.0 "" | errors HPE_CLOSED_CONNECTION | next no
-an unknown method | status - | requests - | errors HPE_INVALID_METHOD | next no
-asterisk is a path | status 200 | requests GET *foo HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-OPTIONS asterisk | status 200 | requests OPTIONS * HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-an absolute URL | status 200 | requests GET http://x/a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes
-HTTP/0.9 | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no
-HTTP/1.0 with an explicit pipeline | status - | requests GET /a HTTP/1.0 "" | errors HPE_CLOSED_CONNECTION | next no
-HTTP/1.0 keep-alive stays open | status 200 | requests GET /a HTTP/1.0 "" || GET /next HTTP/1.1 "" | errors - | next yes
+a plain request stays open for the next one | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+connection close does not take the next request | status - | requests GET /a HTTP/1.1 "" | errors HPE_CLOSED_CONNECTION | next no | wire ""
+lf-only request line | status - | requests - | errors HPE_INVALID_VERSION | next no | wire ""
+lf-only header line | status - | requests - | errors HPE_CR_EXPECTED | next no | wire ""
+lf-only end of headers | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+lf-only throughout | status - | requests - | errors HPE_INVALID_VERSION | next no | wire ""
+a bare CR in a header | status - | requests - | errors HPE_LF_EXPECTED | next no | wire ""
+a bare CR in the request line | status - | requests - | errors HPE_STRICT | next no | wire ""
+obs-fold with a space | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+obs-fold with a tab | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+a space in a header name | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+a tab in a header name | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+a control character in a header value | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+a delete in a header value | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+a high byte in a header value | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+a tab in a header value | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+an empty header name | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+a quoted header name | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+duplicate content-length, same digits | status - | requests - | errors HPE_UNEXPECTED_CONTENT_LENGTH | next no | wire ""
+duplicate content-length, different digits | status - | requests - | errors HPE_UNEXPECTED_CONTENT_LENGTH | next no | wire ""
+duplicate content-length, different case | status - | requests - | errors HPE_UNEXPECTED_CONTENT_LENGTH | next no | wire ""
+content-length with a trailing space | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+content-length with a leading space | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+content-length with a tab | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+content-length with a comma | status - | requests - | errors HPE_INVALID_CONTENT_LENGTH | next no | wire ""
+content-length plus five | status - | requests - | errors HPE_INVALID_CONTENT_LENGTH | next no | wire ""
+transfer-encoding chunked in upper case | status 200 | requests POST /a HTTP/1.1 "hello" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+transfer-encoding chunked with a trailing space | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+transfer-encoding with a trailing comma | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no | wire ""
+transfer-encoding with a leading comma | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+transfer-encoding chunked twice | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no | wire ""
+transfer-encoding gzip then chunked, mixed case | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+transfer-encoding chunked then gzip, mixed case | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no | wire ""
+transfer-encoding chunked and content-length, different case | status - | requests - | errors HPE_INVALID_CONTENT_LENGTH | next no | wire ""
+content-length and transfer-encoding, whitespace | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no | wire ""
+two transfer-encoding headers | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+a blank transfer-encoding before content-length | status 200 | requests POST /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+a blank transfer-encoding after content-length | status - | requests - | errors HPE_INVALID_TRANSFER_ENCODING | next no | wire ""
+a lower-case method | status - | requests - | errors HPE_INVALID_METHOD | next no | wire ""
+a tab after the method | status - | requests - | errors HPE_INVALID_METHOD | next no | wire ""
+two spaces before the target | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+two spaces before the version | status 200 | requests GET /a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+a trailing space after the version | status - | requests - | errors HPE_INVALID_VERSION | next no | wire ""
+HTTP/1.10 | status - | requests - | errors HPE_INVALID_VERSION | next no | wire ""
+HTTP/2.0 | status - | requests GET /a HTTP/2.0 "" | errors HPE_CLOSED_CONNECTION | next no | wire ""
+an unknown method | status - | requests - | errors HPE_INVALID_METHOD | next no | wire ""
+asterisk is a path | status 200 | requests GET *foo HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+OPTIONS asterisk | status 200 | requests OPTIONS * HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+an absolute URL | status 200 | requests GET http://x/a HTTP/1.1 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nokHTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+HTTP/0.9 | status - | requests - | errors HPE_INVALID_HEADER_TOKEN | next no | wire ""
+HTTP/1.0 with an explicit pipeline | status - | requests GET /a HTTP/1.0 "" | errors HPE_CLOSED_CONNECTION | next no | wire ""
+HTTP/1.0 keep-alive stays open | status 200 | requests GET /a HTTP/1.0 "" || GET /next HTTP/1.1 "" | errors - | next yes | wire "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nok"
 closed

@@ -90,7 +90,8 @@ const shot = (label, bytes) =>
             .join(',') || '-';
           const seen = requests.join(' || ') || '-';
           const next = requests.some((row) => row.startsWith('GET /next '));
-          console.log(`${label} | status ${status} | requests ${seen} | errors ${errors.join(',') || '-'} | next ${next ? 'yes' : 'no'}`);
+          const wire = JSON.stringify(got.replace(/\r\nDate: [^\r\n]*/g, ''));
+          console.log(`${label} | status ${status} | requests ${seen} | errors ${errors.join(',') || '-'} | next ${next ? 'yes' : 'no'} | wire ${wire}`);
           srv.close(() => resolve());
         }, 20);
       });
