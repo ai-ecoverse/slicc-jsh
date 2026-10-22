@@ -2,6 +2,5 @@
   "description": "worker_threads parity (#596, #586): a Worker's execArgv and env NODE_OPTIONS refused as Node refuses them, NODE_OPTIONS inherited or taken from the env given, environment data and string data:/file: filenames checked in the constructor, a file: URL's query dropped as Node does, a stream in workerData, getters read once on every way a message goes, SharedArrayBuffers and Blobs through a port, and Node's DataCloneErrors for ports moved, duplicated, unlisted or closed",
   "argv": ["script.js"],
   "env": { "NODE_OPTIONS": "--require ./pre.js" },
-  "shim": true,
-  "kernel": "1.130.0"
+  "shim": true
 }

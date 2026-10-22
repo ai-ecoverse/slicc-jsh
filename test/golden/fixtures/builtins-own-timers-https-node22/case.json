@@ -1,1 +1,1 @@
-{ "description": "builtins schedule on jsh's own timers: with the global timers removed, an https request with a timeout still reports its error, as in Node 22", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }
+{ "description": "builtins schedule on jsh's own timers: with the global timers removed, an https request with a timeout still reports its error, as in Node 22", "argv": ["script.js"], "shim": true }

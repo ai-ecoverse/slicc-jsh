@@ -6,10 +6,8 @@
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, kernelVersion, withJshAndSh } from './helpers.mjs';
+import { withJshAndSh } from './helpers.mjs';
 
-const HAS_CHMOD = kernelAtLeast('1.86.0');
-const needs = HAS_CHMOD ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.fs.chmod (1.86.0)` };
 
 const program = (lines) => `(async () => {\n${lines.join('\n')}\n})().catch((e) => { console.error(e); process.exit(1); });\n`;
 const ERR = "const err = (e) => `${e.code} ${e.syscall} ${e.path} ${e.message}`;";
@@ -29,7 +27,7 @@ describe('fs.chmod then exec by path (kernel)', () => {
     "const run = (f) => { const r = cp.spawnSync(f, ['a', 'b'], { encoding: 'utf8' }); return r.error ? r.error.code : `${r.status} ${r.stdout.trim()}`; };",
   ];
 
-  it('chmodSync(f, 0o755), fs.chmod and fs.promises.chmod make a script JS wrote runnable (spawn, #! and binfmt)', needs, async () => {
+  it('chmodSync(f, 0o755), fs.chmod and fs.promises.chmod make a script JS wrote runnable (spawn, #! and binfmt)', async () => {
     await jsh.kernel.writeFile('/os/x/.keep', '');
     await jsh.kernel.writeFile(
       '/os/chx.js',
@@ -62,7 +60,7 @@ describe('fs.chmod then exec by path (kernel)', () => {
     assert.equal(sh.stdout, 'sh z\nnode y\njsh w\n');
   });
 
-  it('fchmodSync and FileHandle.chmod by the descriptor’s path', needs, async () => {
+  it('fchmodSync and FileHandle.chmod by the descriptor’s path', async () => {
     await jsh.kernel.writeFile(
       '/os/fchx.js',
       program([
@@ -77,7 +75,7 @@ describe('fs.chmod then exec by path (kernel)', () => {
     assert.equal(r.stdout, 'hi.sh 750 0 sh a b\nhi.js 500 0 node a,b\n');
   });
 
-  it('a pnpm add -g style shim written from JS runs by name from $PNPM_HOME/bin (root and a user)', needs, async () => {
+  it('a pnpm add -g style shim written from JS runs by name from $PNPM_HOME/bin (root and a user)', async () => {
     const shim = (pnpmHome, pkgDir) =>
       program([
         "const fs = require('fs'); const path = require('path'); const cp = require('child_process');",
@@ -125,7 +123,7 @@ describe('fs.chmod under users: enforce (kernel)', () => {
   });
   after(() => jsh?.close());
 
-  it('only the owner or root may change a mode: EPERM for anyone else, with Node’s error', needs, async () => {
+  it('only the owner or root may change a mode: EPERM for anyone else, with Node’s error', async () => {
     await jsh.kernel.writeFile(
       '/tmp/eperm.js',
       program([
@@ -177,7 +175,7 @@ describe('fs.mkdir without recursive is exclusive in the kernel', () => {
   });
   after(() => jsh?.close());
 
-  it('two processes make the same 200 directories at once: each is made by exactly one', needs, async () => {
+  it('two processes make the same 200 directories at once: each is made by exactly one', async () => {
     const N = 200;
     await jsh.kernel.writeFile(
       '/os/race.js',
@@ -204,7 +202,7 @@ describe('fs.mkdir without recursive is exclusive in the kernel', () => {
     assert.equal(wonA.length + wonB.length, N, 'every directory made once');
   });
 
-  it('promises.mkdir and the callback mkdir lose with EEXIST as well', needs, async () => {
+  it('promises.mkdir and the callback mkdir lose with EEXIST as well', async () => {
     await jsh.kernel.writeFile(
       '/os/race2.js',
       program([

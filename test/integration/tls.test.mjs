@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageFiles, kernelAtLeast, withJsh } from './helpers.mjs';
+import { devPackageFiles, withJsh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -67,15 +67,6 @@ server.listen(0, '127.0.0.1', () => {
     assert.deepEqual(lines.slice(2).sort(), ['client close 1000 done', 'server close 1000 done', 'server closed']);
   });
 
-  // From slicc-kernel 1.116.0 tls.connect has the kernel's TLS
-  // (tls-transport.test.mjs); from 1.124.0 TLS over an open socket and a
-  // custom ca too (tls-kernel.test.mjs): those calls don't throw there.
-  const transportTls = kernelAtLeast('1.116.0');
-  const kernelTls = kernelAtLeast('1.124.0');
-  // From 1.124.13 the kernel takes a client certificate: key material is
-  // checked as Node checks it (tls-kernel.test.mjs).
-  const kernelCerts = kernelAtLeast('1.124.13');
-  const overSocket = kernelTls ? 'no throw' : `ERR_NOT_SUPPORTED slicc-jsh: '${transportTls ? 'tls.connect over a socket' : 'tls.connect'}' is not supported yet (no TLS on ctx.net)`;
   it("a connection a tls.Server gets is a failed handshake: 'tlsClientError' with ERR_NOT_SUPPORTED and the socket destroyed, an https.Server's 'clientError', the client closed (#792)", async () => {
     const r = await jsh.run([
       'node',
@@ -169,22 +160,16 @@ console.log('https.Server', httpsServer instanceof tls.Server, Object.getPrototy
     const why = '(no TLS on ctx.net)';
     assert.deepEqual(r.stdout.split('\n'), [
       'loaded function',
-      `connect ${overSocket}`,
-      `connect options ${overSocket}`,
+      'connect no throw',
+      'connect options no throw',
       `listen ERR_NOT_SUPPORTED slicc-jsh: 'tls.Server.listen' is not supported yet ${why}`,
       'listening false',
-      kernelTls ? 'TLSSocket over a socket no throw' : `TLSSocket over a socket ERR_NOT_SUPPORTED slicc-jsh: 'tls.TLSSocket over a socket' is not supported yet ${why}`,
+      'TLSSocket over a socket no throw',
       `TLSSocket connect ERR_NOT_SUPPORTED slicc-jsh: 'tls.TLSSocket.connect' is not supported yet ${why}`,
-      kernelCerts
-        ? 'createSecureContext cert ERR_OSSL_PEM_BAD_END_LINE error:04800066:PEM routines::bad end line'
-        : `createSecureContext cert ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'cert'' is not supported yet ${why}`,
-      kernelCerts
-        ? 'createSecureContext key ERR_OSSL_UNSUPPORTED error:1E08010C:DECODER routines::unsupported'
-        : `createSecureContext key ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'key'' is not supported yet ${why}`,
-      kernelTls ? 'createSecureContext ca no throw' : `createSecureContext ca ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'ca'' is not supported yet ${why}`,
-      kernelCerts
-        ? 'createServer key ERR_OSSL_PEM_NO_START_LINE error:0480006C:PEM routines::no start line'
-        : `createServer key ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'cert'' is not supported yet ${why}`,
+      'createSecureContext cert ERR_OSSL_PEM_BAD_END_LINE error:04800066:PEM routines::bad end line',
+      'createSecureContext key ERR_OSSL_UNSUPPORTED error:1E08010C:DECODER routines::unsupported',
+      'createSecureContext ca no throw',
+      'createServer key ERR_OSSL_PEM_NO_START_LINE error:0480006C:PEM routines::no start line',
       `createSecurePair ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecurePair' is not supported yet ${why}`,
       'https.createServer no throw',
       `https listen ERR_NOT_SUPPORTED slicc-jsh: 'tls.Server.listen' is not supported yet ${why}`,

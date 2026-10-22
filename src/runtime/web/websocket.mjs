@@ -4,9 +4,6 @@
  */
 
 import { NodeExitError } from '../exit.mjs';
-import { kernelAtLeast } from '../kernel-version.mjs';
-import { kernelRoute } from './loopback.mjs';
-import { openLoopbackWebSocket } from './websocket-loopback.mjs';
 
 const CONNECTING = 0;
 const OPEN = 1;
@@ -74,31 +71,7 @@ function errorEvent(error) {
   });
 }
 
-/**
- * A `ws:` URL for a server of this kernel (its loopback names; see
- * kernelRoute), else null: `ctx.websocket`, the platform's network, takes it
- * (`host.slicc.internal` too, which the kernel forwards to the real machine).
- */
-function loopbackRoute(href) {
-  let url;
-  try {
-    url = new URL(href);
-  } catch {
-    return null;
-  }
-  if (url.protocol !== 'ws:') return null;
-  url.protocol = 'http:';
-  const route = kernelRoute(url);
-  return route && !route.proxy ? route : null;
-}
-
-export function createWebSocket(ctx, { handles, trackPromise, getNet } = {}) {
-  // slicc-kernel 1.106.3 (ai-ecoverse/slicc-kernel#822, #834): the kernel's
-  // own loopback ctx.websocket answers as undici does (the handshake checks,
-  // the close after the server has the echo and closed the connection, the
-  // refused upgrade), so a loopback URL goes to it. Older kernels: jsh's own
-  // RFC 6455 client over the kernel's sockets.
-  const kernelLoopback = kernelAtLeast(ctx, '1.106.3');
+export function createWebSocket(ctx, { handles, trackPromise } = {}) {
   class WebSocket extends EventTarget {
     static CONNECTING = CONNECTING;
     static OPEN = OPEN;
@@ -232,18 +205,9 @@ export function createWebSocket(ctx, { handles, trackPromise, getNet } = {}) {
     #open(url, protocols) {
       // Track the open promise so drainLoop stays alive until error fires
       // (without a handle the process can exit before the catch runs — m2g/ws2.js).
-      // A loopback URL is a server of this kernel (as fetch has it). From
-      // slicc-kernel 1.106.3 ctx.websocket reaches it as undici would; before
-      // that its close came before the server had the echo
-      // (ai-ecoverse/slicc-kernel#822), so jsh speaks RFC 6455 over the
-      // kernel's sockets there. Anything else, ctx.websocket: the platform's
-      // network, through the kernel's transport.
-      const route = getNet && !kernelLoopback ? loopbackRoute(url) : null;
       const open = (async () => {
         try {
-          const socket = route
-            ? await openLoopbackWebSocket(getNet(), url, protocols, route)
-            : await ctx.websocket(url, protocols != null ? { protocols } : undefined);
+          const socket = await ctx.websocket(url, protocols != null ? { protocols } : undefined);
           if (this.#closed) {
             socket.close();
             return;

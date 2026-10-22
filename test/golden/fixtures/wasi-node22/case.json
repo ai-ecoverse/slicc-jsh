@@ -4,6 +4,5 @@
     "--no-warnings",
     "script.js"
   ],
-  "shim": true,
-  "kernel": "1.133.0"
+  "shim": true
 }

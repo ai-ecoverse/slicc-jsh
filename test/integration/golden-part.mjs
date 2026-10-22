@@ -13,7 +13,6 @@ export function goldenPart(part) {
     assert.match(out, new RegExp(`^golden check: ${names.length} fixture\\(s\\)$`, 'm'), out);
     const ok = new Set(out.match(/^ok \S+$/gm)?.map((line) => line.slice(3)));
     assert.deepEqual(names.filter((name) => !ok.has(name)), [], out);
-    assert.doesNotMatch(out, /: shim skipped /, out);
     if (process.platform === 'linux') assert.doesNotMatch(out, /: host skipped /, out);
   });
 }

@@ -22,7 +22,6 @@ import {
   validateString,
   nodeError,
 } from '../node-errors.mjs';
-import { kernelAtLeast, kernelVersion } from '../kernel-version.mjs';
 import { queueMicrotask } from '../async-context.mjs';
 import { kCustomPromisifyArgs } from './util.mjs';
 
@@ -298,33 +297,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
 
   const syncFs = ctx.sync.fs;
   const asyncFs = ctx.fs;
-  // slicc-kernel 1.86.0: ctx.fs.chmod / ctx.sync.fs.chmod (#495), and, in the
-  // same release, mkdir(p, { recursive: false }) as Node's mkdir without
-  // `recursive` (#514: EEXIST / ENOENT, atomic among one kernel's
-  // processes). An older kernel's mkdir ignores the option and makes the
-  // parents, so chmod's presence stands for both. Older kernels: chmod
-  // changes nothing and mkdir checks before it creates, as before.
-  const kernelChmod = typeof syncFs.chmod === 'function';
-  const exclusiveMkdir = kernelChmod;
   /** Node's chmod(2): the permission bits only, as Linux masks the rest. */
   const chmodPath = (target, mode, syscall, pathArg) => {
     try {
       syncFs.chmod(target, mode & 0o7777);
     } catch (err) {
       throw nodeFsError(err?.code || 'EIO', syscall, pathArg, err);
-    }
-  };
-  let warnedNoChmod = false;
-  /** A kernel before 1.86.0 can't change a mode: say so once, rather than not at all. */
-  const warnNoChmod = () => {
-    if (warnedNoChmod) return;
-    warnedNoChmod = true;
-    try {
-      process?.emitWarning?.('fs.chmod and fs.fchmod change nothing on this slicc-kernel: it needs 1.86.0 or later (ctx.fs.chmod)', {
-        code: 'JSH_NO_CHMOD',
-      });
-    } catch {
-      /* no process yet */
     }
   };
   let recursiveRmdirWarned = false;
@@ -338,37 +316,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       'DEP0147'
     );
   };
-  const umaskNow = () => (typeof process?.umask === 'function' ? process.umask() : 0o022);
-  const kernelUmask = () => (typeof process?._kernelUmask === 'function' ? process._kernelUmask() : 0o022);
   /**
-   * The mode a create asked for, as Node's open / mkdir give it: `mode`
-   * (else `def`) less the program's umask. The kernel made the file with
-   * `def` less its own umask; null when that is already it (or the kernel
-   * can't chmod: before 1.86.0 the mode stays the kernel's).
+   * The options that give a kernel create its mode: `mode` (else `def`),
+   * which the kernel applies less its umask, so a new file never has
+   * another mode, even for a moment (#564).
    */
-  // slicc-kernel 1.92.0 (#564): ctx.sync.umask, and a mode on the kernel's
-  // creating writeFile / mkdir / open, which it applies less the umask, so
-  // a new file never has another mode, even for a moment.
-  const kernelModes = typeof ctx.sync?.umask === 'function';
-  /** The options that give a kernel create its mode (1.92.0+), else none. */
-  const createOpts = (mode, def, extra) =>
-    kernelModes ? { ...extra, mode: (mode ?? def) & 0o7777 } : extra;
-  const createMode = (mode, def) => {
-    if (!kernelChmod || kernelModes) return null;
-    // The default mode under the kernel's own umask is what the kernel made.
-    if (process?._umask === undefined && (mode === undefined || (mode & 0o7777) === def)) return null;
-    const want = (mode ?? def) & ~umaskNow() & 0o7777;
-    return want === (def & ~kernelUmask() & 0o7777) ? null : want;
-  };
-  /** After a create: give the new file or directory the mode Node would. */
-  const applyCreateMode = (target, want) => {
-    if (want == null) return;
-    try {
-      syncFs.chmod(target, want);
-    } catch {
-      /* a mount without modes keeps what it has, as its chmod does */
-    }
-  };
+  const createOpts = (mode, def, extra) => ({ ...extra, mode: (mode ?? def) & 0o7777 });
   const wrapBuffer = (bytes) => (Buffer ? Buffer.from(bytes) : bytes);
   const optEncoding = (options) =>
     typeof options === 'string' ? options : options?.encoding ?? null;
@@ -779,24 +732,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     // Node's mkdir: `mode` (or the options as a mode), default 0o777, less the umask.
     const modeArg = typeof options === 'number' || typeof options === 'string' ? options : isPlainOptionsObject(options) ? options.mode : undefined;
     const askedMode = parseFileMode(modeArg, isPlainOptionsObject(options) ? 'options.mode' : 'mode', 0o777);
-    const dirMode = createMode(askedMode, 0o777);
     if (!recursive) {
-      if (exclusiveMkdir) {
-        // The kernel answers EEXIST / ENOENT / ENOTDIR itself, so of two
-        // processes making one name exactly one succeeds. 1.93.0 and 1.94.0
-        // say EIO for '/' (#659, fixed in 1.94.1): it always exists.
-        if (target === '/' && mkdirRootEio) throw nodeFsError('EEXIST', 'mkdir', pathArg);
-        try {
-          syncFs.mkdir(target, createOpts(askedMode, 0o777, { recursive: false }));
-        } catch (err) {
-          throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
-        }
-        applyCreateMode(target, dirMode);
-        return;
-      }
-      if (syncFs.exists(target)) throw nodeFsError('EEXIST', 'mkdir', pathArg);
+      // The kernel answers EEXIST / ENOENT / ENOTDIR itself, so of two
+      // processes making one name exactly one succeeds.
       try {
-        syncFs.mkdir(target);
+        syncFs.mkdir(target, createOpts(askedMode, 0o777, { recursive: false }));
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
       }
@@ -831,7 +771,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       try {
         syncFs.mkdir(cur, createOpts(askedMode, 0o777));
         firstAbs ??= cur;
-        applyCreateMode(cur, dirMode);
       } catch (err) {
         if (err?.code === 'EEXIST') continue;
         throw nodeFsError(err?.code || 'EIO', 'mkdir', pathArg, err);
@@ -875,9 +814,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     return opts;
   }
 
-  const kernelRefusesDev = kernelAtLeast(ctx, '1.93.0');
-  const mkdirRootEio = kernelAtLeast(ctx, '1.93.0') && !kernelAtLeast(ctx, '1.94.1');
-  const writesInPlace = typeof ctx.sync?.open === 'function' && kernelAtLeast(ctx, '1.143.4');
+  const writesInPlace = typeof ctx.sync?.open === 'function';
 
   function openInPlace(target, { write, append = false }) {
     try {
@@ -893,21 +830,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     return writesInPlace && openInPlace(ent.path, { write: true, append });
   }
 
-  /**
-   * A removal the kernel answered ENOENT for, of an entry that is still there
-   * (a /dev device: the kernel keeps them, ai-ecoverse/slicc-kernel#637): as
-   * Linux refuses it, EACCES for a user, EPERM for root. Else the code as is.
-   */
-  const removalCode = (code, target) => {
-    // From slicc-kernel 1.93.0 (#641) the kernel refuses these itself.
-    if (code !== 'ENOENT' || kernelRefusesDev) return code;
-    try {
-      syncFs.lstat(target);
-    } catch {
-      return code;
-    }
-    return euid() === 0 ? 'EPERM' : 'EACCES';
-  };
   const euid = () => (typeof process?.geteuid === 'function' ? process.geteuid() : 0);
 
   /**
@@ -916,11 +838,9 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
    * the directory (EACCES), and its sticky bit (EPERM unless the caller owns
    * the entry or the directory). Root passes. Null when allowed.
    */
-  // Before slicc-kernel 1.86.0 (no chmod) the modes it reports are its
-  // defaults, which it doesn't enforce: nothing to check there.
   function deleteRefused(dirTarget, entry) {
     const uid = euid();
-    if (uid === 0 || !kernelChmod) return null;
+    if (uid === 0) return null;
     let dir;
     try {
       dir = syncFs.lstat(dirTarget);
@@ -959,7 +879,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     try {
       syncFs.rm(target);
     } catch (err) {
-      throw nodeFsError(removalCode(err?.code, target) || 'EIO', 'rmdir', shown, err);
+      throw nodeFsError(err?.code || 'EIO', 'rmdir', shown, err);
     }
     // The kernel may say it removed what it keeps (/dev).
     if (syncFs.exists(target)) throw nodeFsError(euid() === 0 ? 'EPERM' : 'EACCES', 'rmdir', shown);
@@ -969,7 +889,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     try {
       syncFs.unlink(target);
     } catch (err) {
-      throw nodeFsError(removalCode(err?.code, target) || 'EIO', 'unlink', shown, err);
+      throw nodeFsError(err?.code || 'EIO', 'unlink', shown, err);
     }
   }
 
@@ -1346,8 +1266,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       if (isDevicePath(target)) return writeThroughDescriptor(p, bytes, flag);
       // Node's open: options.mode (default 0o666) for a file it creates.
       const askedMode = isPlainOptionsObject(options) ? parseFileMode(options.mode, 'mode', 0o666) : undefined;
-      const want = createMode(askedMode, 0o666);
-      const existed = want != null || flag.includes('x') ? syncFs.exists(target) : true;
+      const existed = flag.includes('x') ? syncFs.exists(target) : true;
       if (flag.includes('x') && existed) throw nodeFsError('EEXIST', 'open', pathArg);
       if (flag.startsWith('r')) {
         if (writesInPlace) {
@@ -1388,7 +1307,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
       }
-      if (!existed) applyCreateMode(target, want);
     },
     appendFileSync(p, data, options) {
       if (typeof data !== 'string' && !ArrayBuffer.isView(data)) {
@@ -1413,7 +1331,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       // 'ax' / 'ax+': O_EXCL, as the open behind Node's appendFile has it.
       if (flag.includes('x') && syncFs.exists(target)) throw nodeFsError('EEXIST', 'open', pathArg);
       const askedMode = isPlainOptionsObject(options) ? parseFileMode(options.mode, 'mode', 0o666) : undefined;
-      const want = createMode(askedMode, 0o666);
       let existed = true;
       try {
         let prev = new Uint8Array(0);
@@ -1435,7 +1352,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       } catch (err) {
         throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
       }
-      if (!existed) applyCreateMode(target, want);
     },
     existsSync(p) {
       try {
@@ -1567,7 +1483,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       try {
         syncFs.unlink(abs(p));
       } catch (err) {
-        throw nodeFsError(removalCode(err?.code, abs(p)) || 'ENOENT', 'unlink', pathArg, err);
+        throw nodeFsError(err?.code || 'ENOENT', 'unlink', pathArg, err);
       }
     },
     renameSync(from, to) {
@@ -1633,8 +1549,6 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         } catch (err) {
           throw nodeFsError(err?.code || 'EIO', 'open', pathArg, err);
         }
-        // Node's open: `mode` (default 0o666) less the umask, for the file it made.
-        applyCreateMode(target, createMode(askedMode, 0o666));
       } else if (fl.truncate) {
         try {
           syncFs.writeFile(target, new Uint8Array(0));
@@ -1827,7 +1741,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         throw nodeFsError(err?.code || 'EIO', 'copyfile', src, err, dest);
       }
       // libuv's copyfile gives the copy the source's mode, a new copy or not.
-      if (kernelChmod && typeof st.mode === 'number') {
+      if (typeof st.mode === 'number') {
         const perm = st.mode & 0o7777;
         try {
           if ((syncFs.stat(to).mode & 0o7777) !== perm) syncFs.chmod(to, perm);
@@ -1858,15 +1772,12 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         // Sync errors show the template, the promise form the name it tried.
         if (!parentOk) throw nodeFsError('ENOENT', 'mkdtemp', namedError ? name : `${prefix}XXXXXX`);
         try {
-          // Exclusive where the kernel has it: a name taken meanwhile is tried again.
-          if (exclusiveMkdir) syncFs.mkdir(target, createOpts(0o700, 0o700, { recursive: false }));
-          else syncFs.mkdir(target);
+          // Exclusive: a name taken meanwhile is tried again.
+          syncFs.mkdir(target, createOpts(0o700, 0o700, { recursive: false }));
         } catch (err) {
           if (err?.code === 'EEXIST') continue;
           throw nodeFsError(err?.code || 'ENOENT', 'mkdtemp', `${prefix}XXXXXX`, err);
         }
-        // mkdtemp(3): 0700, less the umask.
-        applyCreateMode(target, createMode(0o700, 0o777));
         return optEncoding(options) === 'buffer' ? wrapBuffer(encoder.encode(name)) : name;
       }
       throw nodeFsError('EEXIST', 'mkdtemp', `${prefix}XXXXXX`);
@@ -1887,17 +1798,13 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       out.set(cur.subarray(0, Math.min(cur.length, out.length)), 0);
       syncFs.writeFile(target, out);
     },
-    // chmod goes to the kernel where it has one (1.86.0+; it follows a
-    // symlink, and only the owner or root may: EPERM). Otherwise, and for
-    // chown and utimes, which the kernel's JS fs doesn't have: these check
-    // that the path exists, as Node's do, and change nothing (chmod says so
-    // once, as a warning).
+    // chmod goes to the kernel (it follows a symlink, and only the owner or
+    // root may: EPERM). chown and utimes, which the kernel's JS fs doesn't
+    // have, check that the path exists, as Node's do, and change nothing.
     chmodSync(p, mode) {
       validatePathType(p);
       mode = parseFileMode(mode, 'mode');
-      if (kernelChmod) return chmodPath(abs(p), mode, 'chmod', p);
-      mustExist(p, 'chmod');
-      warnNoChmod();
+      chmodPath(abs(p), mode, 'chmod', p);
     },
     fchmodSync(fd, mode) {
       validatedFd(fd);
@@ -1906,8 +1813,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       // By the descriptor's path: jsh's descriptors are paths (Node's fchmod
       // errors name no path).
       if (!ent) throw nodeFsError('EBADF', 'fchmod', undefined);
-      if (kernelChmod) chmodPath(ent.path, mode, 'fchmod');
-      else warnNoChmod();
+      chmodPath(ent.path, mode, 'fchmod');
     },
     chownSync(p, uid, gid) {
       validatePathType(p);
@@ -2269,7 +2175,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
           try {
             await asyncFs.unlink(abs(p));
           } catch (err) {
-            throw nodeFsError(removalCode(err?.code, abs(p)) || 'ENOENT', 'unlink', p, err);
+            throw nodeFsError(err?.code || 'ENOENT', 'unlink', p, err);
           }
         })()
       );

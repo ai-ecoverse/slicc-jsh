@@ -1,15 +1,13 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { devPackageFiles, kernelAtLeast, withJsh } from './helpers.mjs';
+import { devPackageFiles, withJsh } from './helpers.mjs';
 
 // From slicc-kernel 1.116.0 (ai-ecoverse/slicc-kernel#923) ctx.net.connect's
 // `tls` carries HTTP/1.1 and WebSocket over TLS through the embedder's
 // transport, which does the handshake. The kernel here gets a transport of
 // the test's own: what it is asked is what a TLS peer would have been sent.
-const skip = !kernelAtLeast('1.116.0') && 'slicc-kernel before 1.116.0 has no TLS on ctx.net';
 // From 1.124.0 the kernel has a handshake of its own for a host its uplink
 // routes (tls-kernel.test.mjs); without an uplink, as here, it's the transport.
-const kernelTls = kernelAtLeast('1.124.0');
 
 function recordingTransport() {
   const seen = [];
@@ -64,7 +62,7 @@ function recordingTransport() {
   return { transport, seen };
 }
 
-describe('tls over the kernel transport (kernel)', { skip }, () => {
+describe('tls over the kernel transport (kernel)', () => {
   let jsh;
   let seen;
   before(async () => {
@@ -98,7 +96,7 @@ s.on('error', (e) => console.log('error', e.code, e.message));
       'connect',
       // Node's servername is the SNI it was given (none here: false); before
       // 1.124.0 jsh said the transport's name.
-      `secureConnect true null http/1.1 ${kernelTls ? 'false' : 'example.test'} true {}`,
+      `secureConnect true null http/1.1 false true {}`,
       'status line HTTP/1.1 200 OK true',
       '',
     ]);
@@ -158,7 +156,7 @@ ws.on('error', (e) => console.log('error', e.message));
     assert.deepEqual(seen, ['websocket wss://echo.example.test/sock ["chat"]']);
   });
 
-  it("without an uplink route, what the transport won't carry fails with ERR_NOT_SUPPORTED: another protocol's port, h2 only, a custom ca, the loopback, TLS over a loopback socket", { skip: !kernelTls && 'slicc-kernel before 1.124.0: the case above' }, async () => {
+  it("without an uplink route, what the transport won't carry fails with ERR_NOT_SUPPORTED: another protocol's port, h2 only, a custom ca, the loopback, TLS over a loopback socket", async () => {
     const r = await jsh.run([
       'node',
       '-e',

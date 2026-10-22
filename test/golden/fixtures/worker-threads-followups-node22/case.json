@@ -1,1 +1,1 @@
-{ "description": "worker_threads: a Map and a Set posted in this thread keep their own iterator, set and add unrun, and a Worker threadId is its id in its last message, -1 from its exit on", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }
+{ "description": "worker_threads: a Map and a Set posted in this thread keep their own iterator, set and add unrun, and a Worker threadId is its id in its last message, -1 from its exit on", "argv": ["script.js"], "shim": true }

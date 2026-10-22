@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fakeUplink } from '@ai-ecoverse/slicc-kernel/testing';
-import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
+import { devPackageTree, withJsh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
@@ -12,11 +12,9 @@ const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', nam
 // got and ioredis require dns at load (got through cacheable-lookup, and
 // http2 too). The golden dns-node22 pins the module's surface against Node;
 // here are the kernel's answers and the real packages in a kernel program.
-// slicc-kernel 1.113.0 gives JS programs its resolver (ctx.net.resolve,
+// The kernel gives JS programs its resolver (ctx.net.resolve,
 // ai-ecoverse/slicc-kernel#913): lookup, resolve4 and resolve6 ask it, so
-// /etc/hosts answers too. Before that, jsh answers the kernel's own names
-// and a query finds no nameserver.
-const resolver = kernelAtLeast('1.113.0');
+// /etc/hosts answers too.
 describe('dns (kernel)', () => {
   let jsh;
   before(async () => {
@@ -75,17 +73,15 @@ console.log('servers', JSON.stringify(dns.getServers()), 'hints', dns.ADDRCONFIG
       'host loopback ["10.0.2.2",4]',
       `other name ${notFound}`,
       `other name all ${notFound}`,
-      resolver ? '/etc/hosts ["10.9.8.7",4]' : '/etc/hosts getaddrinfo ENOTFOUND db.example.test | ENOTFOUND | -3008 | getaddrinfo | db.example.test | errno,code,syscall,hostname',
-      resolver
-        ? 'resolve4 /etc/hosts [["10.9.8.7"]]'
-        : 'resolve4 /etc/hosts queryA ECONNREFUSED db.example.test | ECONNREFUSED |  | queryA | db.example.test | errno,code,syscall,hostname',
+      '/etc/hosts ["10.9.8.7",4]',
+      'resolve4 /etc/hosts [["10.9.8.7"]]',
       'promises {"address":"127.0.0.1","family":4} [{"address":"127.0.0.1","family":4},{"address":"::1","family":6}]',
       'promises other getaddrinfo ENOTFOUND nothing.invalid ENOTFOUND -3008',
       'lookupService ["localhost","ssh"]',
       'lookupService 6 ["localhost","4321"]',
       'lookupService promises {"hostname":"slicc","service":"https"}',
       'reverse [["localhost"]]',
-      `resolve4 queryA ${resolver ? 'ENOTFOUND' : 'ECONNREFUSED'} nothing.invalid | ${resolver ? 'ENOTFOUND' : 'ECONNREFUSED'} |  | queryA | nothing.invalid | errno,code,syscall,hostname`,
+      'resolve4 queryA ENOTFOUND nothing.invalid | ENOTFOUND |  | queryA | nothing.invalid | errno,code,syscall,hostname',
       'resolveMx queryMx ECONNREFUSED nothing.invalid | ECONNREFUSED |  | queryMx | nothing.invalid | errno,code,syscall,hostname',
       'promises resolveSrv querySrv ECONNREFUSED _mongodb._tcp.nothing.invalid ECONNREFUSED',
       'servers [] hints 32 16 8',
@@ -233,7 +229,7 @@ for (const [name, members] of Object.entries(packages)) {
   });
 });
 
-describe('dns (kernel): an uplink that fails to resolve', { skip: !kernelAtLeast('1.143.3') && 'slicc-kernel before 1.143.3 answers a failed uplink lookup with ENOTFOUND' }, () => {
+describe('dns (kernel): an uplink that fails to resolve', () => {
   let jsh;
   before(async () => {
     const uplink = fakeUplink({});

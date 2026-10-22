@@ -1,6 +1,5 @@
 {
   "description": "net.Server.listen binds at once as Node 22's when it has no host: right after listen(0), listen({ port: 0 }), listen() and listen(port) the server is listening with address().port, and 'listening' comes on the next tick, before a nextTick queued after the call; with a host it is not listening yet: an IP (listen(0, '127.0.0.1')) is bound on the next tick, so a nextTick queued after the call sees it listening, and 'listening' comes the tick after; a name ('localhost') is looked up first, a name nothing resolves is getaddrinfo ENOTFOUND, and a server closed during the lookup never binds, so its port can be listened on again; listen({ fd }) is listen EINVAL on the next tick; a port in use is EADDRINUSE as an 'error' on the next tick, not thrown, with listening false and address() null; a server can listen again after that error, and connections are accepted. Needs slicc-kernel 1.146.0's ctx.sync.net.listen",
-  "kernel": "1.146.0",
   "argv": ["script.js"],
   "shim": true
 }

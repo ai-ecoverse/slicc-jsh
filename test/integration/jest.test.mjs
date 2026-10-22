@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageTree, kernelAtLeast, kernelVersion, lockedPackageTree, withJsh } from './helpers.mjs';
+import { devPackageTree, lockedPackageTree, withJsh } from './helpers.mjs';
 
 // fork and its IPC channel: socketpairs and spawn's fds (ai-ecoverse/slicc-kernel#1093).
-const IPC_KERNEL = '1.125.11';
 // Node's own, as unrs-resolver loads node:wasi: once per process jest runs.
 const WASI_WARNING =
   /^\(node:\d+\) ExperimentalWarning: WASI is an experimental feature and might change at any time\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\n/;
@@ -21,8 +20,7 @@ const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', nam
 // That has no native binding for jsh (linux x64 has none installed), so it
 // loads its wasm32-wasi one on node:wasi (slicc-kernel 1.133.0), as on seven.
 // npm skips that binding for this platform: it comes from the lockfile.
-const WASI_KERNEL = '1.133.0';
-describe('jest (kernel)', { skip: !kernelAtLeast(WASI_KERNEL) && `slicc-kernel ${kernelVersion} has no WASI host (${WASI_KERNEL})` }, () => {
+describe('jest (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();
@@ -84,7 +82,7 @@ test.each([[1, 1, 2], [2, 3, 5]])('%i + %i', (a, b, c) => expect(a + b).toBe(c))
     assert.match(r.stderr, /^Test Suites: 1 failed, 2 passed, 3 total$/m);
   });
 
-  it('runs a project on forked workers, each suite in a worker process of its own id', { skip: !kernelAtLeast(IPC_KERNEL) }, async () => {
+  it('runs a project on forked workers, each suite in a worker process of its own id', async () => {
     await jsh.kernel.writeFile(
       '/os/proj/worker.test.js',
       `test('in a worker', () => {

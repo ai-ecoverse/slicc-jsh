@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, kernelVersion, withJsh, withJshAndSh } from './helpers.mjs';
+import { withJsh, withJshAndSh } from './helpers.mjs';
 
 // readSync on a regular file opened read-only reads the range asked for from a
 // kernel descriptor (#401), not the whole file on every call.
@@ -103,7 +103,6 @@ describe('fs.readSync of a read-only file reads a range (kernel)', () => {
 });
 
 // The setup chmods from JS (slicc-kernel 1.86.0+).
-const needs = kernelAtLeast('1.86.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.fs.chmod (1.86.0)` };
 
 describe('fs.openSync of a file it may not read (kernel, users: enforce)', () => {
   let jsh;
@@ -113,7 +112,7 @@ describe('fs.openSync of a file it may not read (kernel, users: enforce)', () =>
   });
   after(() => jsh?.close());
 
-  it('is EACCES, not an fd that reads it by path', needs, async () => {
+  it('is EACCES, not an fd that reads it by path', async () => {
     await jsh.kernel.writeFile(
       '/tmp/secret.js',
       [

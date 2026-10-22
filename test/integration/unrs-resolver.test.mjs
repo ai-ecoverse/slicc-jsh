@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { devPackageTree, kernelAtLeast, kernelVersion, lockedPackageTree, withJsh } from './helpers.mjs';
+import { devPackageTree, lockedPackageTree, withJsh } from './helpers.mjs';
 
 // The real unrs-resolver on its wasm32-wasi binding (jsh has no native one),
 // as jest 30 and eslint-import-resolver use it. Its sync way runs on
@@ -9,8 +9,7 @@ import { devPackageTree, kernelAtLeast, kernelVersion, lockedPackageTree, withJs
 // the shared WebAssembly.Memory that it posts them, and globals the worker
 // script assigns (require, Worker, postMessage): writable from slicc-kernel
 // 1.135.4 (ai-ecoverse/slicc-kernel#1209).
-const THREAD_KERNEL = '1.135.4';
-describe('unrs-resolver on WASI worker threads (kernel)', { skip: !kernelAtLeast(THREAD_KERNEL) && `slicc-kernel ${kernelVersion} has no writable worker globals (${THREAD_KERNEL})` }, () => {
+describe('unrs-resolver on WASI worker threads (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();

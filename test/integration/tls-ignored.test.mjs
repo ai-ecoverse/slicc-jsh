@@ -1,8 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, kernelVersion, withJsh, wrapCommandMain } from './helpers.mjs';
+import { withJsh, wrapCommandMain } from './helpers.mjs';
 
-const skip = !kernelAtLeast('1.116.0') && `slicc-kernel ${kernelVersion} has no TLS on ctx.net: jsh never asks it for one`;
 
 const IGNORING = `
 async function ignoring(ctx) {
@@ -55,7 +54,7 @@ peer.listen(Number(process.env.PEER_PORT), '127.0.0.1', () => {
 });
 `;
 
-describe('a kernel that ignores the TLS request: jsh sends nothing over the plain connection', { skip }, () => {
+describe('a kernel that ignores the TLS request: jsh sends nothing over the plain connection', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();

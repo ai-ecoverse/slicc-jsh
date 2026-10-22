@@ -2,7 +2,6 @@
   "description": "fs.watch over an overwrite, as Node 22 reports it on Linux, where every watch of a program shares one inotify queue and inotify merges an event only with the same one just before it: a recursive watch reports an overwrite twice (the file's truncate and write, each after its directory's), a watch on the file once, an empty overwrite, an append, a write through a descriptor (writeSync, writeFileSync with 'r+') and an ftruncate once each; two watchers on one file share its watch and hear each event in the order they were started; a file's watch hears an event after its directory's; a removed file or directory hears its own removal before its parent does (Linux 5.17 and later), never merged with an entry of the same name",
   "argv": ["script.js"],
   "shim": true,
-  "kernel": "1.143.4",
   "hostPlatform": "linux",
   "files": [{ "path": "/os/script.js", "from": "script.js" }]
 }

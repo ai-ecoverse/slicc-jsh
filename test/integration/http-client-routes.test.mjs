@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
 import { fakeUplink } from '@ai-ecoverse/slicc-kernel/testing';
-import { kernelAtLeast, kernelVersion, packageFiles, withJsh } from './helpers.mjs';
+import { packageFiles, withJsh } from './helpers.mjs';
 
 const program = (lines) => `(async () => {\n${lines.join('\n')}\n})().catch((e) => { console.error(e); process.exit(1); });\n`;
 const GET = [
@@ -350,7 +350,7 @@ describe('#189: a name nothing resolves, through nodeTransport (slicc-kernel 1.9
   });
   after(() => jsh?.close());
 
-  it('http.get, https.get and fetch to no-such-host.invalid: getaddrinfo ENOTFOUND, as Node', kernelAtLeast('1.93.0') ? {} : { skip: `slicc-kernel ${kernelVersion} answers ECONNREFUSED` }, async () => {
+  it('http.get, https.get and fetch to no-such-host.invalid: getaddrinfo ENOTFOUND, as Node', async () => {
     await jsh.kernel.writeFile(
       '/os/nx.js',
       program([

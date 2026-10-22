@@ -89,3 +89,18 @@ test("Renovate follows slicc-shared-web's preset, with no cert-review rules left
   assert.equal(config.packageRules, undefined);
   assert.doesNotMatch(JSON.stringify(config), /cert|22\.22\.0/);
 });
+
+test('engines.slicc-kernel is the kernel CI tests, and Renovate moves it with the devDependency', async () => {
+  const kernel = pkg.devDependencies['@ai-ecoverse/slicc-kernel'];
+  assert.equal(pkg.engines['slicc-kernel'], `>=${kernel}`);
+  assert.equal(lock.packages[''].engines['slicc-kernel'], `>=${kernel}`);
+  const config = JSON.parse(await read('renovate.json'));
+  const managers = config.customManagers.filter((m) => m.depNameTemplate === '@ai-ecoverse/slicc-kernel');
+  assert.equal(managers.length, 1);
+  const [manager] = managers;
+  assert.deepEqual([manager.customType, manager.datasourceTemplate], ['regex', 'npm']);
+  assert.ok(manager.managerFilePatterns.some((p) => new RegExp(p.slice(1, -1)).test('package.json')));
+  const raw = await read('package.json');
+  const found = manager.matchStrings.flatMap((s) => [...raw.matchAll(new RegExp(s, 'g'))].map((m) => m.groups.currentValue));
+  assert.deepEqual(found, [kernel]);
+});

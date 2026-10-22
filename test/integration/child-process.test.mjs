@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, withJsh } from './helpers.mjs';
+import { withJsh } from './helpers.mjs';
 
 /** Run a node -e script that exercises child_process; return {status,stdout,stderr}. */
 async function cp(run, source) {
@@ -330,7 +330,7 @@ console.log(out.join(' '));
         // No /bin/sh in this kernel (no wasm-bash), so execSync is ENOENT too.
         // With the channel (ai-ecoverse/slicc-kernel#1093), fork starts a node
         // child (which can't find 'x': that's its own error).
-        `spawnSync:ENOENT execSync:ENOENT execFileSync:ENOENT fork:${kernelAtLeast('1.125.11') ? 'ok' : 'ERR_NOT_SUPPORTED'}`
+        `spawnSync:ENOENT execSync:ENOENT execFileSync:ENOENT fork:${'ok'}`
       );
     } finally {
       close();

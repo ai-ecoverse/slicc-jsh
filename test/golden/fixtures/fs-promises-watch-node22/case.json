@@ -2,7 +2,6 @@
   "description": "fs.promises.watch as Node 22 has it on Linux: { eventType, filename } for changes the program makes after it starts; an AbortSignal ends it with an AbortError; 'buffer' filenames; break ends it; maxQueue with overflow 'error' throws ERR_FS_WATCH_QUEUE_OVERFLOW and with 'ignore' warns; recursive is Node's own watcher; ENOENT and the argument errors from the first next()",
   "argv": ["--no-warnings", "script.js"],
   "shim": true,
-  "kernel": "1.125.0",
   "hostPlatform": "linux",
   "files": [{ "path": "/os/script.js", "from": "script.js" }]
 }

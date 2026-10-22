@@ -12,12 +12,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+import { withJsh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const WASI_KERNEL = '1.133.0';
 
-describe('node:wasi under users: enforce (kernel)', { skip: !kernelAtLeast(WASI_KERNEL) && `slicc-kernel ${kernelVersion} has no WASI host (${WASI_KERNEL})` }, () => {
+describe('node:wasi under users: enforce (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();

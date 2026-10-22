@@ -7,7 +7,6 @@
  * the child's NODE_CHANNEL_FD the other (./ipc-channel.mjs). On older
  * kernels fork stays ERR_NOT_SUPPORTED and 'ipc' does nothing, as before.
  */
-import { kernelAtLeast, kernelVersion } from '../kernel-version.mjs';
 import { trackPromise } from '../async-handles.mjs';
 import { resourceHere, runInResource } from '../async-context.mjs';
 import {
@@ -112,17 +111,6 @@ const SIGNAL_NUMBERS = Object.fromEntries(
 
 function notSupported(name) {
   const err = new Error(`slicc-jsh: child_process.${name} is not supported yet`);
-  err.code = 'ERR_NOT_SUPPORTED';
-  throw err;
-}
-
-/** The kernel that first has ctx.sync.run (slicc-kernel #401, #403). */
-export const SYNC_RUN_KERNEL = '1.65.0';
-
-function syncNotSupported(name) {
-  const err = new Error(
-    `slicc-jsh: child_process.${name} needs slicc-kernel ${SYNC_RUN_KERNEL} or later (ctx.sync.run); this kernel has none`
-  );
   err.code = 'ERR_NOT_SUPPORTED';
   throw err;
 }
@@ -393,8 +381,6 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
   const { setImmediate, setTimeout, clearTimeout } = timers;
   const path = createPath(() => process.cwd());
 
-  // Spawns on a kernel without ctx.sync.spawn (before 1.87.0), until they settle.
-  const inflightSpawns = new Set();
   const later = (fn) => setImmediate(fn);
 
   // An IPC channel: a socketpair, one end passed to the child at fd >= 3
@@ -441,15 +427,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
    * Node's comes after its stdio pipes' EOF, on the next loop turn (after
    * that turn's immediates), and its spawn() is synchronous: a spawn the
    * 'error' handler starts (execFile of a missing command) has reported its
-   * own error by then. Here a spawn settles later on a kernel without
-   * ctx.sync.spawn, so the close also waits for the spawns in flight; it
-   * waited a fixed 20 ms, which a loaded kernel's spawns outlast.
+   * own error by then.
    */
   function closeLater(fn) {
-    setImmediate(function later() {
-      if (inflightSpawns.size === 0) return fn();
-      Promise.allSettled([...inflightSpawns]).then(() => setImmediate(later));
-    });
+    setImmediate(fn);
   }
 
   /**
@@ -467,7 +448,6 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     return getFs()._sliccOpenFile?.(fd) ?? null;
   }
 
-
   /**
    * Node's spawn finds a bare name as execvp does: the first entry of the
    * child's PATH holding an executable regular
@@ -480,21 +460,6 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
    * the first of those, which the spawn reports as EACCES, as execvp does. A name with a '/' is
    * never searched.
    */
-  /**
-   * Linux's execve of a directory is EACCES; the kernel says ENOENT
-   * (ai-ecoverse/slicc-kernel#626). `target` is the path that was run.
-   */
-  // From slicc-kernel 1.93.0 (#630) the kernel says EACCES itself.
-  const kernelDirEacces = kernelAtLeast(ctx, '1.93.0');
-  function spawnCode(code, target, cwd) {
-    if (kernelDirEacces || code !== 'ENOENT' || typeof target !== 'string' || !target.includes('/')) return code;
-    try {
-      return ctx.sync?.fs?.stat?.(path.resolve(cwd, target))?.isDirectory ? 'EACCES' : code;
-    } catch {
-      return code;
-    }
-  }
-
   function resolveOnPath(file, env, cwd) {
     if (!file || file.includes('/')) return file;
     // libuv's: the child's environment's PATH, else _PATH_DEFPATH.
@@ -888,8 +853,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     return { code, signal: null };
   }
 
-  function startSpawn(child, file, args, options, stdio, files, sync = false) {
-    // spawn / exec / execFile / (future sync) all go through here.
+  function startSpawn(child, file, args, options, stdio, files) {
+    // spawn / exec / execFile all go through here.
     const cwd = resolveSpawnCwd(path, options.cwd);
     const env = options.env ? { ...options.env } : { ...process.env };
     // The file is found on the child's PATH; errors and spawnfile keep the name.
@@ -927,7 +892,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     // A file served here is let go in connectStdio (stdin once it has been
     // read, output once all of it is written); a device once the child has it.
     const releaseDirect = () => files.forEach((f, i) => direct[i] != null && f?.release?.());
-    const shared = sync && served[1] && served[2] && stdio[1] === stdio[2] ? sharedPipe() : null;
+    const shared = served[1] && served[2] && stdio[1] === stdio[2] ? sharedPipe() : null;
     const request = {
       argv,
       cwd,
@@ -936,17 +901,14 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       stdout: shared?.[1] ?? direct[1] ?? kernelStdio(stdio[1], served[1]),
       stderr: shared?.[1] ?? direct[2] ?? kernelStdio(stdio[2], served[2]),
       // Node's detached on POSIX is setsid(): a new session and group, no
-      // controlling terminal (slicc-kernel 1.74.0+; older kernels ignore it,
-      // and the child stays in the program's group, as before).
+      // controlling terminal.
       ...(options.detached ? { session: true } : {}),
-      // slicc-kernel 1.76.0+ (ai-ecoverse/slicc-kernel#470); older kernels
-      // ignore it and the child sees what the kernel resolved.
       argv0,
     };
     // The child's end of the IPC channel, at the 'ipc' index.
     const ipc = options[kIpc];
     let pair = null;
-    if (ipc && sync) {
+    if (ipc) {
       try {
         pair = ctx.sync.socketpair();
       } catch (err) {
@@ -995,7 +957,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     };
 
     const failed = (err) => {
-      const code = spawnCode(err?.code ?? 'ERR_SPAWN_FAILED', argv[0], cwd);
+      const code = err?.code ?? 'ERR_SPAWN_FAILED';
       const errno = RUNTIME_SPAWN_ERRNO[code];
       const error =
         errno !== undefined
@@ -1041,41 +1003,27 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     // kill() right after reaches it, as in Node. 'spawn' and 'error' still
     // come on a later tick: a spawn error throws here, and Node reports it
     // as an event, never from spawn().
-    if (sync) {
-      let kernelChild;
-      try {
-        kernelChild = ctx.sync.spawn(request);
-      } catch (err) {
-        closeFds(shared ?? []);
-        // Node sets the channel up even so: send() is there, and its write
-        // fails (EPIPE), the child's end being closed.
-        closePair(false);
-        releaseAll();
-        if (pair) setupIpc(child, pair[0], ipc.serialization);
-        failed(err);
-        return;
-      }
-      closeFds(shared ? [shared[1]] : []);
+    let kernelChild;
+    try {
+      kernelChild = ctx.sync.spawn(request);
+    } catch (err) {
+      closeFds(shared ?? []);
+      // Node sets the channel up even so: send() is there, and its write
+      // fails (EPIPE), the child's end being closed.
       closePair(false);
-      releaseDirect();
-      child._bindKernel(kernelChild);
-      child.stdout?._sliccHold?.();
-      child.stderr?._sliccHold?.();
+      releaseAll();
       if (pair) setupIpc(child, pair[0], ipc.serialization);
-      process.nextTick(() => run(kernelChild));
+      failed(err);
       return;
     }
-
-    const spawnPromise = ctx.spawn(request);
-    trackPromise(handles, spawnPromise);
-    inflightSpawns.add(spawnPromise);
-    const settled = () => inflightSpawns.delete(spawnPromise);
-    spawnPromise.then(settled, settled);
-    spawnPromise.then(releaseDirect, releaseAll);
-    spawnPromise.then((kernelChild) => {
-      child._bindKernel(kernelChild);
-      run(kernelChild);
-    }, failed);
+    closeFds(shared ? [shared[1]] : []);
+    closePair(false);
+    releaseDirect();
+    child._bindKernel(kernelChild);
+    child.stdout?._sliccHold?.();
+    child.stderr?._sliccHold?.();
+    if (pair) setupIpc(child, pair[0], ipc.serialization);
+    process.nextTick(() => run(kernelChild));
   }
 
   function spawn(command, args, options) {
@@ -1197,9 +1145,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       if (file?.hold) file.release = file.hold();
       return file;
     });
-    // Older kernels: the child starts a tick later, and child.pid with it.
-    if (typeof ctx.sync?.spawn === 'function') startSpawn(child, file, argv, opts, stdio, files, true);
-    else process.nextTick(() => startSpawn(child, file, argv, opts, stdio, files));
+    startSpawn(child, file, argv, opts, stdio, files);
     return child;
   }
 
@@ -1450,22 +1396,13 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
   }
 
   /**
-   * Whether ctx.sync.run takes program fd numbers and stderr: 'stdout'
-   * (slicc-kernel 1.70.0+, ai-ecoverse/slicc-kernel#432). Unknown until the
-   * first call that needs it: an older kernel refuses those with EINVAL
-   * before it starts anything, and the call is then made the old way. A
-   * kernel that says its version (1.88.0+, ctx.kernel) has them.
-   */
-  let syncRunTakesFds = kernelVersion(ctx) !== null ? true : undefined;
-
-  /**
    * How each stdio slot goes to ctx.sync.run. `how` is the kernel's choice,
    * `capture[i]` an fd whose output (or input) jsh carries itself: a jsh fd
    * (fs.openSync) always, a kernel fd only where the kernel can't take its
    * number. With `merged`, stdout and stderr share one capture (in the
    * child's write order) that goes to slot 1's target.
    */
-  function planSync(stdio, takesFds) {
+  function planSync(stdio) {
     const how = [];
     const capture = [];
     for (const i of [0, 1, 2]) {
@@ -1476,9 +1413,9 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       else if (slot.fd === i) how.push('inherit');
       else {
         const file = jshOpenFile(slot.fd);
-        if (!file && takesFds) {
+        if (!file) {
           how.push(slot.fd);
-        } else if (file?.kernelFd != null && takesFds) {
+        } else if (file?.kernelFd != null) {
           // A device: its kernel descriptor, streamed as in Node.
           how.push(file.kernelFd);
         } else {
@@ -1489,7 +1426,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     }
     // stdout and stderr to one jsh fd: one capture keeps their order.
     let merged = false;
-    if (takesFds && capture[1] && capture[2] && capture[1].fd === capture[2].fd) {
+    if (capture[1] && capture[2] && capture[1].fd === capture[2].fd) {
       how[2] = 'stdout';
       capture[2] = undefined;
       merged = true;
@@ -1535,22 +1472,19 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     }
     let plan;
     if (!failed) {
-      let fed;
-      const request = (takesFds) => {
-        plan = planSync(stdio, takesFds);
+      const request = () => {
+        plan = planSync(stdio);
         const { how, capture } = plan;
         remapped = capture[1] !== undefined || capture[2] !== undefined;
         let input = stdio[0]?.input;
         if (capture[0]) {
-          // Read once: a retry the old way must not read the fd again.
-          fed ??= capture[0].file ? Buffer.from(capture[0].file.readRest()) : readFdToEnd(capture[0].fd);
-          input = fed;
+          input = capture[0].file ? Buffer.from(capture[0].file.readRest()) : readFdToEnd(capture[0].fd);
         }
         const req = {
           // Node's native layer stringifies each argument (null → 'null').
           argv: [resolveOnPath(file, options.env, resolveSpawnCwd(path, options.cwd)), ...args.slice(1).map((a) => `${a}`)],
           // What the child sees as argv[0]: options.argv0, else the file, as
-          // Node (slicc-kernel 1.76.0+; ignored before).
+          // Node.
           argv0: args[0],
           env: options.env,
           cwd: resolveSpawnCwd(path, options.cwd),
@@ -1568,24 +1502,13 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
           req.input = new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
         }
         if (options.timeout > 0) req.timeout = options.timeout;
-        // detached: setsid(), as in Node (slicc-kernel 1.74.0+; ignored before).
+        // detached: setsid(), as in Node.
         if (options.detached) req.session = true;
         return req;
       };
-      let req = request(syncRunTakesFds !== false);
-      const usesFds = [req.stdin, req.stdout, req.stderr].some((h) => typeof h === 'number' || h === 'stdout');
-      if (usesFds && syncRunTakesFds === undefined) {
-        try {
-          raw = ctx.sync.run(req);
-          syncRunTakesFds = true;
-        } catch (err) {
-          if (err?.code !== 'EINVAL') throw err;
-          syncRunTakesFds = false;
-          req = request(false);
-        }
-      }
-      raw ??= ctx.sync.run(req);
-      if (raw.error && raw.pid === 0 && raw.status === null) failed = spawnCode(raw.error.code ?? 'ENOENT', req.argv[0], req.cwd);
+      const req = request();
+      raw = ctx.sync.run(req);
+      if (raw.error && raw.pid === 0 && raw.status === null) failed = raw.error.code ?? 'ENOENT';
     }
 
     if (failed && !raw?.pid) {
@@ -1653,7 +1576,6 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
 
   /** lib/child_process.js spawnSync. */
   function spawnSync(file, args, options) {
-    if (typeof ctx.sync?.run !== 'function') syncNotSupported('spawnSync');
     return spawnSyncImpl(file, args, options);
   }
 
@@ -1724,7 +1646,6 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
   }
 
   function execFileSync(file, args, options) {
-    if (typeof ctx.sync?.run !== 'function') syncNotSupported('execFileSync');
     ({ file, args, options } = normalizeExecFileArgs(file, args, options));
     const inheritStderr = !options.stdio;
     const ret = spawnSyncImpl(file, args, options);
@@ -1736,7 +1657,6 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
   }
 
   function execSync(command, options) {
-    if (typeof ctx.sync?.run !== 'function') syncNotSupported('execSync');
     validateString(command, 'command');
     validateArgumentNullCheck(command, 'command');
     const opts = { __proto__: null, ...options };

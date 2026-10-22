@@ -4,6 +4,5 @@
     "script.js"
   ],
   "shim": true,
-  "kernel": "1.126.0",
   "packages": ["@ai-ecoverse/wasm-bash"]
 }

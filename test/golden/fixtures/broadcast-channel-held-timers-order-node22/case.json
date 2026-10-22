@@ -1,6 +1,5 @@
 {
   "description": "BroadcastChannel: timers that became due while slow handlers ran (set in the first one, before its busy wait) run once every queued message is delivered, in the order of Node's timers phase (the lists, one per delay, by when their first timer is due; each list's due timers in the order they were set), intervals and timeouts alike, wherever the turn's steps fall among their due times. Needs slicc-kernel 1.92.0's writable slot",
-  "kernel": "1.92.0",
   "argv": ["script.js"],
   "shim": true
 }

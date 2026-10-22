@@ -1,6 +1,5 @@
 {
   "description": "A message turn after a timer that came due before the posting task ended, as in Node 22 (#565, #593): posted from the main script or an immediate, the turn waits for a timer that came due during a long microtask or busy work after the posts; posted from a timer, it comes first; immediates queued in the check phase that posted run after the turn",
-  "kernel": "1.92.0",
   "argv": ["script.js"],
   "shim": true
 }

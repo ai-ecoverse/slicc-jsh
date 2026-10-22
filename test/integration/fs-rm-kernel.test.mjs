@@ -9,10 +9,9 @@
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, kernelVersion, withJshAndSh } from './helpers.mjs';
+import { withJshAndSh } from './helpers.mjs';
 
 // The setup chmods from JS (slicc-kernel 1.86.0+).
-const needs = kernelAtLeast('1.86.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.fs.chmod (1.86.0)` };
 
 const program = (lines) => `(async () => {\n${lines.join('\n')}\n})().catch((e) => { console.error(e); process.exit(1); });\n`;
 const ERR = "const err = (e) => `${e.code} ${e.errno} ${e.syscall} ${e.path} ${e.message}`;";
@@ -35,7 +34,7 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
   });
   after(() => jsh?.close());
 
-  it('EACCES: a directory in a read-only one (rmdir names it, as Node does)', needs, async () => {
+  it('EACCES: a directory in a read-only one (rmdir names it, as Node does)', async () => {
     await jsh.kernel.writeFile(
       '/tmp/eacces.js',
       program([
@@ -55,7 +54,7 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
     assert.equal(r.stdout, `rmSync ${e}\nrmSync force ${e}\npromises.rm ${e}\nrm callback ${e}\nleft true\nthen removed true\n`);
   });
 
-  it('EPERM: another user’s directory in a sticky one', needs, async () => {
+  it('EPERM: another user’s directory in a sticky one', async () => {
     await jsh.kernel.writeFile(
       '/tmp/sticky-setup.js',
       "const fs = require('fs'); fs.mkdirSync('/tmp/sd'); fs.chmodSync('/tmp/sd', 0o1777);\n"
@@ -77,7 +76,7 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
     assert.equal(r.stdout, `rmSync ${e}\nrmSync force ${e}\npromises.rm ${e}\nrm callback ${e}\nleft true\n`);
   });
 
-  it('a lookup refused under an untraversable directory: lstat, or with force and recursive unlink, as Node gives it', needs, async () => {
+  it('a lookup refused under an untraversable directory: lstat, or with force and recursive unlink, as Node gives it', async () => {
     await jsh.kernel.writeFile(
       '/tmp/locked.js',
       program([
@@ -121,12 +120,7 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
     // a user on hosted ubuntu-latest and on the bench pool: EACCES rmdir /dev
     // (ai-ecoverse/slicc-jsh#249; #215 had it as the first entry's unlink).
     const first = `/dev/${/^first (.+)$/m.exec(r.stdout)[1]}`;
-    // Before slicc-kernel 1.86.0 jsh doesn't check modes (the kernel's are
-    // defaults it doesn't enforce): rmdir is ENOTEMPTY, and the first entry's
-    // unlink is refused.
-    const dev = kernelAtLeast('1.86.0')
-      ? "EACCES -13 rmdir /dev EACCES: permission denied, rmdir '/dev'"
-      : `EACCES -13 unlink ${first} EACCES: permission denied, unlink '${first}'`;
+    const dev = "EACCES -13 rmdir /dev EACCES: permission denied, rmdir '/dev'";
     assert.equal(
       r.stdout,
       [
@@ -144,7 +138,7 @@ describe('fs.rm recursive refused partway (kernel, users: enforce)', () => {
     );
   });
 
-  it('a 0555 subdirectory of the user\'s own tree: rmSync stops at its rmdir and keeps the rest; rm and promises.rm remove its siblings, as Node (#249)', needs, async () => {
+  it('a 0555 subdirectory of the user\'s own tree: rmSync stops at its rmdir and keeps the rest; rm and promises.rm remove its siblings, as Node (#249)', async () => {
     // Node's rmSync rmdir()s
     // t6, a and b (ENOTEMPTY, so on to their entries, in readdir order),
     // then c: EACCES, b being 0555. Nothing is removed. Node's callback

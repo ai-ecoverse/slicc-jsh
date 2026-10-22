@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createFsWatch } from '../../src/runtime/builtins/fs-watch.mjs';
 import { createHandleTable } from '../../src/runtime/handles.mjs';
-import { kernelAtLeast, withJsh } from './helpers.mjs';
+import { withJsh } from './helpers.mjs';
 
 function standInKernel(roundTrip) {
   let tail = Promise.resolve();
@@ -125,7 +125,7 @@ describe('fs.watch: one queue over watches the kernel hands out apart', () => {
   });
 });
 
-describe('fs.watch: one queue, every round trip of the kernel transport 5 ms late (kernel)', { skip: !kernelAtLeast('1.143.4') }, () => {
+describe('fs.watch: one queue, every round trip of the kernel transport 5 ms late (kernel)', () => {
   const fixture = new URL('../golden/fixtures/fs-watch-overwrite-node22/', import.meta.url);
   let jsh;
   before(async () => {

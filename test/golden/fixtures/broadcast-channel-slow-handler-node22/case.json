@@ -1,6 +1,5 @@
 {
   "description": "BroadcastChannel: the messages already queued are all delivered before a timer that became due while a slow handler ran (Node delivers a port's queue in one poll phase, before the next timers phase), with each handler's microtasks run before the next message. Needs slicc-kernel 1.92.0's writable slot",
-  "kernel": "1.92.0",
   "argv": ["script.js"],
   "shim": true
 }

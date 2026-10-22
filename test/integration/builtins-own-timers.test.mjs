@@ -1,7 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { withJsh } from './helpers.mjs';
-import { createChildProcess } from '../../src/runtime/builtins/child-process.mjs';
 
 const script = `const crypto = require('crypto');
 const zlib = require('zlib');
@@ -45,60 +44,4 @@ describe('builtins without the global timers: what jsh has no Node output for (k
       assert.equal(r.stdout, `${name} ${code} later\nthe program ends\n`);
     });
   }
-});
-
-describe('child_process without the global setImmediate: a kernel without ctx.sync.spawn', () => {
-  it("a failed spawn's close waits for the spawns still in flight, on jsh's own setImmediate", async () => {
-    const own = { setImmediate, setTimeout, clearTimeout };
-    let settle;
-    const second = new Promise((resolve) => {
-      settle = resolve;
-    });
-    let spawned = 0;
-    const enoent = () => Object.assign(new Error('not found'), { code: 'ENOENT' });
-    const cp = createChildProcess({
-      ctx: {
-        sync: {
-          fs: {
-            stat: (p) => {
-              if (p === '/') return { isDirectory: true };
-              throw enoent();
-            },
-          },
-        },
-        spawn: () => (++spawned === 1 ? Promise.reject(enoent()) : second.then(() => Promise.reject(enoent()))),
-      },
-      process: { cwd: () => '/', env: {}, nextTick: (fn, ...args) => process.nextTick(fn, ...args) },
-      Buffer,
-      handles: { add() {}, delete() {}, notify() {} },
-      getStream: () => {
-        throw new Error('not reached');
-      },
-      timers: own,
-    });
-    const events = [];
-    const saved = globalThis.setImmediate;
-    globalThis.setImmediate = undefined;
-    try {
-      const closed = (name) =>
-        new Promise((resolve) =>
-          cp
-            .spawn(name, [], { stdio: 'ignore' })
-            .on('error', (err) => events.push(`${name} error ${err.code}`))
-            .on('close', (code) => {
-              events.push(`${name} close ${code}`);
-              resolve();
-            })
-        );
-      const first = closed('a');
-      const next = closed('b');
-      await new Promise((resolve) => own.setTimeout(resolve, 20));
-      assert.deepEqual(events, ['a error ENOENT']);
-      settle();
-      await Promise.all([first, next]);
-    } finally {
-      globalThis.setImmediate = saved;
-    }
-    assert.deepEqual(events, ['a error ENOENT', 'b error ENOENT', 'a close -2', 'b close -2']);
-  });
 });

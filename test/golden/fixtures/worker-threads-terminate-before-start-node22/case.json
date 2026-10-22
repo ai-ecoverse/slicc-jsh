@@ -1,1 +1,1 @@
-{ "description": "a Worker terminated in the turn that made it, before its thread is up, emits no 'online', message, error or output, and exits 0, as in Node 22", "argv": ["script.js"], "shim": true, "kernel": "1.130.0" }
+{ "description": "a Worker terminated in the turn that made it, before its thread is up, emits no 'online', message, error or output, and exits 0, as in Node 22", "argv": ["script.js"], "shim": true }

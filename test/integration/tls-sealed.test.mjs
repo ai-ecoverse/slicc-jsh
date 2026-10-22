@@ -5,7 +5,7 @@ import { createServer as createTcp, connect as tcp } from 'node:net';
 import { createServer as createHttpsServer } from 'node:https';
 import { createRequire } from 'node:module';
 import { TLSSocket } from 'node:tls';
-import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
+import { devPackageTree, withJsh } from './helpers.mjs';
 import { makeCa } from './tls-certs.mjs';
 
 // Sealed (vault) values on jsh's own TLS path: the kernel's handshake (A2),
@@ -32,28 +32,14 @@ import { makeCa } from './tls-certs.mjs';
 // the bundled roots don't: a CA, the exact leaf, or an SPKI pin on the leaf
 // or an issuer, which the vault answers for the bound host. A ca the program
 // passes never does.
-//
-// Each protocol's rows run from the release that substitutes in it.
-const SEALED = {
-  http1: '1.127.0', // slicc-kernel#1130: an HTTP/1.1 request head's header, and the read scrub
-  smtp: '1.129.0', // #1131: SMTP AUTH PLAIN and LOGIN's password, STARTTLS included
-  pg: '1.131.0', // #1136: pg's cleartext PasswordMessage
-  scram: '1.134.0', // #1138: pg's SCRAM-SHA-256, the proof recomputed from the secret
-};
-const skipFor = (protocol) =>
-  !(SEALED[protocol] && kernelAtLeast(SEALED[protocol])) && `slicc-kernel#1090 doesn't substitute in ${protocol} yet`;
-const skip = !kernelAtLeast('1.127.0') && 'slicc-kernel before 1.127.0 substitutes in no A2 session';
-const skipAnchors = !kernelAtLeast('1.136.0') && 'slicc-kernel before 1.136.0 has no vault anchors (slicc-kernel#1147)';
+
 // slicc-kernel#1224 (1.136.4): pg SCRAM channel binding in a sealed session.
 // The kernel picks the gs2 header itself, tls-server-end-point where the
 // bundled roots verified a server offering -PLUS, and an anchored session
-// gets no binding before 1.141.0. Its vault side, slicc-vault 1.15.1, isn't needed here:
+// gets one too. Its vault side, slicc-vault 1.15.1, isn't needed here:
 // the vault is this file's own hook.
-const skipBinding = !kernelAtLeast('1.136.4') && 'slicc-kernel before 1.136.4 has no sealed pg channel binding (slicc-kernel#1224)';
 // slicc-kernel#1278 (1.137.0): a program's own SCRAM exchange in a session
 // the kernel didn't verify passes through untouched, channel binding and all.
-const skipOwnBinding = !kernelAtLeast('1.137.0') && "slicc-kernel before 1.137.0 rewrites the program's own channel binding (slicc-kernel#1278)";
-const anchoredBinding = kernelAtLeast('1.141.0');
 
 // A placeholder as the vault makes them (fnox_proxy_<24 hex>).
 const PLACEHOLDER = 'fnox_proxy_0123456789abcdef01234567';
@@ -235,7 +221,7 @@ function listen(server) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve((server.address ? server : server.server).address().port)));
 }
 
-describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { skip }, () => {
+describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', () => {
   let jsh;
   let sealed;
   const ca = makeCa();
@@ -571,7 +557,7 @@ describe('sealed values in the kernel\'s TLS sessions (slicc-kernel#1090)', { sk
     return r;
   }
 
-  it('HTTP Authorization on a port that is not 443: the verified, bound server gets the secret; a reflecting endpoint gives the program none of it', { skip: skipFor('http1') }, async () => {
+  it('HTTP Authorization on a port that is not 443: the verified, bound server gets the secret; a reflecting endpoint gives the program none of it', async () => {
     got.length = 0;
     sealed.asked.clear();
     const r = await run(
@@ -608,7 +594,7 @@ const get = (label, options) => new Promise((resolve) => {
     assert.deepEqual([...sealed.asked], ['api.test http1 header:authorization']);
   });
 
-  it("HTTP Authorization where the kernel can't vouch for the bound host gets the placeholder: another host, a ca of the program's own, an untrusted chain, a wrong name, whatever the program accepts", { skip: skipFor('http1') }, async () => {
+  it("HTTP Authorization where the kernel can't vouch for the bound host gets the placeholder: another host, a ca of the program's own, an untrusted chain, a wrong name, whatever the program accepts", async () => {
     got.length = 0;
     sealed.asked.clear();
     const r = await run(
@@ -652,7 +638,7 @@ const get = (label, options) => new Promise((resolve) => {
     );
   });
 
-  it('SMTP AUTH PLAIN and LOGIN after STARTTLS and over SMTPS get the secret; AUTH before any upgrade gets the placeholder; a server quoting the password gives the program none of it', { skip: skipFor('smtp') }, async () => {
+  it('SMTP AUTH PLAIN and LOGIN after STARTTLS and over SMTPS get the secret; AUTH before any upgrade gets the placeholder; a server quoting the password gives the program none of it', async () => {
     got.length = 0;
     sealed.asked.clear();
     const r = await run(
@@ -698,7 +684,7 @@ const send = async (label, options) => {
     assert.deepEqual([...sealed.asked], ['mail.test smtp auth-plain', 'mail.test smtp auth-login']);
   });
 
-  it("pg's cleartext password over sslmode=verify-full and require gets the secret where the kernel's roots trust the server; with a root of its own, without verification or without TLS it gets the placeholder; a server quoting it gives the program none of it", { skip: skipFor('pg') }, async () => {
+  it("pg's cleartext password over sslmode=verify-full and require gets the secret where the kernel's roots trust the server; with a root of its own, without verification or without TLS it gets the placeholder; a server quoting it gives the program none of it", async () => {
     got.length = 0;
     sealed.asked.clear();
     const r = await run(
@@ -744,7 +730,7 @@ const connect = async (label, user, host, port, query) => {
     assert.deepEqual([...sealed.asked], ['db.test pg password-cleartext']);
   });
 
-  it("pg's SCRAM-SHA-256 over sslmode=verify-full and require proves the secret where the kernel's roots trust the server, and the server's signature checks; with a root of its own, an untrusted chain, a wrong name or without TLS the proof is the placeholder's and authentication fails; a server quoting what it got gives the program none of it", { skip: skipFor('scram') }, async () => {
+  it("pg's SCRAM-SHA-256 over sslmode=verify-full and require proves the secret where the kernel's roots trust the server, and the server's signature checks; with a root of its own, an untrusted chain, a wrong name or without TLS the proof is the placeholder's and authentication fails; a server quoting what it got gives the program none of it", async () => {
     got.length = 0;
     sealed.asked.clear();
     const r = await run(
@@ -824,7 +810,7 @@ const connect = async (label, user, port, query) => {
   const VERIFY_PRIV = 'sslmode=verify-full&sslrootcert=/os/priv.pem';
   const REQUIRE = 'sslmode=require&uselibpqcompat=true';
 
-  it('a private CA the vault anchors for the bound host verifies the session: HTTP Authorization, SMTP AUTH, and pg cleartext and SCRAM get the secret, whatever the program checks', { skip: skipAnchors }, async () => {
+  it('a private CA the vault anchors for the bound host verifies the session: HTTP Authorization, SMTP AUTH, and pg cleartext and SCRAM get the secret, whatever the program checks', async () => {
     sealed.anchor({ anchors: [priv.der] });
     const out = await client([
       { label: 'http, ca', http: api('privApi', { ca: 'priv' }) },
@@ -875,7 +861,7 @@ const connect = async (label, user, port, query) => {
     ]);
   });
 
-  it('the exact leaf as the anchor, or an SPKI pin on the leaf or on its issuer, gets the secret; another leaf for the same name gets the placeholder unless the issuer is pinned', { skip: skipAnchors }, async () => {
+  it('the exact leaf as the anchor, or an SPKI pin on the leaf or on its issuer, gets the secret; another leaf for the same name gets the placeholder unless the issuer is pinned', async () => {
     const leaf = leaves.privApi.der;
     const steps = [
       { label: 'the leaf', http: api('privApi', { ca: 'priv' }) },
@@ -898,7 +884,7 @@ const connect = async (label, user, port, query) => {
     }
   });
 
-  it("the program's own ca is no anchor: the private CA as its ca or sslrootcert, with no vault anchor or another CA's, gets the placeholder", { skip: skipAnchors }, async () => {
+  it("the program's own ca is no anchor: the private CA as its ca or sslrootcert, with no vault anchor or another CA's, gets the placeholder", async () => {
     for (const answer of [{}, { anchors: [other.der], pins: [pinOf(other.der)] }]) {
       sealed.anchor(answer);
       const out = await client([
@@ -922,7 +908,7 @@ const connect = async (label, user, port, query) => {
     }
   });
 
-  it('an anchor still checks name, validity and usage: an anchored CA with a leaf naming another host or an expired leaf, and an anchor or pin that is no CA issuing, get the placeholder', { skip: skipAnchors }, async () => {
+  it('an anchor still checks name, validity and usage: an anchored CA with a leaf naming another host or an expired leaf, and an anchor or pin that is no CA issuing, get the placeholder', async () => {
     sealed.anchor({ anchors: [priv.der, notCa.der], pins: [pinOf(notCa.der)] });
     const unchecked = { rejectUnauthorized: false };
     const out = await client([
@@ -950,7 +936,7 @@ const connect = async (label, user, port, query) => {
     ]);
   });
 
-  it('an anchored server reflecting the secret gives the program none of it: an HTTP echo, an SMTP refusal and pg refusals quoting it', { skip: skipAnchors }, async () => {
+  it('an anchored server reflecting the secret gives the program none of it: an HTTP echo, an SMTP refusal and pg refusals quoting it', async () => {
     sealed.anchor({ anchors: [priv.der] });
     // run() fails on the secret in the program's output.
     const out = await client([
@@ -978,7 +964,7 @@ const connect = async (label, user, port, query) => {
     );
   });
 
-  it('the vault is asked sessionAnchors once per session, at its credential position, with the session and its exit, and nothing for an IP literal', { skip: skipAnchors }, async () => {
+  it('the vault is asked sessionAnchors once per session, at its credential position, with the session and its exit, and nothing for an IP literal', async () => {
     sealed.anchor({ anchors: [priv.der] });
     const address = { host: ports.apiAddress, port: ports.privApi, rejectUnauthorized: false };
     const out = await client([
@@ -1049,7 +1035,7 @@ const connect = async (label, user, port, query) => {
   // placeholder over y,,, proves nothing; require fails closed in the program.
   // From slicc-kernel#1278 (1.137.0) it leaves those sessions alone, -PLUS and
   // all: the program binds with the placeholder's proof, which still fails.
-  it("pg channel binding where the bundled roots verify the server: enableChannelBinding (libpq's channel_binding=prefer) and require bind to the server's leaf and authenticate with the secret; with a root of its own, an untrusted chain, a wrong name or without TLS, the placeholder's proof fails, and require fails closed or, from 1.137.0, binds and fails", { skip: skipBinding }, async () => {
+  it("pg channel binding where the bundled roots verify the server: enableChannelBinding (libpq's channel_binding=prefer) and require bind to the server's leaf and authenticate with the secret; with a root of its own, an untrusted chain, a wrong name or without TLS, the placeholder's proof fails, and require binds and fails", async () => {
     sealed.anchor({});
     const verified = [['verify-full', 'scram', 'sslmode=verify-full'], ['require (libpq)', 'scram', REQUIRE]];
     const unverified = [
@@ -1062,7 +1048,6 @@ const connect = async (label, user, port, query) => {
     const out = await client(steps);
     const failed = 'error 28P01 password authentication failed for user "alice"';
     const closed = 'error undefined channel binding required, offered SCRAM-SHA-256';
-    const passThrough = kernelAtLeast('1.137.0');
     assert.deepEqual(out, {
       'prefer, verify-full': 'connected, queried',
       'prefer, require (libpq)': 'connected, queried',
@@ -1072,23 +1057,23 @@ const connect = async (label, user, port, query) => {
       'prefer, disable': failed,
       'require, verify-full': 'connected, queried',
       'require, require (libpq)': 'connected, queried',
-      'require, verify-full, a root of its own': passThrough ? failed : closed,
-      'require, require (libpq), untrusted': passThrough ? failed : closed,
-      'require, require (libpq), wrong name': passThrough ? failed : closed,
+      'require, verify-full, a root of its own': failed,
+      'require, require (libpq), untrusted': failed,
+      'require, require (libpq), wrong name': failed,
       'require, disable': closed,
     });
     // The server checked c= against its own leaf for each -PLUS.
     const bound = `scram scram p=tls-server-end-point,, tls ${SECRET}`;
     const untouched = ['scram', 'scramUntrusted', 'scramMismatch'].map((server) =>
-      passThrough ? `${server} scram p=tls-server-end-point,, tls ${PLACEHOLDER}` : `${server} scram n,, tls neither`
+      `${server} scram p=tls-server-end-point,, tls ${PLACEHOLDER}`
     );
-    assert.deepEqual(got.map((g) => g.join(' ')), [bound, bound, ...untouched, `scram scram y,, plain ${PLACEHOLDER}`, bound, bound, ...(passThrough ? untouched : [])]);
+    assert.deepEqual(got.map((g) => g.join(' ')), [bound, bound, ...untouched, `scram scram y,, plain ${PLACEHOLDER}`, bound, bound, ...untouched]);
     const asked = ['anchors scram pg', 'anchors scramUntrusted pg', 'anchors scramMismatch pg'];
     const roots = ['anchors scram pg', 'materialize scram scram-sha-256 roots'];
-    assert.deepEqual(trail(), [...roots, ...roots, ...asked, ...roots, ...roots, ...(passThrough ? asked : [])]);
+    assert.deepEqual(trail(), [...roots, ...roots, ...asked, ...roots, ...roots, ...asked]);
   });
 
-  it("pg channel binding with a password of the program's own, where nothing has to change: bound to a server the bundled roots verify, and unbound without TLS, it authenticates", { skip: skipBinding }, async () => {
+  it("pg channel binding with a password of the program's own, where nothing has to change: bound to a server the bundled roots verify, and unbound without TLS, it authenticates", async () => {
     sealed.anchor({});
     const own = (query, channelBinding) => pg('scram', query, { user: 'own', password: OWN, channelBinding });
     const out = await client([
@@ -1107,7 +1092,7 @@ const connect = async (label, user, port, query) => {
   // slicc-kernel#1278 (1.137.0) touches SCRAM only where a sealed value could
   // be substituted, and passes the program's own exchange through untouched:
   // it binds where the server offers -PLUS, as it would without the kernel.
-  it("pg channel binding with a password of the program's own in a session the kernel didn't verify: a root of its own, a private CA through sslrootcert and an untrusted chain, prefer and require bind and authenticate", { skip: skipOwnBinding }, async () => {
+  it("pg channel binding with a password of the program's own in a session the kernel didn't verify: a root of its own, a private CA through sslrootcert and an untrusted chain, prefer and require bind and authenticate", async () => {
     sealed.anchor({});
     const own = (port, query, channelBinding) => pg(port, query, { user: 'own', password: OWN, channelBinding });
     const steps = ['prefer', 'require'].flatMap((cb) => [
@@ -1125,23 +1110,17 @@ const connect = async (label, user, port, query) => {
 
   // slicc-kernel#1224 binds SCRAM-SHA-256-PLUS only in a session the bundled
   // roots verified; from 1.141.0 an anchored one binds too (slicc-kernel#1259).
-  it("pg channel binding in an anchored session: pg's enableChannelBinding (libpq's prefer) authenticates with the secret, unbound before 1.141.0 and bound from it", { skip: skipAnchors || skipBinding }, async () => {
+  it("pg channel binding in an anchored session: pg's enableChannelBinding (libpq's prefer) authenticates with the secret, bound", async () => {
     sealed.anchor({ anchors: [priv.der] });
     const out = await client([{ label: 'prefer', pg: pg('privScram', VERIFY_PRIV, { channelBinding: 'prefer' }) }]);
     assert.deepEqual(out, { prefer: 'connected, queried' });
-    assert.deepEqual(got.map((g) => g.join(' ')), [`privScram scram ${anchoredBinding ? 'p=tls-server-end-point' : 'n'},, tls ${SECRET}`]);
+    assert.deepEqual(got.map((g) => g.join(' ')), [`privScram scram p=tls-server-end-point,, tls ${SECRET}`]);
   });
 
-  it("pg channel binding in an anchored session: libpq's channel_binding=require fails closed before 1.141.0, offered no -PLUS and sending nothing, and from it binds and authenticates with the secret", { skip: skipAnchors || skipBinding }, async () => {
+  it("pg channel binding in an anchored session: libpq's channel_binding=require binds and authenticates with the secret", async () => {
     sealed.anchor({ anchors: [priv.der] });
     const out = await client([{ label: 'require', pg: pg('privScram', VERIFY_PRIV, { channelBinding: 'require' }) }]);
-    if (anchoredBinding) {
-      assert.deepEqual(out, { require: 'connected, queried' });
-      assert.deepEqual(got.map((g) => g.join(' ')), [`privScram scram p=tls-server-end-point,, tls ${SECRET}`]);
-      return;
-    }
-    assert.deepEqual(out, { require: 'error undefined channel binding required, offered SCRAM-SHA-256' });
-    assert.deepEqual(got, []);
-    assert.equal(sealed.requests.some((r) => r.op === 'sessionMaterialize'), false);
+    assert.deepEqual(out, { require: 'connected, queried' });
+    assert.deepEqual(got.map((g) => g.join(' ')), [`privScram scram p=tls-server-end-point,, tls ${SECRET}`]);
   });
 });

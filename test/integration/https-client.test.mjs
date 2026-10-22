@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, withJsh, wrapCommandMain } from './helpers.mjs';
+import { withJsh, wrapCommandMain } from './helpers.mjs';
 
 describe('https client (ctx.fetch)', () => {
   let jsh;
@@ -239,7 +239,7 @@ req.on('close', () => {
   });
 
   it('throws ERR_NOT_SUPPORTED for client cert / ca options', async () => {
-    const opts = kernelAtLeast('1.124.13') ? ['pfx'] : kernelAtLeast('1.124.0') ? ['cert', 'key', 'pfx'] : ['cert', 'key', 'pfx', 'ca'];
+    const opts = ['pfx'];
     const out = await run(`globalThis.__fetch = async () => new Response('');
 const codes = [];
 for (const opt of ${JSON.stringify(opts)}) {

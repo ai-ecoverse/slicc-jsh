@@ -1,6 +1,5 @@
 {
   "description": "a file or directory fs creates gets the mode asked for (writeFile, appendFile, open, FileHandle, createWriteStream, mkdir, recursive mkdir, mkdtemp's 0700) less process.umask(), and an existing one keeps its own; copyFile gives the copy the source's mode; process.umask parses as Node does. The modes are set with chmod, so the shim side needs slicc-kernel 1.86.0",
-  "kernel": "1.86.0",
   "argv": ["script.js"],
   "shim": true
 }
