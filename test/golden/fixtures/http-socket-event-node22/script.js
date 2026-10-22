@@ -1,4 +1,5 @@
 const http = require('http');
+const net = require('net');
 const one = (label, port, agent) =>
   new Promise((resolve) => {
     const events = [];
@@ -27,5 +28,68 @@ srv.listen(0, '127.0.0.1', async () => {
   await one('keepAlive reused', port, ka);
   plain.destroy();
   ka.destroy();
+  const state = (req, res) => `res.socket ${res.socket === null ? 'null' : 'set'}, req.destroyed ${req.destroyed}, writableFinished ${req.writableFinished}`;
+  await new Promise((resolve) => {
+    const agent = new http.Agent({ keepAlive: true });
+    const events = [];
+    const req = http.get({ host: '127.0.0.1', port, agent }, (res) => {
+      res.prependListener('end', () => events.push(`prepended end: ${state(req, res)}`));
+      res.on('end', () => events.push(`end: ${state(req, res)}`));
+      res.resume();
+    });
+    req.on('close', () => {
+      console.log('keepAlive, prepended end |', events.join('; '));
+      agent.destroy();
+      resolve();
+    });
+  });
+  const early = net.createServer((s) => {
+    let got = '';
+    let answered = false;
+    s.on('data', (d) => {
+      got += d;
+      if (!answered && got.includes('\r\n\r\n')) {
+        answered = true;
+        s.write('HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Length: 5\r\n\r\nearly');
+      }
+    });
+  });
+  await new Promise((r) => early.listen(0, '127.0.0.1', r));
+  await new Promise((resolve) => {
+    const agent = new http.Agent({ keepAlive: true });
+    const events = [];
+    const req = http.request({ host: '127.0.0.1', port: early.address().port, agent, method: 'POST', headers: { 'content-length': 8 } }, (res) => {
+      res.on('end', () => {
+        events.push(`end: ${state(req, res)}`);
+        setTimeout(() => {
+          req.on('finish', () => {
+            events.push(`finish: ${state(req, res)}`);
+            process.nextTick(() => events.push(`tick after finish: ${state(req, res)}`));
+          });
+          req.end('body');
+        }, 20);
+      });
+      res.resume();
+    });
+    req.on('close', () => {
+      console.log('keepAlive, response before the body is sent |', events.join('; '));
+      agent.destroy();
+      early.close(resolve);
+    });
+    req.write('half');
+  });
+  await new Promise((resolve) => {
+    const agent = new http.Agent({ maxSockets: 1 });
+    const events = [];
+    const req = http.get({ host: '127.0.0.1', port, path: '/headers', agent }, (res) => {
+      res.on('end', () => events.push(`end: ${state(req, res)}, shouldKeepAlive ${req.shouldKeepAlive}`));
+      res.resume();
+    });
+    req.on('close', () => {
+      console.log('maxSockets 1 without keepAlive |', events.join('; '), '| sent', JSON.stringify(req.getHeader('connection') ?? /Connection: ([^\r]*)/.exec(req._header)?.[1]));
+      agent.destroy();
+      resolve();
+    });
+  });
   srv.close();
 });
