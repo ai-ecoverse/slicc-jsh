@@ -2438,7 +2438,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         try {
           closeFd();
         } catch (closeErr) {
-          if (closeErr?.code !== 'EBADF') closing = closeErr;
+          closing = closeErr;
         }
         cb(closing || err);
       },
@@ -2540,7 +2540,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         try {
           closeFd();
         } catch (closeErr) {
-          if (closeErr?.code !== 'EBADF') closing = closeErr;
+          closing = closeErr;
         }
         cb(closing || err);
       },

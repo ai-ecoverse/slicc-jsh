@@ -1,0 +1,1 @@
+{ "description": "#847: a read or write stream made on an fd the program closed itself gets the close's EBADF as its 'error' when it is destroyed, by destroy(), destroy(err) or at its end, ahead of the error that destroyed it, as Node 22's closeAfterSync does", "argv": ["main.js"], "shim": true }
