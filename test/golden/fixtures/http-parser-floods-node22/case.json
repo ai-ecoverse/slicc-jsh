@@ -1,0 +1,5 @@
+{
+  "description": "8 MiB of bytes llhttp does not count toward the header size (junk in the method or after the version, spaces in the request line, whitespace before a header or trailer value, leading CRLFs), sent to an http server and from a server to an http client, end as in Node 22: junk is an error at once, the rest is read through without buffering it, so each row stays well inside the no-progress watchdog",
+  "argv": ["script.js"],
+  "shim": true
+}

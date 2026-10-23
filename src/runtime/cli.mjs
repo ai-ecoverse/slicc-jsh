@@ -53,6 +53,7 @@ const VALUED_FLAGS = [
   '--report-signal',
   '--trace-event-categories',
   '--trace-event-file-pattern',
+  '--max-http-header-size',
 ];
 const INPUT_TYPES = ['module', 'commonjs', 'module-typescript', 'commonjs-typescript'];
 

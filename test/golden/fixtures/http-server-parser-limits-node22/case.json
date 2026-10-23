@@ -1,0 +1,5 @@
+{
+  "description": "an http server applies llhttp's limits and chunk-size grammar, as Node 22: chunk extensions over 16 KiB are HPE_CHUNK_EXTENSIONS_OVERFLOW (a 413 without a clientError listener), counted over extension names and values, per chunk, also before the line ends; the strict chunk-size line errors with llhttp's codes; the header size counts the target, header names and values as llhttp does, against maxHeaderSize or 16 KiB, also in a partial head and in trailers, as HPE_HEADER_OVERFLOW (a 431 without a listener); a head is checked in order",
+  "argv": ["script.js"],
+  "shim": true
+}

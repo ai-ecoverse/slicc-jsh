@@ -1,0 +1,15 @@
+http.maxHeaderSize 100
+server, a target of 94 | no error, HTTP/1.1 200 OK
+server, a target of 95 | HPE_HEADER_OVERFLOW, -
+server with maxHeaderSize 200 | no error, HTTP/1.1 200 OK
+client, a reason of 84 | response 200
+client, a reason of 85 | HPE_HEADER_OVERFLOW
+client with maxHeaderSize 200 | response 200
+--max-http-header-size=12abc | 12
+--max-http-header-size=+12 | 12
+--max-http-header-size=-5 | 18446744073709552000
+--max-http-header-size=99999999999999999999999 | 18446744073709552000
+--max-http-header-size=0x10 | 0
+--max-http-header-size | status 9 | node: --max-http-header-size requires an argument
+--no-max-http-header-size | status 9 | node: --no-max-http-header-size is an invalid negation because it is not a boolean option
+NODE_OPTIONS | 55

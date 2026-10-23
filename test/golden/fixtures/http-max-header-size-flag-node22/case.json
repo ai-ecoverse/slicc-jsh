@@ -1,0 +1,5 @@
+{
+  "description": "--max-http-header-size sets http.maxHeaderSize and the header limit of servers and requests that have no maxHeaderSize of their own, as Node 22",
+  "argv": ["--max-http-header-size=100", "script.js"],
+  "shim": true
+}
