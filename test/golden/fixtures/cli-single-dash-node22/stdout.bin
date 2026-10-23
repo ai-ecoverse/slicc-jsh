@@ -64,3 +64,9 @@ node: bad option: --experimental-wasm-exnref
 6
 Error: Value for flag -max-old-space-size=-5 of type size_t is out of bounds [0-18446744073709551615]
 Try --help for options
+== NODE_OPTIONS=-stack-trace-limit=5 -e console.log(Error.stackTraceLimit): status 9
+node: -stack-trace-limit=5 is not allowed in NODE_OPTIONS
+== NODE_OPTIONS=-max-old-space-size=100 -e console.log(7): status 9
+node: -max-old-space-size=100 is not allowed in NODE_OPTIONS
+worker -stack-trace-limit=4 ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: -stack-trace-limit=4
+worker -max-old-space-size=4 ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: -max-old-space-size=4

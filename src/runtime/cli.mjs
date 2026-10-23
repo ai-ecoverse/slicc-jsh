@@ -138,7 +138,7 @@ export function workerExecArgvError(execArgv) {
       invalid.push(word);
       continue;
     }
-    if (refusedInWorker(name)) {
+    if (refusedInWorker(name) || singleDashV8(word)) {
       invalid.push(word);
       continue;
     }
