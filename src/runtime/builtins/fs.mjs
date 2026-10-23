@@ -581,6 +581,15 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     }
   }
 
+  function readHeld(file, pos, buffer, at, len) {
+    const fits = buffer instanceof Uint8Array && Number.isInteger(at) && at >= 0 && at + len <= buffer.length;
+    if (fits && typeof file.readInto === 'function') return file.readInto(pos, buffer, at, len);
+    const chunk = file.read(pos, len);
+    const n = Math.min(len, chunk.length);
+    if (n) buffer.set(chunk.subarray(0, n), at);
+    return n;
+  }
+
   /** The bytes from an fd's position to its end; the position moves there. */
   function readRestOf(ent, sized) {
     if (ent.file) {
@@ -1672,9 +1681,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         try {
           // Node: with no position, read at the fd's own and move it.
           const pos = filePosition ?? ent.pos;
-          const chunk = len > 0 ? ent.file.read(pos, len) : new Uint8Array(0);
-          const n = Math.min(len, chunk.length);
-          if (n) buffer.set(chunk.subarray(0, n), bufOffset);
+          const n = len > 0 ? readHeld(ent.file, pos, buffer, bufOffset, len) : 0;
           if (filePosition == null) ent.pos = pos + n;
           return n;
         } catch (err) {

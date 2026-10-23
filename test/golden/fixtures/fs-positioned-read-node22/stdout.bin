@@ -1,0 +1,31 @@
+readSync zero at 0 0 5adeabbe1cf67ba2 same
+readSync zero at end 0 5adeabbe1cf67ba2 same
+readSync zero past end 0 5adeabbe1cf67ba2 same
+readSync across 1 MiB 7 1f037504876aa765 same
+readSync across 16 MiB 10 3a80c64a58f90c91 same
+readSync across 32 MiB at an offset 1060922 eab2b4659565c279 same
+readSync 16 MiB + 7 from 1 16777223 9989a689ab2e1add same
+readSync 17 MiB from 3 into offset 5 17825792 558c3237979eff96 same
+readSync past end from 3 34615350 003e3782fd9a97dd same
+readSync tail past end 10 062990f91c5dc374 same
+readSync at end 0 66660ac3f0ddd642 same
+readSync past end 0 66660ac3f0ddd642 same
+readSync options 2097152 3643aaa23725153d same
+readSync bigint 1048579 7ff9ef2cb3540395 same
+readSync view 1048576 7ac230598a0356de same
+readSync own position 34 same
+chunks 65536 530 same
+chunks 1048575 35 same
+chunks 1048576 35 same
+chunks 16777216 4 same
+chunks 16777217 4 same
+chunks 67108864 2 same
+readvSync 17825800 5b953e5527c62e72 same
+fs.read 17825792 51ada518afac0fb6 same
+FileHandle.read 2097151 bf50ca16a914e0e8 same
+FileHandle.read options 20 037b2a59da49c887 same
+FileHandle.read 64 MiB 34615353 9ed222ed03141858 same
+FileHandle.read zero 0
+createReadStream 1048569 16777225 15728657 260af74d8201651b same
+createReadStream 34615348 undefined 5 a43842074794344d same
+createReadStream 34615356 undefined 0 e3b0c44298fc1c14 same
