@@ -1,0 +1,19 @@
+child close: tick, micro
+child exit: tick, micro
+child stdout data: tick, micro
+client close: tick, micro
+client data: tick, micro
+client end: tick, micro
+connect: tick, micro
+crypto.randomBytes: tick, micro
+dns.lookup: tick, micro
+fs.promises: micro, tick
+fs.readFile: tick, micro
+fs.stat: tick, micro
+listen: tick, micro
+server close: tick, micro
+server connection: tick, micro
+server data: tick, micro
+setImmediate: tick, micro
+setTimeout: tick, micro
+zlib.gzip: tick, micro

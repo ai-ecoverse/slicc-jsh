@@ -2,6 +2,7 @@
  * Node-like fs / fs/promises over ctx.sync (sync) and ctx.fs (promises).
  * Async ops are tracked as ref'd handles so the event loop stays alive.
  */
+import { makeCallback } from '../callback-scope.mjs';
 import { trackPromise } from '../async-handles.mjs';
 import { createCp } from './fs-cp.mjs';
 import { createStatWatchers } from './fs-watchers.mjs';
@@ -2025,10 +2026,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       requireCallback(cb);
       try {
         const result = fn(...syncArgs);
-        queueMicrotask(() => cb(null, result));
+        queueMicrotask(() => makeCallback(process, null, cb, undefined, [null, result]));
       } catch (err) {
         if (isArgError(err)) throw err;
-        queueMicrotask(() => cb(err));
+        queueMicrotask(() => makeCallback(process, null, cb, undefined, [err]));
       }
     };
   }

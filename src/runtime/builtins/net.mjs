@@ -1,6 +1,7 @@
 /**
  * node:net over ctx.net (kernel loopback TCP).
  */
+import { makeCallback } from '../callback-scope.mjs';
 import { trackPromise } from '../async-handles.mjs';
 import { EventEmitter } from './events.mjs';
 import { connectError } from './http-fetch.mjs';
@@ -276,7 +277,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         });
       }
       if (quiet) return;
-      runInResource(this.#resource, this.#emitConnect, this, []);
+      makeCallback(process, this.#resource, this.#emitConnect, this);
     }
 
     #emitConnect() {
@@ -817,7 +818,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             this.emit('close');
           };
           const during = timers.inCheck?.();
-          nextTick(() => queueMicrotask(() => nextTick(() => (timers.afterCheck ? timers.afterCheck(emitClose, during) : emitClose()))));
+          const closeNow = () => makeCallback(process, null, emitClose);
+          nextTick(() => queueMicrotask(() => nextTick(() => (timers.afterCheck ? timers.afterCheck(closeNow, during) : closeNow()))));
         };
       }
       // Node's Socket._destroy: the server's count drops now, before this
@@ -1166,7 +1168,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           this.#connections++;
           socket[kServer] = this;
           socket._attach(conn, { deferRead: this[kServesTls] === true });
-          runInResource(resource, this.emit, this, ['connection', socket]);
+          makeCallback(process, resource, this.emit, this, ['connection', socket]);
           handles.notify();
         }
       } catch (err) {

@@ -17,6 +17,7 @@ import { currentFrame, runInFrame } from './async-context.mjs';
 export function createNextTick(onQueue) {
   const queue = [];
   let stopped = false;
+  let flushing = false;
   // Ticks run so far (the drain loop's measure of progress).
   let ran = 0;
 
@@ -60,18 +61,24 @@ export function createNextTick(onQueue) {
     },
     /** Run queued ticks synchronously. */
     flushSync() {
-      while (queue.length > 0) {
-        const batch = queue.splice(0);
-        for (let i = 0; i < batch.length; i++) {
-          try {
-            ran++;
-            batch[i]();
-          } catch (err) {
-            // The rest of the batch still runs (after the error is handled).
-            queue.unshift(...batch.slice(i + 1));
-            throw err;
+      if (flushing) return;
+      flushing = true;
+      try {
+        while (queue.length > 0) {
+          const batch = queue.splice(0);
+          for (let i = 0; i < batch.length; i++) {
+            try {
+              ran++;
+              batch[i]();
+            } catch (err) {
+              // The rest of the batch still runs (after the error is handled).
+              queue.unshift(...batch.slice(i + 1));
+              throw err;
+            }
           }
         }
+      } finally {
+        flushing = false;
       }
     },
     get depth() {

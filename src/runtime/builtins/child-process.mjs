@@ -7,6 +7,7 @@
  * the child's NODE_CHANNEL_FD the other (./ipc-channel.mjs). On older
  * kernels fork stays ERR_NOT_SUPPORTED and 'ipc' does nothing, as before.
  */
+import { makeCallback } from '../callback-scope.mjs';
 import { trackPromise } from '../async-handles.mjs';
 import { resourceHere, runInResource } from '../async-context.mjs';
 import {
@@ -651,7 +652,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
           if (done || gone) break;
           const chunk =
             value instanceof Uint8Array ? Buffer.from(value) : Buffer.from(String(value));
-          runInResource(resource, r.push, r, [chunk]);
+          makeCallback(process, resource, r.push, r, [chunk]);
         }
         if (!gone) runInResource(resource, r.push, r, [null]);
       } catch (err) {
@@ -996,8 +997,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
             // After the channel's end of file and its 'disconnect' tick.
             trackPromise(handles, settling).then(() => later(() => finish(child, code, signal)));
           };
-          if (child._drainStdio) child._drainStdio().then(exited);
-          else exited();
+          if (child._drainStdio) child._drainStdio().then(() => makeCallback(process, null, exited));
+          else makeCallback(process, null, exited);
         },
         (err) => {
           if (isExitError(err)) return;
