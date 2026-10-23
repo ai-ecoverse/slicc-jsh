@@ -9,4 +9,7 @@ POST, Transfer-Encoding identity, end(data) alone | end() at once, server "POST 
 PUT, Transfer-Encoding identity, end() alone | end() at once, server "PUT / HTTP/1.1|Transfer-Encoding: identity|Connection: close" body "", response 204
 POST, Transfer-Encoding chunked, end(data) alone | end() at once, server "POST / HTTP/1.1|Transfer-Encoding: chunked|Connection: close" body "5\r\nhello\r\n0\r\n\r\n", response 204
 POST, Transfer-Encoding chunked, end() alone | end() at once, server "POST / HTTP/1.1|Transfer-Encoding: chunked|Connection: close" body "0\r\n\r\n", response 204
+POST, Transfer-Encoding chunked, end(data) after the connect | end() at once, server "POST / HTTP/1.1|Transfer-Encoding: chunked|Connection: close" body "5\r\nhello\r\n0\r\n\r\n", response 204
+PUT, Content-Length, end(data) after the connect | end() at once, server "PUT / HTTP/1.1|Content-Length: 5|Connection: close" body "hello", response 204
+DELETE, end(data) after the connect | end() at once, server "DELETE / HTTP/1.1|Connection: close" body "hello", response 204
 POST, Transfer-Encoding gzip, end(data) alone | end() at once, server "POST / HTTP/1.1|Transfer-Encoding: gzip|Connection: close" body "hello", response 204

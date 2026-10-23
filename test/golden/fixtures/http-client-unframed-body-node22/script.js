@@ -13,9 +13,11 @@ const srv = net.createServer((s) => {
     got += d;
     row.wire = got;
     const end = got.indexOf('\r\n\r\n');
-    if (end < 0 || !got.slice(end + 4).endsWith(row.want)) return;
-    row.ev.push(`server ${show(got)}`);
-    s.end('HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n');
+    if (end < 0 || !got.slice(end + 4).endsWith(row.want) || row.settling) return;
+    row.settling = setTimeout(() => {
+      row.ev.push(`server ${show(got)}`);
+      s.end('HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n');
+    }, 20);
   });
 });
 const row = (label, opts, want, drive) => new Promise((resolve) => {
@@ -75,6 +77,9 @@ srv.listen(0, '127.0.0.1', async () => {
   await row('PUT, Transfer-Encoding identity, end() alone', { method: 'PUT', headers: { 'Transfer-Encoding': 'identity' } }, '', { writes: [], endAtOnce: true });
   await row('POST, Transfer-Encoding chunked, end(data) alone', { method: 'POST', headers: { 'Transfer-Encoding': 'chunked' } }, '0\r\n\r\n', { writes: [], last: 'hello', endAtOnce: true });
   await row('POST, Transfer-Encoding chunked, end() alone', { method: 'POST', headers: { 'Transfer-Encoding': 'chunked' } }, '0\r\n\r\n', { writes: [], endAtOnce: true });
+  await row('POST, Transfer-Encoding chunked, end(data) after the connect', { method: 'POST', headers: { 'Transfer-Encoding': 'chunked' } }, '0\r\n\r\n', { writes: [], last: 'hello', endAtOnce: true, afterConnect: true });
+  await row('PUT, Content-Length, end(data) after the connect', { method: 'PUT', headers: { 'Content-Length': 5 } }, 'hello', { writes: [], last: 'hello', endAtOnce: true, afterConnect: true });
+  await row('DELETE, end(data) after the connect', { method: 'DELETE' }, 'hello', { writes: [], last: 'hello', endAtOnce: true, afterConnect: true });
   await row('POST, Transfer-Encoding gzip, end(data) alone', { method: 'POST', headers: { 'Transfer-Encoding': 'gzip' } }, 'hello', { writes: [], last: 'hello', endAtOnce: true });
   srv.close();
 });

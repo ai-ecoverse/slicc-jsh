@@ -3396,7 +3396,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         this[kBuffered] += buf.length + (this[kChunkedOut] && buf.length ? buf.length.toString(16).length + 4 : 0);
         if (this[kBuffered] >= this[kHighWaterMark] && !this[kNeedDrain]) this[kNeedDrain] = true;
       }
-      if (!this._headerSent && this[kConnected]) this[kFlushHead]();
+      if (!this._headerSent && this[kConnected] && !this[kEnded]) this[kFlushHead]();
       process.nextTick(callback);
       return true;
     },
