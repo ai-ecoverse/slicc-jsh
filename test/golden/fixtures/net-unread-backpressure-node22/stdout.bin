@@ -1,4 +1,3 @@
-server write returned false
 readableHighWaterMark 65536 readableFlowing null
 holds about its highWaterMark true
 read on, got every byte

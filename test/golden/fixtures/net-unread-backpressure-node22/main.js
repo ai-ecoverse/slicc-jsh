@@ -4,7 +4,7 @@ const SIZE = 1 << 20;
 
 function unread(next) {
   const server = net.createServer((sock) => {
-    console.log('server write returned', sock.write(Buffer.alloc(SIZE, 7)));
+    sock.write(Buffer.alloc(SIZE, 7));
     sock.end();
     server.close();
   });
