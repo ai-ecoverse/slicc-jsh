@@ -1,0 +1,5 @@
+{
+  "description": "an http client parses the bytes that come in the same packet as the end of a response as the next response, as Node 22: junk there is the request's error, before the response's end, after a Content-Length or chunked body, a 204, 304 or HEAD, a 100 Continue, and on a keep-alive agent; a second response there or a partial one, CRLFs, or bytes in a later packet are no error. The server sends each later packet only once the client has seen the response or its end",
+  "argv": ["script.js"],
+  "shim": true
+}
