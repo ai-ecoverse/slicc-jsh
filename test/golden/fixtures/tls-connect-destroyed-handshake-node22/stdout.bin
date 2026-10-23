@@ -1,0 +1,9 @@
+a server that never answers the hello
+  server the hello
+  server end
+  server close
+  client close false
+a tls.Server whose SNICallback answers after the client left
+  server SNICallback a.test
+  server tlsClientError ECONNRESET
+  client close false
