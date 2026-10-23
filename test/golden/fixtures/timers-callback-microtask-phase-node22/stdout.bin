@@ -10,6 +10,11 @@ a stat callback's promise continuation, started from an immediate | immediate, t
 an exists callback started from an immediate | immediate, timeout 0
 an awaited fs.promises.realpath started from an immediate | immediate, timeout 0
 an awaited fs.promises.stat started from an immediate | immediate, timeout 0
+an immediate's promise continuation after it started a stat | timeout 0, immediate
+an immediate's queueMicrotask after it started a readFile | timeout 0, immediate
+an immediate's await after it started an fs.promises.realpath | timeout 0, immediate
+an immediate's nextTick's promise continuation after it started an exists | timeout 0, immediate
+a stat callback started from an immediate that also queued its own promise continuation | immediate, timeout 0
 an awaited fs.promises.open started from an immediate | immediate, timeout 0
 an awaited FileHandle read started from an immediate | immediate, timeout 0
 an awaited FileHandle stat started from an immediate | immediate, timeout 0

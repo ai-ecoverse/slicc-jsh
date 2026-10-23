@@ -2,12 +2,20 @@ import { queueMicrotask, runInResource } from './async-context.mjs';
 
 let depth = 0;
 let enterIo = null;
+let poll = null;
 
-export function onIo(fn) {
+export function onIo(fn, { inCheck, schedule } = {}) {
   enterIo = fn;
+  poll = inCheck && schedule ? { inCheck, schedule } : null;
 }
 
+const pollLater = () => poll !== null && poll.inCheck();
+
 export function ioMicrotask(fn) {
+  if (pollLater()) {
+    poll.schedule(fn);
+    return;
+  }
   queueMicrotask(() => {
     enterIo?.();
     fn();
@@ -15,6 +23,15 @@ export function ioMicrotask(fn) {
 }
 
 export function ioSettled(promise) {
+  if (pollLater()) {
+    const { schedule } = poll;
+    return new Promise((resolve, reject) =>
+      promise.then(
+        (value) => schedule(() => resolve(value)),
+        (err) => schedule(() => reject(err))
+      )
+    );
+  }
   promise.then(
     () => enterIo?.(),
     () => enterIo?.()

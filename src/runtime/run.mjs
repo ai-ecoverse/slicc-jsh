@@ -565,7 +565,7 @@ export async function runNode(ctx, options = {}) {
       timers.clearPending();
     },
   });
-  onIo(() => timers.endPhase());
+  onIo(() => timers.endPhase(), { inCheck: () => timers.inCheck(), schedule: (fn) => timers.setImmediatePoll(fn) });
   // A signal handler runs from the loop, as an immediate (its throw is an
   // uncaught exception, handled as a timer callback's).
   // Like Node's signal handles it doesn't keep the loop alive: a signal

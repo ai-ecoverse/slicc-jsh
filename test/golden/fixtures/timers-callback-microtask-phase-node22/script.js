@@ -24,6 +24,11 @@ const row = (label, start) => new Promise((done) => {
   await row("an exists callback started from an immediate", (out) => setImmediate(() => fs.exists(__filename, () => both(out))));
   await row("an awaited fs.promises.realpath started from an immediate", (out) => setImmediate(async () => { await fs.promises.realpath(__filename); both(out); }));
   await row("an awaited fs.promises.stat started from an immediate", (out) => setImmediate(async () => { await fs.promises.stat(__filename); both(out); }));
+  await row("an immediate's promise continuation after it started a stat", (out) => setImmediate(() => { fs.stat(__filename, () => {}); Promise.resolve().then(() => both(out)); }));
+  await row("an immediate's queueMicrotask after it started a readFile", (out) => setImmediate(() => { fs.readFile(__filename, () => {}); queueMicrotask(() => both(out)); }));
+  await row("an immediate's await after it started an fs.promises.realpath", (out) => setImmediate(async () => { fs.promises.realpath(__filename); await null; await null; both(out); }));
+  await row("an immediate's nextTick's promise continuation after it started an exists", (out) => setImmediate(() => { fs.exists(__filename, () => {}); process.nextTick(() => Promise.resolve().then(() => both(out))); }));
+  await row("a stat callback started from an immediate that also queued its own promise continuation", (out) => setImmediate(() => { fs.stat(__filename, () => both(out)); Promise.resolve().then(() => {}); }));
   await row("an awaited fs.promises.open started from an immediate", (out) => setImmediate(async () => { const h = await fs.promises.open(__filename); both(out); await h.close(); }));
   const h = await fs.promises.open(__filename);
   await row("an awaited FileHandle read started from an immediate", (out) => setImmediate(async () => { await h.read(Buffer.alloc(4), 0, 4, 0); both(out); }));
