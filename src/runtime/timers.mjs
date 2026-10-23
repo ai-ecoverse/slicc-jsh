@@ -168,7 +168,7 @@ export function createTimers(
         if (!due.has(fire)) due.set(fire, state.due);
         return;
       }
-      if (hold(state.due)) {
+      if (closeTimer || hold(state.due)) {
         held.add(state);
         state.retry ??= nativeSetTimeout(retry, 0);
         return;
@@ -214,7 +214,7 @@ export function createTimers(
         due.set(fire, Infinity);
         return;
       }
-      if (held && holdImmediate(state.seq)) {
+      if (held && (closeTimer || holdImmediate(state.seq))) {
         state.retry = nativeSetTimeout(fire, 0);
         return;
       }
@@ -230,7 +230,7 @@ export function createTimers(
         runMethod(handle, '_onImmediate', args, domain, frame);
       } finally {
         if (inCheck) inImmediate--;
-        if (closing.length > 0) closePhase();
+        if (closing.length > 0) scheduleClose();
       }
     };
     state.seq = made++;
@@ -245,12 +245,24 @@ export function createTimers(
     return false;
   };
   const closing = [];
+  let closeTimer = null;
   const closePhase = () => {
+    closeTimer = null;
     for (let i = 0; i < closing.length; i++) {
       if (pendingBefore(closing[i].cut)) continue;
       const [{ fn }] = closing.splice(i--, 1);
-      fn();
+      try {
+        fn();
+        afterCallback?.();
+      } catch (err) {
+        if (onCallbackError) onCallbackError(err);
+        else throw err;
+      }
     }
+  };
+  const scheduleClose = () => {
+    if (closeTimer || !closing.some((entry) => !pendingBefore(entry.cut))) return;
+    closeTimer = nativeSetTimeout(closePhase, 0);
   };
 
   const clear = (handle, nativeClear) => {
@@ -265,7 +277,7 @@ export function createTimers(
       check.delete(state);
       held.delete(state);
       if (state.retry) nativeClearTimeout(state.retry);
-      if (closing.length > 0) nativeSetTimeout(closePhase, 0);
+      if (closing.length > 0) scheduleClose();
     }
     nativeClear(id);
   };

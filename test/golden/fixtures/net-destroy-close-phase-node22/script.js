@@ -81,5 +81,33 @@ const after = (ev, log) => {
       setImmediate(log('immediate after'));
     });
   });
+  await row('a tick and a microtask from the last immediate', (s, ev, log) => {
+    s.destroy();
+    setImmediate(() => {
+      ev.push('immediate');
+      process.nextTick(log('tick'));
+      queueMicrotask(log('microtask'));
+    });
+  });
+  await row('microtasks and ticks queued by microtasks of the last immediate', (s, ev, log) => {
+    s.destroy();
+    setImmediate(() => {
+      ev.push('immediate');
+      queueMicrotask(() => {
+        ev.push('microtask');
+        queueMicrotask(log('microtask from a microtask'));
+        process.nextTick(log('tick from a microtask'));
+      });
+      Promise.resolve().then(log('then')).then(log('then then'));
+    });
+  });
+  await row('an immediate the last immediate queues, with a microtask', (s, ev, log) => {
+    s.destroy();
+    setImmediate(() => {
+      ev.push('immediate');
+      queueMicrotask(log('microtask'));
+      setImmediate(log('next immediate'));
+    });
+  });
   console.log('done');
 })();

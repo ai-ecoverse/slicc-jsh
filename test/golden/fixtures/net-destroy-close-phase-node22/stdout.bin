@@ -6,4 +6,7 @@ two immediates after destroy() | sync, first immediate, second immediate, close
 an immediate from an immediate | sync, immediate, close, immediate from an immediate
 an immediate cleared again | sync, close, timeout 0
 destroy() inside an immediate | destroyed in an immediate, close, immediate after
+a tick and a microtask from the last immediate | immediate, tick, microtask, close
+microtasks and ticks queued by microtasks of the last immediate | immediate, microtask, then, microtask from a microtask, then then, tick from a microtask, close
+an immediate the last immediate queues, with a microtask | immediate, microtask, close, next immediate
 done
