@@ -30,13 +30,14 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 
 ## The `node` command
 
-- `node script.js`, `node -e`, `node -p`, `node -` (the program from stdin, even a terminal), and `node` with no script (the [REPL](#readline-and-the-repl) on a terminal, else the piped text as a script). `-i` forces the REPL.
+- `node script.js`, `node -e`, `node -p`, `node -pe`, `node -` (the program from stdin, even a terminal), and `node` with no script (the [REPL](#readline-and-the-repl) on a terminal, else the piped text as a script). `-i` forces the REPL.
 - `-r X` / `--require X` loads `X` first, from the working directory. Its require stack is `internal/preload`.
 - `--import X` loads the ES module `X` after the `-r` modules and before the entry, top-level `await` included.
 - `--input-type=module|commonjs` for `-e` and piped input. `--input-type=module-typescript` and `commonjs-typescript` fail: there's no TypeScript.
 - `--stack-trace-limit=N` sets `Error.stackTraceLimit`.
 - `--max-old-space-size=N`, `--trace-uncaught` and `--trace-sigint` are accepted. The kernel sets a program's memory, the uncaught report is the usual one, and no stack is printed on SIGINT.
 - A bad value for a V8 flag gets V8's report, followed by Node's `bad option` lines.
+- V8's flags take one dash as well as two (`-stack-trace-limit=5`); Node's own options need two. `-e` and `-p` take their code as the next argument, so `-econsole.log(1)` is a `bad option`, as in Node (golden `cli-single-dash-node22`).
 - Options after `-e`/`-p` are still node's, up to the first argument.
 - `NODE_OPTIONS` is read as Node 22 reads it: words with spaces, quotes and escapes; only the options Node allows there; its options before the command line's and out of `execArgv`; Node's errors.
 - Boolean options take `--x` and `--no-x`, and the last form wins. A value that looks like an option counts as missing (`--require --no-warnings`).

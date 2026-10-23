@@ -138,7 +138,7 @@ export function workerExecArgvError(execArgv) {
       invalid.push(word);
       continue;
     }
-    if (refusedInWorker(name)) {
+    if (refusedInWorker(name) || singleDashV8(word)) {
       invalid.push(word);
       continue;
     }
@@ -370,6 +370,15 @@ export function normalizeOption(word) {
   return word.slice(0, 2) + word.slice(2, end).replaceAll('_', '-') + word.slice(end);
 }
 
+const SINGLE_DASH_V8 = new Set(['stack-trace-limit', 'max-old-space-size']);
+
+function singleDashV8(word) {
+  if (!/^-[^-]/.test(word)) return null;
+  const eq = word.indexOf('=');
+  const name = word.slice(1, eq === -1 ? word.length : eq).replaceAll('_', '-');
+  return SINGLE_DASH_V8.has(name) ? `--${name}${eq === -1 ? '' : word.slice(eq)}` : null;
+}
+
 /** Node's: a value that looks like an option isn't one (`--require --no-warnings`). */
 const missingValue = (next) => next === undefined || next.startsWith('-');
 
@@ -404,7 +413,7 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
 
   while (i < args.length) {
     word = args[i];
-    arg = normalizeOption(word);
+    arg = singleDashV8(word) ?? normalizeOption(word);
     if (arg === '--') {
       userArgs.push(...args.slice(i + 1));
       break;
@@ -438,17 +447,12 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
       i += 1;
       continue;
     }
-    if (arg.startsWith('-e') && arg.length > 2) {
-      evalCode = word.slice(2);
-      print = false;
-      keep('-e', evalCode);
+    if (arg === '-pe') {
       i += 1;
-      continue;
-    }
-    if (arg.startsWith('-p') && arg.length > 2) {
+      if (missingValue(args[i])) return { error: `${argv0}: --eval requires an argument`, status: 9 };
       print = true;
-      evalCode = word.slice(2);
-      keep('-p', evalCode);
+      evalCode = args[i];
+      keep(arg, evalCode);
       i += 1;
       continue;
     }

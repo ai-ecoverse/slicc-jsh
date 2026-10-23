@@ -1,0 +1,72 @@
+== -econsole.log(1): status 9
+node: bad option: -econsole.log(1)
+== -pconsole.log(1): status 9
+node: bad option: -pconsole.log(1)
+== -rfs -e 1: status 9
+node: bad option: -rfs
+== -ifoo: status 9
+node: bad option: -ifoo
+== -cfoo: status 9
+node: bad option: -cfoo
+== -e1: status 9
+node: bad option: -e1
+== -stack-trace-limit=5 -e console.log(Error.stackTraceLimit, process.execArgv): status 0
+5 [
+  '-stack-trace-limit=5',
+  '-e',
+  'console.log(Error.stackTraceLimit, process.execArgv)'
+]
+== -stack_trace_limit=6 -e console.log(Error.stackTraceLimit): status 0
+6
+== -max-old-space-size=100 -e console.log(2): status 0
+2
+== -foo-bar -e 1: status 9
+node: bad option: -foo-bar
+== -no-warnings -e 1: status 9
+node: bad option: -no-warnings
+== -title=x -e console.log(process.title): status 9
+node: bad option: -title=x
+== -input-type=module -e console.log(typeof require): status 9
+node: bad option: -input-type=module
+== -pe 1+1: status 0
+2
+== -pe process.execArgv x: status 0
+[ '-pe', 'process.execArgv' ]
+== -pe -1: status 9
+node: --eval requires an argument
+== -ep 1+2: status 9
+node: bad option: -ep
+== -pe: status 9
+node: --eval requires an argument
+== -pe1: status 9
+node: bad option: -pe1
+== -e console.log(4) -pconsole.log(5): status 9
+node: bad option: -pconsole.log(5)
+== -stack-trace-limit=x -e 1: status 9
+Error: illegal value for flag -stack-trace-limit=x of type int
+Try --help for options
+node: bad option: -stack-trace-limit=x
+node: bad option: --harmony-import-attributes
+node: bad option: --no-harmony-import-assertions
+node: bad option: --experimental-wasm-imported-strings
+node: bad option: --experimental-wasm-memory64
+node: bad option: --experimental-wasm-exnref
+== -stack-trace-limit -e 1: status 9
+Error: illegal value for flag -stack-trace-limit of type int
+Try --help for options
+node: bad option: -stack-trace-limit
+node: bad option: --harmony-import-attributes
+node: bad option: --no-harmony-import-assertions
+node: bad option: --experimental-wasm-imported-strings
+node: bad option: --experimental-wasm-memory64
+node: bad option: --experimental-wasm-exnref
+== -max-old-space-size=-5 -e console.log(6): status 0
+6
+Error: Value for flag -max-old-space-size=-5 of type size_t is out of bounds [0-18446744073709551615]
+Try --help for options
+== NODE_OPTIONS=-stack-trace-limit=5 -e console.log(Error.stackTraceLimit): status 9
+node: -stack-trace-limit=5 is not allowed in NODE_OPTIONS
+== NODE_OPTIONS=-max-old-space-size=100 -e console.log(7): status 9
+node: -max-old-space-size=100 is not allowed in NODE_OPTIONS
+worker -stack-trace-limit=4 ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: -stack-trace-limit=4
+worker -max-old-space-size=4 ERR_WORKER_INVALID_EXEC_ARGV Initiated Worker with invalid execArgv flags: -max-old-space-size=4
