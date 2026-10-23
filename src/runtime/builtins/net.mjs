@@ -192,8 +192,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     get localPort() {
       return this.#localPort;
     }
+    #bytesRead = 0;
+
     get bytesRead() {
-      return this._readableState?.bytesRead ?? 0;
+      return this.#bytesRead;
     }
     get bytesWritten() {
       return this._writableState?.length ?? 0;
@@ -586,6 +588,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             value instanceof Uint8Array
               ? Buffer.from(value.buffer, value.byteOffset, value.byteLength)
               : Buffer.from(value);
+          this.#bytesRead += buf.length;
           const more = runInResource(this.#resource, this.push, this, [buf]);
           handles.notify();
           await Promise.resolve();
@@ -701,6 +704,16 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #send(bytes, callback) {
+      const taken = this.#writeNow(bytes);
+      if (taken.error) {
+        callback(taken.error);
+        return;
+      }
+      if (taken.n === bytes.length) {
+        callback();
+        return;
+      }
+      bytes = bytes.subarray(taken.n);
       this.#writing = callback;
       const settled = (err) => {
         if (this.#writing !== callback) return;
@@ -714,6 +727,17 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #writing = null;
+
+    #writeNow(bytes) {
+      const conn = this.#conn;
+      if (!conn || conn.tls || this.#tls || this.#detached || this.#unsettled > 0 || typeof ctx.sync?.write !== 'function') return { n: 0 };
+      try {
+        return { n: ctx.sync.write(conn.fd, bytes, { nonblock: true }) };
+      } catch (err) {
+        if ((err?.code ?? err?.cause?.code) === 'EAGAIN') return { n: 0 };
+        return { error: this[kIoError]?.(err) ?? errnoError(err, 'write') };
+      }
+    }
 
     #flushFinal() {
       if (this.destroyed) return;

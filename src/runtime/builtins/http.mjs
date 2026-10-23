@@ -1924,7 +1924,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       for (;;) {
         let step;
         try {
-          step = dead || stopped || socket.destroyed ? 'stop' : body ? body.step() : buf.length > 0 ? parseOne() : 'wait';
+          step = dead || stopped ? 'stop' : body ? body.step() : socket.destroyed ? 'stop' : buf.length > 0 ? parseOne() : 'wait';
         } catch (err) {
           running = false;
           throw err;

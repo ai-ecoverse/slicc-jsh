@@ -27,13 +27,26 @@ const shot = (label, packets, { listener = false } = {}) =>
         s.destroy();
       });
     }
+    let served;
+    srv.on('connection', (s) => (served = s));
     srv.listen(0, '127.0.0.1', () => {
       const c = net.connect(srv.address().port, '127.0.0.1');
       let got = '';
       c.on('data', (d) => (got += d));
       const queue = [...packets];
+      let sent = 0;
       const send = () => {
-        if (queue.length) c.write(queue.shift(), () => setTimeout(send, 20));
+        if (!queue.length) return;
+        const packet = queue.shift();
+        sent += packet.length;
+        c.write(packet);
+        const start = Date.now();
+        const read = () => {
+          if (served?.destroyed) return;
+          if ((served?.bytesRead ?? 0) < sent && Date.now() - start < 5000) return setTimeout(read, 5);
+          setTimeout(send, 20);
+        };
+        read();
       };
       c.on('connect', send);
       const bound = setTimeout(() => {
