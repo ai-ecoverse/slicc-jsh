@@ -1,0 +1,6 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#985: a tls.Server or https.Server without a certificate waits for the client's hello, as Node 22: a client that says hello gets alert 40 and the server ERR_SSL_NO_SUITABLE_SIGNATURE_ALGORITHM, and a client that stays silent is still open at handshakeTimeout",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}

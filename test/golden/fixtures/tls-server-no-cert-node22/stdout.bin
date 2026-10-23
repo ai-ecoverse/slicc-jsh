@@ -1,0 +1,9 @@
+tls.Server, a client that says hello
+  server tlsClientError ERR_SSL_NO_SUITABLE_SIGNATURE_ALGORITHM | SSL routines | no suitable signature algorithm, destroyed true
+  client error ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE | SSL routines | ssl/tls alert handshake failure
+https.Server, a client that says hello
+  server tlsClientError ERR_SSL_NO_SUITABLE_SIGNATURE_ALGORITHM | SSL routines | no suitable signature algorithm
+  client error
+tls.Server, a client that stays silent
+  server tlsClientError ERR_TLS_HANDSHAKE_TIMEOUT, destroyed false
+  client end
