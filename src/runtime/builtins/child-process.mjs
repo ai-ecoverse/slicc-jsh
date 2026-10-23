@@ -590,6 +590,10 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     get _closing() {
       return this.#closing;
     }
+
+    get _refed() {
+      return this.#refed;
+    }
   }
 
   /** Create pipe Readable immediately (Node exposes .stdout before spawn finishes). */
@@ -731,7 +735,50 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     }
   }
 
-  function connectStdio(child, kernelChild, files, sharedFd) {
+  function servePipe(fd, file) {
+    let wake = null;
+    let draining = null;
+    const done = (async () => {
+      try {
+        for (;;) {
+          if (draining) {
+            const { read } = await ctx.select({ read: [fd], timeoutMs: 0 });
+            if (!read.length) {
+              draining();
+              draining = null;
+            }
+          }
+          if (!draining) {
+            wake = new AbortController();
+            try {
+              await ctx.select({ read: [fd] }, { signal: wake.signal });
+            } catch (err) {
+              if (!wake.signal.aborted) throw err;
+              continue;
+            } finally {
+              wake = null;
+            }
+          }
+          const chunk = ctx.sync.read(fd);
+          if (!chunk?.length) break;
+          file.write(chunk);
+        }
+      } finally {
+        closeFds([fd]);
+      }
+    })().catch(() => {});
+    const drain = () =>
+      Promise.race([
+        done,
+        new Promise((resolve) => {
+          draining = resolve;
+          wake?.abort();
+        }),
+      ]);
+    return { done, drain };
+  }
+
+  function connectStdio(child, kernelChild, files, pipes) {
     child.stdin?._sliccAttach?.(kernelChild.stdin);
     const pumps = [];
     if (child.stdout?._sliccPump) pumps.push(child.stdout._sliccPump(kernelChild.stdout));
@@ -758,28 +805,15 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     } else {
       files[0]?.release?.();
     }
-    if (sharedFd != null) {
-      pumps.push(
-        (async () => {
-          try {
-            for (;;) {
-              const chunk = await ctx.read(sharedFd);
-              if (!chunk?.length) break;
-              files[1].write(chunk);
-            }
-          } finally {
-            closeFds([sharedFd]);
-          }
-        })().catch(() => {})
-      );
-    }
+    const served = pipes.map(([fd, file]) => servePipe(fd, file));
+    const streamed = [];
     for (const [i, web] of [
       [1, kernelChild.stdout],
       [2, kernelChild.stderr],
     ]) {
       const file = files[i];
       if (!file || !web) continue;
-      pumps.push(
+      streamed.push(
         (async () => {
           const reader = web.getReader();
           for (;;) {
@@ -790,7 +824,11 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
         })().catch(() => {})
       );
     }
-    child._stdioPumps = Promise.all(pumps).finally(() => files.forEach((f, i) => i > 0 && f?.release?.()));
+    child._stdioPumps = Promise.all(pumps);
+    child._filePumps = Promise.all([...streamed, ...served.map((s) => s.done)]).finally(() =>
+      files.forEach((f, i) => i > 0 && f?.release?.())
+    );
+    if (served.length || streamed.length) child._drainStdio = () => Promise.all([...streamed, ...served.map((s) => s.drain())]);
   }
 
   function safeEmit(child, event, ...args) {
@@ -826,8 +864,8 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       handles.notify?.();
       return;
     }
-    const after = (child._stdioPumps ?? Promise.resolve()).then(() => Promise.all([child.stdout, child.stderr].map(streamClosed)));
-    after.finally(() => {
+    const close = () => {
+      if (child._refed && child._filePumps) trackPromise(handles, child._filePumps);
       if (child._ipcClosed) {
         // The channel holds the program while it's open (it is ref'd).
         child._release();
@@ -835,11 +873,13 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
         child._ipcClosed.then(() => safeEmit(child, 'close', code, signal));
         return;
       }
-      const closeErr = safeEmit(child, 'close', code, signal);
+      safeEmit(child, 'close', code, signal);
       child._release();
       handles.notify?.();
-      if (closeErr) return;
-    });
+    };
+    const open = [child.stdout, child.stderr].some((stream) => stream?._sliccPump && !stream.destroyed && !stream.closed);
+    if (!open && !child._ipcClosed) return close();
+    (child._stdioPumps ?? Promise.resolve()).then(() => Promise.all([child.stdout, child.stderr].map(streamClosed))).finally(close);
   }
 
   function decodeWait(status) {
@@ -893,13 +933,15 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     // read, output once all of it is written); a device once the child has it.
     const releaseDirect = () => files.forEach((f, i) => direct[i] != null && f?.release?.());
     const shared = served[1] && served[2] && stdio[1] === stdio[2] ? sharedPipe() : null;
+    const outPipes = [null, shared ?? (served[1] ? sharedPipe() : null), shared ?? (served[2] ? sharedPipe() : null)];
+    const pipeFds = [...new Set(outPipes.filter(Boolean))];
     const request = {
       argv,
       cwd,
       env,
       stdin: direct[0] ?? kernelStdio(stdio[0], served[0]),
-      stdout: shared?.[1] ?? direct[1] ?? kernelStdio(stdio[1], served[1]),
-      stderr: shared?.[1] ?? direct[2] ?? kernelStdio(stdio[2], served[2]),
+      stdout: outPipes[1]?.[1] ?? direct[1] ?? kernelStdio(stdio[1], served[1]),
+      stderr: outPipes[2]?.[1] ?? direct[2] ?? kernelStdio(stdio[2], served[2]),
       // Node's detached on POSIX is setsid(): a new session and group, no
       // controlling terminal.
       ...(options.detached ? { session: true } : {}),
@@ -912,7 +954,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       try {
         pair = ctx.sync.socketpair();
       } catch (err) {
-        closeFds(shared ?? []);
+        closeFds(pipeFds.flat());
         releaseAll();
         process.nextTick(() => {
           safeEmit(child, 'error', err);
@@ -935,7 +977,12 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     };
 
     const run = (kernelChild) => {
-      connectStdio(child, kernelChild, served, shared?.[0]);
+      connectStdio(
+        child,
+        kernelChild,
+        served,
+        pipeFds.map((pipe) => [pipe[0], served[outPipes.indexOf(pipe)]])
+      );
       const spawnErr = safeEmit(child, 'spawn');
       if (spawnErr) return;
       const waitP = kernelChild.wait();
@@ -943,10 +990,14 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       waitP.then(
         (status) => {
           const { code, signal } = decodeWait(status);
-          const settling = child._ipcSettle?.();
-          if (!settling) return finish(child, code, signal);
-          // After the channel's end of file and its 'disconnect' tick.
-          trackPromise(handles, settling).then(() => later(() => finish(child, code, signal)));
+          const exited = () => {
+            const settling = child._ipcSettle?.();
+            if (!settling) return finish(child, code, signal);
+            // After the channel's end of file and its 'disconnect' tick.
+            trackPromise(handles, settling).then(() => later(() => finish(child, code, signal)));
+          };
+          if (child._drainStdio) child._drainStdio().then(exited);
+          else exited();
         },
         (err) => {
           if (isExitError(err)) return;
@@ -1007,7 +1058,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     try {
       kernelChild = ctx.sync.spawn(request);
     } catch (err) {
-      closeFds(shared ?? []);
+      closeFds(pipeFds.flat());
       // Node sets the channel up even so: send() is there, and its write
       // fails (EPIPE), the child's end being closed.
       closePair(false);
@@ -1016,7 +1067,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       failed(err);
       return;
     }
-    closeFds(shared ? [shared[1]] : []);
+    closeFds(pipeFds.map((pipe) => pipe[1]));
     closePair(false);
     releaseDirect();
     child._bindKernel(kernelChild);

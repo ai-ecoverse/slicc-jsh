@@ -1,0 +1,7 @@
+one-fd exit 0 100011, close 0, tick
+  a "<100000 x>\nchild err\ngrandchild after close\n"
+two-fds exit 0 100001 10, close 0, tick
+  a "<100000 x>\ngrandchild after close\n"
+  b "child err\n"
+stdout-fd exit 0 100001, close 0, tick
+  a "<100000 x>\ngrandchild after close\n"
