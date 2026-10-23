@@ -84,8 +84,8 @@ function loadCase(name) {
   return { name, dir, meta };
 }
 
-function withoutColorEnv(env) {
-  const { NO_COLOR, FORCE_COLOR, NODE_DISABLE_COLORS, ...rest } = env;
+function baselineEnv(env) {
+  const { NO_COLOR, FORCE_COLOR, NODE_DISABLE_COLORS, NODE_OPTIONS, ...rest } = env;
   return rest;
 }
 
@@ -103,7 +103,7 @@ function runNode22(argv, { cwd, stdin, env = {} } = {}) {
       cwd: cwd ?? root,
       // case.json `env` applies to Node too (on top of the caller's, less the
       // colour switches: the shim's environment has none unless the case sets them).
-      env: node22Env({ ...withoutColorEnv(process.env), npm_config_yes: 'true', ...env }),
+      env: node22Env({ ...baselineEnv(process.env), npm_config_yes: 'true', ...env }),
     });
     const out = { stdout: [], stderr: [] };
     let size = 0;
