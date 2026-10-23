@@ -1,0 +1,15 @@
+4 MiB before connect, content-length | write false needDrain=true length=4194390, socket, drain needDrain=false length=0, response 4194304
+16 KiB before connect | write true needDrain=false, socket, response 16384
+16 KiB - 1 before connect | write true needDrain=false, write true, socket, response 16384
+chunked, 64 KiB in four writes | write true, write true, write true, write false, socket, response 65536
+a small write, then end | write true, socket, response 2
+highWaterMark 1024 | write true write true, socket, response 2048
+65449 bytes, content-length | hwm 65536 header 84 write true length 65533
+65450 bytes, content-length | hwm 65536 header 84 write true length 65534
+65451 bytes, content-length | hwm 65536 header 84 write true length 65535
+65536 bytes, content-length | hwm 65536 header 84 write false length 65620
+65420 bytes, chunked | hwm 65536 header 89 write true length 65517
+65440 bytes, chunked | hwm 65536 header 89 write false length 65537
+65450 bytes, chunked | hwm 65536 header 89 write false length 65547
+array headers | write false needDrain=true length=100071, drain length=0, response 100000
+_implicitHeader() before the first write | write false needDrain=true length=100085, drain length=0, response 100000

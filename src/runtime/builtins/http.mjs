@@ -220,6 +220,7 @@ const kPending = Symbol('kPending');
 const kFinishQueued = Symbol('kFinishQueued');
 const kRequestListener = Symbol('kRequestListener');
 const kFetchTimer = Symbol('kFetchTimer');
+const kBuffered = Symbol('kBuffered');
 export const kFetchVia = Symbol('slicc-jsh.http.fetchVia');
 export const httpInternals = new WeakMap();
 
@@ -1041,7 +1042,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         msg[kDrainWait] = true;
         socket.once('drain', () => {
           msg[kDrainWait] = false;
-          if (!msg[kNeedDrain]) return;
+          if (!msg[kNeedDrain] || msg.finished) return;
           msg[kNeedDrain] = false;
           msg.emit('drain');
         });
@@ -1229,7 +1230,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     this[kChunkedBuffer] = [];
     this[kChunkedLength] = 0;
     this[kBatch] = null;
-    this[kHighWaterMark] = options?.highWaterMark ?? 16384;
+    this[kHighWaterMark] = options?.highWaterMark ?? stream.getDefaultHighWaterMark(false);
   }
   Object.setPrototypeOf(OutgoingMessage.prototype, Stream.prototype);
   Object.setPrototypeOf(OutgoingMessage, Stream);
@@ -1246,7 +1247,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     }),
     writableObjectMode: getter(() => false),
     writableLength: getter(function () {
-      return this.outputSize + this[kChunkedLength] + (this[kBatch]?.size ?? 0) + (this.socket ? this.socket.writableLength : 0);
+      return this.outputSize + this[kChunkedLength] + (this[kBatch]?.size ?? 0) + (this[kBuffered] ?? 0) + (this.socket ? this.socket.writableLength : 0);
     }),
     writableHighWaterMark: getter(function () {
       return this.socket ? this.socket.writableHighWaterMark : this[kHighWaterMark];
@@ -3226,6 +3227,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       if (!ownAgent) return false;
       this[kFetchMode] = true;
       this[kNoRouteError] = err;
+      this[kBuffered] = 0;
+      if (this[kNeedDrain] && !this.finished) {
+        this[kNeedDrain] = false;
+        process.nextTick(() => this.emit('drain'));
+      }
       try {
         this[kConnSocket]?.destroy?.();
       } catch {
@@ -3364,7 +3370,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       }
       const head = this[kRenderHead]();
       this._header = head.toString('latin1');
-      this[kConnSocket].write(Buffer.concat([head, framed]));
+      this[kBuffered] = 0;
+      const ok = socketWrite(this, this[kConnSocket], Buffer.concat([head, framed]), nop);
+      if (ok && this[kNeedDrain] && !this.finished) {
+        this[kNeedDrain] = false;
+        this.emit('drain');
+      }
     },
 
     [kWriteBody](buf, callback) {
@@ -3373,6 +3384,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       if (!this._headerSent && !this[kEnded] && !this[kFetchMode] && !this[kFetchVia]) {
         armChunked(this);
         this._header ||= this[kRenderHead]().toString('latin1');
+        this[kBuffered] ??= this._header.length;
+        this[kBuffered] += buf.length + (this[kChunkedOut] && buf.length ? buf.length.toString(16).length + 4 : 0);
+        if (this[kBuffered] >= this[kHighWaterMark]) this[kNeedDrain] = true;
       }
       // Content-Length known and socket up: start streaming now.
       if (!this._headerSent && this[kConnected] && (rawHeader(this, 'content-length') != null || this[kChunkedOut])) this[kFlushHead]();

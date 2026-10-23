@@ -1,0 +1,5 @@
+{
+  "description": "requestTimeout while an upload is still arriving, after the response has started (its head flushed, or some of a Content-Length or chunked body written), as Node 22: no 408, the socket destroyed, the request aborted with ECONNRESET and the response's close; with a clientError listener it gets ERR_HTTP_REQUEST_TIMEOUT first; before a response, a 408",
+  "argv": ["script.js"],
+  "shim": true
+}

@@ -1,0 +1,9 @@
+the response started | aborted, res close, req error ECONNRESET, req close | "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\npartial"
+only the head sent | aborted, res close, req error ECONNRESET, req close | "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+no response yet | aborted, res close, req error ECONNRESET, req close | "HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n"
+a chunked response started | aborted, res close, req error ECONNRESET, req close | "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n7\r\npartial\r\n"
+the response started, a clientError listener | clientError ERR_HTTP_REQUEST_TIMEOUT, aborted, res close, req error ECONNRESET, req close | "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\npartial"
+only the head sent, a clientError listener | clientError ERR_HTTP_REQUEST_TIMEOUT, aborted, res close, req error ECONNRESET, req close | "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\n\r\n"
+no response yet, a clientError listener | clientError ERR_HTTP_REQUEST_TIMEOUT, aborted, res close, req error ECONNRESET, req close | ""
+a chunked response started, a clientError listener | clientError ERR_HTTP_REQUEST_TIMEOUT, aborted, res close, req error ECONNRESET, req close | "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nTransfer-Encoding: chunked\r\n\r\n7\r\npartial\r\n"
+done
