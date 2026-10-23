@@ -54,6 +54,7 @@ const VALUED_FLAGS = [
   '--trace-event-categories',
   '--trace-event-file-pattern',
   '--max-http-header-size',
+  '--tls-keylog',
 ];
 const INPUT_TYPES = ['module', 'commonjs', 'module-typescript', 'commonjs-typescript'];
 

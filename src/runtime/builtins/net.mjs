@@ -343,8 +343,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#resource = resourceHere();
       const run = async () => {
         if (this.destroyed) return;
-        const { host, tls } = request.dial();
         const conn = await parent[kDetach](this);
+        const { host, tls } = request.dial();
         let secure;
         this.#handshaking = conn;
         try {
@@ -497,15 +497,18 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         signal = abort.signal;
       }
       const dial = (tls) => ctx.net.connect({ host, port, signal, ...(tls ? { tls } : {}) });
-      let dialled = dial(tlsRequest?.tls);
       // tls's first choice refused (the kernel path for a host the uplink
       // doesn't route): its second.
-      if (tlsRequest?.retry) {
-        dialled = dialled.catch((err) => {
+      const dialTls = () => {
+        const first = dial(tlsRequest.tls);
+        const retry = tlsRequest.retry;
+        if (!retry) return first;
+        return first.catch((err) => {
           if ((err?.code ?? err?.cause?.code) !== 'ENOTSUP') throw err;
-          return dial(tlsRequest.retry);
+          return dial(retry);
         });
-      }
+      };
+      const dialled = tlsRequest ? Promise.resolve().then(dialTls) : dial();
       const p = trackPromise(
         handles,
         dialled

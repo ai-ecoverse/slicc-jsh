@@ -446,7 +446,7 @@ function checkServerIdentity(hostname, cert) {
   return undefined;
 }
 
-export function createTls({ ctx, process, Buffer, net, getCrypto }) {
+export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
   // ctx.net.connect's `tls`: HTTP/1.1 and WebSocket over TLS through the
   // embedder's transport, which does the handshake and verifies the peer
   // (ai-ecoverse/slicc-kernel#923); to a host the uplink routes, the
@@ -468,6 +468,15 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
   };
 
   const isArrayBufferView = (v) => ArrayBuffer.isView(v);
+  const tlsKeylog = optionValue('--tls-keylog');
+  let warnOnTlsKeylog = true;
+  let warnOnTlsKeylogError = true;
+
+  const wantsKeylog = (socket) => socket.listenerCount('keylog') > 0;
+
+  function emitKeylog(socket, session) {
+    for (const line of session?.keylog ?? []) socket.emit('keylog', Buffer.from(`${line}\n`, 'latin1'));
+  }
 
   function convertProtocols(protocols) {
     const lens = new Array(protocols.length);
@@ -845,6 +854,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
    * `options`) onConnectSecure leave it. Returns the error to destroy with.
    */
   function takeSession(socket, session, options) {
+    emitKeylog(socket, session);
     socket._secureEstablished = true;
     socket.secureConnecting = false;
     socket.alpnProtocol = session.alpnProtocol || false;
@@ -1088,6 +1098,20 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       this.ssl = null;
       this[kALPNCallback] = null;
       this.server = tlsOptions.server;
+      if (tlsKeylog) {
+        if (warnOnTlsKeylog) {
+          warnOnTlsKeylog = false;
+          process.emitWarning(`Using --tls-keylog makes TLS connections insecure by writing secret key material to file ${tlsKeylog}`);
+        }
+        this.on('keylog', (line) => {
+          getFs().appendFile(tlsKeylog, line, { mode: 0o600 }, (err) => {
+            if (err && warnOnTlsKeylogError) {
+              warnOnTlsKeylogError = false;
+              process.emitWarning(`Failed to write TLS keylog (this warning will not be repeated): ${err}`);
+            }
+          });
+        });
+      }
       if (tlsOptions.isServer) {
         this._requestCert = Boolean(tlsOptions.requestCert);
         this._rejectUnauthorized = Boolean(tlsOptions.rejectUnauthorized);
@@ -1121,12 +1145,13 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       const request = serverRequest(context, tlsOptions, selects ? (offer) => this.#select(offer, context) : undefined);
       this[kStartTls](socket, {
         server: true,
-        dial: () => ({ tls: request }),
+        dial: () => ({ tls: wantsKeylog(this) ? { ...request, keylog: true } : request }),
         settled: () => {
           this[kHeld].settled = true;
           for (const release of this[kHeld].splice(0)) release();
         },
         check: (session) => {
+          emitKeylog(this, session);
           this._secureEstablished = true;
           this.alpnProtocol = session.alpnProtocol || false;
           this.servername = session.servername || false;
@@ -1260,7 +1285,8 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
           own = clientCredentials(context?.context);
           const servername = options.servername || tlsOptions.servername || options.host || socket._host;
           const tls = kernelRequest({ ...options, ALPNProtocols: tlsOptions.ALPNProtocols }, servername, ca);
-          return { host: options.host ?? socket._host, tls: { ...tls, ...kernelControlsOf(context, optionsNow()?.servername) } };
+          const keylog = wantsKeylog(this) ? { keylog: true } : {};
+          return { host: options.host ?? socket._host, tls: { ...tls, ...kernelControlsOf(context, optionsNow()?.servername), ...keylog } };
         },
         check: (session) => takeSession(this, session, optionsNow()),
         refusedSession: (err) => {
@@ -1449,6 +1475,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
         SNICallback: this[kSNICallback] || SNICallback,
       });
       socket.on('secure', onServerSocketSecure);
+      if (this.listenerCount('keylog') > 0) socket.on('keylog', onSocketKeylog);
       socket[kErrorEmitted] = false;
       socket.on('close', onSocketClose);
       socket.on('_tlsError', onSocketTLSError);
@@ -1460,6 +1487,9 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       rawSocket.destroy?.();
       this.emit('tlsClientError', err, rawSocket);
     });
+  }
+  function onSocketKeylog(line) {
+    this._tlsOptions.server.emit('keylog', line, this);
   }
   function onServerSocketSecure() {
     if (this._requestCert) {
@@ -1651,14 +1681,21 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     const preferKernel =
       port !== 443 || options.rejectUnauthorized === false || options.checkServerIdentity !== checkServerIdentity || own !== undefined;
     const what = `tls.connect to ${host}:${port}`;
+    let keylog = false;
     Reflect.apply(net.Socket.prototype.connect, socket, [
       {
         host,
         port,
         signal: options.signal,
         [kConnectTls]: {
-          tls: preferKernel ? { ...tls, ...kernelControlsOf(context, options.servername), path: 'kernel' } : tls,
-          ...(preferKernel && !own ? { retry: tls } : {}),
+          get tls() {
+            keylog = wantsKeylog(socket);
+            if (!preferKernel && !keylog) return tls;
+            return { ...tls, ...kernelControlsOf(context, options.servername), path: 'kernel', ...(keylog ? { keylog: true } : {}) };
+          },
+          get retry() {
+            return (preferKernel || keylog) && !own ? tls : undefined;
+          },
           check: (session) => takeSession(socket, session, options),
           refusedSession: (err) => {
             socket[kVerifyError] = err;

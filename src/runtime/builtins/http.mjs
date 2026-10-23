@@ -192,6 +192,7 @@ const kSocketWrite = Symbol('kSocketWrite');
 const kUncorkWire = Symbol('kUncorkWire');
 const kDrainWait = Symbol('kDrainWait');
 const kOnFree = Symbol('kOnFree');
+const kOnKeylog = Symbol('onkeylog');
 const kHandoff = Symbol('kHandoff');
 const kOpts = Symbol('kOpts');
 const kChunks = Symbol('kChunks');
@@ -2486,6 +2487,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     // Node's _http_agent.js: a socket whose response is done comes back
     // here: to the next queued request, else to the free pool.
     this.on('free', (socket, options) => this[kOnFree](socket, options));
+    this.on('newListener', maybeEnableKeylog);
+  }
+  function maybeEnableKeylog(eventName) {
+    if (eventName !== 'keylog') return;
+    this.removeListener('newListener', maybeEnableKeylog);
+    const agent = this;
+    this[kOnKeylog] = function onkeylog(keylog) {
+      agent.emit('keylog', keylog, this);
+    };
+    for (const list of Object.values(this.sockets)) for (const s of list) s.on('keylog', this[kOnKeylog]);
   }
   Object.setPrototypeOf(Agent.prototype, EventEmitter.prototype);
   Object.setPrototypeOf(Agent, EventEmitter);
@@ -2651,6 +2662,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         s.on?.('free', onFree);
         s.on?.('timeout', onTimeout);
         s.on?.('agentRemove', onRemove);
+        if (this[kOnKeylog]) s.on?.('keylog', this[kOnKeylog]);
         cb(null, s);
       };
 

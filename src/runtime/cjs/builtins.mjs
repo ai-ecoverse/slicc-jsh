@@ -232,7 +232,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
     return https;
   };
   let tls;
-  const getTls = () => (tls ??= createTls({ ctx, process, Buffer, net: getNet(), getCrypto: () => getCrypto() }));
+  const getTls = () => (tls ??= createTls({ ctx, process, Buffer, net: getNet(), getCrypto: () => getCrypto(), getFs: () => fs }));
   let dns;
   const getDns = () => (dns ??= createDns({ ctx, process, handles, hostname: process._nodeLib().os.hostname() }));
   let inspector;
