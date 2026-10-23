@@ -4,6 +4,12 @@ an immediate's queueMicrotask | timeout 0, immediate
 a nextTick from an immediate's promise continuation | timeout 0, immediate
 a promise continuation from an immediate's nextTick | timeout 0, immediate
 a nextTick in a nextTick from an immediate's promise continuation | timeout 0, immediate
+a readFile callback started from an immediate | immediate, timeout 0
+a readFile callback started from an immediate's promise continuation | immediate, timeout 0
+a stat callback's promise continuation, started from an immediate | immediate, timeout 0
+an exists callback started from an immediate | immediate, timeout 0
+an awaited fs.promises.realpath started from an immediate | immediate, timeout 0
+an awaited fs.promises.stat started from an immediate | immediate, timeout 0
 a timer's promise continuation | immediate, timeout 0
 a timer's third await | immediate, timeout 0
 a nextTick from a timer's promise continuation | immediate, timeout 0

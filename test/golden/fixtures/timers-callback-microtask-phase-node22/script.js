@@ -18,6 +18,12 @@ const row = (label, start) => new Promise((done) => {
   await row("a nextTick from an immediate's promise continuation", (out) => setImmediate(() => Promise.resolve().then(() => process.nextTick(() => both(out)))));
   await row("a promise continuation from an immediate's nextTick", (out) => setImmediate(() => process.nextTick(() => Promise.resolve().then(() => both(out)))));
   await row("a nextTick in a nextTick from an immediate's promise continuation", (out) => setImmediate(() => Promise.resolve().then(() => process.nextTick(() => process.nextTick(() => both(out))))));
+  await row("a readFile callback started from an immediate", (out) => setImmediate(() => fs.readFile(__filename, () => both(out))));
+  await row("a readFile callback started from an immediate's promise continuation", (out) => setImmediate(() => Promise.resolve().then(() => fs.readFile(__filename, () => both(out)))));
+  await row("a stat callback's promise continuation, started from an immediate", (out) => setImmediate(() => fs.stat(__filename, () => Promise.resolve().then(() => both(out)))));
+  await row("an exists callback started from an immediate", (out) => setImmediate(() => fs.exists(__filename, () => both(out))));
+  await row("an awaited fs.promises.realpath started from an immediate", (out) => setImmediate(async () => { await fs.promises.realpath(__filename); both(out); }));
+  await row("an awaited fs.promises.stat started from an immediate", (out) => setImmediate(async () => { await fs.promises.stat(__filename); both(out); }));
   await row("a timer's promise continuation", (out) => setTimeout(() => Promise.resolve().then(() => both(out)), 1));
   await row("a timer's third await", (out) => setTimeout(async () => { await null; await null; await null; both(out); }, 1));
   await row("a nextTick from a timer's promise continuation", (out) => setTimeout(() => Promise.resolve().then(() => process.nextTick(() => both(out))), 1));
