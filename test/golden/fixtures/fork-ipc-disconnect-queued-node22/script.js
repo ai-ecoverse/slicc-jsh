@@ -12,12 +12,16 @@ const run = (label, size) =>
     const cp = fork(__filename);
     const seen = [];
     cp.on('error', (e) => seen.push(`error ${e.code}`));
-    cp.on('spawn', () => {
+    cp.on('spawn', () => setTimeout(() => {
       const ok = cp.send({ body: 'x'.repeat(size) }, (err) => seen.push(`callback ${err ? err.code : null}`));
-      cp.send('after it');
+      cp.send('after it', (err) => seen.push(`second callback ${err ? err.code : null}`));
       cp.disconnect();
       seen.push(`send ${ok}`, `connected ${cp.connected}`);
-    });
+      process.nextTick(() => seen.push('tick'));
+      Promise.resolve().then(() => seen.push('microtask'));
+      setImmediate(() => seen.push('immediate'));
+      setTimeout(() => seen.push('timeout'), 0);
+    }, 1));
     cp.on('exit', (code) => {
       setImmediate(() => {
         console.log(`${label} | ${seen.join(' | ')} | the child got ${code}`);

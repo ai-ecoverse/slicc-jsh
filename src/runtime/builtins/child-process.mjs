@@ -393,7 +393,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
   /** The parent's end of a channel: Node's setupChannel on the kernel fd. */
   function setupIpc(child, fd, serializationMode) {
     const serialization = process._nodeLib().childProcessSerialization;
-    const channel = channelOn({ ctx, handles, serialization, fd, process });
+    const channel = channelOn({ ctx, handles, serialization, fd, process, timers });
     let closed;
     let ended = false;
     // The channel's end of file, or the parent's own close of it.
