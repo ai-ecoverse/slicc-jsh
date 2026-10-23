@@ -1,0 +1,6 @@
+{
+  "description": "FileHandle.read and fs.read with the buffer in the options object, with options but no buffer, and with no arguments (a 16384-byte buffer), beside fs.readSync and the read forms with a buffer and options: bytes, counts, the buffer given back and its size",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

@@ -683,7 +683,14 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     return bytes.length;
   }
 
+  function readParams(params) {
+    const { buffer = Buffer.alloc(16384), offset = 0, length = buffer.byteLength - offset, position = null } = params ?? {};
+    return { buffer, bufOffset: offset, length, position };
+  }
+
   function parseReadCallbackArgs(buffer, offset, length, position, callback) {
+    if (typeof buffer === 'function') return { ...readParams(), callback: buffer };
+    if (!ArrayBuffer.isView(buffer) && typeof offset === 'function') return { ...readParams(buffer), callback: offset };
     if (typeof offset === 'function') {
       return { bufOffset: 0, length: buffer.length, position: null, callback: offset };
     }
@@ -2326,6 +2333,11 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       fd,
       async read(buffer, offset, length, position) {
         ensureOpen('read');
+        if (!ArrayBuffer.isView(buffer)) {
+          const params = readParams(buffer);
+          const bytesRead = syncApi.readSync(fd, params.buffer, params.bufOffset, params.length, params.position);
+          return { bytesRead, buffer: params.buffer };
+        }
         if (isPlainOptionsObject(offset)) {
           const opts = offset;
           const bytesRead = syncApi.readSync(fd, buffer, opts);
@@ -2714,16 +2726,17 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       validatedFd(fd);
       const parsed = parseReadCallbackArgs(buffer, offset, length, position, callback);
       const cb = requireCallback(parsed.callback);
+      const target = parsed.buffer ?? buffer;
       queueMicrotask(() => {
         try {
           const bytesRead = syncApi.readSync(
             fd,
-            buffer,
+            target,
             parsed.bufOffset,
             parsed.length,
             parsed.position
           );
-          cb(null, bytesRead, buffer);
+          cb(null, bytesRead, target);
         } catch (err) {
           cb(err);
         }
@@ -2889,6 +2902,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
       COPYFILE_FICLONE_FORCE: 4,
     },
   };
+  Object.defineProperty(fsModule.read, kCustomPromisifyArgs, { value: ['bytesRead', 'buffer'], enumerable: false });
+  Object.defineProperty(fsModule.write, kCustomPromisifyArgs, { value: ['bytesWritten', 'buffer'], enumerable: false });
   const statWatchers = createStatWatchers({
     process,
     path,
