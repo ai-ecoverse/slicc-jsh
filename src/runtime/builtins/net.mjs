@@ -485,7 +485,18 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this._host = host;
       const tlsRequest = options[kConnectTls];
       this.#tls = Boolean(tlsRequest);
-      const dial = (tls) => ctx.net.connect({ host, port, signal: options.signal, ...(tls ? { tls } : {}) });
+      let signal = options.signal;
+      let unfollow = () => {};
+      if (tlsRequest) {
+        const abort = new AbortController();
+        this.#dialAbort = abort;
+        const follow = () => abort.abort(options.signal.reason);
+        options.signal?.addEventListener('abort', follow, { once: true });
+        unfollow = () => options.signal?.removeEventListener('abort', follow);
+        if (options.signal?.aborted) abort.abort(options.signal.reason);
+        signal = abort.signal;
+      }
+      const dial = (tls) => ctx.net.connect({ host, port, signal, ...(tls ? { tls } : {}) });
       let dialled = dial(tlsRequest?.tls);
       // tls's first choice refused (the kernel path for a host the uplink
       // doesn't route): its second.
@@ -498,6 +509,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       const p = trackPromise(
         handles,
         dialled
+          .finally(() => {
+            this.#dialAbort = null;
+            unfollow();
+          })
           .then((conn) => {
             if (this.destroyed) {
               void conn.close();
@@ -764,6 +779,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #tlsParent = null;
+    #dialAbort = null;
     #handshaking = null;
 
     #finalError() {
@@ -849,6 +865,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       if (this.#idleTimer) clearTimeout(this.#idleTimer);
       this.#idleTimer = null;
       void this.#handshaking?.close?.().catch(() => {});
+      this.#dialAbort?.abort();
       // Handed to a TLS socket, the connection is that socket's to close.
       if (this.#detached) {
         this.#conn = undefined;

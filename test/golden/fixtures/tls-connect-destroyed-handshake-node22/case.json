@@ -1,0 +1,6 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#987: a tls.connect destroyed during its handshake closes its connection at once, as Node 22: a server that never answers the hello sees the client leave, and a tls.Server whose SNICallback answers after the client left gets tlsClientError ECONNRESET, never secureConnection",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}
