@@ -37,5 +37,6 @@ srv.listen(0, '127.0.0.1', async () => {
     c.on('finish', () => log.push('finish'));
     c.end(() => log.push('end callback'));
   });
+  await row('end(data, cb)', nothing, (c, log) => c.end('x', () => log.push('end callback')));
   srv.close(() => console.log('done'));
 });

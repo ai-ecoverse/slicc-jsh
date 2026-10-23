@@ -1,5 +1,5 @@
 {
-  "description": "a net socket's end() callback and 'finish' come in the turn of the end(), after its ticks and before its immediates, as Node 22's shutdown completes before the check phase: end(cb) with nothing written, after a write that has called back, and with 'finish'",
+  "description": "a net socket's end() callback and 'finish' come in the turn of the end(), after its ticks and before its immediates, as Node 22's shutdown completes before the check phase: end(cb) with nothing written, after a write that has called back, end(data, cb), and with 'finish'",
   "argv": ["script.js"],
   "shim": true
 }
