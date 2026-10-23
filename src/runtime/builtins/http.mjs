@@ -3212,6 +3212,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       if (!ownAgent) return false;
       this[kFetchMode] = true;
       this[kNoRouteError] = err;
+      this[kBuffered] = 0;
+      if (this[kNeedDrain] && !this.finished) {
+        this[kNeedDrain] = false;
+        process.nextTick(() => this.emit('drain'));
+      }
       try {
         this[kConnSocket]?.destroy?.();
       } catch {
@@ -3363,10 +3368,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       this[kChunks].push(buf);
       if (!this._headerSent && !this[kEnded] && !this[kFetchMode] && !this[kFetchVia]) {
         armChunked(this);
-        if (!this._header) {
-          this._header = this[kRenderHead]().toString('latin1');
-          this[kBuffered] = this._header.length;
-        }
+        this._header ||= this[kRenderHead]().toString('latin1');
+        this[kBuffered] ??= this._header.length;
         this[kBuffered] += buf.length + (this[kChunkedOut] && buf.length ? buf.length.toString(16).length + 4 : 0);
         if (this[kBuffered] >= this[kHighWaterMark]) this[kNeedDrain] = true;
       }

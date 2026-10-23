@@ -11,3 +11,5 @@ highWaterMark 1024 | write true write true, socket, response 2048
 65420 bytes, chunked | hwm 65536 header 89 write true length 65517
 65440 bytes, chunked | hwm 65536 header 89 write false length 65537
 65450 bytes, chunked | hwm 65536 header 89 write false length 65547
+array headers | write false needDrain=true length=100071, drain length=0, response 100000
+_implicitHeader() before the first write | write false needDrain=true length=100085, drain length=0, response 100000

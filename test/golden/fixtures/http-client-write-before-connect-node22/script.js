@@ -24,5 +24,26 @@ srv.listen(0, '127.0.0.1', async () => {
   });
   for (const n of [65449, 65450, 65451, 65536]) await one(n, false);
   for (const n of [65420, 65440, 65450]) await one(n, true);
+  const preset = (label, opts, before) =>
+    new Promise((resolve) => {
+      const ev = [];
+      const req = http.request({ host: '127.0.0.1', port: srv.address().port, method: 'POST', agent: false, ...opts }, (res) => {
+        let b = '';
+        res.on('data', (d) => (b += d));
+        res.on('end', () => {
+          ev.push(`response ${b}`);
+          console.log(`${label} | ${ev.join(', ')}`);
+          resolve();
+        });
+      });
+      req.on('drain', () => {
+        ev.push(`drain length=${req.writableLength}`);
+        req.end();
+      });
+      before?.(req);
+      ev.push(`write ${req.write(Buffer.alloc(100000))} needDrain=${req.writableNeedDrain} length=${req.writableLength}`);
+    });
+  await preset('array headers', { headers: ['Content-Length', '100000', 'Host', 'x'] });
+  await preset('_implicitHeader() before the first write', { headers: { 'Content-Length': '100000' } }, (req) => req._implicitHeader());
   srv.close();
 });

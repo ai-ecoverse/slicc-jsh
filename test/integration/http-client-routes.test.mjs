@@ -171,6 +171,30 @@ describe('http.request without a route: through ctx.fetch', () => {
     assert.equal(hit?.body, 'payload');
   });
 
+  it('a write past the high water mark before the fetch fallback still gets its drain, and the whole body goes', async () => {
+    const base = `http://host.slicc.internal:${port}`;
+    await jsh.kernel.writeFile(
+      '/os/drainfetch.js',
+      program([
+        "const http = require('http');",
+        "const stuck = setTimeout(() => { console.log('no drain'); process.exit(0); }, 20000);",
+        'await new Promise((resolve) => {',
+        `  const req = http.request('${base}/drain', { method: 'POST' }, (res) => { res.resume(); res.on('end', resolve); });`,
+        "  req.on('error', (e) => { console.log('error', e.code); resolve(); });",
+        "  req.once('drain', () => { console.log('drain', req.writableNeedDrain); console.log('write', req.write(Buffer.alloc(65536, 98))); req.end(); });",
+        "  console.log('write', req.write(Buffer.alloc(65536, 97)));",
+        '});',
+        'clearTimeout(stuck);',
+        "console.log('sent');",
+      ])
+    );
+    const r = await jsh.run(['node', 'drainfetch.js']);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(r.stdout, 'write false\ndrain false\nwrite true\nsent\n');
+    const hit = seen.find((row) => row.url === '/drain');
+    assert.equal(hit?.body.length, 131072);
+  });
+
   it('req.destroy() before the response aborts the fetch; a custom agent gets the connect error', async () => {
     const base = `http://host.slicc.internal:${port}`;
     await jsh.kernel.writeFile(
