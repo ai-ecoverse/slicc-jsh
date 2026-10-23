@@ -1,0 +1,10 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#958, ai-ecoverse/slicc-jsh#959: a connection a tls.Server keeps after handshakeTimeout sees its peer close, as Node 22: the client's end or destroy ends the server socket, which ends its side and closes, with a tlsClientError listener or without one, and server.close calls back; what the program writes to it meanwhile never reaches the client, and holds its end",
+  "argv": [
+    "main.js"
+  ],
+  "shim": true,
+  "packages": [
+    "@ai-ecoverse/wasm-tls-engine"
+  ]
+}

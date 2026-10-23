@@ -334,7 +334,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         } catch (err) {
           const refusal = request.refused(err);
           if (refusal && request.keeps?.(refusal)) {
-            this.#conn = conn;
+            this.#keep(conn);
             request.kept(refusal);
             return;
           }
@@ -395,6 +395,17 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     /** A lazy kStartTls's handshake, now. */
     [kStartNow]() {
       this.#startOnWrite?.();
+    }
+
+    #kept = false;
+
+    #keep(conn) {
+      this.#kept = true;
+      this.#conn = conn;
+      this.#reader = conn.readable.getReader();
+      this.#handle = { kind: 'socket', fd: conn.fd };
+      if (this.#refed) handles.add(this.#handle);
+      void this.#pumpRead();
     }
 
     /** @internal Whether the socket has its kernel connection. */
@@ -568,6 +579,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             runInResource(this.#resource, this.#endRead, this, []);
             break;
           }
+          if (this.#kept) continue;
           const buf =
             value instanceof Uint8Array
               ? Buffer.from(value.buffer, value.byteOffset, value.byteLength)
@@ -637,6 +649,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     _write(chunk, encoding, callback) {
       if (this.#idleTimer) this._touch();
       const bytes = toBytes(chunk, encoding);
+      if (this.#kept) return;
       if (!this.#writer) {
         if (this.#connecting && this.#tls) {
           this.#pending.push({ bytes, callback: () => {} });
@@ -731,6 +744,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
 
     _final(callback) {
       this.#ended = true;
+      if (this.#kept && !this.#writer) this.#writer = this.#conn.writable.getWriter();
       // Half-close the send side only (Node socket.end / SHUT_WR). Raw ctx.net
       // delivers reader `done` to the peer after writer.close(); also calling
       // conn.close() here races and often surfaces as EBADF on the peer instead
