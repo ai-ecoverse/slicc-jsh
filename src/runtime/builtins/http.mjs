@@ -3468,7 +3468,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       } else if (!this._headerSent) {
         // No Content-Length: buffer until end, then send with computed CL.
         if (this[kConnected]) this[kFlushHead]();
-        // else: connect handler will flush once the socket is up
+        else this._header ||= this[kRenderHead]().toString('latin1');
       } else if (this[kChunkedOut]) {
         const parts = [];
         for (const part of this[kChunks]) if (part.length) parts.push(chunkFrame(part));

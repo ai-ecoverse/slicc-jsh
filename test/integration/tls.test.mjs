@@ -67,7 +67,7 @@ server.listen(0, '127.0.0.1', () => {
     assert.deepEqual(lines.slice(2).sort(), ['client close 1000 done', 'server close 1000 done', 'server closed']);
   });
 
-  it("a connection a tls.Server gets is a failed handshake: 'tlsClientError' with ERR_NOT_SUPPORTED and the socket destroyed, an https.Server's 'clientError', the client closed (#792)", async () => {
+  it("a connection a tls.Server without a certificate gets is a failed handshake: 'tlsClientError' with Node's no suitable signature algorithm and the socket destroyed, an https.Server's 'clientError', the client closed (#792, #758)", async () => {
     const r = await jsh.run([
       'node',
       '-e',
@@ -111,18 +111,18 @@ process.on('uncaughtException', (e) => console.log('uncaught', e.code));
     assert.equal(r.status, 0);
     assert.deepEqual(r.stdout.trimEnd().split('\n'), [
       'a listener given, destroyed at once false',
-      'tlsClientError ERR_NOT_SUPPORTED true true',
+      'tlsClientError ERR_SSL_NO_SUITABLE_SIGNATURE_ALGORITHM true true',
       'a listener client close',
       'no listener given, destroyed at once false',
       'no listener client close',
       'https given, destroyed at once false',
-      'https clientError ERR_NOT_SUPPORTED true',
+      'https clientError ERR_SSL_NO_SUITABLE_SIGNATURE_ALGORITHM true',
       'https client close',
       'tlsConnectionListener',
     ]);
   });
 
-  it('a handshake throws ERR_NOT_SUPPORTED when it is called: connect, listen, an https.Server\'s listen, a TLSSocket over a socket, key material', async () => {
+  it('what the kernel has no handshake for throws ERR_NOT_SUPPORTED when it is called, and a tls.Server and an https.Server listen (#758)', async () => {
     const r = await jsh.run([
       'node',
       '-e',
@@ -151,7 +151,11 @@ t('createSecureContext ca', () => tls.createSecureContext({ ca: ['c'] }));
 t('createServer key', () => tls.createServer({ key: 'k', cert: 'c' }));
 t('createSecurePair', () => tls.createSecurePair());
 t('https.createServer', () => https.createServer());
-t('https listen', () => https.createServer().listen(0));
+const web = https.createServer();
+t('https listen', () => web.listen(0));
+console.log('https listening', web.listening);
+server.close();
+web.close();
 const httpsServer = new https.Server();
 console.log('https.Server', httpsServer instanceof tls.Server, Object.getPrototypeOf(https.Server.prototype) === tls.Server.prototype, https.Server !== require('http').Server, httpsServer.listening);
 `,
@@ -162,8 +166,8 @@ console.log('https.Server', httpsServer instanceof tls.Server, Object.getPrototy
       'loaded function',
       'connect no throw',
       'connect options no throw',
-      `listen ERR_NOT_SUPPORTED slicc-jsh: 'tls.Server.listen' is not supported yet ${why}`,
-      'listening false',
+      'listen no throw',
+      'listening true',
       'TLSSocket over a socket no throw',
       `TLSSocket connect ERR_NOT_SUPPORTED slicc-jsh: 'tls.TLSSocket.connect' is not supported yet ${why}`,
       'createSecureContext cert ERR_OSSL_PEM_BAD_END_LINE error:04800066:PEM routines::bad end line',
@@ -172,7 +176,8 @@ console.log('https.Server', httpsServer instanceof tls.Server, Object.getPrototy
       'createServer key ERR_OSSL_PEM_NO_START_LINE error:0480006C:PEM routines::no start line',
       `createSecurePair ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecurePair' is not supported yet ${why}`,
       'https.createServer no throw',
-      `https listen ERR_NOT_SUPPORTED slicc-jsh: 'tls.Server.listen' is not supported yet ${why}`,
+      'https listen no throw',
+      'https listening true',
       'https.Server true true true false',
       '',
     ]);

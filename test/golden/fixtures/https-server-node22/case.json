@@ -1,0 +1,6 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#758: tls and https servers listen on the kernel's TLS server sessions (slicc-kernel 1.149.0) with the program's own certificate and key: https.get round trips with the self-signed cert as ca, refused without it; an encrypted key with its passphrase, a wrong or missing passphrase and a key for another certificate thrown at createServer; mutual TLS with requestCert and a ca, a client cert the ca issued authorized, a self-signed one and none refused with Node's tlsClientError and never reaching the handler, and with rejectUnauthorized false let in with Node's authorizationError; ALPN by the server's preference, and none in common refused; an Express app over https",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine", "express"]
+}

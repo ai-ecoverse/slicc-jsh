@@ -72,6 +72,7 @@ export const kStartTls = Symbol('slicc-jsh.net.startTls');
 export const kStartNow = Symbol('slicc-jsh.net.startNow');
 /** A TLS socket's error for a failed read or write (a fatal alert), or undefined for errnoError's. */
 export const kIoError = Symbol('slicc-jsh.net.ioError');
+export const kServesTls = Symbol('slicc-jsh.net.servesTls');
 
 /** A server-side socket's server (Node's socket._server), told when the socket goes. */
 const kServer = Symbol('slicc-jsh.net.server');
@@ -253,7 +254,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     /** Bind an already-open kernel connection (server accept path). */
-    _attach(conn, { quiet = false } = {}) {
+    _attach(conn, { quiet = false, deferRead = false } = {}) {
       this.#conn = conn;
       this.#remoteAddress = conn.remote?.host;
       this.#remotePort = conn.remote?.port;
@@ -265,7 +266,12 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#reader = conn.readable.getReader();
       this.#handle = { kind: 'socket', fd: conn.fd };
       handles.add(this.#handle);
-      void this.#pumpRead();
+      if (!deferRead) void this.#pumpRead();
+      else {
+        nextTick(() => {
+          if (!this.#detached && this.#reader) void this.#pumpRead();
+        });
+      }
       if (quiet) return;
       runInResource(this.#resource, this.#emitConnect, this, []);
     }
@@ -320,12 +326,22 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         const { host, tls } = request.dial();
         const conn = await parent[kDetach](this);
         let secure;
+        this.#handshaking = conn;
         try {
-          secure = await ctx.net.connect({ socket: conn, ...(host ? { host } : {}), tls });
+          const dialled = request.server ? ctx.net.secure(conn, tls) : ctx.net.connect({ socket: conn, ...(host ? { host } : {}), tls });
+          secure = await dialled;
         } catch (err) {
           // The connection is this socket's now: it goes with the failed handshake.
           void conn.close?.().catch(() => {});
-          throw request.refused(err) ?? errnoError(err, 'connect');
+          const refusal = request.refused(err);
+          if (refusal === null) {
+            this.connecting = false;
+            if (!this.destroyed) this.destroy();
+            return;
+          }
+          throw refusal ?? errnoError(err, 'connect');
+        } finally {
+          this.#handshaking = null;
         }
         if (this.destroyed) {
           void secure.close?.().catch(() => {});
@@ -647,6 +663,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #tlsParent = null;
+    #handshaking = null;
 
     #finalError() {
       if (!this.#pending.length) return nodeError(Error, 'ERR_STREAM_DESTROYED', 'Cannot call end after a stream was destroyed');
@@ -723,6 +740,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       }
       if (this.#idleTimer) clearTimeout(this.#idleTimer);
       this.#idleTimer = null;
+      void this.#handshaking?.close?.().catch(() => {});
       // Handed to a TLS socket, the connection is that socket's to close.
       if (this.#detached) {
         this.#conn = undefined;
@@ -1043,7 +1061,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           const socket = new Socket({ allowHalfOpen: Boolean(this.allowHalfOpen) });
           this.#connections++;
           socket[kServer] = this;
-          socket._attach(conn);
+          socket._attach(conn, { deferRead: this[kServesTls] === true });
           runInResource(resource, this.emit, this, ['connection', socket]);
           handles.notify();
         }

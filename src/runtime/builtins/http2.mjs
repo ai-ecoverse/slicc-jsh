@@ -291,7 +291,7 @@ export function createHttp2({ process, Buffer, net, tls, getStream }) {
       if (typeof requestListener === 'function') this.on('request', requestListener);
     }
     listen() {
-      throw notSupported('http2.Http2SecureServer.listen', 'no TLS on ctx.net');
+      throw notSupported('http2.Http2SecureServer.listen', 'no HTTP/2 sessions');
     }
     setTimeout(msecs, callback) {
       this.timeout = msecs;
