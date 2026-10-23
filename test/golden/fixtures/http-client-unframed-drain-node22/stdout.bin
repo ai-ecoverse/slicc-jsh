@@ -1,0 +1,5 @@
+DELETE with a body | write false needDrain=true, drain length=0, response DELETE 100000 body bytes, no transfer-encoding
+GET with a body | write false needDrain=true, drain length=0, response GET 100000 body bytes, no transfer-encoding
+OPTIONS with a body | write false needDrain=true, drain length=0, response OPTIONS 100000 body bytes, no transfer-encoding
+POST, Transfer-Encoding identity | write false needDrain=true, drain length=0, response POST 100000 body bytes, transfer-encoding: identity
+DELETE, a write after the connect | write false needDrain=true, drain length=0, response DELETE 100000 body bytes, no transfer-encoding
