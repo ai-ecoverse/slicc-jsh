@@ -1,0 +1,22 @@
+four posts in one packet, answered later
+  request /a, data foo /a, request /b, end /a, data foo /b, req close /a, request /c, end /b, data foo /c, req close /b, request /d, end /c, data foo /d, req close /c, end /d, req close /d, finish /a, res close /a, finish /b, res close /b, finish /c, res close /c, finish /d, res close /d
+four posts in one packet, answered at once
+  request /a, data foo /a, request /b, end /a, data foo /b, req close /a, request /c, end /b, data foo /c, req close /b, request /d, end /c, data foo /d, req close /c, end /d, req close /d
+four posts in one packet, answered at the end of each
+  request /a, data foo /a, request /b, end /a, data foo /b, req close /a, request /c, end /b, data foo /c, req close /b, request /d, end /c, data foo /d, req close /c, end /d, req close /d
+ticks and microtasks of each request
+  request /a, tick /a, data foo /a, micro /a, request /b, end /a, tick /b, data bar /b, req close /a, micro /b, end micro /a, request /c, end /b, tick /c, data baz /c, req close /b, micro /c, end micro /b, end /c, req close /c, end micro /c
+for await over each request
+  request /a, chunk foo /a, request /b, chunk bar /b, end /a, req close /a, done /a, request /c, chunk baz /c, end /b, req close /b, done /b, end /c, req close /c, done /c
+three gets in one packet
+  request /a, request /b, request /c, end /a, end /b, end /c, req close /a, req close /b, req close /c, finish /a, res close /a, finish /b, res close /b, finish /c, res close /c
+chunked posts in one packet
+  request /a, data fo /a, data o /a, request /b, end /a, data bar /b, req close /a, request /c, end /b, end /c, req close /b, req close /c, finish /a, res close /a, finish /b, res close /b, finish /c, res close /c
+a pipelined request split over two packets
+  request /a, data foo /a, end /a, req close /a, request /b, data foo /b, request /c, end /b, data foo /c, req close /b, end /c, req close /c
+a request after a Connection: close one, in a later packet
+  request /a, end /a, clientError HPE_CLOSED_CONNECTION
+a request after an HTTP/1.0 one, in a later packet
+  request /a, end /a, clientError HPE_CLOSED_CONNECTION
+a body split over two packets, with a request behind it
+  request /a, data foo /a, request /b, end /a, data foo /b, req close /a, data bar /b, request /c, end /b, data foo /c, req close /b, end /c, req close /c
