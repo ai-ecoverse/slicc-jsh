@@ -1685,11 +1685,23 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     let suppressWrite = false;
     const wave = [];
     const outgoing = [];
+    const incoming = [];
+    let peerEnded = false;
+    let eofDone = false;
+    let waiting = false;
+    let draining = false;
+    let broken = false;
+    let timedOut = null;
     socket.once('close', () => {
       server._connections.delete(conn);
       clearTimeout(idleTimer);
       clearTimeout(headersTimer);
       clearTimeout(requestTimer);
+      for (const req of incoming.splice(0)) {
+        if (!req.destroyed) req.destroy(Object.assign(new Error('aborted'), { code: 'ECONNRESET' }));
+      }
+      const attached = socket._httpMessage ?? timedOut;
+      if (attached instanceof ServerResponse) attached[kEmitClose]();
       server._connectionGone?.();
     });
     const destroy = () => {
@@ -1698,6 +1710,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       } catch {
         /* ignore */
       }
+    };
+    const destroySoon = () => {
+      if (socket.writable) socket.end();
+      if (socket.writableFinished) destroy();
+      else socket.once('finish', destroy);
     };
     const armIdle = () => {
       clearTimeout(idleTimer);
@@ -1719,12 +1736,19 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       clearTimeout(headersTimer);
       headersTimer = null;
       const res = current?.res;
+      if (res && !res.headersSent) {
+        res.detachSocket(socket);
+        timedOut = res;
+      }
+      current = null;
+      if (server.listenerCount('clientError') > 0) {
+        server.emit('clientError', nodeError(Error, 'ERR_HTTP_REQUEST_TIMEOUT', 'Request timeout'), socket);
+        return;
+      }
       if (busy && res?.headersSent) {
         destroy();
         return;
       }
-      if (res && !res.headersSent) res.detachSocket(socket);
-      current = null;
       try {
         socket.end('HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n', destroy);
       } catch {
@@ -1749,12 +1773,20 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     };
     const pump = () => runInResource(resource, pumpNow, null, []);
     const pumpNow = () => {
+      pumpWave();
+      eofSoon();
+    };
+    const eofSoon = () => {
+      if (peerEnded && !eofDone) process.nextTick(eofCheck);
+    };
+    const pumpWave = () => {
       if (dead || socket.destroyed) return;
       holding = true;
-      while (!busy && !socket.destroyed && !dead && buf.length > 0 && wave.length < 2) {
+      while (!busy && !socket.destroyed && !dead && buf.length > 0 && (draining || wave.length < 2)) {
         const before = buf.length;
         parseOne();
         if (busy || dead || socket.destroyed || buf.length === before) break;
+        if (draining) continue;
         if (wave.length >= 1 && wave[0].res.finished) break;
         if (wave.length >= 2) break;
       }
@@ -1770,15 +1802,41 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       if (wave.length === 0) return;
       const first = wave.shift();
       first.deliver();
-      if (first.res._last) {
+      if (first.res._last || draining) {
         while (wave.length > 0) wave.shift().deliver();
       }
+    };
+    const eofCheck = () => {
+      if (!peerEnded || eofDone || draining || dead || socket.destroyed) return;
+      if (broken) {
+        eofDone = true;
+        if (socket.writable) socket.end();
+        return;
+      }
+      if (buf.length > 0 && !waiting) {
+        if (socket._httpMessage?.finished) return;
+        draining = true;
+        if (busy && current?.bodyDone()) {
+          busy = false;
+          current = null;
+        }
+        pumpWave();
+        draining = false;
+        if (dead || socket.destroyed || (buf.length > 0 && !waiting)) return;
+      }
+      if (socket._httpMessage?.finished) return;
+      eofDone = true;
+      while (wave.length > 0) wave.shift().deliver();
+      socket.off('data', onData);
+      if (buf.length > 0 || (current && !current.bodyDone())) {
+        socketError(hpe('HPE_INVALID_EOF_STATE', 'Invalid EOF state'));
+        return;
+      }
+      if (socket.writable) socket.end();
     };
     const parseOne = () => {
       if (busy || socket.destroyed || dead || buf.length === 0) return;
       armRequest();
-      clearTimeout(idleTimer);
-      idleTimer = null;
       armHeaders();
       if (buf.length > MAX_HTTP_BODY + 64 * 1024) {
         // Cap head+body growth while still reading the request line/headers.
@@ -1786,12 +1844,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         return;
       }
       const parsed = parseHead(buf, Buffer);
-      if (!parsed || parsed.kind === 'error') {
-        if (parsed?.kind === 'error') destroy();
+      if (!parsed) {
+        waiting = true;
         return;
       }
       if (parsed.kind !== 'request') return;
+      clearTimeout(idleTimer);
+      idleTimer = null;
       if (parsed.error) {
+        broken = true;
         socket.off('data', onData);
         if (server.listenerCount('clientError') > 0) {
           server.emit('clientError', parsed.error, socket);
@@ -1877,6 +1938,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         return runInResource(resource, emit, this, args);
       };
       setRequestLine(req, parsed, headers);
+      incoming.push(req);
       let bodyDone = false;
       let primed = false;
       let resDone = false;
@@ -1893,6 +1955,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (!req.readableEnded || !req.complete) {
           req.aborted = true;
           req.emit('aborted');
+        }
+        if (req.aborted && !socket.destroyed) {
+          callback(req.listenerCount('error') > 0 ? err : undefined);
+          socket.destroy(err);
+          return;
         }
         process.nextTick(() => callback(req.listenerCount('error') > 0 ? err : undefined));
       };
@@ -1916,7 +1983,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         const extra = buf.length > 0 && res.shouldKeepAlive === false;
         if (extra) {
           failed = true;
-          socket.off('close', gone);
+          incoming.splice(incoming.indexOf(req), 1);
           const closed = hpe('HPE_CLOSED_CONNECTION', 'Data after `Connection: close`');
           if (server.listenerCount('clientError') > 0) server.emit('clientError', closed, socket);
           else socketError(closed);
@@ -1987,7 +2054,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           if (failed || bodyDone) return;
           if (chunk.phase === 'size' || chunk.phase === 'trailer') {
             const line = readChunkLine(buf, chunk.phase === 'size' ? 'size' : 'trailer');
-            if (line.wait) return;
+            if (line.wait) {
+              waiting = true;
+              return;
+            }
             if (line.error) return badBody(line.error.code, line.error.reason);
             buf = line.rest;
             if (chunk.phase === 'trailer') {
@@ -2044,6 +2114,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         } finally {
           feeding = false;
         }
+        eofSoon();
       };
       const res = new ServerResponse(req);
       if (!suppressWrite && !socket.destroyed && !socket._httpMessage) res.assignSocket(socket);
@@ -2058,40 +2129,11 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       res.shouldKeepAlive = persistent && !(max > 0 && served >= max);
       res._keepAliveTimeout = server.keepAliveTimeout;
       res._maxRequestsPerSocket = max;
-      // The client gone before the response ended (an aborted SSE or
-      // long-poll): Node's 'close' on both, so the handler can stop.
-      const gone = () => {
-        if (!res.writableFinished && !res.destroyed) {
-          res.destroyed = true;
-          process.nextTick(() => res[kEmitClose]());
-        }
-        if (!req.destroyed) req.destroy(bodyDone ? undefined : Object.assign(new Error('aborted'), { code: 'ECONNRESET' }));
-      };
-      // Node (httpAllowHalfOpen false): the client's FIN aborts a response
-      // still going, and the server ends its side.
-      const onEnd = () => {
-        if (failed) return;
-        if (!bodyDone) {
-          failed = true;
-          socketError(Object.assign(new Error('Parse Error: Invalid EOF state'), { code: 'HPE_INVALID_EOF_STATE', reason: 'Invalid EOF state' }));
-          return;
-        }
-        if (res.writableFinished) return;
-        gone();
-        try {
-          socket.end();
-        } catch {
-          /* ignore */
-        }
-      };
-      socket.once('close', gone);
-      socket.once('end', onEnd);
       const keptAlive = () => {
         if (handed) return;
         handed = true;
-        socket.off('close', gone);
-        socket.off('end', onEnd);
-        if (!primed) {
+        const ahead = current !== null && current.req !== req;
+        if (!primed && !ahead) {
           current = null;
           busy = false;
           conn.idle = true;
@@ -2102,18 +2144,20 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         } else req.once('end', () => req.destroy());
         const next = outgoing.shift();
         if (next && !suppressWrite && !socket.destroyed && !socket._httpMessage) next.assignSocket(socket);
-        if (primed) return;
-        armIdle();
+        if (primed || ahead) return;
+        if (!next) armIdle();
         queueMicrotask(pump);
       };
       res.on('finish', () => {
         resDone = true;
+        if (incoming.includes(req)) incoming.splice(incoming.indexOf(req), 1);
         if (!req._consuming && !req._readableState.resumeScheduled) req._dump();
         res.detachSocket(socket);
         process.nextTick(() => res[kEmitClose]());
         if (socket.destroyed || dead) return;
         if (!res._last) {
           if (bodyDone && !holding) keptAlive();
+          eofSoon();
           return;
         }
         suppressWrite = true;
@@ -2130,7 +2174,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (server._closing) closeGracefully(socket);
         else {
           socket.unref?.();
-          destroy();
+          destroySoon();
         }
       });
       pending = parsed.teAfter || bodyDone ? null : feed;
@@ -2176,6 +2220,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       if (typeof requestListener === 'function') requestListener(req, res);
     };
     const socketError = (err) => {
+      broken = true;
       socket.off('data', onData);
       if (server.listenerCount('clientError') > 0) {
         server.emit('clientError', err, socket);
@@ -2193,14 +2238,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     };
     const onData = (chunk) => {
       if (dead || socket.destroyed) return;
+      waiting = false;
+      if (idleTimer) armIdle();
       if (!busy && buf.length === 0) armRequest();
       buf = Buffer.concat([buf, chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk)]);
       if (pending) pending();
       else pump();
     };
-    // The client ends an idle connection: so does the server.
     const onSocketEnd = () => {
-      if (!busy) destroy();
+      peerEnded = true;
+      eofCheck();
     };
     const onSocketError = (err) => server.emit('clientError', err, socket);
     socket.on('end', onSocketEnd);
