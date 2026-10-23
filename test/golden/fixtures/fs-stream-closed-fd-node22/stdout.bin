@@ -1,0 +1,6 @@
+read destroy error EBADF close EBADF: bad file descriptor, close close true
+read destroy-err error EBADF close EBADF: bad file descriptor, close close true
+read end error EBADF close EBADF: bad file descriptor, close close true
+write destroy error EBADF close EBADF: bad file descriptor, close close true
+write destroy-err error EBADF close EBADF: bad file descriptor, close close true
+write end error EBADF close EBADF: bad file descriptor, close close true

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { memoryRoot } from '@ai-ecoverse/slicc-kernel/node';
 import { withJsh } from './helpers.mjs';
 
-const NAMES = ['sync.txt', 'callback.txt', 'handle.txt', 'stream.txt'];
+const NAMES = ['sync.txt', 'callback.txt', 'handle.txt', 'stream.txt', 'read-stream.txt'];
 
 async function full(root, name) {
   const dir = await root.getDirectoryHandle('os', { create: true });
@@ -45,6 +45,11 @@ describe('fs close of a file whose write-back fails (kernel)', () => {
         "  const ws = fs.createWriteStream('stream.txt', { flags: 'r+' });",
         "  ws.on('error', (e) => show('stream error', e)).on('close', () => console.log('stream close'));",
         "  ws.end('data');",
+        "  await new Promise((r) => ws.on('close', r));",
+        "  const rfd = fs.openSync('read-stream.txt', 'r+'); write(rfd);",
+        "  const rs = fs.createReadStream(null, { fd: rfd });",
+        "  rs.on('error', (e) => show('read stream error', e)).on('close', () => console.log('read stream close'));",
+        "  rs.destroy(new Error('destroyed'));",
         '})();',
       ].join('\n')
     );
@@ -63,6 +68,9 @@ describe('fs close of a file whose write-back fails (kernel)', () => {
       'FileHandle.close again EBADF close file closed',
       `stream error ${enospc}`,
       'stream close',
+      'write ENOSPC',
+      `read stream error ${enospc}`,
+      'read stream close',
     ]);
   });
 });
