@@ -230,7 +230,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - `execSync`/`execFileSync` throw with `status`, `signal`, `stdout`, `stderr`, `output` and `pid`.
 
 **Other fds as stdio.** A stdio slot can be another fd.
-- On slicc-kernel 1.70.0 and later, the program's own fds go straight to the child, and stdout and stderr sent to one fd keep the child's write order. An fd from `fs.openSync` (jsh's own) is written after the run.
+- On slicc-kernel 1.70.0 and later, the program's own fds go straight to the child, and stdout and stderr sent to one fd keep the child's write order. An fd from `fs.openSync` (jsh's own) is written after the run. With `spawn`, it is written as the child writes, and one such fd as both stdout and stderr is one pipe, so their writes keep the child's order (golden `child-process-fd-shared-order-node22`).
 - On older kernels every other fd is written after the run, stdout before stderr.
 - stdio slots past fd 2 are not passed to the child.
 

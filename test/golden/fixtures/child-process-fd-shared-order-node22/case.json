@@ -1,0 +1,1 @@
+{ "description": "#809: a child given one fs.openSync fd as its stdout and stderr writes both to that file in the order it writes them, as Node 22's child does with one descriptor in both slots, also when the parent is busy until the child has written everything (spawnSync and spawn)", "argv": ["main.js"], "shim": true }

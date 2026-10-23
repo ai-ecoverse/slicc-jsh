@@ -750,7 +750,23 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     if (toKernelStdio(errMode) === 'pipe') child.stderr = createPipeReadable();
   }
 
-  function connectStdio(child, kernelChild, files) {
+  function sharedPipe() {
+    try {
+      return ctx.sync.pipe();
+    } catch {
+      return null;
+    }
+  }
+
+  function closeFds(fds) {
+    for (const fd of fds) {
+      try {
+        ctx.sync.close(fd);
+      } catch {}
+    }
+  }
+
+  function connectStdio(child, kernelChild, files, sharedFd) {
     child.stdin?._sliccAttach?.(kernelChild.stdin);
     const pumps = [];
     if (child.stdout?._sliccPump) pumps.push(child.stdout._sliccPump(kernelChild.stdout));
@@ -776,6 +792,21 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       trackPromise(handles, feed);
     } else {
       files[0]?.release?.();
+    }
+    if (sharedFd != null) {
+      pumps.push(
+        (async () => {
+          try {
+            for (;;) {
+              const chunk = await ctx.read(sharedFd);
+              if (!chunk?.length) break;
+              files[1].write(chunk);
+            }
+          } finally {
+            closeFds([sharedFd]);
+          }
+        })().catch(() => {})
+      );
     }
     for (const [i, web] of [
       [1, kernelChild.stdout],
@@ -896,13 +927,14 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     // A file served here is let go in connectStdio (stdin once it has been
     // read, output once all of it is written); a device once the child has it.
     const releaseDirect = () => files.forEach((f, i) => direct[i] != null && f?.release?.());
+    const shared = sync && served[1] && served[2] && stdio[1] === stdio[2] ? sharedPipe() : null;
     const request = {
       argv,
       cwd,
       env,
       stdin: direct[0] ?? kernelStdio(stdio[0], served[0]),
-      stdout: direct[1] ?? kernelStdio(stdio[1], served[1]),
-      stderr: direct[2] ?? kernelStdio(stdio[2], served[2]),
+      stdout: shared?.[1] ?? direct[1] ?? kernelStdio(stdio[1], served[1]),
+      stderr: shared?.[1] ?? direct[2] ?? kernelStdio(stdio[2], served[2]),
       // Node's detached on POSIX is setsid(): a new session and group, no
       // controlling terminal (slicc-kernel 1.74.0+; older kernels ignore it,
       // and the child stays in the program's group, as before).
@@ -918,6 +950,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       try {
         pair = ctx.sync.socketpair();
       } catch (err) {
+        closeFds(shared ?? []);
         releaseAll();
         process.nextTick(() => {
           safeEmit(child, 'error', err);
@@ -940,7 +973,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
     };
 
     const run = (kernelChild) => {
-      connectStdio(child, kernelChild, served);
+      connectStdio(child, kernelChild, served, shared?.[0]);
       const spawnErr = safeEmit(child, 'spawn');
       if (spawnErr) return;
       const waitP = kernelChild.wait();
@@ -1013,6 +1046,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       try {
         kernelChild = ctx.sync.spawn(request);
       } catch (err) {
+        closeFds(shared ?? []);
         // Node sets the channel up even so: send() is there, and its write
         // fails (EPIPE), the child's end being closed.
         closePair(false);
@@ -1021,6 +1055,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
         failed(err);
         return;
       }
+      closeFds(shared ? [shared[1]] : []);
       closePair(false);
       releaseDirect();
       child._bindKernel(kernelChild);
