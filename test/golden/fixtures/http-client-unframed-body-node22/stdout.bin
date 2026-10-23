@@ -1,0 +1,12 @@
+DELETE, a write | server "DELETE / HTTP/1.1|Connection: close" body "hello", response 204, end() on the response
+GET, two writes | server "GET / HTTP/1.1|Connection: close" body "hello", response 204, end() on the response
+OPTIONS, a write after the connect | server "OPTIONS / HTTP/1.1|Connection: close" body "hello", response 204, end() on the response
+POST, Transfer-Encoding identity, two writes | server "POST / HTTP/1.1|Transfer-Encoding: identity|Connection: close" body "hello", response 204, end() on the response
+PUT, Transfer-Encoding gzip, a write | server "PUT / HTTP/1.1|Transfer-Encoding: gzip|Connection: close" body "hello", response 204, end() on the response
+GET, end(data) alone | end() at once, server "GET / HTTP/1.1|Connection: close" body "hello", response 204
+DELETE, a write, then end(data) | end() at once, server "DELETE / HTTP/1.1|Connection: close" body "hello", response 204
+POST, Transfer-Encoding identity, end(data) alone | end() at once, server "POST / HTTP/1.1|Transfer-Encoding: identity|Connection: close" body "hello", response 204
+PUT, Transfer-Encoding identity, end() alone | end() at once, server "PUT / HTTP/1.1|Transfer-Encoding: identity|Connection: close" body "", response 204
+POST, Transfer-Encoding chunked, end(data) alone | end() at once, server "POST / HTTP/1.1|Transfer-Encoding: chunked|Connection: close" body "5\r\nhello\r\n0\r\n\r\n", response 204
+POST, Transfer-Encoding chunked, end() alone | end() at once, server "POST / HTTP/1.1|Transfer-Encoding: chunked|Connection: close" body "0\r\n\r\n", response 204
+POST, Transfer-Encoding gzip, end(data) alone | end() at once, server "POST / HTTP/1.1|Transfer-Encoding: gzip|Connection: close" body "hello", response 204

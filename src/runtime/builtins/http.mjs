@@ -1034,13 +1034,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     return toBuffer(chunk, encoding);
   }
 
-  function onUnframedDrain(msg) {
-    if (!msg[kNeedDrain] || msg.finished) return;
-    msg[kNeedDrain] = false;
-    msg[kBuffered] = 0;
-    msg.emit('drain');
-  }
-
   function socketWrite(msg, socket, data, callback) {
     const ok = socket.write(data, callback);
     if (!ok) {
@@ -2904,11 +2897,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       });
       const onReady = () => {
         this[kConnected] = true;
-        // With Content-Length: send headers + any buffered body and stream the rest.
-        // Without: wait for end() and send one framed request (buffer until end).
-        if (rawHeader(this, 'content-length') != null || this[kEnded] || this[kFlushAsked] || this[kChunkedOut]) {
-          this[kFlushHead]();
-        } else onUnframedDrain(this);
+        if (rawHeader(this, 'content-length') != null || this[kEnded] || this[kFlushAsked] || this[kChunkedOut] || this[kChunks].length) this[kFlushHead]();
       };
       // Already connected (agent-base may hand off an open socket or generic Duplex
       // with no `connecting` property and no future 'connect' event).
@@ -3376,11 +3365,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
             framed = chunkFrame(body);
           }
         } else {
-          // Node: a GET / HEAD / DELETE / OPTIONS / TRACE / CONNECT with no body
-          // sends no Content-Length (the others send 0).
           const method = (this[kOpts].method ?? 'GET').toUpperCase();
           const bodiless = ['GET', 'HEAD', 'DELETE', 'OPTIONS', 'TRACE', 'CONNECT'].includes(method);
-          if (body.length > 0 || !bodiless) setRawHeader(this, 'Content-Length', String(body.length));
+          const teRaw = rawHeader(this, 'transfer-encoding');
+          if (teRaw != null) {
+            if (classifyTransferEncoding([String(teRaw)])?.chunked) {
+              this[kChunkedOut] = true;
+              framed = Buffer.concat([chunkFrame(body), Buffer.from('0\r\n\r\n')]);
+            }
+          } else if (!bodiless) setRawHeader(this, 'Content-Length', String(body.length));
         }
       }
       const head = this[kRenderHead]();
@@ -3401,13 +3394,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         this._header ||= this[kRenderHead]().toString('latin1');
         this[kBuffered] ??= this._header.length;
         this[kBuffered] += buf.length + (this[kChunkedOut] && buf.length ? buf.length.toString(16).length + 4 : 0);
-        if (this[kBuffered] >= this[kHighWaterMark] && !this[kNeedDrain]) {
-          this[kNeedDrain] = true;
-          if (this[kConnected]) process.nextTick(() => this[kConnected] && !this._headerSent && onUnframedDrain(this));
-        }
+        if (this[kBuffered] >= this[kHighWaterMark] && !this[kNeedDrain]) this[kNeedDrain] = true;
       }
-      // Content-Length known and socket up: start streaming now.
-      if (!this._headerSent && this[kConnected] && (rawHeader(this, 'content-length') != null || this[kChunkedOut])) this[kFlushHead]();
+      if (!this._headerSent && this[kConnected]) this[kFlushHead]();
       process.nextTick(callback);
       return true;
     },
@@ -3418,7 +3407,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       if (this[kFetchMode]) {
         this[kSendViaFetch]();
       } else if (!this._headerSent) {
-        // No Content-Length: buffer until end, then send with computed CL.
         if (this[kConnected]) this[kFlushHead]();
         else this._header ||= this[kRenderHead]().toString('latin1');
       } else if (this[kChunkedOut]) {

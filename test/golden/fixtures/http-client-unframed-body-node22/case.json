@@ -1,0 +1,5 @@
+{
+  "description": "an http ClientRequest body with no framing (a GET, DELETE or OPTIONS body, or a Transfer-Encoding other than chunked) goes out unframed as it is written, the head as soon as the socket is up, with no Content-Length, as Node 22; end(data) alone on such a request sends no Content-Length either, and a Transfer-Encoding chunked given in the headers frames end(data) and end() with chunks",
+  "argv": ["script.js"],
+  "shim": true
+}
