@@ -396,12 +396,12 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
     }
   });
 
-  it('http client buffers body writes across timers (no CL and with CL)', async () => {
+  it('http client body writes across timers: chunked with no CL, as Node, and streamed with a CL', async () => {
     const { run, close } = await withJsh();
     try {
-      for (const [label, headers] of [
-        ['nolen', '{}'],
-        ['cl', "{'content-length':9}"],
+      for (const [label, headers, cl] of [
+        ['nolen', '{}', 'undefined'],
+        ['cl', "{'content-length':9}", '9'],
       ]) {
         const r = await run([
           'node',
@@ -424,7 +424,7 @@ describe('slicc-jsh kernel smoke (PR2 runtime)', () => {
           ].join(''),
         ]);
         assert.equal(r.status, 0, r.stderr + r.stdout);
-        assert.match(r.stdout, new RegExp(`${label} cl=9 got=9 tail=ccc`));
+        assert.match(r.stdout, new RegExp(`${label} cl=${cl} got=9 tail=ccc`));
       }
     } finally {
       close();

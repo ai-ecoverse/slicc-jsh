@@ -2785,7 +2785,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         this[kConnected] = true;
         // With Content-Length: send headers + any buffered body and stream the rest.
         // Without: wait for end() and send one framed request (buffer until end).
-        if (rawHeader(this, 'content-length') != null || this[kEnded] || this[kFlushAsked]) {
+        if (rawHeader(this, 'content-length') != null || this[kEnded] || this[kFlushAsked] || this[kChunkedOut]) {
           this[kFlushHead]();
         }
       };
@@ -3249,8 +3249,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     [kWriteBody](buf, callback) {
       if (this._headerSent && this[kStreaming]) return this[kTrackWrite](this[kChunkedOut] ? chunkFrame(buf) : buf, callback);
       this[kChunks].push(buf);
+      if (!this._headerSent && !this[kEnded] && !this[kFetchMode] && !this[kFetchVia]) armChunked(this);
       // Content-Length known and socket up: start streaming now.
-      if (!this._headerSent && this[kConnected] && rawHeader(this, 'content-length') != null) this[kFlushHead]();
+      if (!this._headerSent && this[kConnected] && (rawHeader(this, 'content-length') != null || this[kChunkedOut])) this[kFlushHead]();
       process.nextTick(callback);
       return true;
     },

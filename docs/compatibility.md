@@ -295,7 +295,7 @@ On slicc-kernel 1.72.0 to 1.85.x, `chmod` changes nothing (see Modes), so a `055
 - Header names are written as they were set.
 
 **`http` client.**
-- With a `Content-Length`, request body bytes stream as written. Without one, the body is buffered until `end()` and sent with a computed length. Request bodies aren't sent chunked.
+- With a `Content-Length`, request body bytes stream as written. Without one, a body written before `end()` is sent chunked, each write as it comes, as in Node (golden `http-client-request-framing-node22`); a body given only to `end()` is sent with its length.
 - `'response'` comes at the head, and the body streams as it arrives: by `Content-Length`, chunked, or until the peer's FIN. `socket.end` half-closes. A chunked body's trailers are `res.rawTrailers` and `res.trailers` by its `'end'`.
 - `http.validateHeaderName`, `http.validateHeaderValue` and `http.setMaxIdleHTTPParsers` are Node's (golden `http-validate-headers-node22`).
 - A `ClientRequest` has its `Host` header from the start, set after the given headers and before the agent's `addRequest` sees the request. It's absent with `setHost: false`. The request line is the request's `method` and `path` as they are when it's sent. `_header` and `_implicitHeader()` are Node's. That lets **http-proxy-agent** rewrite the path to the absolute URL and send through a plain `http://` proxy.
