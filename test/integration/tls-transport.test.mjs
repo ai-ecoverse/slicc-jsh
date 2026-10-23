@@ -156,7 +156,7 @@ ws.on('error', (e) => console.log('error', e.message));
     assert.deepEqual(seen, ['websocket wss://echo.example.test/sock ["chat"]']);
   });
 
-  it("without an uplink route, what the transport won't carry fails with ERR_NOT_SUPPORTED: another protocol's port, h2 only, a custom ca, the loopback, TLS over a loopback socket", async () => {
+  it("without an uplink route, what the transport won't carry fails with ERR_NOT_SUPPORTED: another protocol's port, h2 only, a custom ca, TLS over a loopback socket for another host; a closed loopback port is Node's ECONNREFUSED", async () => {
     const r = await jsh.run([
       'node',
       '-e',
@@ -186,7 +186,7 @@ const tryConnect = (label, opts) => new Promise((resolve) => {
       "imaps ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to mail.example.test:993' is not supported yet (the kernel's TLS to a host its uplink doesn't route goes through its transport, which carries HTTP/1.1 and WebSocket only)",
       "h2 only ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to example.test:443' is not supported yet (the kernel's TLS to a host its uplink doesn't route goes through its transport, which carries HTTP/1.1 and WebSocket only)",
       "ca ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to example.test:443' is not supported yet (a custom ca needs a host the kernel's uplink routes)",
-      "loopback ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect to 127.0.0.1:443' is not supported yet (the kernel's TLS goes through its transport, which has no loopback)",
+      'loopback ECONNREFUSED connect ECONNREFUSED 127.0.0.1:443',
       "loopback socket ERR_NOT_SUPPORTED slicc-jsh: 'tls.connect over a socket' is not supported yet (the kernel upgrades only a plain connection its uplink routes)",
       'plain destroyed true',
       '',
