@@ -198,6 +198,7 @@ export function createPorts({
     return phase.cut;
   };
   delivering.closingCut = closingCut;
+  delivering.closing = () => dispatching;
   const closeLater = (port) => {
     closing.push(port);
     if (phase) return;
@@ -219,6 +220,7 @@ export function createPorts({
       const port = list.shift();
       dispatching = list.length > 0;
       port._finishClose();
+      if (!dispatching && flushing) markPosted();
       handles?.notify?.();
       if (dispatching) later(next);
       else handles?.delete(handle);
@@ -228,6 +230,26 @@ export function createPorts({
 
   let checkAt = Infinity;
   delivering.postedAt = () => checkAt;
+  const markPosted = () => {
+    const timerAt = delivering.timerAt?.();
+    if (timerAt != null) {
+      checkAt = timerAt;
+      return;
+    }
+    checkAt = Infinity;
+    let idle = 0;
+    let hops = 0;
+    const mark = () => {
+      const now = clock();
+      if (now === checkAt) idle += 1;
+      else {
+        checkAt = now;
+        idle = 0;
+      }
+      if (idle < 4 && ++hops < 1000) queueMicrotask(mark);
+    };
+    queueMicrotask(mark);
+  };
   const flushSoon = (held) => {
     if (flushing) {
       if (held && !flushing.held) {
@@ -290,22 +312,7 @@ export function createPorts({
       flushing = null;
       handles?.notify?.();
     };
-    const timerAt = delivering.timerAt?.();
-    if (timerAt != null) checkAt = timerAt;
-    else {
-      let idle = 0;
-      let hops = 0;
-      const mark = () => {
-        const now = clock();
-        if (now === checkAt) idle += 1;
-        else {
-          checkAt = now;
-          idle = 0;
-        }
-        if (idle < 4 && ++hops < 1000) queueMicrotask(mark);
-      };
-      queueMicrotask(mark);
-    }
+    markPosted();
     again(() => step(true));
   };
   // A post from the main program or a callback other than an immediate or

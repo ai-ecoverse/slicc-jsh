@@ -536,6 +536,7 @@ export async function runNode(ctx, options = {}) {
 
   const timers = createTimers(handles, {
     hold: (due) =>
+      delivering.closing() ||
       ((delivering.active || timers.checkPending()) && due > delivering.since) ||
       (delivering.pending && delivering.cut === 0 && due > delivering.postedAt()),
     holdImmediate: (seq) => delivering.active || (delivering.pending && seq >= delivering.cut) || seq >= delivering.closingCut(),
