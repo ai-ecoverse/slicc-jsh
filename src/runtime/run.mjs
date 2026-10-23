@@ -48,6 +48,8 @@ function trackingProxy() {
 }
 
 const decoder = new TextDecoder();
+const kEvalImport = Symbol.for('slicc-jsh.evalImport');
+const EVAL_IMPORT = "globalThis[Symbol.for('slicc-jsh.evalImport')]";
 
 /**
  * Install jsh bindings on globalThis (slicc-kernel Node-entry lockdown).
@@ -846,15 +848,11 @@ export async function runNode(ctx, options = {}) {
         const {
           code: cjsCode,
           changed: hasImport,
-          binding: importBinding = '__import',
-        } = rewriteDynamicImports(code);
+        } = rewriteDynamicImports(code, { callee: EVAL_IMPORT });
         const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
         const args = ['exports', 'require', 'module', '__filename', '__dirname'];
         const values = [exports, require, module, evalName, process.cwd()];
-        if (hasImport) {
-          args.push(importBinding);
-          values.push(dynImport);
-        }
+        if (hasImport) globalThis[kEvalImport] = dynImport;
         const report = syntaxReport(code, { kind: 'script', filename: evalName });
         if (report) {
           const err = new SyntaxError(report.message);

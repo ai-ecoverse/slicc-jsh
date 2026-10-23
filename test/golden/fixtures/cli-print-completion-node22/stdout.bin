@@ -32,6 +32,8 @@ imported function
 == ["-e","console.log(typeof globalThis.require, typeof globalThis.module, globalThis.__filename, this === globalThis); var v = 1; console.log(globalThis.v)"]: status 0
 function object [eval] true
 1
+== ["-e","import(\"node:os\").then((os) => console.log(typeof os.cpus, typeof globalThis.__import))"]: status 0
+function undefined
 == ["-p"] < "const b = 2;\nb * 3": status 0
 6
 == ["-p","\n\n\nconst e = new Error(\"x\");\ne.stack.split(\"\\n\")[1]"]: status 0

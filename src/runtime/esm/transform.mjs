@@ -643,7 +643,7 @@ function collectScriptBindingNames(ast) {
  * (`__import`, then `__import$1`, …).
  * Returns `{ code, changed, binding? }`. No-op when there are no ImportExpressions.
  */
-export function rewriteDynamicImports(source) {
+export function rewriteDynamicImports(source, { callee } = {}) {
   const body = stripHashbang(source);
   let ast;
   try {
@@ -669,9 +669,9 @@ export function rewriteDynamicImports(source) {
   if (replacements.length === 0) return { code: source, changed: false };
 
   const used = collectScriptBindingNames(ast);
-  let binding = '__import';
+  let binding = callee ?? '__import';
   let n = 0;
-  while (used.has(binding)) binding = `__import$${++n}`;
+  while (!callee && used.has(binding)) binding = `__import$${++n}`;
   for (const r of replacements) r.text = `${binding}(`;
 
   return { code: applyReplacements(body, replacements), changed: true, binding };

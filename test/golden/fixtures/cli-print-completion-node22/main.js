@@ -18,5 +18,6 @@ run(['-p', 'process.exit(2)']);
 run(['-p', 'import("node:path").then((p) => console.log("imported", typeof p.join)), 6']);
 run(['-p', '[typeof require, typeof module, typeof exports, __filename, typeof __dirname, typeof globalThis.require, this === globalThis]']);
 run(['-e', 'console.log(typeof globalThis.require, typeof globalThis.module, globalThis.__filename, this === globalThis); var v = 1; console.log(globalThis.v)']);
+run(['-e', 'import("node:os").then((os) => console.log(typeof os.cpus, typeof globalThis.__import))']);
 run(['-p'], 'const b = 2;\nb * 3');
 run(['-p', '\n\n\nconst e = new Error("x");\ne.stack.split("\\n")[1]']);
