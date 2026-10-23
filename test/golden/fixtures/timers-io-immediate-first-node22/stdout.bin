@@ -1,0 +1,8 @@
+a readFile callback | immediate, timeout 0
+a stat callback | immediate, timeout 0
+a socket data callback | immediate, timeout 0
+a listen callback | immediate, timeout 0
+a timer callback | immediate, timeout 0
+immediate first from a readFile callback | immediate, timeout 0
+destroy() in a data callback | immediate, close, timeout 0
+done

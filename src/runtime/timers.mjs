@@ -168,7 +168,8 @@ export function createTimers(
         if (!due.has(fire)) due.set(fire, state.due);
         return;
       }
-      if (closeTimer || hold(state.due)) {
+      if (state.afterIo) state.cut ??= made;
+      if (closeTimer || hold(state.due) || (state.afterIo && immediatesFirst(state.cut))) {
         held.add(state);
         state.retry ??= nativeSetTimeout(retry, 0);
         return;
@@ -182,6 +183,7 @@ export function createTimers(
       }
     };
     state.run = run;
+    state.afterIo = looping && inImmediate === 0;
     state.seq = made++;
     // Node's delay: a number from 1 up (anything else is 1).
     state.delay = delay >= 1 && delay <= 2147483647 ? Number(delay) : 1;
@@ -244,6 +246,13 @@ export function createTimers(
     for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < cut) return true;
     return false;
   };
+  const immediatesFirst = (cut) => {
+    for (const state of byId.values()) {
+      if (state.kind === 'Immediate' && state.inCheck && state.seq < cut && !holdImmediate(state.seq)) return true;
+    }
+    return false;
+  };
+  let looping = false;
   const closing = [];
   let closeTimer = null;
   const closePhase = () => {
@@ -308,6 +317,10 @@ export function createTimers(
     /** @internal An immediate that is never held (the message ports' own steps). */
     setImmediateUnheld: (fn) => makeImmediate(fn, [], false),
     setImmediatePoll: (fn) => makeImmediate(fn, [], true, false),
+    /** @internal The entry has run: a timeout set from here on is set in the loop. */
+    startLoop() {
+      looping = true;
+    },
     /** @internal Node's close phase: fn runs now, or after the immediates pending now have run. */
     afterCheck(fn, during = inImmediate > 0) {
       const cut = during ? checkCut : made;
