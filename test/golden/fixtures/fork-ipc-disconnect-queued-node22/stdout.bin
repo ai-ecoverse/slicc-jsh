@@ -1,0 +1,2 @@
+a small send, then disconnect | send true | connected false | callback null | second callback null | tick | microtask | immediate | timeout | the child got 2
+a 4 MiB send still queued, then disconnect | send false | connected false | tick | microtask | immediate | callback null | second callback null | timeout | the child got 0

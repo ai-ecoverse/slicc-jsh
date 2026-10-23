@@ -56,7 +56,7 @@ export function isInternal(message) {
  * unref, close. A pending read doesn't keep the program alive by itself;
  * ref() does (Control counts the channel's users, as in Node).
  */
-export function createChannelHandle({ ctx, handles, streamBaseState, constants, fd, exitFlush }) {
+export function createChannelHandle({ ctx, handles, streamBaseState, constants, fd, exitFlush, timers }) {
   const { kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync } = constants;
   const encoder = new TextEncoder();
   const handle = { kind: 'PipeWrap' };
@@ -127,8 +127,13 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
       reading = false;
       refed = false;
       handles.delete(handle);
-      // Node's writes are usually done by the time it closes (libuv tries
-      // them at once); here they are written out first.
+      waiting?.abort();
+      waiting = null;
+      const dropped = writes.splice(0);
+      for (const { bytes } of dropped) channel.writeQueueSize -= bytes.length;
+      const during = timers?.inCheck?.();
+      const cancel = () => dropped.forEach(({ req }) => complete(req, -125));
+      if (dropped.length) queueMicrotask(() => (timers?.afterCheck ? timers.afterCheck(cancel, during) : cancel()));
       if (!writing) shut();
     },
   };
@@ -486,7 +491,7 @@ export function setupChannel({ target, channel, serializationMode, serialization
 }
 
 /** A channel handle on `fd`, with the serialization module's stream_wrap state. */
-export function channelOn({ ctx, handles, serialization, fd, process }) {
+export function channelOn({ ctx, handles, serialization, fd, process, timers }) {
   const { streamBaseState, kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync } = serialization.streamWrap;
   return createChannelHandle({
     ctx,
@@ -495,6 +500,7 @@ export function channelOn({ ctx, handles, serialization, fd, process }) {
     constants: { kReadBytesOrError, kArrayBufferOffset, kLastWriteWasAsync },
     fd,
     exitFlush: process ? (process._exitFlush ??= new Set()) : undefined,
+    timers,
   });
 }
 
