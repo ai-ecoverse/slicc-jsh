@@ -1,6 +1,5 @@
 {
   "description": "A message turn starts when the posting task ended (#451): a timeout that becomes due while jsh's own task for the turn waits (a long microtask after the posts in a timer callback) runs after the turn's messages and immediates, as in Node, where the poll phase follows the timer that posted in the same iteration",
-  "kernel": "1.92.0",
   "argv": ["script.js"],
   "shim": true
 }

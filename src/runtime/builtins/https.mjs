@@ -3,25 +3,21 @@
  * the fetch client http shares (http-fetch.mjs): redirect: 'manual' where the
  * transport can, the response body streamed. A request with its own agent
  * or createConnection (a proxy agent's, ws's wss://) goes over a socket
- * instead, http's ClientRequest on tls.connect, where the kernel has TLS
- * (slicc-kernel 1.116.0).
+ * instead, http's ClientRequest on tls.connect.
  */
 import { EventEmitter } from './events.mjs';
 import { connectError, createFetchClient, isLoopbackHost } from './http-fetch.mjs';
 import { httpInternals, kFetchVia } from './http.mjs';
 import { noTls as notSupported } from './tls.mjs';
-import { kernelAtLeast } from '../kernel-version.mjs';
 import { validateObject } from '../node-errors.mjs';
 
 const TLS_CLIENT_OPTS = ['cert', 'key', 'pfx', 'ca'];
 
-// From slicc-kernel 1.124.0 the kernel's own handshake takes a `ca`
-// (ai-ecoverse/slicc-kernel#922), and from 1.124.13 a client certificate
-// (ai-ecoverse/slicc-kernel#1004): a request with one goes over a TLS socket.
-// `pfx` it doesn't take.
-function rejectTlsOptions(options, kernelTls = false, kernelCerts = false) {
+// The kernel's own handshake takes a `ca` and a client certificate: a
+// request with one goes over a TLS socket. `pfx` it doesn't take.
+function rejectTlsOptions(options, overSocket = false) {
   for (const name of TLS_CLIENT_OPTS) {
-    if (options?.[name] != null && !(kernelTls && name === 'ca') && !(kernelCerts && (name === 'cert' || name === 'key'))) {
+    if (options?.[name] != null && !(overSocket && name !== 'pfx')) {
       throw notSupported(`https.request option '${name}'`);
     }
   }
@@ -119,25 +115,23 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
     return { options: options ?? { protocol: 'https:' }, callback };
   }
 
-  // Over a socket: a request with its own agent or createConnection, on a
-  // kernel whose ctx.net.connect carries TLS. Its default agent is https's.
-  // On slicc-kernel 1.124.0 and later, also a request with a `ca`, which
-  // fetch can't take (the kernel's handshake, for a host the uplink routes).
-  // On 1.124.13 and later, a client certificate likewise.
-  const kernelTls = kernelAtLeast(ctx, '1.124.0');
-  const kernelCerts = kernelAtLeast(ctx, '1.124.13');
+  // Over a socket: a request with its own agent or createConnection, or with
+  // a `ca`, a secureContext or a client certificate, which fetch can't take
+  // (the kernel's handshake, for a host the uplink routes). Its default
+  // agent is https's.
   const viaSocket = (options) =>
-    kernelAtLeast(ctx, '1.116.0') &&
     typeof http?.request === 'function' &&
     (typeof options?.createConnection === 'function' ||
       (options?.agent != null && options.agent !== false && options.agent !== globalAgent) ||
-      (kernelTls && (options?.ca != null || options?.secureContext != null)) ||
-      (kernelCerts && (options?.cert != null || options?.key != null)));
+      options?.ca != null ||
+      options?.secureContext != null ||
+      options?.cert != null ||
+      options?.key != null);
 
   function request(input, options, callback) {
     const norm = normalize(input, options, callback);
     if (viaSocket(norm.options)) {
-      rejectTlsOptions(norm.options, kernelTls, kernelCerts);
+      rejectTlsOptions(norm.options, true);
       // Node's agent calls tls.connect inside https.request, so key material
       // that isn't (ERR_OSSL_*) throws from it; jsh's agent connects later.
       // Only https's own connection parses it: a createConnection of the
@@ -146,7 +140,7 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
       const used = agent === false || agent == null ? globalAgent : agent;
       const ownTls =
         typeof createConnection !== 'function' && used instanceof Agent && used.createConnection === Agent.prototype.createConnection;
-      if (kernelCerts && ownTls && (cert != null || key != null) && secureContext == null) getTls().createSecureContext(norm.options);
+      if (ownTls && (cert != null || key != null) && secureContext == null) getTls().createSecureContext(norm.options);
       // Node's agent: false is a fresh agent of the default's kind (not a plain socket).
       const own = norm.options.agent === false && typeof norm.options.createConnection !== 'function' ? { agent: new Agent() } : {};
       return http.request(

@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import * as stream from 'node:stream';
 import { createNet } from '../../src/runtime/builtins/net.mjs';
 import { createHandleTable } from '../../src/runtime/handles.mjs';
-import { kernelAtLeast, withJsh, wrapCommandMain } from './helpers.mjs';
+import { withJsh, wrapCommandMain } from './helpers.mjs';
 
 function standInKernel() {
   const held = [];
@@ -83,7 +83,7 @@ describe('net: a dropped listener whose close fails (src)', () => {
   });
 });
 
-describe('net: a dropped listener whose close fails (kernel)', { skip: !kernelAtLeast('1.125.11') }, () => {
+describe('net: a dropped listener whose close fails (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();

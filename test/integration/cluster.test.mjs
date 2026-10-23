@@ -3,11 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
+import { devPackageTree, withJsh } from './helpers.mjs';
 
 // fork's IPC channel (ai-ecoverse/slicc-kernel#1093): cluster.fork works
 // there (golden cluster-fork-node22).
-const IPC_KERNEL = '1.125.11';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
@@ -49,7 +48,7 @@ client.register.metrics().then((m) => console.log(m.split('\\n').filter((l) => l
   // closes, so the primary ends. (Node answers it there, and the EPIPE is an
   // unhandled 'error' on the Worker.) raw.js sends cluster's queryServer
   // itself, then disconnects at once: the race, every time.
-  it('a worker gone while the primary binds its address: the primary closes it and ends', { skip: !kernelAtLeast(IPC_KERNEL) }, async () => {
+  it('a worker gone while the primary binds its address: the primary closes it and ends', async () => {
     await jsh.kernel.writeFile(
       '/os/race/raw.js',
       `process.send({ cmd: 'NODE_CLUSTER', act: 'online', seq: 0 });

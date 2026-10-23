@@ -1,6 +1,5 @@
 {
   "description": "fs takes a path as a string, a Buffer or a file: URL across its sync, callback and promise calls, the FileHandle and Dir openers, streams, watch / watchFile, cp, rm, mkdtemp and realpath, with Node 22's results (a Buffer under encoding 'buffer', a Dirent's or a Dir's or a stream's path as given) and its errors for another type, a NUL byte, another scheme, a URL host and an encoded /. Left out: what Node 22 itself gets wrong with a Buffer or a URL (cp's callback and promise and recursive readdir throw for a Buffer, promises.statfs aborts the process for a URL or a bad path)",
   "argv": ["script.js"],
-  "shim": true,
-  "kernel": "1.125.0"
+  "shim": true
 }

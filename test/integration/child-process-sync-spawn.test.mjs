@@ -6,10 +6,8 @@
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, kernelVersion, withJshAndSh } from './helpers.mjs';
+import { withJshAndSh } from './helpers.mjs';
 
-const HAS_SYNC_SPAWN = kernelAtLeast('1.87.0');
-const needs = HAS_SYNC_SPAWN ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.sync.spawn (1.87.0)` };
 
 const program = (lines) => `(async () => {\n${lines.join('\n')}\n})().catch((e) => { console.error(e); process.exit(1); });\n`;
 const CLOSED = "const closed = (c) => new Promise((res) => c.on('close', (code, sig) => res(`${code} ${sig}`)));";
@@ -21,7 +19,7 @@ describe('child_process.spawn with ctx.sync.spawn (kernel)', () => {
   });
   after(() => jsh?.close());
 
-  it('process.kill(child.pid) right after spawn() reaches the child; its ppid is ours', needs, async () => {
+  it('process.kill(child.pid) right after spawn() reaches the child; its ppid is ours', async () => {
     await jsh.kernel.writeFile(
       '/os/pid-now.js',
       program([
@@ -44,7 +42,7 @@ describe('child_process.spawn with ctx.sync.spawn (kernel)', () => {
     assert.equal(r.stdout, 'pid number\nclose null SIGTERM ppid true\nclose null SIGKILL\n');
   });
 
-  it('detached: process.kill(-child.pid) right after spawn() signals its new group', needs, async () => {
+  it('detached: process.kill(-child.pid) right after spawn() signals its new group', async () => {
     await jsh.kernel.writeFile(
       '/os/group-now.js',
       program([
@@ -61,7 +59,7 @@ describe('child_process.spawn with ctx.sync.spawn (kernel)', () => {
     assert.equal(r.stdout, 'close null SIGKILL ""\n');
   });
 
-  it('jsh fds and devices closed right after spawn() still reach the child', needs, async () => {
+  it('jsh fds and devices closed right after spawn() still reach the child', async () => {
     await jsh.kernel.writeFile(
       '/os/fds-now.js',
       program([
@@ -79,7 +77,7 @@ describe('child_process.spawn with ctx.sync.spawn (kernel)', () => {
     assert.equal(r.stdout, 'pid number close 0 null "got from a file\\n"\n');
   });
 
-  it('a missing command: no throw, pid undefined, then error and close -2', needs, async () => {
+  it('a missing command: no throw, pid undefined, then error and close -2', async () => {
     await jsh.kernel.writeFile(
       '/os/enoent-now.js',
       program([

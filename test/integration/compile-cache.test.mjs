@@ -10,9 +10,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+import { withJsh } from './helpers.mjs';
 
-const skip = !kernelAtLeast('1.142.0') && `slicc-kernel ${kernelVersion} has no compileCache`;
 
 // A program that exercises the bundle broadly: builtins, a Worker's message,
 // an ES module, and an uncaught error's stack and exit status.
@@ -34,7 +33,7 @@ w.on('message', (n) => {
 // The cache's files, not its directories: a directory alone isn't a compiled bundle.
 const files = (dir) => readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile());
 
-describe('compileCache: jsh runs the same with the kernel caching its compiled bundle', { skip }, () => {
+describe('compileCache: jsh runs the same with the kernel caching its compiled bundle', () => {
   let dir;
   let plain;
   before(async () => {

@@ -3,17 +3,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageTree, kernelAtLeast, withJsh, wrapCommandMain } from './helpers.mjs';
+import { devPackageTree, withJsh, wrapCommandMain } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
 // Workers on the kernel's JS threads (ai-ecoverse/slicc-kernel#1094).
-const THREADS_KERNEL = '1.130.0';
 
 // The real piscina and tinypool run tasks on worker threads. Their workers
 // sleep on a counter in shared memory (Atomics.wait) and drain their port
 // synchronously (receiveMessageOnPort), unless told not to.
-describe('worker pools (kernel)', { skip: !kernelAtLeast(THREADS_KERNEL) }, () => {
+describe('worker pools (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();
@@ -114,7 +113,7 @@ module.exports.never = () => new Promise(() => {});
   });
 });
 
-describe('a worker whose thread is slow to end (kernel)', { skip: !kernelAtLeast(THREADS_KERNEL) }, () => {
+describe('a worker whose thread is slow to end (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();
@@ -195,7 +194,7 @@ w.once('message', (m) => {
 // with ctx.thread.spawn wrapped: its threads are real, but the kernel says
 // 257 when one ends, and globalThis.__crashThread ends the last one, as the
 // kernel ends a thread that crashed.
-describe('a worker whose thread crashes (kernel)', { skip: !kernelAtLeast(THREADS_KERNEL) }, () => {
+describe('a worker whose thread crashes (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();
@@ -274,7 +273,7 @@ process.on('exit', () => console.log('the program ends'));
 // A post to a worker whose transfer list has a jsh port and something that
 // can't be transferred (a locked stream): the post fails before the port is
 // exported, so the port stays usable. (Node loses it there; jsh keeps it.)
-describe('worker transfers (kernel)', { skip: !kernelAtLeast(THREADS_KERNEL) }, () => {
+describe('worker transfers (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();

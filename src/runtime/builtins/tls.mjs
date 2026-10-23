@@ -26,7 +26,6 @@ import {
 import { deprecate } from './util.mjs';
 import { kConnectTls, kDetach, kIoError, kStartNow, kStartTls, kTlsSession } from './net.mjs';
 import { certificateObject, isIssuedBy, likelyIssued, parseCertificate } from './x509.mjs';
-import { kernelAtLeast } from '../kernel-version.mjs';
 import { lockedKeyError } from './tls-key.mjs';
 
 // tls.connect's options on its socket (Node's kConnectOptions).
@@ -442,19 +441,14 @@ function checkServerIdentity(hostname, cert) {
 }
 
 export function createTls({ ctx, process, Buffer, net, getCrypto }) {
-  // slicc-kernel 1.116.0 (ai-ecoverse/slicc-kernel#923): ctx.net.connect's
-  // `tls` carries HTTP/1.1 and WebSocket over TLS through the embedder's
-  // transport, which does the handshake and verifies the peer.
-  const transportTls = typeof ctx?.net?.connect === 'function' && kernelAtLeast(ctx, '1.116.0');
-  // slicc-kernel 1.124.0 (ai-ecoverse/slicc-kernel#922): to a host the
-  // uplink routes, the kernel runs the handshake itself (any port and
-  // protocol, a custom ca, STARTTLS) and hands over the session: protocol,
-  // ALPN, its verdict and the server's chain.
-  const kernelTls = transportTls && kernelAtLeast(ctx, '1.124.0');
-  // slicc-kernel 1.124.13 (ai-ecoverse/slicc-kernel#1004): the handshake
-  // takes a client certificate and `sni: false`, and its session says the
-  // cipher.
-  const kernelControls = kernelTls && kernelAtLeast(ctx, '1.124.13');
+  // ctx.net.connect's `tls`: HTTP/1.1 and WebSocket over TLS through the
+  // embedder's transport, which does the handshake and verifies the peer
+  // (ai-ecoverse/slicc-kernel#923); to a host the uplink routes, the
+  // kernel's own handshake (any port and protocol, a custom ca, STARTTLS, a
+  // client certificate, `sni: false`), which hands over the session:
+  // protocol, ALPN, its verdict, the cipher and the server's chain
+  // (ai-ecoverse/slicc-kernel#922, #1004).
+  const kernelTls = typeof ctx?.net?.connect === 'function';
   const options = () => process?._options ?? process?.execArgv ?? [];
   const hasOption = (flag) => options().includes(flag);
   const optionValue = (name) => {
@@ -607,22 +601,20 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     if (!list.some((c) => c.length > 0)) throw ERR_INVALID_ARG_VALUE(`${name}.ciphers`, list);
     if (ca) {
       for (const c of Array.isArray(ca) ? ca : [ca]) validateKeyOrCertOption(`${name}.ca`, c);
-      // The kernel's handshake takes a ca (slicc-kernel 1.124.0).
       if (!kernelTls) refuse('ca');
       context[kCa] = Array.isArray(ca) ? [...ca] : [ca];
     }
     if (cert) {
       const certs = Array.isArray(cert) ? cert : [cert];
       for (const c of certs) validateKeyOrCertOption(`${name}.cert`, c);
-      // The kernel's handshake takes a client certificate (slicc-kernel 1.124.13).
-      if (!kernelControls) refuse('cert');
+      if (!kernelTls) refuse('cert');
       // Text with no certificate in it is OpenSSL's PEM error, here as there.
       const pemError = pemCertError(certs[0]);
       if (pemError) throw osslError(pemError);
       context[kOwnCert] = { cert: certs, leaf: caCertificates(certs)[0] };
     }
     if (key) {
-      if (!kernelControls) refuse('key');
+      if (!kernelTls) refuse('key');
       // One key: a key per algorithm (RSA and EC) is OpenSSL's choice to make.
       const keys = Array.isArray(key) ? key : [key];
       if (keys.length > 1) throw noTls(`tls.createSecureContext option 'key' with more than one key`, 'the kernel takes one client key');
@@ -850,11 +842,8 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     socket._secureEstablished = true;
     socket.secureConnecting = false;
     socket.alpnProtocol = session.alpnProtocol || false;
-    // Node's: the SNI it sent (servername), else false. Before slicc-kernel
-    // 1.124.0 jsh said the transport's name, and still does there.
-    if (socket.servername === null) {
-      socket.servername = kernelTls ? options?.servername || false : session.servername || options?.servername || false;
-    }
+    // Node's: the SNI it sent (servername), else false.
+    if (socket.servername === null) socket.servername = options?.servername || false;
     if (!options) return undefined;
     // The transport's session (A1): it verified the server, and keeps the certificates.
     if (session.path !== 'kernel') {
@@ -887,19 +876,18 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     return {
       ...(servername ? { servername } : {}),
       ...(alpn ? { alpn } : {}),
-      ...(kernelTls ? { rejectUnauthorized: false } : { rejectUnauthorized: options.rejectUnauthorized !== false }),
+      rejectUnauthorized: false,
       ...(ca ? { ca } : {}),
     };
   }
 
   /**
-   * What only the kernel's own handshake does (slicc-kernel 1.124.13): the
-   * client certificate, and no SNI where Node sends none. Node sends one
+   * What only the kernel's own handshake does: the client certificate, and
+   * no SNI where Node sends none. Node sends one
    * only for tls.connect's `servername` (not the host, and never a bare
    * TLSSocket's); the kernel still checks the certificate against the name.
    */
   function kernelControlsOf(context, sni) {
-    if (!kernelControls) return {};
     const own = clientCredentials(context?.context);
     return { ...(sni ? {} : { sni: false }), ...(own ?? {}) };
   }
@@ -923,12 +911,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     if (code === 'ERR_OSSL_CRYPTO_INTERRUPTED_OR_CANCELLED') return osslError('ERR_OSSL_BAD_DECRYPT');
     if (typeof code === 'string' && Object.hasOwn(OSSL_ERRORS, code)) return osslError(code);
     if (code === 'EPROTONOSUPPORT') {
-      return noTls(
-        what,
-        kernelTls
-          ? "the kernel's TLS to a host its uplink doesn't route goes through its transport, which carries HTTP/1.1 and WebSocket only"
-          : "the kernel's TLS carries HTTP/1.1 and WebSocket only"
-      );
+      return noTls(what, "the kernel's TLS to a host its uplink doesn't route goes through its transport, which carries HTTP/1.1 and WebSocket only");
     }
     // Over a socket, sni: false (or a client certificate) takes the kernel's
     // own path, which says ENOTSUP for a connection its uplink doesn't route.
@@ -988,7 +971,6 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       if (tlsOptions.enableTrace != null) validateBoolean(tlsOptions.enableTrace, 'options.enableTrace');
       if (tlsOptions.ALPNProtocols) convertALPNProtocols(tlsOptions.ALPNProtocols, tlsOptions);
       if (socket) {
-        // A TLS session over a socket needs the kernel's handshake (slicc-kernel 1.124.0).
         if (!kernelTls) throw noTls('tls.TLSSocket over a socket');
         if (tlsOptions.isServer) throw noTls('tls.TLSSocket over a socket as a server', "the kernel's TLS is a client's");
         if (!(socket instanceof net.Socket) || typeof socket[kDetach] !== 'function') {
@@ -1314,11 +1296,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     options = { rejectUnauthorized: true, checkServerIdentity, minDHSize: 1024, ...options };
     validateFunction(options.checkServerIdentity, 'options.checkServerIdentity');
     validateNumber(options.minDHSize, 'options.minDHSize', 1);
-    if (!transportTls) throw noTls('tls.connect');
-    // TLS over a socket that's already open (STARTTLS, a proxy's tunnel):
-    // the kernel's upgrade (slicc-kernel 1.124.0); before it, a handshake
-    // jsh would have to do itself.
-    if (options.socket && !kernelTls) throw noTls('tls.connect over a socket');
+    if (!kernelTls) throw noTls('tls.connect');
     if (options.path) throw noTls('tls.connect to a Unix socket');
     // Node makes the context first: its checks (and its refusal of key material) come first.
     const context = options.secureContext || createSecureContext(options);
@@ -1343,7 +1321,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     const port = Number(options.port ?? 443);
     // The name the kernel checks the certificate against; whether it's sent
     // as the SNI is kernelControlsOf's (Node's rule).
-    const servername = options.servername || (isIP(host) && !kernelControls ? undefined : host);
+    const servername = options.servername || host;
     const ca = options.ca ? (Array.isArray(options.ca) ? options.ca : [options.ca]) : context?.context?.[kCa];
     const own = clientCredentials(context?.context);
     const socket = new TLSSocket(undefined, { ALPNProtocols: options.ALPNProtocols, allowHalfOpen: options.allowHalfOpen });
@@ -1365,8 +1343,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     // transport can't make), then the transport (ENOTSUP: not the uplink's).
     // A client certificate is the kernel's handshake's alone: no transport after it.
     const preferKernel =
-      kernelTls &&
-      (port !== 443 || options.rejectUnauthorized === false || options.checkServerIdentity !== checkServerIdentity || own !== undefined);
+      port !== 443 || options.rejectUnauthorized === false || options.checkServerIdentity !== checkServerIdentity || own !== undefined;
     const what = `tls.connect to ${host}:${port}`;
     Reflect.apply(net.Socket.prototype.connect, socket, [
       {

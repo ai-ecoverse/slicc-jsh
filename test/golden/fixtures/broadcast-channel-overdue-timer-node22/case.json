@@ -1,6 +1,5 @@
 {
   "description": "BroadcastChannel and timers: a timeout already due when a delivery batch starts runs before it (Node's timers phase precedes the poll phase), one that becomes due during the batch waits for it. Needs slicc-kernel 1.92.0's writable slot",
-  "kernel": "1.92.0",
   "argv": ["script.js"],
   "shim": true
 }

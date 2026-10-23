@@ -1,49 +1,12 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { Buffer } from 'node:buffer';
 import { withJshAndSh } from './helpers.mjs';
-import { createChildProcess, SYNC_RUN_KERNEL } from '../../src/runtime/builtins/child-process.mjs';
 
 // spawnSync / execSync / execFileSync on ctx.sync.run (slicc-kernel 1.65.0+).
 // Option handling and result shapes are pinned against Node 22.22.0 by the
 // child-process-spawn-sync and child-process-exec-sync goldens; these cover
 // what the golden harness can't: a terminal, ^C, other processes and timers
-// while the call blocks, and kernels without ctx.sync.run.
-
-describe('child_process sync forms: kernels without ctx.sync.run', () => {
-  const make = (sync) =>
-    createChildProcess({
-      ctx: { sync },
-      process: { cwd: () => '/', env: {}, nextTick: queueMicrotask },
-      Buffer,
-      handles: { add() {}, delete() {} },
-      getStream: () => {
-        throw new Error('not reached');
-      },
-    });
-
-  for (const name of ['spawnSync', 'execSync', 'execFileSync']) {
-    it(`${name} throws ERR_NOT_SUPPORTED naming slicc-kernel ${SYNC_RUN_KERNEL}`, () => {
-      const cp = make({ fs: {}, read() {}, write() {} });
-      assert.throws(
-        () => cp[name]('node', name === 'execSync' ? undefined : ['-e', '']),
-        (err) => {
-          assert.equal(err.code, 'ERR_NOT_SUPPORTED');
-          assert.equal(
-            err.message,
-            `slicc-jsh: child_process.${name} needs slicc-kernel ${SYNC_RUN_KERNEL} or later (ctx.sync.run); this kernel has none`
-          );
-          return true;
-        }
-      );
-    });
-  }
-
-  it('fork stays unsupported', () => {
-    const cp = make({ fs: {}, run() {} });
-    assert.throws(() => cp.fork('x.js'), { code: 'ERR_NOT_SUPPORTED' });
-  });
-});
+// while the call blocks.
 
 describe('child_process sync forms (kernel)', () => {
   let jsh;

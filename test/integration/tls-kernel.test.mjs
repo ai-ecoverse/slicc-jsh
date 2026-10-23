@@ -7,7 +7,7 @@ import { createPrivateKey } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer as createTlsServer } from 'node:tls';
-import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
+import { devPackageTree, withJsh } from './helpers.mjs';
 import { makeCa, selfSigned } from './tls-certs.mjs';
 import { TLSSocket } from 'node:tls';
 import { node22Bin } from '../../scripts/node22.mjs';
@@ -24,13 +24,10 @@ const modules = fileURLToPath(new URL('../../node_modules', import.meta.url));
 // uplink whose peers are real Node TLS servers on the host, and the TLS
 // engine installed; a program's output is compared with host Node 22.22.0's,
 // the same program against the same server.
-const skip = !kernelAtLeast('1.124.0') && 'slicc-kernel before 1.124.0 has no TLS handshake of its own';
 // slicc-kernel 1.124.13 (ai-ecoverse/slicc-kernel#1004): a client
 // certificate, `sni: false`, and the cipher in the session.
-const skipControls = !kernelAtLeast('1.124.13') && 'slicc-kernel before 1.124.13 takes no client certificate';
 // slicc-kernel 1.125.2 (ai-ecoverse/slicc-kernel#1057): a server's alert has
 // its number, and the chain's verdict comes apart from the name's.
-const skipAlerts = !kernelAtLeast('1.125.2') && 'slicc-kernel before 1.125.2 names no alert';
 
 const UPLINK = '203.0.113.10';
 
@@ -87,7 +84,7 @@ function hostNode(dir, file, args) {
   });
 }
 
-describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
+describe('tls through the kernel handshake (kernel 1.124.0)', () => {
   let jsh;
   let dir;
   const ca = makeCa();
@@ -457,7 +454,7 @@ const go = (label, opts) => new Promise((resolve) => {
     assert.match(shim.stdout, /^own check takes a wrong name secureConnect true null TLSv1\.3 other\.test /m);
   });
 
-  it("the chain's verdict is the kernel's (kernel 1.125.2): a self-issued certificate that isn't self-signed, and with another name a client-only certificate or a key usage no server may have", { skip: skipAlerts }, async () => {
+  it("the chain's verdict is the kernel's (kernel 1.125.2): a self-issued certificate that isn't self-signed, and with another name a client-only certificate or a key usage no server may have", async () => {
     const { host, shim } = await both(
       'chain.js',
       `const tls = require('tls');
@@ -870,7 +867,7 @@ const send = (label, options, body) => new Promise((resolve) => {
     assert.match(shim.stdout, /^check other\.test secure\.test\nno agent, wrong name, own check takes it 200 /m);
   });
 
-  it('client certificates (kernel 1.124.13): mTLS on TLS 1.3 and 1.2, an encrypted key, getCertificate, and a server that requires one', { skip: skipAlerts }, async () => {
+  it('client certificates (kernel 1.124.13): mTLS on TLS 1.3 and 1.2, an encrypted key, getCertificate, and a server that requires one', async () => {
     const { host, shim } = await both(
       'mtls.js',
       `const tls = require('tls');
@@ -914,7 +911,7 @@ const go = (label, opts) => new Promise((resolve) => {
     assert.match(shim.stdout, /^TLS 1\.2 data client=client\.test sni=secure\.test$/m);
   });
 
-  it("bad key material: Node's codes, messages and properties for a wrong or missing passphrase, a key that isn't one, another certificate's key, a certificate that isn't one", { skip: skipControls }, async () => {
+  it("bad key material: Node's codes, messages and properties for a wrong or missing passphrase, a key that isn't one, another certificate's key, a certificate that isn't one", async () => {
     // Node throws these from tls.connect (createSecureContext); jsh throws
     // what it can see without the kernel (it isn't one, the certificate isn't
     // one, a wrong passphrase), and another certificate's key is the kernel's at connect, on 'error'.
@@ -968,7 +965,7 @@ const go = (label, opts) => new Promise((resolve) => {
     assert.equal(pfx.stdout, "ERR_NOT_SUPPORTED slicc-jsh: 'tls.createSecureContext option 'pfx'' is not supported yet (no TLS on ctx.net)\n");
   });
 
-  it('SNI as Node sends it (only a servername tls.connect is given), getCipher, and checkServerIdentity on the leaf', { skip: skipControls }, async () => {
+  it('SNI as Node sends it (only a servername tls.connect is given), getCipher, and checkServerIdentity on the leaf', async () => {
     const { host, shim } = await both(
       'sni.js',
       `const tls = require('tls');
@@ -1072,7 +1069,7 @@ s.on('error', (e) => console.log('error', e.message));
     assert.equal(thrown.shim.stdout, 'check secure.test secure.test\nuncaught thrown\n');
   });
 
-  it('client certificates in the real pg (sslcert, sslkey) and in https.request, with an agent and without', { skip: skipAlerts }, async () => {
+  it('client certificates in the real pg (sslcert, sslkey) and in https.request, with an agent and without', async () => {
     const { host, shim } = await both(
       'mtls-clients.js',
       `const [host, portsJson, dir, mods] = process.argv.slice(2);

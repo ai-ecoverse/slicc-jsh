@@ -9,11 +9,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+import { withJsh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const WASI_KERNEL = '1.133.0';
-const hasWasi = kernelAtLeast(WASI_KERNEL);
 
 describe('node:wasi (kernel)', () => {
   let jsh;
@@ -43,7 +41,7 @@ try {
     return jsh.run(['node', '--no-warnings', 'main.js'], { cwd: '/os/wasi' });
   };
 
-  it('a file fs opened is no stdout for WASI: ERR_NOT_SUPPORTED, not output lost', { skip: !hasWasi && `slicc-kernel ${kernelVersion} has no WASI host (${WASI_KERNEL})` }, async () => {
+  it('a file fs opened is no stdout for WASI: ERR_NOT_SUPPORTED, not output lost', async () => {
     const r = await run("fs.openSync(__dirname + '/out.txt', 'w')");
     assert.equal(r.status, 0, r.stderr);
     assert.equal(
@@ -52,7 +50,7 @@ try {
     );
   });
 
-  it('a device fs opened is: /dev/null takes the program\'s stdout', { skip: !hasWasi && `slicc-kernel ${kernelVersion} has no WASI host (${WASI_KERNEL})` }, async () => {
+  it('a device fs opened is: /dev/null takes the program\'s stdout', async () => {
     const r = await run("fs.openSync('/dev/null', 'w')");
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, 'code 44\n');

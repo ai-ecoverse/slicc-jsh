@@ -1,6 +1,5 @@
 {
   "description": "ai-ecoverse/slicc-jsh#743: chai-http 5's request.execute(app) against an Express app: it listens with listen(0) and reads address() at once, so the server must be bound when listen() returns; a GET with JSON, a POST with a body, an error handler, an agent keeping a cookie across requests, a server the caller listens on itself, and the program exits by itself once each server is closed. Needs slicc-kernel 1.146.0's ctx.sync.net.listen",
-  "kernel": "1.146.0",
   "argv": ["main.mjs"],
   "shim": true,
   "packages": ["express", "chai", "chai-http"]

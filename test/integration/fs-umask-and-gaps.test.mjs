@@ -8,10 +8,8 @@
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+import { withJsh } from './helpers.mjs';
 
-const needs = kernelAtLeast('1.86.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.fs.chmod (1.86.0)` };
-const has192 = kernelAtLeast('1.92.0') ? {} : { skip: `slicc-kernel ${kernelVersion}: no ctx.umask / writable BroadcastChannel slot (1.92.0)` };
 
 describe('process.umask and new files under a user’s umask (kernel)', () => {
   let jsh;
@@ -21,7 +19,7 @@ describe('process.umask and new files under a user’s umask (kernel)', () => {
   });
   after(() => jsh?.close());
 
-  it('umask() is the kernel’s 077; files and directories keep to it, an explicit mode too', needs, async () => {
+  it('umask() is the kernel’s 077; files and directories keep to it, an explicit mode too', async () => {
     await jsh.kernel.writeFile(
       '/tmp/um.js',
       [
@@ -54,7 +52,7 @@ describe('modules and globals jsh leaves out (kernel)', () => {
       "const m = require('module'); for (const id of ['wasi', 'node:wasi', 'dgram', 'node:dgram']) { try { require(id); console.log(id, 'loaded'); } catch (e) { console.log(id, m.isBuiltin(id), e.code); } }",
     ]);
     assert.equal(r.status, 0, r.stderr);
-    const wasi = kernelAtLeast('1.133.0') ? 'wasi loaded\nnode:wasi loaded\n' : 'wasi true ERR_NOT_SUPPORTED\nnode:wasi true ERR_NOT_SUPPORTED\n';
+    const wasi = 'wasi loaded\nnode:wasi loaded\n';
     assert.equal(r.stdout, `${wasi}dgram true ERR_NOT_SUPPORTED\nnode:dgram true ERR_NOT_SUPPORTED\n`);
   });
 
@@ -68,7 +66,7 @@ describe('modules and globals jsh leaves out (kernel)', () => {
     assert.equal(r.stdout, 'undefined undefined\nERR_METHOD_NOT_IMPLEMENTED The lchmod() method is not implemented\n');
   });
 
-  it('BroadcastChannel (1.92.0+) is jsh’s, never the platform’s: in-process only, not across programs', has192, async () => {
+  it('BroadcastChannel (1.92.0+) is jsh’s, never the platform’s: in-process only, not across programs', async () => {
     await jsh.kernel.writeFile(
       '/os/bc-listen.js',
       [
@@ -94,7 +92,7 @@ describe('modules and globals jsh leaves out (kernel)', () => {
     assert.equal(listener.stdout, 'listener heard nothing\n');
   });
 
-  it('process.umask(mask) (1.92.0+) is the kernel’s: a child inherits it', has192, async () => {
+  it('process.umask(mask) (1.92.0+) is the kernel’s: a child inherits it', async () => {
     const r = await jsh.run([
       'node',
       '-e',

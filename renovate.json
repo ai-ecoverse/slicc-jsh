@@ -7,5 +7,20 @@
     "**/node_modules/**",
     "**/bower_components/**",
     "test/fixtures/**"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "engines.slicc-kernel is the kernel CI tests: it moves with the @ai-ecoverse/slicc-kernel devDependency, in the same kernel-and-pnpm pull request.",
+      "managerFilePatterns": [
+        "/^package\\.json$/"
+      ],
+      "matchStrings": [
+        "\"slicc-kernel\": \">=(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "@ai-ecoverse/slicc-kernel",
+      "datasourceTemplate": "npm",
+      "versioningTemplate": "npm"
+    }
   ]
 }

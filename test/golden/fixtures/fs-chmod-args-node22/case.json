@@ -1,6 +1,5 @@
 {
   "description": "fs.chmod*, fchmod* and FileHandle.chmod: Node 22's mode parsing (octal strings, ERR_INVALID_ARG_VALUE / TYPE, ERR_OUT_OF_RANGE) and error objects (ENOENT, EBADF, a closed FileHandle), and mkdir's EEXIST and recursive results (fs-chmod-mkdir-node22 has the modes themselves). Shim side on slicc-kernel 1.86.0+: before it, chmod's one-time JSH_NO_CHMOD warning is a deliberate difference)",
-  "kernel": "1.86.0",
   "argv": [
     "script.js"
   ],

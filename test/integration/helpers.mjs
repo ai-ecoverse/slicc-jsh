@@ -221,16 +221,3 @@ export async function withJshAndSh(options = {}) {
   }
   return env;
 }
-
-/** The installed @ai-ecoverse/slicc-kernel's version. */
-export const kernelVersion = JSON.parse(
-  readFileSync(join(root, 'node_modules/@ai-ecoverse/slicc-kernel/package.json'), 'utf8')
-).version;
-
-/** Whether the installed kernel is `min` (x.y.z) or newer. */
-export function kernelAtLeast(min) {
-  const a = kernelVersion.split(/[.-]/).map(Number);
-  const b = min.split(/[.-]/).map(Number);
-  for (let i = 0; i < 3; i++) if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
-  return true;
-}

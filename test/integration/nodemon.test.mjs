@@ -9,13 +9,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageFiles, devPackageTree, kernelAtLeast, kernelVersion, withJshAndSh } from './helpers.mjs';
+import { devPackageFiles, devPackageTree, withJshAndSh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
-const needs = kernelAtLeast('1.125.11') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.socketpair (1.125.11)` };
 
-describe('nodemon (kernel)', needs, () => {
+describe('nodemon (kernel)', () => {
   let jsh;
   before(async () => {
     jsh = await withJshAndSh();

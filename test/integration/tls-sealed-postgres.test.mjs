@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { createServer as createTcp, connect as tcp } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
-import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
+import { devPackageTree, withJsh } from './helpers.mjs';
 import { makeCa } from './tls-certs.mjs';
 
 // Sealed values against a real PostgreSQL over TLS (the kernel net lane's
@@ -27,13 +27,10 @@ const SECRET = 'jsh-1224-the-sealed-secret';
 const OWN = 'jsh-1224-a-password-of-its-own';
 const DB = 'db.test';
 
-const skip =
-  (process.getuid?.() === 0 && 'PostgreSQL refuses to run as root') ||
-  (!kernelAtLeast('1.136.4') && 'slicc-kernel before 1.136.4 has no sealed pg channel binding (slicc-kernel#1224)');
+const skip = process.getuid?.() === 0 && 'PostgreSQL refuses to run as root';
 
-// slicc-kernel#1278 (1.137.0): a program's own SCRAM exchange in a session
-// the kernel didn't verify passes through untouched, channel binding and all.
-const skipOwnBinding = !kernelAtLeast('1.137.0') && "slicc-kernel before 1.137.0 rewrites the program's own channel binding (slicc-kernel#1278)";
+// slicc-kernel#1278: a program's own SCRAM exchange in a session the kernel
+// didn't verify passes through untouched, channel binding and all.
 
 const sha256 = (b) => createHash('sha256').update(b).digest();
 const hmac = (key, b) => createHmac('sha256', key).update(b).digest();
@@ -270,11 +267,11 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
     ]);
     assert.deepEqual(out, {
       'a private CA, prefer': failed,
-      'a private CA, require': kernelAtLeast('1.137.0') ? failed : 'error undefined channel binding required, offered SCRAM-SHA-256',
+      'a private CA, require': failed,
       'own sslrootcert, prefer': failed,
       'own sslrootcert, no binding': failed,
       // slicc-kernel#1278 (1.137.0) leaves the session alone, -PLUS and all.
-      'own sslrootcert, require': kernelAtLeast('1.137.0') ? failed : 'error undefined channel binding required, offered SCRAM-SHA-256',
+      'own sslrootcert, require': failed,
       // Verified, so bound, but the vault has nothing for this host.
       'another host, prefer': failed,
       'another host, require': failed,
@@ -302,7 +299,7 @@ describe('sealed pg SCRAM channel binding against a real PostgreSQL over TLS (sl
   // in a session it didn't verify, so libpq's default channel_binding=prefer
   // failed there with a password of the program's own. slicc-kernel#1278
   // (1.137.0) passes that exchange through: PostgreSQL checks the binding.
-  it("a password of the program's own in a session the kernel didn't verify: a root of its own and a private CA through sslrootcert, prefer and require bind with SCRAM-SHA-256-PLUS and authenticate", { skip: skipOwnBinding }, async () => {
+  it("a password of the program's own in a session the kernel didn't verify: a root of its own and a private CA through sslrootcert, prefer and require bind with SCRAM-SHA-256-PLUS and authenticate", async () => {
     const own = { user: 'own', password: OWN };
     const steps = ['prefer', 'require'].flatMap((channelBinding) => [
       { label: `${channelBinding}, a root of its own`, query: OWN_ROOT, channelBinding, ...own },

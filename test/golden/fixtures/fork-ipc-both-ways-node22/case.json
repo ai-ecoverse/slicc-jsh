@@ -4,7 +4,6 @@
     "script.js"
   ],
   "shim": true,
-  "kernel": "1.126.0",
   "files": [
     {
       "path": "/os/script.js",

@@ -1,19 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { launch } from '../browser/chrome.mjs';
 import { booted, installJsh, packJsh } from '../browser/kernel.mjs';
 
-const kernel = JSON.parse(readFileSync(new URL('../../node_modules/@ai-ecoverse/slicc-kernel/package.json', import.meta.url), 'utf8')).version;
-const atLeast = (min) => {
-  const a = kernel.split('.').map(Number);
-  const b = min.split('.').map(Number);
-  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
-  return true;
-};
-const skip = !atLeast('1.146.5') && `slicc-kernel ${kernel} drops write-back past the quota silently (ai-ecoverse/slicc-kernel#1430)`;
 const pack = mkdtempSync(join(tmpdir(), 'jsh-quota-pack-'));
 let chrome;
 let tgz;
@@ -56,7 +48,7 @@ const script = [
   '})();',
 ].join('\n');
 
-test('a write past the quota is ENOSPC, never data that reads back as zeros', { skip }, async (t) => {
+test('a write past the quota is ENOSPC, never data that reads back as zeros', async (t) => {
   const k = await booted(chrome, t, { cdp: false });
   await installJsh(k, chrome, tgz);
   await k.write('/home/t/quota.js', script);

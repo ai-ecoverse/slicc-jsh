@@ -1,6 +1,5 @@
 {
   "description": "AsyncLocalStorage as Node 22.22.0's in the callbacks of the runtime's own I/O: a net server's 'connection' (the listen's store) and its accepted socket's 'data' (none), a client socket's 'connect', 'data', 'end' and 'close' (the connect's), an http server's 'request', its body and the next kept-alive request (the listen's), a client request's 'response' and its body (the request's), a child's stdout (the spawn's); enterWith in a timer, a socket's 'data' and an http 'request', reaching what it schedules and no other callback; and across native awaits: nested awaits, a thenable, .then chains, queueMicrotask, nextTick, timers, an interval, fs and http/net callbacks mixed with awaits, for await, a second storage, exit, enterWith after an await, and concurrent runs interleaving across awaits without seeing each other's store. Needs slicc-kernel 1.143.0's ctx.asyncContext",
-  "kernel": "1.143.0",
   "argv": ["script.js"],
   "shim": true
 }

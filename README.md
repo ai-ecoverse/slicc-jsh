@@ -164,28 +164,7 @@ This table is the summary. Details, quirks and the libraries behind each module 
 
 ## Kernel requirements
 
-The package needs `slicc-kernel` 1.53.2 or later. These features need a newer kernel:
-
-| Feature | slicc-kernel | On an older kernel |
-|---|---|---|
-| a refused `WebSocket` connect is an `error` event with `cause.code` | 1.59.1 | |
-| `spawnSync`, `execSync`, `execFileSync`, `process.execve` | 1.65.0 | they throw, naming the kernel version needed |
-| `process.exit()` ends the program inside the call | 1.65 | code it unwinds through still runs, silenced |
-| `/dev` through `fs` (`/dev/null`, `/dev/urandom`, …) | 1.69 | |
-| sync `child_process`: the program's own fds go to the child, output order kept on one fd | 1.70.0 | other fds are written after the run, stdout before stderr |
-| `process.kill(self)` and `process.abort()` end the program inside the call; `kill` of other processes | 1.72.0 | the program unwinds, silenced; other pids give `ESRCH` |
-| `fs.statfs` reports the storage quota and usage | 1.72 | a fixed 1 GiB |
-| `child_process` `detached: true` makes a new session and process group | 1.74.0 | the child stays in the program's group |
-| a child sees `options.argv0` as its `argv[0]` | 1.76.0 | `argv0` only shows in error messages |
-| `process.setuid`, `setgid`, `seteuid`, `setegid`, `setgroups`, `initgroups` | 1.81.0 | not defined |
-| `fs.chmod`, `fchmod` and `FileHandle.chmod` change the mode; new files get the mode asked for, less the umask; `copyFile` keeps the source's mode | 1.86.0 | they change nothing; new files get the kernel's default mode |
-| `fs.mkdir` without `recursive` is exclusive (`EEXIST`/`ENOENT` from the kernel; one winner among processes) | 1.86.0 | it checks, then creates, and makes a missing parent |
-| `child.pid` is set when `spawn()` returns | 1.87.0 | it is set by the `'spawn'` event |
-| a recursive `fs.rm` is one kernel call | 1.88.0 | jsh walks the tree |
-| `process.umask(mask)` sets the kernel's umask (children inherit it); new files are created with their mode | 1.92.0 | jsh's own umask; it `chmod`s new files after (1.86.0+) |
-| the `BroadcastChannel` global | 1.92.0 | `undefined`; `worker_threads.BroadcastChannel` has it |
-| `tls.connect` for HTTP/1.1 and WebSocket (the transport's TLS), `https` with an agent, `wss://` | 1.116.0 | `tls.connect` throws `ERR_NOT_SUPPORTED` |
-| TLS to a host the uplink routes, in the kernel: any port and protocol, a custom `ca`, STARTTLS (`tls.connect({ socket })`, `new tls.TLSSocket(socket)`), the server's certificate | 1.124.0 | those throw or fail with `ERR_NOT_SUPPORTED` |
+The package needs `slicc-kernel` 1.147.10 or later: `engines.slicc-kernel` is the kernel CI tests, the `@ai-ecoverse/slicc-kernel` devDependency, and the two move together. jsh has no fallbacks for older kernels.
 
 ## Develop
 

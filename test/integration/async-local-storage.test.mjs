@@ -3,16 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { devPackageTree, kernelAtLeast, withJsh } from './helpers.mjs';
+import { devPackageTree, withJsh } from './helpers.mjs';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const version = (name) => JSON.parse(readFileSync(join(root, 'node_modules', name, 'package.json'), 'utf8')).version;
-const hostContext = kernelAtLeast('1.143.0');
 
 // The golden async-local-storage-node22 pins where the store is carried as
-// in Node. Below slicc-kernel 1.143.0 a native await continuation resumes
-// outside every run: it must fail safe, never seeing another run's store.
-// From 1.143.0 the kernel's ctx.asyncContext carries it, as in Node.
+// in Node: the kernel's ctx.asyncContext carries it across a native await.
 describe('AsyncLocalStorage (kernel)', () => {
   let jsh;
   before(async () => {
@@ -20,7 +17,7 @@ describe('AsyncLocalStorage (kernel)', () => {
   });
   after(() => jsh?.close());
 
-  it(hostContext ? "after a native await a run's store is its own, as in Node" : "after a native await a run's store is missing (undefined), never another run's", async () => {
+  it("after a native await a run's store is its own, as in Node", async () => {
     await jsh.kernel.writeFile(
       '/os/als-await.js',
       `const { AsyncLocalStorage } = require('async_hooks');
@@ -50,7 +47,7 @@ Promise.all([request('A', 5, 1), request('B', 1, 8), als.run({ id: 'C' }, () => 
     assert.equal(r.status, 0);
     const lines = r.stdout.trim().split('\n');
     assert.deepEqual(lines.filter((l) => l.includes('before await')).sort(), ['A before await: A', 'B before await: B']);
-    const after = hostContext ? ['A', 'A', 'B', 'B'] : ['undefined', 'undefined', 'undefined', 'undefined'];
+    const after = ['A', 'A', 'B', 'B'];
     assert.deepEqual(lines.filter((l) => l.includes('after await')).sort(), [
       `A after await null: ${after[0]}`,
       `A after await: ${after[1]}`,
@@ -62,7 +59,7 @@ Promise.all([request('A', 5, 1), request('B', 1, 8), als.run({ id: 'C' }, () => 
     assert.equal(lines.at(-1), 'outside: undefined');
   });
 
-  it(hostContext ? 'enterWith after a native await works as in Node' : 'enterWith after a native await throws ERR_NOT_SUPPORTED rather than reach unrelated code', async () => {
+  it('enterWith after a native await works as in Node', async () => {
     const r = await jsh.run([
       'node',
       '-e',
@@ -87,13 +84,8 @@ setTimeout(() => console.log('next timer', als.getStore()), 5);
     assert.equal(r.status, 0, r.stderr);
     assert.deepEqual(r.stdout.split('\n'), [
       'main main',
-      ...(hostContext
-        ? ['after await main', 'still after await']
-        : [
-            'after await undefined',
-            "ERR_NOT_SUPPORTED slicc-jsh: AsyncLocalStorage#enterWith is not supported here yet (after a native await, or in a callback of the runtime's own I/O, its store would reach unrelated code); use run()",
-            'still undefined',
-          ]),
+      'after await main',
+      'still after await',
       'timer made in main main',
       'timer in timer',
       'next timer main',

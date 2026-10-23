@@ -1,6 +1,5 @@
 {
   "description": "fs.chmod*, fchmod* and FileHandle.chmod set the mode bits statSync shows (slicc-kernel 1.86.0's ctx.sync.fs.chmod; older kernels change nothing), with Node 22's mode parsing and error objects; mkdir without recursive: EEXIST, ENOENT and ENOTDIR from the kernel; recursive gives the first directory made",
-  "kernel": "1.86.0",
   "argv": ["script.js"],
   "shim": true
 }

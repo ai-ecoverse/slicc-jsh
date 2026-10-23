@@ -1,8 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+import { withJsh } from './helpers.mjs';
 
-const needs = kernelAtLeast('1.126.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.sync.tty.setRaw (1.126.0): a key typed at the prompt can beat raw mode` };
 
 // readline on a kernel terminal (openTerminal): raw mode, line editing,
 // history, completion, ^C and ^D. The readline-node22 golden pins the bytes
@@ -56,7 +55,7 @@ describe('readline on a terminal (kernel)', () => {
     '',
   ].join('\n');
 
-  it('edits, recalls history, completes, and closes on ^C', needs, async () => {
+  it('edits, recalls history, completes, and closes on ^C', async () => {
     const { out, status } = await session(repl, [
       [/jsh> /, 'hello\r'],
       [/got \[hello\]/, 'ab\x1b[Dc\r'], // left arrow: c goes before the cursor's char
@@ -80,13 +79,13 @@ describe('readline on a terminal (kernel)', () => {
     assert.match(out, /closed \["help","hello","abc","hello"\] false/);
   });
 
-  it('closes on ^D at an empty line', needs, async () => {
+  it('closes on ^D at an empty line', async () => {
     const { out, status } = await session(repl, [[/jsh> /, 'x\x7f\x04']]);
     assert.equal(status, 0, out);
     assert.match(out, /closed \[\] false/);
   });
 
-  it('readline/promises question() on the terminal', needs, async () => {
+  it('readline/promises question() on the terminal', async () => {
     const { out, status } = await session(
       [
         "const { createInterface } = require('readline/promises');",

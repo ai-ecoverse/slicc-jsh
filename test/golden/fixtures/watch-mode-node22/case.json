@@ -4,7 +4,6 @@
     "script.js"
   ],
   "shim": true,
-  "kernel": "1.125.11",
   "hostPlatform": "linux",
   "files": [
     {

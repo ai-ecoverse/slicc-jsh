@@ -8,12 +8,11 @@
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { devPackageFiles, kernelAtLeast, kernelVersion, withJsh } from './helpers.mjs';
+import { devPackageFiles, withJsh } from './helpers.mjs';
 
 const decoder = new TextDecoder();
-const needs = kernelAtLeast('1.125.0') ? {} : { skip: `slicc-kernel ${kernelVersion} has no ctx.sync.fs.watch` };
 
-describe('fs.watch in the kernel', needs, () => {
+describe('fs.watch in the kernel', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();
@@ -101,8 +100,7 @@ describe('fs.watch in the kernel', needs, () => {
     assert.equal(await read('/tmp/gone.log'), 'watching\nchange gone.txt\nrename gone.txt\nrename gone.txt\nclose\n');
   });
 
-  const beside = kernelAtLeast('1.125.3') ? {} : { skip: `slicc-kernel ${kernelVersion} ends a watch on a write beside it (ai-ecoverse/slicc-kernel#1063)` };
-  it("the embedder's writes beside a watched directory and file, in their parent, don't end either watch", beside, async () => {
+  it("the embedder's writes beside a watched directory and file, in their parent, don't end either watch", async () => {
     const made = await jsh.run(['node', '-e', "const fs = require('fs'); fs.mkdirSync('/tmp/parent/dir', { recursive: true }); fs.writeFileSync('/tmp/parent/dir/f.txt', 'f')"]);
     assert.equal(made.status, 0, made.stderr);
     await program('/tmp/parent.js', [
@@ -127,7 +125,7 @@ describe('fs.watch in the kernel', needs, () => {
     await jsh.kernel.writeFile('/tmp/parent/dir/stop', '');
     const r = await run;
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(await read('/tmp/parent.log'), `watching\n${kernelAtLeast('1.143.4') ? 'file change f.txt\n' : ''}file change f.txt\ndir rename stop\n`);
+    assert.equal(await read('/tmp/parent.log'), `watching\n${'file change f.txt\n'}file change f.txt\ndir rename stop\n`);
   });
 
   it('an AbortSignal aborted on an outside change closes the watcher; nothing comes after close()', async () => {
@@ -271,7 +269,7 @@ describe('fs.watch in the kernel', needs, () => {
   });
 });
 
-describe('chokidar 5 in the kernel (usePolling: false)', needs, () => {
+describe('chokidar 5 in the kernel (usePolling: false)', () => {
   let jsh;
   before(async () => {
     jsh = await withJsh();
