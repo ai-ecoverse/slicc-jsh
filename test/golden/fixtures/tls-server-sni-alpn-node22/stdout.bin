@@ -1,0 +1,120 @@
+addContext: the name the client sends
+  server secureConnection: servername a.test, alpn false, cert a.test
+  client secureConnect: cert a.test, alpn false
+  client got "hello"
+addContext: a wildcard
+  server secureConnection: servername x.wild.test, alpn false, cert *.wild.test
+  client secureConnect: cert *.wild.test, alpn false
+  client got "hello"
+addContext: no context for the name
+  server secureConnection: servername b.test, alpn false, cert localhost
+  client secureConnect: cert localhost, alpn false
+  client got "hello"
+addContext: the last added that matches
+  server secureConnection: servername a.test, alpn false, cert *.test
+  client secureConnect: cert *.test, alpn false
+  client got "hello"
+addContext: a SecureContext
+  server secureConnection: servername a.test, alpn false, cert a.test
+  client secureConnect: cert a.test, alpn false
+  client got "hello"
+addContext: a client without SNI
+  server secureConnection: servername false, alpn false, cert localhost
+  client secureConnect: cert localhost, alpn false
+  client got "hello"
+SNICallback: a context for the name
+  server SNICallback a.test, this is the socket true
+  server secureConnection: servername a.test, alpn false, cert a.test
+  client secureConnect: cert a.test, alpn false
+  client got "hello"
+SNICallback: later, a raw context
+  server SNICallback y.wild.test
+  server secureConnection: servername y.wild.test, alpn false, cert *.wild.test
+  client secureConnect: cert *.wild.test, alpn false
+  client got "hello"
+SNICallback: no context
+  server SNICallback b.test
+  server secureConnection: servername b.test, alpn false, cert localhost
+  client secureConnect: cert localhost, alpn false
+  client got "hello"
+SNICallback: an error
+  server SNICallback b.test
+  server tlsClientError no certificate for that name, destroyed true
+  client error ECONNRESET | Client network socket disconnected before secure TLS connection was established
+  client got ""
+SNICallback: a client without SNI
+  server secureConnection: servername false, alpn false, cert localhost
+  client secureConnect: cert localhost, alpn false
+  client got "hello"
+SNICallback over addContext
+  server SNICallback a.test
+  server secureConnection: servername a.test, alpn false, cert *.wild.test
+  client secureConnect: cert *.wild.test, alpn false
+  client got "hello"
+ALPNCallback: its choice
+  server ALPNCallback {"servername":"localhost","protocols":["x-a","x-b","x-c"]}
+  server secureConnection: servername localhost, alpn x-b, cert localhost
+  client secureConnect: cert localhost, alpn x-b
+  client got "hello"
+ALPNCallback: none of them
+  server ALPNCallback {"servername":false,"protocols":["x-a"]}
+  server tlsClientError ERR_SSL_NO_APPLICATION_PROTOCOL | SSL routines | no application protocol, destroyed true
+  client error ERR_SSL_TLSV1_ALERT_NO_APPLICATION_PROTOCOL | SSL routines | tlsv1 alert no application protocol
+  client got ""
+ALPNCallback: one the client did not offer
+  server ALPNCallback {"servername":false,"protocols":["x-a","x-b"]}
+  server tlsClientError ERR_TLS_ALPN_CALLBACK_INVALID_RESULT | ALPN callback returned a value (x-z) that did not match any of the client's offered protocols (x-a, x-b), destroyed true
+  client error ECONNRESET | Client network socket disconnected before secure TLS connection was established
+  client got ""
+ALPNCallback: it throws
+  server ALPNCallback {"servername":false,"protocols":["x-a"]}
+  server tlsClientError no protocol today, destroyed true
+  client error ECONNRESET | Client network socket disconnected before secure TLS connection was established
+  client got ""
+ALPNCallback: a client without ALPN
+  server secureConnection: servername false, alpn false, cert localhost
+  client secureConnect: cert localhost, alpn false
+  client got "hello"
+ALPNCallback with ALPNProtocols
+  createServer throws ERR_TLS_ALPN_CALLBACK_WITH_PROTOCOLS The ALPNCallback and ALPNProtocols TLS options are mutually exclusive
+SNICallback and ALPNCallback
+  server ALPNCallback {"servername":"a.test","protocols":["x-a","x-b"]}
+  server SNICallback a.test
+  server secureConnection: servername a.test, alpn x-a, cert a.test
+  client secureConnect: cert a.test, alpn x-a
+  client got "hello"
+SNICallback without a certificate of its own, SNI
+  server SNICallback a.test
+  server secureConnection: servername a.test, alpn false, cert a.test
+  client secureConnect: cert a.test, alpn false
+  client got "hello"
+SNICallback without a certificate of its own, no SNI
+  server tlsClientError ERR_SSL_NO_SUITABLE_SIGNATURE_ALGORITHM | SSL routines | no suitable signature algorithm, destroyed true
+  client error ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE | SSL routines | ssl/tls alert handshake failure
+  client got ""
+addContext, a key for another certificate: throws ERR_OSSL_X509_KEY_VALUES_MISMATCH error:05800074:x509 certificate routines::key values mismatch
+requestCert: a context with the same ca checks the client certificate
+  server secureConnection: servername a.test, alpn false, cert a.test
+  client secureConnect: cert a.test, alpn false
+  client got "hello"
+requestCert: a context whose ca doesn't issue the client certificate refuses it
+  server tlsClientError
+  client got ""
+addContext and ALPNProtocols
+  server secureConnection: servername a.test, alpn h2, cert a.test
+  client secureConnect: cert a.test, alpn h2
+  client got "hello"
+addContext and ALPNProtocols, none in common
+  server tlsClientError ERR_SSL_NO_APPLICATION_PROTOCOL | SSL routines | no application protocol, destroyed true
+  client error ERR_SSL_TLSV1_ALERT_NO_APPLICATION_PROTOCOL | SSL routines | tlsv1 alert no application protocol
+  client got ""
+https with SNICallback
+  server request /a.test: servername a.test
+  server request /localhost: servername localhost
+  client a.test: 200, cert a.test
+  client localhost: 200, cert localhost
+new tls.TLSSocket(socket, { isServer: true, SNICallback })
+  server SNICallback a.test
+  server secure: servername a.test
+  client secureConnect: cert a.test, alpn false
+  client got "hello from a TLSSocket"
