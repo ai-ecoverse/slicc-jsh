@@ -164,7 +164,7 @@ This table is the summary. Details, quirks and the libraries behind each module 
 
 ## Kernel requirements
 
-The package needs `slicc-kernel` 1.147.1 or later: `engines.slicc-kernel` is the kernel CI tests, the `@ai-ecoverse/slicc-kernel` devDependency, and the two move together. jsh has no fallbacks for older kernels.
+The package needs `slicc-kernel` 1.147.4 or later: `engines.slicc-kernel` is the kernel CI tests, the `@ai-ecoverse/slicc-kernel` devDependency, and the two move together. jsh has no fallbacks for older kernels.
 
 ## Develop
 
