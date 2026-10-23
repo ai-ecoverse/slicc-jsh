@@ -129,6 +129,10 @@ describe('tls through the kernel handshake (kernel 1.124.0)', { skip }, () => {
       ports[name] = await listen(server);
     };
     await tlsServer('echo', { key: leaf.key, cert: leaf.cert, ALPNProtocols: ['echo/1'] });
+    const hello = createTlsServer({ key: leaf.key, cert: leaf.cert }, (s) => s.end('hello'));
+    hello.on('tlsClientError', () => {});
+    servers.push(hello);
+    ports.hello = await listen(hello);
     const other = makeCa('another CA');
     const day = 86400_000;
     const plainLeaf = ca.server('secure.test');
@@ -578,6 +582,136 @@ process.on('exit', (code) => console.log('exit', code));
     assert.equal(shim.stdout, host.stdout);
     assert.equal(shim.stderr, '');
     assert.equal(shim.status, host.status);
+  });
+
+  it("STARTTLS, then end(), with the plain socket's destroy callback held back: the program still lives until the plain socket closes (#814)", async () => {
+    const { host, shim } = await both(
+      'starttls-end-late.js',
+      `const tls = require('tls');
+const net = require('net');
+const fs = require('fs');
+const [host, port, dir] = process.argv.slice(2);
+const ca = fs.readFileSync(dir + '/ca.pem');
+const upgradeThenEnd = (label) => new Promise((resolve) => {
+  const plain = net.connect(Number(port), host, () => plain.write('STARTTLS\\r\\n'));
+  const destroy = plain._destroy;
+  plain._destroy = function (err, cb) {
+    return destroy.call(this, err, (e) => setTimeout(() => cb(e), 50).unref());
+  };
+  plain.on('close', (hadError) => {
+    console.log(label, 'plain close', hadError);
+    resolve();
+  });
+  plain.once('data', () => {
+    const s = tls.connect({ socket: plain, servername: 'secure.test', ca }, () => s.write(label));
+    s.once('data', (d) => {
+      console.log(label, 'echo', String(d));
+      s.end();
+    });
+    s.on('close', (hadError) => console.log(label, 'tls close', hadError));
+    s.on('error', (e) => console.log(label, 'error', e.code));
+  });
+});
+process.on('exit', (code) => console.log('exit', code));
+(async () => {
+  for (const label of ['first', 'second']) {
+    await upgradeThenEnd(label);
+    console.log(label, 'done');
+  }
+})();
+`,
+      ports.starttls
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.match(host.stdout, /^second done$/m);
+    assert.equal(shim.stdout, host.stdout);
+    assert.equal(shim.stderr, '');
+    assert.equal(shim.status, host.status);
+  });
+
+  it("end() before the handshake is done: what it carries goes out after it, straight and over STARTTLS, and a handshake that fails is the end callback's error (#838)", async () => {
+    const { host, shim } = await both(
+      'end-before-secure.js',
+      `const tls = require('tls');
+const net = require('net');
+const fs = require('fs');
+const [host, ports, dir] = process.argv.slice(2);
+const port = JSON.parse(ports);
+const ca = fs.readFileSync(dir + '/ca.pem');
+const watch = (label, s, resolve) => {
+  const seen = [];
+  let got = '';
+  for (const e of ['secureConnect', 'finish', 'end']) s.on(e, () => seen.push(e));
+  s.on('data', (d) => (got += d));
+  s.on('error', (e) => seen.push('error ' + e.code));
+  s.on('close', () => {
+    console.log(label, seen.join(', '), '| got', JSON.stringify(got));
+    resolve();
+  });
+};
+const direct = (label, use, p = port.echo) => new Promise((resolve) => {
+  const s = tls.connect({ host, port: p, servername: 'secure.test', ca });
+  watch(label, s, resolve);
+  use(s);
+});
+const starttls = (label, upgrade) => new Promise((resolve) => {
+  const plain = net.connect(port.starttls, host, () => plain.write('STARTTLS\\r\\n'));
+  plain.once('data', () => {
+    const s = upgrade(plain);
+    watch(label, s, resolve);
+    s.end('payload', (e) => console.log(label, 'end callback', e ? e.code : null));
+  });
+});
+(async () => {
+  await direct('end(payload)', (s) => s.end('payload', (e) => console.log('end(payload) end callback', e ? e.code : null)));
+  await direct('write, end()', (s) => { s.write('a'); s.write('b'); s.end(); });
+  await starttls('STARTTLS tls.connect end(payload)', (socket) => tls.connect({ socket, servername: 'secure.test', ca }));
+  await starttls('STARTTLS TLSSocket end(payload)', (socket) => new tls.TLSSocket(socket, { isServer: false, servername: 'secure.test', secureContext: tls.createSecureContext({ ca }) }));
+  await direct('an untrusted peer', (s) => s.end('payload', (e) => console.log('an untrusted peer end callback', e ? e.code : null)), port.untrusted);
+})();
+`,
+      { echo: ports.echo, starttls: ports.starttls, untrusted: ports.untrusted }
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.equal(shim.stdout, host.stdout);
+    assert.equal(shim.stderr, '');
+  });
+
+  it("a TLS socket nobody reads keeps what arrives, with readableFlowing null and no 'end', until the program reads it (#834)", async () => {
+    const { host, shim } = await both(
+      'tls-unread.js',
+      `const tls = require('tls');
+const fs = require('fs');
+const [host, port, dir] = process.argv.slice(2);
+const ca = fs.readFileSync(dir + '/ca.pem');
+const open = (label) => {
+  const s = tls.connect({ host, port: Number(port), servername: 'secure.test', ca });
+  let ended = false;
+  s.on('end', () => (ended = true));
+  return { s, state: () => label + ' readableFlowing ' + s.readableFlowing + ', readableLength ' + s.readableLength + ', ended ' + ended };
+};
+(async () => {
+  const late = open('late');
+  await new Promise((r) => late.s.once('secureConnect', r));
+  await new Promise((r) => setTimeout(r, 200));
+  console.log(late.state());
+  let got = '';
+  late.s.on('data', (d) => (got += d));
+  await new Promise((r) => late.s.on('end', r));
+  console.log('late got', JSON.stringify(got));
+  late.s.destroy();
+  const never = open('never');
+  await new Promise((r) => never.s.once('secureConnect', r));
+  await new Promise((r) => setTimeout(r, 200));
+  console.log(never.state());
+  process.on('exit', (code) => console.log(never.state(), 'exit', code));
+})();
+`,
+      ports.hello
+    );
+    assert.equal(host.status, 0, host.stderr);
+    assert.equal(shim.stdout, host.stdout);
+    assert.equal(shim.stderr, '');
   });
 
   it('the real pg: an SSLRequest, then TLS over the same socket (sslmode=verify-full with sslrootcert, and libpq-style require)', async () => {
