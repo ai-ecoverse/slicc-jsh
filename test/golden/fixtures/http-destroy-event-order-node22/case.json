@@ -1,0 +1,5 @@
+{
+  "description": "the events of a destroy come in Node 22's order: req.destroy(err) on a server request whose upload is still arriving gives the socket's error (clientError) first, then the request's error and close, then the socket's close; a net socket's close comes after the ticks and microtasks queued with the destroy and by its error listeners",
+  "argv": ["script.js"],
+  "shim": true
+}

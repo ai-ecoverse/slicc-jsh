@@ -725,10 +725,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         trackPromise(handles, new Promise((resolve) => (release = resolve))).catch(() => {});
         callback = (e) => {
           done(e);
-          nextTick(() => {
-            release();
-            this.emit('close');
-          });
+          nextTick(() =>
+            queueMicrotask(() =>
+              nextTick(() => {
+                release();
+                this.emit('close');
+              })
+            )
+          );
         };
       }
       // Node's Socket._destroy: the server's count drops now, before this
