@@ -76,6 +76,61 @@ server.listen(0, '127.0.0.1', () => {
   // checked as Node checks it (tls-kernel.test.mjs).
   const kernelCerts = kernelAtLeast('1.124.13');
   const overSocket = kernelTls ? 'no throw' : `ERR_NOT_SUPPORTED slicc-jsh: '${transportTls ? 'tls.connect over a socket' : 'tls.connect'}' is not supported yet (no TLS on ctx.net)`;
+  it("a connection a tls.Server gets is a failed handshake: 'tlsClientError' with ERR_NOT_SUPPORTED and the socket destroyed, an https.Server's 'clientError', the client closed (#792)", async () => {
+    const r = await jsh.run([
+      'node',
+      '-e',
+      `const tls = require('tls');
+const net = require('net');
+const https = require('https');
+const through = (label, server) => new Promise((resolve) => {
+  const plain = net.createServer((sock) => {
+    server.emit('connection', sock);
+    console.log(label, 'given, destroyed at once', sock.destroyed);
+    plain.close();
+  });
+  plain.listen(0, '127.0.0.1', () => {
+    const c = net.connect(plain.address().port, '127.0.0.1');
+    const bound = setTimeout(() => {
+      console.log(label, 'client still open after 5 s');
+      c.destroy();
+    }, 5000);
+    c.on('error', (e) => console.log(label, 'client error', e.code));
+    c.on('close', () => {
+      clearTimeout(bound);
+      console.log(label, 'client close');
+      setImmediate(resolve);
+    });
+  });
+});
+process.on('uncaughtException', (e) => console.log('uncaught', e.code));
+(async () => {
+  const told = tls.createServer();
+  told.on('tlsClientError', (e, sock) => console.log('tlsClientError', e.code, sock.destroyed, sock instanceof net.Socket));
+  await through('a listener', told);
+  await through('no listener', tls.createServer());
+  const web = https.createServer();
+  web.on('clientError', (e, sock) => console.log('https clientError', e.code, sock.destroyed));
+  await through('https', web);
+  console.log(told.listeners('connection').map((f) => f.name).join());
+})();
+`,
+    ]);
+    assert.equal(r.stderr, '');
+    assert.equal(r.status, 0);
+    assert.deepEqual(r.stdout.trimEnd().split('\n'), [
+      'a listener given, destroyed at once false',
+      'tlsClientError ERR_NOT_SUPPORTED true true',
+      'a listener client close',
+      'no listener given, destroyed at once false',
+      'no listener client close',
+      'https given, destroyed at once false',
+      'https clientError ERR_NOT_SUPPORTED true',
+      'https client close',
+      'tlsConnectionListener',
+    ]);
+  });
+
   it('a handshake throws ERR_NOT_SUPPORTED when it is called: connect, listen, an https.Server\'s listen, a TLSSocket over a socket, key material', async () => {
     const r = await jsh.run([
       'node',
