@@ -814,6 +814,93 @@ export async function runNode(ctx, options = {}) {
     return undefined;
   };
 
+  const evaluate = (code, evalName) => {
+    // --input-type, else Node's detect-module: CJS unless ESM-only syntax
+    // (not mere import()).
+    const inputType = inputTypeOf(process._options);
+    const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(code);
+    try {
+      if (asEsm && parsed.print) {
+        throw nodeError(Error, 'ERR_EVAL_ESM_CANNOT_PRINT', '--print cannot be used with ESM input');
+      }
+      if (asEsm) {
+        // Node: ES module input is the module <cwd>/[eval1].
+        uncaughtFromEsm = true;
+        mainBegin();
+        let result;
+        try {
+          result = esm.runEsmEval(code, `${process.cwd().replace(/\/$/, '')}/[eval1]`);
+        } finally {
+          mainEnd();
+        }
+        uncaughtFromEsm = false;
+        if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
+        flushTicks();
+      } else {
+        const evalParent = `${process.cwd()}/${evalName}`;
+        const require = cjs.makeRequire(evalParent);
+        const exports = {};
+        const module = { exports, id: evalName };
+        // Dynamic import() is valid in CJS; rewrite to the kernel loader
+        // (host import() cannot see the in-memory FS).
+        const {
+          code: cjsCode,
+          changed: hasImport,
+          binding: importBinding = '__import',
+        } = rewriteDynamicImports(code);
+        const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
+        const body = parsed.print
+          ? `return (${/\S/.test(cjsCode) ? cjsCode : 'undefined'}\n)\n//# sourceURL=${evalName}`
+          : `${cjsCode}\n//# sourceURL=${evalName}`;
+        const args = ['exports', 'require', 'module', '__filename', '__dirname'];
+        const values = [exports, require, module, evalName, process.cwd()];
+        if (hasImport) {
+          args.push(importBinding);
+          values.push(dynImport);
+        }
+        let fn;
+        try {
+          fn = new Function(...args, body);
+        } catch (err) {
+          // Node's report: [eval]:line, the line, carets under the token.
+          // -p compiled the code as an expression: its own message is V8's for
+          // the code itself (not for the `return (…)` around it).
+          const report =
+            err instanceof SyntaxError &&
+            syntaxReport(code, { kind: 'commonjs', filename: evalName, error: parsed.print ? undefined : err });
+          if (report) {
+            Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
+            err.stack = report.stack;
+          }
+          throw err;
+        }
+        mainBegin();
+        let result;
+        try {
+          result = fn(...values);
+        } finally {
+          mainEnd();
+        }
+        // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
+        if (result != null && typeof result.then === 'function') {
+          trackPromise(handles, result);
+        }
+        flushTicks();
+        // Node -p: console.log semantics (strings unquoted), not util.inspect.
+        if (parsed.print) {
+          console.log(result);
+        }
+      }
+    } catch (err) {
+      if (isExitError(err)) throw err;
+      if (handleUncaught(err)) {
+        uncaughtFromEsm = false;
+      } else {
+        return dieUncaught(() => printUncaught(err));
+      }
+    }
+  };
+
   /**
    * The entry promise: a `.jsh` body or an ES module's top-level await. It
    * runs alongside the event loop (ticks and timers keep going while it is
@@ -972,7 +1059,7 @@ export async function runNode(ctx, options = {}) {
         /* EOF / no stdin */
       }
       // Nothing piped: no program, but what -r loaded still runs its loop.
-      if (chunks.length === 0 && !(parsed.preload?.length > 0) && !(parsed.imports?.length > 0)) return 0;
+      if (chunks.length === 0 && !parsed.print && !(parsed.preload?.length > 0) && !(parsed.imports?.length > 0)) return 0;
       let total = 0;
       for (const c of chunks) total += c.byteLength;
       const merged = new Uint8Array(total);
@@ -984,8 +1071,6 @@ export async function runNode(ctx, options = {}) {
       const source = decoder.decode(merged);
       lastEvalCode = source;
       process._evalCode = source;
-      // `node -` keeps its `-`; piped input with no argument is [stdin].
-      if (!parsed.stdinScript) process.argv[1] = '[stdin]';
       const inputType = inputTypeOf(process._options);
       if (parsed.check) {
         // Node checks piped input as CommonJS unless --input-type=module.
@@ -997,35 +1082,40 @@ export async function runNode(ctx, options = {}) {
         }
         return 0;
       }
-      const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(source);
-      try {
-        if (asEsm) {
-          uncaughtFromEsm = true;
-          mainBegin();
-          let result;
-          try {
-            result = esm.runEsmEval(source, `${process.cwd().replace(/\/$/, '')}/[eval1]`);
-          } finally {
-            mainEnd();
+      if (parsed.print) {
+        const status = evaluate(source, '[stdin]');
+        if (status !== undefined) return status;
+      } else {
+        const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(source);
+        try {
+          if (asEsm) {
+            uncaughtFromEsm = true;
+            mainBegin();
+            let result;
+            try {
+              result = esm.runEsmEval(source, `${process.cwd().replace(/\/$/, '')}/[eval1]`);
+            } finally {
+              mainEnd();
+            }
+            uncaughtFromEsm = false;
+            if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
+          } else {
+            // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
+            mainBegin();
+            try {
+              cjs.runMain('[stdin]', source, { setMain: false });
+            } finally {
+              mainEnd();
+            }
           }
-          uncaughtFromEsm = false;
-          if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
-        } else {
-          // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
-          mainBegin();
-          try {
-            cjs.runMain('[stdin]', source, { setMain: false });
-          } finally {
-            mainEnd();
+          flushTicks();
+        } catch (err) {
+          if (isExitError(err)) throw err;
+          if (handleUncaught(err)) {
+            uncaughtFromEsm = false;
+          } else {
+            return dieUncaught(() => printUncaught(err));
           }
-        }
-        flushTicks();
-      } catch (err) {
-        if (isExitError(err)) throw err;
-        if (handleUncaught(err)) {
-          uncaughtFromEsm = false;
-        } else {
-          return dieUncaught(() => printUncaught(err));
         }
       }
     } else if (parsed.mode === 'eval') {
@@ -1035,95 +1125,9 @@ export async function runNode(ctx, options = {}) {
         if (status !== undefined) return status;
       }
       lastEvalCode = parsed.code;
-      // --input-type, else Node's detect-module: CJS unless ESM-only syntax
-      // (not mere import()).
-      const inputType = inputTypeOf(process._options);
-      const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(parsed.code);
-      try {
-        if (asEsm && parsed.print) {
-          throw nodeError(Error, 'ERR_EVAL_ESM_CANNOT_PRINT', '--print cannot be used with ESM input');
-        }
-        if (asEsm) {
-          // Node: ES module input is the module <cwd>/[eval1].
-          uncaughtFromEsm = true;
-          mainBegin();
-          let result;
-          try {
-            result = esm.runEsmEval(
-              parsed.print ? `console.log(${parsed.code}\n)` : parsed.code,
-              `${process.cwd().replace(/\/$/, '')}/[eval1]`
-            );
-          } finally {
-            mainEnd();
-          }
-          uncaughtFromEsm = false;
-          if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
-          flushTicks();
-        } else {
-          // A worker's eval code is Node's `[worker eval]`.
-          const evalName = options.worker ? '[worker eval]' : '[eval]';
-          const evalParent = `${process.cwd()}/${evalName}`;
-          const require = cjs.makeRequire(evalParent);
-          const exports = {};
-          const module = { exports, id: evalName };
-          // Dynamic import() is valid in CJS; rewrite to the kernel loader
-          // (host import() cannot see the in-memory FS).
-          const {
-            code: cjsCode,
-            changed: hasImport,
-            binding: importBinding = '__import',
-          } = rewriteDynamicImports(parsed.code);
-          const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
-          const body = parsed.print
-            ? `return (${cjsCode}\n)\n//# sourceURL=${evalName}`
-            : `${cjsCode}\n//# sourceURL=${evalName}`;
-          const args = ['exports', 'require', 'module', '__filename', '__dirname'];
-          const values = [exports, require, module, evalName, process.cwd()];
-          if (hasImport) {
-            args.push(importBinding);
-            values.push(dynImport);
-          }
-          let fn;
-          try {
-            fn = new Function(...args, body);
-          } catch (err) {
-            // Node's report: [eval]:line, the line, carets under the token.
-            // -p compiled the code as an expression: its own message is V8's for
-            // the code itself (not for the `return (…)` around it).
-            const report =
-              err instanceof SyntaxError &&
-              syntaxReport(parsed.code, { kind: 'commonjs', filename: evalName, error: parsed.print ? undefined : err });
-            if (report) {
-              Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
-              err.stack = report.stack;
-            }
-            throw err;
-          }
-          mainBegin();
-          let result;
-          try {
-            result = fn(...values);
-          } finally {
-            mainEnd();
-          }
-          // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
-          if (result != null && typeof result.then === 'function') {
-            trackPromise(handles, result);
-          }
-          flushTicks();
-          // Node -p: console.log semantics (strings unquoted), not util.inspect.
-          if (parsed.print) {
-            console.log(result);
-          }
-        }
-      } catch (err) {
-        if (isExitError(err)) throw err;
-        if (handleUncaught(err)) {
-          uncaughtFromEsm = false;
-        } else {
-          return dieUncaught(() => printUncaught(err));
-        }
-      }
+      // A worker's eval code is Node's `[worker eval]`.
+      const status = evaluate(parsed.code, options.worker ? '[worker eval]' : '[eval]');
+      if (status !== undefined) return status;
     } else if (parsed.mode === 'file') {
       const filePath = ctx.resolve(parsed.script).replace(/(?<=.)\/+$/, '');
       // Node's resolveMainPath: the entry as require() finds a file (an

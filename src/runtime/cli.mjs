@@ -67,11 +67,15 @@ export function withoutEntryOptions(execArgv = []) {
   const out = [];
   for (let i = 0; i < execArgv.length; i++) {
     const arg = execArgv[i];
-    if (/^(-e|--eval|-p|--print|-pe|-ep)$/.test(arg)) {
+    if (/^(-e|--eval|-pe|-ep)$/.test(arg)) {
       i++;
       continue;
     }
-    if (/^(--eval|--print)=/.test(arg) || /^(-c|--check|-i|--interactive)$/.test(arg)) continue;
+    if (/^(-p|--(no-)?print(=.*)?)$/.test(arg)) {
+      if (execArgv[i + 1] && !execArgv[i + 1].startsWith('-')) i++;
+      continue;
+    }
+    if (/^--eval=/.test(arg) || /^(-c|--check|-i|--interactive)$/.test(arg)) continue;
     out.push(arg);
   }
   return out;
@@ -416,7 +420,12 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
     word = args[i];
     arg = singleDashV8(word) ?? normalizeOption(word);
     if (arg === '--') {
-      userArgs.push(...args.slice(i + 1));
+      const rest = args.slice(i + 1);
+      if (evalCode === undefined && rest.length > 0) {
+        if (rest[0] === '-' || rest[0] === '') stdinScript = rest[0];
+        else script = rest[0];
+        userArgs.push(...rest.slice(1));
+      } else userArgs.push(...rest);
       break;
     }
     if (arg === '-v' || arg === '--version') {
@@ -431,21 +440,20 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
         return { error: `${argv0}: ${word} requires an argument`, status: 9 };
       }
       evalCode = args[i];
-      print = false;
       keep('-e', evalCode);
       i += 1;
       // Node goes on parsing options after the code, up to the first argument.
       continue;
     }
-    if (arg === '-p' || arg === '--print') {
-      print = true;
+    const printing = arg === '-p' || /^--(no-)?print(=|$)/.exec(arg);
+    if (printing) {
+      print = !printing[1];
       i += 1;
-      if (i >= args.length) {
-        return { error: `${argv0}: ${word} requires an argument`, status: 9 };
-      }
-      evalCode = args[i];
-      keep('-p', evalCode);
-      i += 1;
+      if (args[i] && !args[i].startsWith('-')) {
+        evalCode = args[i];
+        keep(arg, evalCode);
+        i += 1;
+      } else keep(arg);
       continue;
     }
     if (arg === '-pe') {
@@ -517,8 +525,8 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
       continue;
     }
     // `node -`: the program is stdin (even a terminal), `-` its argv[1].
-    if (arg === '-' && evalCode === undefined) {
-      stdinScript = true;
+    if ((arg === '-' || arg === '') && evalCode === undefined) {
+      stdinScript = arg;
       userArgs.push(...args.slice(i + 1));
       break;
     }
@@ -626,12 +634,12 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
     if (evalCode !== undefined) return { error: `${argv0}: either --watch or --eval can be used, not both`, status: 9 };
     if (check) return { error: `${argv0}: either --watch or --check can be used, not both`, status: 9 };
     if (interactive) return { error: `${argv0}: either --watch or --interactive can be used, not both`, status: 9 };
-    if (script === undefined && !stdinScript) return { error: `${argv0}: --watch requires specifying a file`, status: 9 };
+    if (script === undefined && stdinScript === false) return { error: `${argv0}: --watch requires specifying a file`, status: 9 };
     // Node's internal/main/watch_mode: it runs the program as given, again
     // whenever a file it loaded changes.
     return {
       mode: 'watch',
-      processArgv: [argv0, ...(stdinScript ? ['-'] : [script]), ...userArgs],
+      processArgv: [argv0, ...(stdinScript !== false ? [stdinScript] : [script]), ...userArgs],
       execArgv: shown,
     canonical: flags,
       preload,
@@ -672,14 +680,15 @@ function parseCommandLine(argv, { watch: watchable = false } = {}) {
 
   return {
     mode: 'empty',
-    processArgv: stdinScript ? [argv0, '-', ...userArgs] : [argv0],
+    processArgv: stdinScript !== false ? [argv0, stdinScript, ...userArgs] : [argv0],
     execArgv: shown,
     canonical: flags,
     interactive,
     preload,
     imports,
     v8Warnings,
-    stdinScript,
+    stdinScript: stdinScript !== false,
     check,
+    print,
   };
 }

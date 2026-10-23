@@ -1,0 +1,52 @@
+== ["-p"]: status 0
+undefined
+== ["--print"]: status 0
+undefined
+== ["-p","-1"]: status 9
+node: bad option: -1
+== ["--print","-1"]: status 9
+node: bad option: -1
+== ["-p","-foo","1"]: status 9
+node: bad option: -foo
+== ["-p"," "]: status 0
+undefined
+== ["-p"] < "6 * 7": status 0
+42
+== ["-p"] < "process.argv.length": status 0
+1
+== ["-p","--no-warnings"] < "process.execArgv": status 0
+[ '-p', '--no-warnings' ]
+== ["-p","-"] < "6 * 7": status 0
+42
+== ["-p","-","a"] < "process.argv.slice(1)": status 0
+[ '-', 'a' ]
+== ["-p","","a"] < "process.argv.slice(1)": status 0
+[ '', 'a' ]
+== ["-p","-e","1 + 2"]: status 0
+3
+== ["-p","-p","process.execArgv"]: status 0
+[ '-p', '-p', 'process.execArgv' ]
+== ["-p","1","-e","2"]: status 0
+2
+== ["-e","1","-p"]: status 0
+1
+== ["--print","process.execArgv"]: status 0
+[ '--print', 'process.execArgv' ]
+== ["--print=1","process.execArgv"]: status 0
+[ '--print=1', 'process.execArgv' ]
+== ["--print="] < "8": status 0
+8
+== ["--no-print","console.log(3)"]: status 0
+3
+== ["-p","--","script.js","a"]: status 0
+script [ 'a' ]
+== ["--","script.js","a","--","b"]: status 0
+script [ 'a', '--', 'b' ]
+== ["--"] < "console.log(process.argv.length)": status 0
+1
+== ["-p","-e"]: status 9
+node: -e requires an argument
+== [""] < "console.log(process.argv.slice(1))": status 0
+[ '' ]
+worker [ '-p', '--no-warnings' ]
+worker exit 0
