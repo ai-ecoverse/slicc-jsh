@@ -736,7 +736,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#finishConnStarted = true;
       this.#dropHandle();
       const state = this._writableState;
-      if (this.#writer && !halfClosedCleanly && !state.corked) {
+      const flush = !halfClosedCleanly && !state.corked && !state.needDrain;
+      if (this.#writer && flush) {
         const writing = this.#writing;
         this.#writing = null;
         if (writing) nextTick(writing);
@@ -757,7 +758,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#conn = undefined;
       // After a clean half-close, do not abort/cancel — that RSTs the peer and
       // they never see 'end' (fin.js server side). Only force-close on errors.
+      let closed = false;
       const close = () => {
+        if (closed) return;
+        closed = true;
         void reader?.cancel?.().catch(() => {});
         try {
           if (typeof writer?.abort === 'function') void writer.abort().catch(() => {});
@@ -767,9 +771,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         }
         void conn?.close?.().catch(() => {});
       };
-      if (!halfClosedCleanly && this.#unsettled > 0) {
-        const flushed = this.#lastWrite.then(close, close);
-        if (this.#refed) trackPromise(handles, flushed).catch(() => {});
+      if (flush && this.#unsettled > 0) {
+        const timer = setTimeout(close, MAX_FLUSH_MS);
+        timer.unref?.();
+        const flushed = () => {
+          clearTimeout(timer);
+          close();
+        };
+        this.#lastWrite.then(flushed, flushed);
       } else if (!halfClosedCleanly) close();
       callback(err);
     }
@@ -780,6 +789,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       return super.end(data, encoding, callback);
     }
   }
+
+  const MAX_FLUSH_MS = 1000;
 
   function toBytes(chunk, encoding) {
     if (typeof chunk === 'string') return Buffer.from(chunk, encoding);

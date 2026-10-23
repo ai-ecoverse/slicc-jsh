@@ -1,0 +1,6 @@
+a 1 MiB write to a paused peer: write returned false
+destroyed true
+server close
+server closed
+a 16 MiB write, then destroy: server closed
+exit
