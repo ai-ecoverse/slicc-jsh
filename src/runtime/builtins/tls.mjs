@@ -24,7 +24,7 @@ import {
   validateUint32,
 } from '../node-errors.mjs';
 import { deprecate } from './util.mjs';
-import { kConnectTls, kDetach, kIoError, kServesTls, kStartNow, kStartTls, kTlsSession } from './net.mjs';
+import { kConnectTls, kDetach, kDropHandshake, kIoError, kServesTls, kStartNow, kStartTls, kTlsSession } from './net.mjs';
 import { certificateObject, isIssuedBy, likelyIssued, parseCertificate } from './x509.mjs';
 import { lockedKeyError } from './tls-key.mjs';
 
@@ -47,6 +47,9 @@ const kOwnLeaf = Symbol('slicc-jsh.tls.ownLeaf');
 const kErrorEmitted = Symbol('slicc-jsh.tls.errorEmitted');
 const kHandshakeTimeout = Symbol('slicc-jsh.tls.handshakeTimeout');
 const kSNICallback = Symbol('slicc-jsh.tls.SNICallback');
+const kALPNCallback = Symbol('slicc-jsh.tls.ALPNCallback');
+const kHeld = Symbol('slicc-jsh.tls.held');
+const kRefusal = Symbol('slicc-jsh.tls.refusal');
 
 // OpenSSL 3.0's errors for key material, as Node 22.22.0 throws them.
 const OSSL_ERRORS = {
@@ -990,21 +993,53 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     return null;
   }
 
-  function serverRequest(context, options) {
+  function serverRequest(context, options, select) {
     const own = context?.[kOwnCert];
     const key = context?.[kOwnKey];
-    if (!own || !key) return undefined;
-    const alpn = alpnNames(options.ALPNProtocols);
+    if ((!own || !key) && !select) return undefined;
+    const alpn = select ? undefined : alpnNames(options.ALPNProtocols);
     return {
       server: true,
-      cert: own.cert,
-      ...key,
+      ...(own && key ? { cert: own.cert, ...key } : {}),
+      ...(select ? { select } : {}),
       ...(context[kCa] ? { ca: context[kCa] } : {}),
       ...(options.requestCert ? { requestCert: true } : {}),
       ...(options.rejectUnauthorized ? {} : { rejectUnauthorized: false }),
       ...(alpn ? { alpn } : {}),
       ...(options.handshakeTimeout > 0 ? { handshakeTimeout: options.handshakeTimeout } : {}),
     };
+  }
+
+  const kernelContexts = new Map();
+
+  function holdContext(context) {
+    let held = kernelContexts.get(context);
+    if (!held) {
+      held = { made: ctx.net.tlsContext(clientCredentials(context)), users: 0 };
+      held.made.catch(() => {});
+      kernelContexts.set(context, held);
+    }
+    held.users++;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      if (--held.users > 0) return;
+      if (kernelContexts.get(context) === held) kernelContexts.delete(context);
+      held.made.then((made) => made.close(), () => {}).catch(() => {});
+    };
+    return { made: held.made, release };
+  }
+
+  function SNICallback(servername, callback) {
+    const contexts = this.server._contexts;
+    for (let i = contexts.length - 1; i >= 0; --i) {
+      if (contexts[i][0].test(servername)) {
+        callback(null, contexts[i][1]);
+        return;
+      }
+    }
+    callback(null, undefined);
   }
 
   function clientVerifyError(socket, session) {
@@ -1045,10 +1080,21 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       this.authorizationError = null;
       this.encrypted = true;
       this.ssl = null;
+      this[kALPNCallback] = null;
+      this.server = tlsOptions.server;
       if (tlsOptions.isServer) {
         this._requestCert = Boolean(tlsOptions.requestCert);
         this._rejectUnauthorized = Boolean(tlsOptions.rejectUnauthorized);
         this.on('error', this._tlsError);
+        if (tlsOptions.ALPNCallback) {
+          validateFunction(tlsOptions.ALPNCallback, 'options.ALPNCallback');
+          this[kALPNCallback] = tlsOptions.ALPNCallback;
+        }
+        const sni = tlsOptions.SNICallback;
+        if (sni && (sni !== SNICallback || tlsOptions.server?._contexts.length)) {
+          validateFunction(sni, 'options.SNICallback');
+          this._SNICallback = sni;
+        }
       }
       if (socket && tlsOptions.isServer) this.#serve(socket);
       else if (socket) this.#over(socket);
@@ -1063,7 +1109,9 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       const context = (tlsOptions.secureContext ?? createSecureContext(tlsOptions)).context;
       this[kStore] = caCertificates(context[kCa]);
       this[kOwnLeaf] = context[kOwnCert]?.leaf;
-      const request = serverRequest(context, tlsOptions);
+      this[kHeld] = [];
+      const selects = this._SNICallback || this[kALPNCallback];
+      const request = serverRequest(context, tlsOptions, selects ? (offer) => this.#select(offer, context) : undefined);
       if (!request) {
         process.nextTick(() => this.destroy(sslReason('76', 'no suitable signature algorithm')));
         return;
@@ -1071,16 +1119,94 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       this[kStartTls](socket, {
         server: true,
         dial: () => ({ tls: request }),
+        settled: () => {
+          for (const release of this[kHeld].splice(0)) release();
+        },
         check: (session) => {
           this._secureEstablished = true;
           this.alpnProtocol = session.alpnProtocol || false;
           this.servername = session.servername || false;
         },
-        refused: serverRefusal,
+        refused: (err) => this[kRefusal] ?? serverRefusal(err),
         keeps: (err) => err.code === 'ERR_TLS_HANDSHAKE_TIMEOUT',
         kept: (err) => this._tlsError(err),
         secured: () => this.emit('secure'),
       });
+    }
+
+    async #select(offer, context) {
+      const servername = offer.servername;
+      const protocols = [...offer.protocols];
+      let alpn;
+      if (this[kALPNCallback]) {
+        if (protocols.length) {
+          try {
+            alpn = this[kALPNCallback]({ servername: servername || false, protocols });
+          } catch (err) {
+            return this.#drop(err);
+          }
+          if (alpn === undefined) return this.#refuse('no_application_protocol', sslReason('EB', 'no application protocol'));
+          if (!protocols.includes(alpn)) {
+            return this.#drop(nodeError(TypeError, 'ERR_TLS_ALPN_CALLBACK_INVALID_RESULT',
+              `ALPN callback returned a value (${alpn}) that did not match any of the client's offered protocols (${protocols.join(', ')})`));
+          }
+        }
+      } else {
+        const mine = alpnNames(this._tlsOptions.ALPNProtocols);
+        if (mine && protocols.length) {
+          alpn = mine.find((name) => protocols.includes(name));
+          if (alpn === undefined) return this.#refuse('no_application_protocol', sslReason('EB', 'no application protocol'));
+        }
+      }
+      let chosen;
+      if (this._SNICallback && servername) {
+        try {
+          const picked = await this.#sni(servername);
+          chosen = picked?.context || picked;
+        } catch (err) {
+          return this.#drop(err);
+        }
+      }
+      if (this.destroyed) return kDropHandshake;
+      const own = chosen && clientCredentials(chosen) ? chosen : undefined;
+      if (!own && !clientCredentials(context)) return this.#refuse('handshake_failure', sslReason('76', 'no suitable signature algorithm'));
+      let made;
+      if (own) {
+        const held = holdContext(own);
+        this[kHeld].push(held.release);
+        try {
+          made = await held.made;
+        } catch (err) {
+          return this.#drop(serverRefusal(err) ?? err);
+        }
+        this[kOwnLeaf] = own[kOwnCert].leaf;
+      }
+      return { ...(made ? { context: made } : {}), ...(alpn !== undefined ? { alpn } : {}) };
+    }
+
+    #sni(servername) {
+      return new Promise((resolve, reject) => {
+        let once = false;
+        this._SNICallback(servername, (err, context) => {
+          if (once) {
+            this.destroy(nodeError(Error, 'ERR_MULTIPLE_CALLBACK', 'Callback called multiple times'));
+            return;
+          }
+          once = true;
+          if (err) reject(err);
+          else resolve(context);
+        });
+      });
+    }
+
+    #refuse(refuse, err) {
+      this[kRefusal] = err;
+      return { refuse };
+    }
+
+    #drop(err) {
+      if (!this.destroyed) this.destroy(err);
+      return kDropHandshake;
     }
 
     _tlsError(err) {
@@ -1305,6 +1431,8 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
         rejectUnauthorized: this.rejectUnauthorized,
         handshakeTimeout: this[kHandshakeTimeout],
         ALPNProtocols: this.ALPNProtocols,
+        ALPNCallback: this.ALPNCallback,
+        SNICallback: this[kSNICallback] || SNICallback,
       });
       socket.on('secure', onServerSocketSecure);
       socket[kErrorEmitted] = false;
@@ -1379,13 +1507,12 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
         `^${servername.replace(/([.^$+?\-\\[\]{}])/g, '\\$1').replace(/\*/g, '[^.]*')}$`
       );
       const secureContext = context instanceof SecureContext ? context : createSecureContext(context);
+      const request = serverRequest(secureContext.context, {});
+      if (request && typeof ctx?.sync?.net?.listen === 'function') checkLeaf(request);
       this._contexts.push([re, secureContext.context]);
     },
     listen(...args) {
       if (typeof ctx?.net?.secure !== 'function') throw noTls('tls.Server.listen');
-      if (this.ALPNCallback) throw noTls("tls.Server option 'ALPNCallback'", 'the kernel chooses from ALPNProtocols');
-      if (this[kSNICallback]) throw noTls("tls.Server option 'SNICallback'", 'the kernel serves one certificate');
-      if (this._contexts.length) throw noTls('tls.Server.addContext', 'the kernel serves one certificate');
       return Reflect.apply(net.Server.prototype.listen, this, args);
     },
   };

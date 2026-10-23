@@ -73,6 +73,21 @@ export const kStartNow = Symbol('slicc-jsh.net.startNow');
 /** A TLS socket's error for a failed read or write (a fatal alert), or undefined for errnoError's. */
 export const kIoError = Symbol('slicc-jsh.net.ioError');
 export const kServesTls = Symbol('slicc-jsh.net.servesTls');
+export const kDropHandshake = Symbol('slicc-jsh.net.dropHandshake');
+
+function dropping(tls, conn) {
+  if (typeof tls?.select !== 'function') return tls;
+  const select = tls.select;
+  return {
+    ...tls,
+    select: async (offer) => {
+      const choice = await select(offer);
+      if (choice !== kDropHandshake) return choice;
+      await conn.close().catch(() => {});
+      return { refuse: 'handshake_failure' };
+    },
+  };
+}
 
 /** A server-side socket's server (Node's socket._server), told when the socket goes. */
 const kServer = Symbol('slicc-jsh.net.server');
@@ -330,7 +345,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         let secure;
         this.#handshaking = conn;
         try {
-          const dialled = request.server ? ctx.net.secure(conn, tls) : ctx.net.connect({ socket: conn, ...(host ? { host } : {}), tls });
+          const dialled = request.server ? ctx.net.secure(conn, dropping(tls, conn)) : ctx.net.connect({ socket: conn, ...(host ? { host } : {}), tls });
           secure = await dialled;
         } catch (err) {
           const refusal = request.refused(err);
@@ -349,6 +364,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           throw refusal ?? errnoError(err, 'connect');
         } finally {
           this.#handshaking = null;
+          request.settled?.();
         }
         if (this.destroyed) {
           void secure.close?.().catch(() => {});
