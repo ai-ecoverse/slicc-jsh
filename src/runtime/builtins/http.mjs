@@ -2102,8 +2102,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           req.emit('aborted');
         }
         if (req.aborted && !socket.destroyed) {
-          callback(req.listenerCount('error') > 0 ? err : undefined);
+          const done = () => callback(req.listenerCount('error') > 0 ? err : undefined);
+          if (err) socket.once('error', done);
           socket.destroy(err);
+          if (!err) done();
           return;
         }
         process.nextTick(() => callback(req.listenerCount('error') > 0 ? err : undefined));

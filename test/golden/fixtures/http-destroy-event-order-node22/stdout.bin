@@ -1,0 +1,11 @@
+req.destroy(err) during an upload | aborted, clientError boom, socket error boom, req error boom, req close, res close, socket close | -
+req.destroy(err) with the body complete and unread | aborted, clientError boom, socket error boom, req error boom, req close, res close, socket close | -
+req.destroy(err) on a GET | aborted, clientError boom, socket error boom, req error boom, req close, res close, socket close | -
+req.destroy() during an upload | aborted, req close, res close, socket close | -
+req.destroy(err) after some of the body | aborted, clientError boom, socket error boom, req error boom, req close, res close, socket close | -
+req.destroy(err) without an error listener | aborted, clientError boom, socket error boom, req close, res close, socket close | -
+req.destroy(err) without a clientError listener | aborted, socket error boom, req error boom, req close, res close, socket close | -
+a net socket: destroy() | sync, tick, microtask, tick from a microtask, close
+a net socket: destroy(err) | sync, error, tick, tick from error, tick in a tick from error, microtask, microtask from error, tick from a microtask, close
+a net socket: write, then destroy() | sync, tick, microtask, tick from a microtask, close
+done
