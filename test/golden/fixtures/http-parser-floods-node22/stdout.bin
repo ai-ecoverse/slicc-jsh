@@ -1,0 +1,12 @@
+server, junk after the version | clientError HPE_INVALID_VERSION "Parse Error: Expected CRLF after version" | -
+server, junk in the method | clientError HPE_INVALID_METHOD "Parse Error: Expected space after method" | -
+server, spaces before the target | request /a "" | HTTP/1.1 200 OK
+server, spaces before the version | request /a "" | HTTP/1.1 200 OK
+server, whitespace before a value | request /a "v" | HTTP/1.1 200 OK
+server, leading CRLFs | request /a "" | HTTP/1.1 200 OK
+server, whitespace before a trailer value | request /a "" trailers ["T","v"] | HTTP/1.1 200 OK
+client, whitespace before a value | response 200 "v" "hi"
+client, leading CRLFs | response 200 "" "hi"
+client, whitespace before a trailer value | response 200 "" "hi"
+client, junk after the status | error HPE_INVALID_STATUS "Parse Error: Invalid response status"
+done
