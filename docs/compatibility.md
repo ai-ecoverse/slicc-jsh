@@ -39,6 +39,8 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - A bad value for a V8 flag gets V8's report, followed by Node's `bad option` lines.
 - V8's flags take one dash as well as two (`-stack-trace-limit=5`); Node's own options need two. `-e` and `-p` take their code as the next argument, so `-econsole.log(1)` is a `bad option`, as in Node (golden `cli-single-dash-node22`).
 - Options after `-e`/`-p` are still node's, up to the first argument.
+- `-p` (`--print`) is a boolean, as in Node: its code is the next argument only if that is there, not empty and doesn't start with `-`. So `node -p` alone prints what stdin evaluates to (`undefined` for none), and `node -p -1` is a `bad option`. `--print=X` and `--no-print` are the same option, and `-e` after `-p` still prints (golden `cli-print-node22`).
+- `--` ends the options: the next argument is the script (`-` or an empty one reads stdin).
 - `NODE_OPTIONS` is read as Node 22 reads it: words with spaces, quotes and escapes; only the options Node allows there; its options before the command line's and out of `execArgv`; Node's errors.
 - Boolean options take `--x` and `--no-x`, and the last form wins. A value that looks like an option counts as missing (`--require --no-warnings`).
 - Also: the [warning flags](#warnings), `--enable-source-maps`, `--preserve-symlinks`, `--preserve-symlinks-main`, `--expose-internals`, `--title`, `--pending-deprecation` and the `--report-*` options (they set `process.report`).
