@@ -1,0 +1,7 @@
+{
+  "description": "a tls.Server or https.Server whose client sends a plain HTTP request gets tlsClientError ERR_SSL_HTTP_REQUEST, as Node 22 (slicc-kernel 1.150.0); after handshakeTimeout the connection stays open for a tlsClientError listener, which closes it when it wants",
+  "argv": ["main.js"],
+  "shim": true,
+  "kernel": "1.150.0",
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}
