@@ -486,10 +486,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       const tlsRequest = options[kConnectTls];
       this.#tls = Boolean(tlsRequest);
       let signal = options.signal;
+      let unfollow = () => {};
       if (tlsRequest) {
         const abort = new AbortController();
         this.#dialAbort = abort;
-        options.signal?.addEventListener('abort', () => abort.abort(options.signal.reason), { once: true });
+        const follow = () => abort.abort(options.signal.reason);
+        options.signal?.addEventListener('abort', follow, { once: true });
+        unfollow = () => options.signal?.removeEventListener('abort', follow);
         if (options.signal?.aborted) abort.abort(options.signal.reason);
         signal = abort.signal;
       }
@@ -508,6 +511,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         dialled
           .finally(() => {
             this.#dialAbort = null;
+            unfollow();
           })
           .then((conn) => {
             if (this.destroyed) {
