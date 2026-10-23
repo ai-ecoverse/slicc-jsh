@@ -2909,6 +2909,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       let finished = false;
       let released = false;
       let awaitingFinish = false;
+      let cut = false;
       let framing = null; // { kind: 'none' | 'length' | 'chunked' | 'eof', left, buf, state }
       const quietClose = () => {
         unlisten();
@@ -2936,7 +2937,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           res.httpVersion !== '1.0' &&
           !/\bclose\b/i.test(String(res.headers.connection ?? '')) &&
           !socketEnded &&
-          !socket.destroyed &&
+          (!socket.destroyed || cut) &&
           // An agent that didn't make the socket (its own createSocket) has no pool for it.
           socket.listenerCount('free') > 0
         );
@@ -2981,13 +2982,25 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (!res.push(bytes)) socket.pause?.();
         handles?.notify?.();
       };
+      const trailing = (rest) => {
+        if (rest.length === 0) return;
+        const next = parseHead(Buffer.from(rest), Buffer, 'response', headerLimit);
+        if (!next) return;
+        cut = true;
+        quietClose();
+        if (next.error) emitError(this, next.error);
+      };
       const feed = (bytes) => {
         const f = framing;
+        if (finished) return;
         if (f.kind === 'length') {
           const take = bytes.subarray(0, f.left);
           f.left -= take.length;
           deliver(take);
-          if (f.left === 0) finish();
+          if (f.left === 0) {
+            finish();
+            trailing(bytes.subarray(take.length));
+          }
           return;
         }
         if (f.kind === 'eof') {
@@ -3028,6 +3041,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
               res.rawTrailers = chunk.rawTrailers ?? [];
               res.trailers = trailerObj(res.rawTrailers);
               finish();
+              trailing(chunk.buf);
               return;
             }
             if (line.header.name.toLowerCase() === 'content-length') return chunkError('HPE_INVALID_CONTENT_LENGTH', "Content-Length can't be present with Transfer-Encoding");
@@ -3147,6 +3161,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (!this.emit('response', res)) res._dump();
         if (framing.kind === 'none' || (framing.kind === 'length' && framing.left === 0)) {
           finish();
+          trailing(parsed.bodyPrefix);
           return;
         }
         if (parsed.bodyPrefix?.length) feed(Buffer.from(parsed.bodyPrefix));

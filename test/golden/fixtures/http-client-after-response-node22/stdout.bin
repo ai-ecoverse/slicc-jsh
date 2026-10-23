@@ -1,0 +1,25 @@
+content-length, then junk in the same packet | response 200, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "hi", res close, req close
+content-length, then junk once the response ended | response 200, end "hi", res close, req close
+a keep-alive agent, junk in the same packet | response 200, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "hi", req close, res close
+a keep-alive agent, junk once the response ended | response 200, end "hi", req close, res close
+chunked, then junk in the same packet | response 200, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "hi", res close, req close
+chunked, then junk once the response ended | response 200, end "hi", res close, req close
+a trailer, then junk | response 200, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "hi", res close, req close
+204, then junk | response 204, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "", res close, req close
+304, then junk once the response ended | response 304, end "", res close, req close
+HEAD, then the body anyway | response 200, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "", res close, req close
+the head, then the body and junk in the next packet | response 200, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "hi", res close, req close
+the body split, junk with its last byte | response 200, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "hi", res close, req close
+100 Continue, a response, then junk | response 200, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "hi", res close, req close
+junk once the response arrived, read later | response 200, end "hi", res close, req close
+a second response in the same packet | response 200, end "hi", res close, req close
+a keep-alive agent, a second response in the same packet | response 200, end "hi", req close, res close
+a second response once the response ended | response 200, end "hi", res close, req close
+a partial second head | response 200, end "hi", res close, req close
+a bad second status line | response 200, error HPE_INVALID_STATUS "Parse Error: Invalid status code", end "hi", res close, req close
+a bad second header | response 200, error HPE_INVALID_HEADER_TOKEN "Parse Error: Invalid header token", end "hi", res close, req close
+CRLF after the body | response 200, end "hi", res close, req close
+CRLFs after the body | response 200, end "hi", res close, req close
+CRLF, then junk | response 200, error HPE_INVALID_CONSTANT "Parse Error: Expected HTTP/, RTSP/ or ICE/", end "hi", res close, req close
+a body read until close, then more | response 200, end "himore", res close, req close
+done
