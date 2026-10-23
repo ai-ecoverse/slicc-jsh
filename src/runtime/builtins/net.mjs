@@ -701,6 +701,16 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #send(bytes, callback) {
+      const taken = this.#writeNow(bytes);
+      if (taken.error) {
+        callback(taken.error);
+        return;
+      }
+      if (taken.n === bytes.length) {
+        callback();
+        return;
+      }
+      bytes = bytes.subarray(taken.n);
       this.#writing = callback;
       const settled = (err) => {
         if (this.#writing !== callback) return;
@@ -714,6 +724,17 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #writing = null;
+
+    #writeNow(bytes) {
+      const conn = this.#conn;
+      if (!conn || conn.tls || this.#tls || this.#detached || this.#unsettled > 0 || typeof ctx.sync?.write !== 'function') return { n: 0 };
+      try {
+        return { n: ctx.sync.write(conn.fd, bytes, { nonblock: true }) };
+      } catch (err) {
+        if ((err?.code ?? err?.cause?.code) === 'EAGAIN') return { n: 0 };
+        return { error: this[kIoError]?.(err) ?? errnoError(err, 'write') };
+      }
+    }
 
     #flushFinal() {
       if (this.destroyed) return;

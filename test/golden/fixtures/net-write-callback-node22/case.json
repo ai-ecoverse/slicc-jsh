@@ -1,0 +1,1 @@
+{ "description": "ai-ecoverse/slicc-jsh#955: a socket write the kernel takes at once calls back on the next tick, before ticks queued after it, as Node 22 does after uv_try_write; so an http response answered at once emits finish and close in the tick drain after its request body, before the next pipelined request", "argv": ["script.js"], "shim": true }

@@ -1,0 +1,6 @@
+a small write: callback, tick, immediate
+two small writes: callback 1, callback 2, tick, immediate
+pipelined posts answered at once
+  request /a, data foo /a, finish /a, res close /a, request /b, end /a, data foo /b, finish /b, res close /b, request /c, end /b, data foo /c, finish /c, res close /c, end /c
+pipelined posts answered at their end
+  request /a, data foo /a, request /b, end /a, data foo /b, finish /a, res close /a, request /c, end /b, data foo /c, finish /b, res close /b, end /c, finish /c, res close /c
