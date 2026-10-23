@@ -1034,6 +1034,13 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     return toBuffer(chunk, encoding);
   }
 
+  function onUnframedDrain(msg) {
+    if (!msg[kNeedDrain] || msg.finished) return;
+    msg[kNeedDrain] = false;
+    msg[kBuffered] = 0;
+    msg.emit('drain');
+  }
+
   function socketWrite(msg, socket, data, callback) {
     const ok = socket.write(data, callback);
     if (!ok) {
@@ -2901,7 +2908,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         // Without: wait for end() and send one framed request (buffer until end).
         if (rawHeader(this, 'content-length') != null || this[kEnded] || this[kFlushAsked] || this[kChunkedOut]) {
           this[kFlushHead]();
-        }
+        } else onUnframedDrain(this);
       };
       // Already connected (agent-base may hand off an open socket or generic Duplex
       // with no `connecting` property and no future 'connect' event).
@@ -3394,7 +3401,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         this._header ||= this[kRenderHead]().toString('latin1');
         this[kBuffered] ??= this._header.length;
         this[kBuffered] += buf.length + (this[kChunkedOut] && buf.length ? buf.length.toString(16).length + 4 : 0);
-        if (this[kBuffered] >= this[kHighWaterMark]) this[kNeedDrain] = true;
+        if (this[kBuffered] >= this[kHighWaterMark] && !this[kNeedDrain]) {
+          this[kNeedDrain] = true;
+          if (this[kConnected]) process.nextTick(() => this[kConnected] && !this._headerSent && onUnframedDrain(this));
+        }
       }
       // Content-Length known and socket up: start streaming now.
       if (!this._headerSent && this[kConnected] && (rawHeader(this, 'content-length') != null || this[kChunkedOut])) this[kFlushHead]();

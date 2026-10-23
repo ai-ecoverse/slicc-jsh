@@ -1,0 +1,5 @@
+{
+  "description": "an http ClientRequest whose body has no framing (a GET, DELETE or OPTIONS body, or Transfer-Encoding identity) and goes past the high water mark gets write() false, then 'drain' once the socket is up, as Node 22, so a caller that waits for it before end() sends the body; also for a write past the mark after the connect",
+  "argv": ["script.js"],
+  "shim": true
+}
