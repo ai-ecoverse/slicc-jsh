@@ -1116,12 +1116,9 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       this[kStore] = caCertificates(context[kCa]);
       this[kOwnLeaf] = context[kOwnCert]?.leaf;
       this[kHeld] = [];
-      const selects = this._SNICallback || this[kALPNCallback];
+      const bare = !clientCredentials(context);
+      const selects = this._SNICallback || this[kALPNCallback] || bare;
       const request = serverRequest(context, tlsOptions, selects ? (offer) => this.#select(offer, context) : undefined);
-      if (!request) {
-        process.nextTick(() => this.destroy(sslReason('76', 'no suitable signature algorithm')));
-        return;
-      }
       this[kStartTls](socket, {
         server: true,
         dial: () => ({ tls: request }),
@@ -1134,7 +1131,11 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
           this.alpnProtocol = session.alpnProtocol || false;
           this.servername = session.servername || false;
         },
-        refused: (err) => this[kRefusal] ?? serverRefusal(err),
+        refused: (err) => {
+          if (this[kRefusal]) return this[kRefusal];
+          if (bare && (err?.code ?? err?.cause?.code) === 'EIO') return sslReason('76', 'no suitable signature algorithm');
+          return serverRefusal(err);
+        },
         keeps: (err) => err.code === 'ERR_TLS_HANDSHAKE_TIMEOUT',
         kept: (err) => this._tlsError(err),
         secured: () => this.emit('secure'),
