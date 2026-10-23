@@ -1,0 +1,1 @@
+{ "description": "#840: a listening net.Server gives its port back when it closes, as Node 22's uv_close does: another server can listen on it in the same tick as close(), the server itself can listen again from its close callback or in the same tick, and after _handle.close()", "argv": ["main.js"], "shim": true }

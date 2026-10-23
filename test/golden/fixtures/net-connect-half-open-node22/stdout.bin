@@ -1,0 +1,24 @@
+== nothing: status 0, the server got 0 bytes
+end
+exit 0
+== late end: status 0, the server got 4194304 bytes
+end
+end callback
+finish
+close
+exit 0
+== ref after: status 0, the server got 0 bytes
+end
+exit 0
+== ref after, end(data): status 0, the server got 1048576 bytes
+end
+finish
+close
+exit 0
+== unref before, a timer: status 0, the server got 1048576 bytes
+end
+finish
+close
+exit 0
+== net.connect({ timeout: 50 }): socket.timeout 50
+timeout

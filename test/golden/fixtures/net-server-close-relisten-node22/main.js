@@ -1,0 +1,33 @@
+const net = require('net');
+const listen = (s, ...args) => new Promise((resolve) => {
+  s.once('error', (e) => resolve(`error ${e.code}`));
+  s.listen(...args, () => resolve('listening'));
+});
+(async () => {
+  const a = net.createServer();
+  await listen(a, 0, '127.0.0.1');
+  const port = a.address().port;
+  a.close();
+  const b = net.createServer();
+  console.log('close(); listen(port) at once:', await listen(b, port, '127.0.0.1'));
+  await new Promise((resolve) => b.close(resolve));
+  const c = net.createServer();
+  await listen(c, port, '127.0.0.1');
+  const fromClose = await new Promise((resolve) => c.close(() => listen(c, port, '127.0.0.1').then(resolve)));
+  console.log('relisten from the close callback:', fromClose, c.address().port === port);
+  c.close();
+  const d = net.createServer();
+  console.log('close(); listen(port) on the same server at once:', await listen(d, port, '127.0.0.1'));
+  d.close();
+  d.listen(port, '127.0.0.1');
+  await new Promise((resolve) => { d.once('listening', resolve); d.once('error', (e) => { console.log('error', e.code); resolve(); }); });
+  console.log('the same server, close() then listen() in one tick:', d.listening);
+  d.close();
+  const e = net.createServer();
+  await listen(e, port, '127.0.0.1');
+  e._handle.close();
+  const f = net.createServer();
+  console.log('_handle.close(); listen(port):', await listen(f, port, '127.0.0.1'));
+  f.close();
+  e.close();
+})();

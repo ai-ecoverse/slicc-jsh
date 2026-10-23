@@ -201,7 +201,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #refed = true;
     ref() {
       this.#refed = true;
-      if (this.#handle && !this.#readableEof) handles.add(this.#handle);
+      if (this.#handle && !this.#readableEof && !this.#readPaused) handles.add(this.#handle);
       return this;
     }
     unref() {
@@ -282,6 +282,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       }
       this.#detached = true;
       this.#owner = owner;
+      this.#wantRead();
       // What was written in plain text goes out before the handshake.
       await this.#lastWrite.catch(() => {});
       // The pump's pending read ends (a TypeError it ignores); a chunk the
@@ -383,7 +384,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #write(bytes) {
       const p = this.#writer.write(bytes);
       this.#lastWrite = p;
-      if (this.#readableEof && this.#refed) trackPromise(handles, p).catch(() => {});
+      if ((this.#readableEof || this.#readPaused) && this.#refed) trackPromise(handles, p).catch(() => {});
       return p;
     }
 
@@ -540,11 +541,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             value instanceof Uint8Array
               ? Buffer.from(value.buffer, value.byteOffset, value.byteLength)
               : Buffer.from(value);
-          // Keep pulling from the kernel stream; readable-stream buffers if paused.
-          // Waiting on push()===false deadlocks when the only consumer is 'data'.
-          runInResource(this.#resource, this.push, this, [buf]);
+          const more = runInResource(this.#resource, this.push, this, [buf]);
           handles.notify();
           await Promise.resolve();
+          if (!more) await this.#waitForRead();
         }
       } catch (err) {
         // Handed to a TLS socket: its reader was released, nothing ended.
@@ -576,7 +576,30 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
 
     #ended = false;
 
+    #readWanted = null;
+    #readPaused = false;
+
+    #waitForRead() {
+      if (this.destroyed || this.#detached || this.readableLength < this.readableHighWaterMark) return null;
+      this.#readPaused = true;
+      if (this.#handle) {
+        handles.delete(this.#handle);
+        if (this.#refed) trackPromise(handles, this.#lastWrite).catch(() => {});
+      }
+      return new Promise((resolve) => (this.#readWanted = resolve)).finally(() => {
+        this.#readPaused = false;
+        if (this.#handle && this.#refed && !this.#readableEof) handles.add(this.#handle);
+      });
+    }
+
+    #wantRead() {
+      const resolve = this.#readWanted;
+      this.#readWanted = null;
+      resolve?.();
+    }
+
     _read() {
+      this.#wantRead();
       this.emit('drain-read');
     }
 
@@ -659,11 +682,12 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           callback();
         });
       this.#lastWrite = closing;
-      if (this.#readableEof && this.#refed) trackPromise(handles, closing).catch(() => {});
+      if ((this.#readableEof || this.#readPaused) && this.#refed) trackPromise(handles, closing).catch(() => {});
     }
 
     _destroy(err, done) {
       this.destroyed = true;
+      this.#wantRead();
       const final = this.#pendingFinal;
       this.#pendingFinal = undefined;
       if (final) final(err ?? this.#finalError());
@@ -1116,7 +1140,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
   }
 
   function createConnection(...args) {
-    const socket = new Socket();
+    const options = args[0] !== null && typeof args[0] === 'object' ? args[0] : {};
+    const socket = new Socket({ allowHalfOpen: options.allowHalfOpen });
+    if (options.timeout) socket.setTimeout(options.timeout);
     return socket.connect(...args);
   }
 

@@ -65,10 +65,13 @@ function standInWorker() {
     connected: true,
     written,
     kill() {},
-    send(message) {
+    crash() {
+      gone = true;
+    },
+    send(message, handle, options) {
       written.push(message);
       if (gone) {
-        process.nextTick(() => this.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE', errno: -32, syscall: 'write' })));
+        if (!options?.swallowErrors) process.nextTick(() => this.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE', errno: -32, syscall: 'write' })));
         return true;
       }
       if (message.ack === 1) gone = true;
@@ -109,6 +112,28 @@ describe('cluster primary: a worker that leaves while its listen() is set up (sr
       assert.deepEqual(errors, []);
     } finally {
       // Its going closes the primary's server.
+      leave(worker);
+    }
+  });
+
+  it('answers a worker whose channel is gone without an EPIPE: the answer to a worker that exited first is dropped', async () => {
+    const worker = standInWorker();
+    const slow = slowNet(50);
+    const cluster = createCluster({ process: primaryProcess, getChildProcess: () => ({ fork: () => worker }), getNet: () => slow.net, canFork: () => true });
+    const errors = [];
+    const w = cluster.fork();
+    w.on('error', (err) => errors.push(err.code));
+    internal(worker, queryServer);
+    worker.crash();
+    try {
+      await slow.done;
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(
+        worker.written.map((m) => m.ack),
+        [0]
+      );
+      assert.deepEqual(errors, []);
+    } finally {
       leave(worker);
     }
   });
