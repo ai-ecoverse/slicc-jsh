@@ -1,0 +1,2 @@
+a small send, then disconnect | send true | connected false | callback null | the child got 2
+a 4 MiB send still queued, then disconnect | send false | connected false | callback null | the child got 0

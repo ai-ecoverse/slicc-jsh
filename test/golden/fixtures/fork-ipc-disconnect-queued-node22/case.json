@@ -1,0 +1,6 @@
+{
+  "description": "child_process.fork: disconnect() with a send still queued drops it and the sends behind it, as Node 22, whose channel close cancels the writes libuv hasn't done (their callbacks get null); a small send written at once still arrives",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}

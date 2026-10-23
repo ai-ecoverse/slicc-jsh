@@ -127,8 +127,11 @@ export function createChannelHandle({ ctx, handles, streamBaseState, constants, 
       reading = false;
       refed = false;
       handles.delete(handle);
-      // Node's writes are usually done by the time it closes (libuv tries
-      // them at once); here they are written out first.
+      waiting?.abort();
+      waiting = null;
+      const dropped = writes.splice(0);
+      for (const { bytes } of dropped) channel.writeQueueSize -= bytes.length;
+      if (dropped.length) queueMicrotask(() => dropped.forEach(({ req }) => complete(req, -125)));
       if (!writing) shut();
     },
   };
