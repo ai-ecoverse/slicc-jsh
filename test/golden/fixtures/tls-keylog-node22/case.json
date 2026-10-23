@@ -1,0 +1,10 @@
+{
+  "description": "Node's keylog event on slicc-kernel 1.154's keylog: a tls.connect socket's and a tls.Server's lines (with the socket), an https.Agent's and an https.Server's, and both ends of TLS over a socket: the four TLS 1.3 traffic secret lines in NSS key log format before secureConnect, one client random and the same secrets on both sides (Node's EXPORTER_SECRET line, which the kernel's engine doesn't log, is left out)",
+  "argv": [
+    "main.js"
+  ],
+  "shim": true,
+  "packages": [
+    "@ai-ecoverse/wasm-tls-engine"
+  ]
+}
