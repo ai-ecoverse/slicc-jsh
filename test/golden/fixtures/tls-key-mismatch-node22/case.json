@@ -1,0 +1,6 @@
+{
+  "description": "a certificate with another certificate's key is thrown, as Node 22: by tls.createSecureContext (a key as text or [{ pem }], a leaf with its issuer), tls.connect, https.request, tls.createServer and addContext, with OpenSSL's code, message, library and reason; a matching key, a certificate alone and a key alone make a context",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}

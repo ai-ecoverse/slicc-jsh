@@ -912,9 +912,7 @@ const go = (label, opts) => new Promise((resolve) => {
   });
 
   it("bad key material: Node's codes, messages and properties for a wrong or missing passphrase, a key that isn't one, another certificate's key, a certificate that isn't one", async () => {
-    // Node throws these from tls.connect (createSecureContext); jsh throws
-    // what it can see without the kernel (it isn't one, the certificate isn't
-    // one, a wrong passphrase), and another certificate's key is the kernel's at connect, on 'error'.
+    // Node throws these from tls.connect (createSecureContext), and so does jsh.
     const { host, shim } = await both(
       'badkey.js',
       `const tls = require('tls');
