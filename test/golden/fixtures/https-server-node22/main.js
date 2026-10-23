@@ -18,6 +18,7 @@ const peer = (socket) => {
   if (!c || !c.subject) return 'none';
   return `${c.subject.CN} <- ${c.issuerCertificate?.subject?.CN}`;
 };
+const suite = (c) => (c ? `${c.version} ${Object.keys(c).join('/')} ${c.name === c.standardName}` : String(c));
 const side = (socket) =>
   [
     `protocol ${socket.getProtocol()}`,
@@ -27,6 +28,7 @@ const side = (socket) =>
     `authorizationError ${socket.authorizationError}`,
     `peer ${peer(socket)}`,
     `encrypted ${socket.encrypted}`,
+    `cipher ${suite(socket.getCipher())}`,
   ].join(', ');
 
 function report(name, server, client) {
@@ -43,13 +45,15 @@ function close(server) {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-async function tlsCase(name, serverOptions, clientOptions, { clientErrors = true } = {}) {
+async function tlsCase(name, serverOptions, clientOptions, { refusedCert = false } = {}) {
   const s = [];
   const c = [];
+  const ciphers = [];
   let served;
   const outcome = new Promise((resolve) => (served = resolve));
   const server = tls.createServer({ key, cert, ...serverOptions }, (socket) => {
     s.push(`secureConnection: ${side(socket)}`);
+    ciphers.push(JSON.stringify(socket.getCipher()));
     socket.on('error', () => {});
     socket.on('close', served);
     socket.end('hello from tls');
@@ -62,10 +66,13 @@ async function tlsCase(name, serverOptions, clientOptions, { clientErrors = true
   await new Promise((resolve) => {
     const socket = tls.connect({ host: 'localhost', port, servername: 'localhost', ca: cert, ...clientOptions });
     let data = '';
-    socket.on('secureConnect', () => c.push(`secureConnect: authorized ${socket.authorized}, alpn ${socket.alpnProtocol}`));
+    socket.on('secureConnect', () => {
+      c.push(`secureConnect: authorized ${socket.authorized}, alpn ${socket.alpnProtocol}`);
+      ciphers.push(JSON.stringify(socket.getCipher()));
+    });
     socket.on('data', (d) => (data += d));
     socket.on('error', (err) => {
-      if (clientErrors) c.push(`error ${shown(err)}`);
+      if (!refusedCert) c.push(`error ${shown(err)}`);
     });
     socket.on('close', () => {
       c.push(`got ${JSON.stringify(data)}`);
@@ -74,10 +81,11 @@ async function tlsCase(name, serverOptions, clientOptions, { clientErrors = true
   });
   await outcome;
   await close(server);
+  if (ciphers.length === 2) s.push(`cipher the client's: ${ciphers[0] === ciphers[1]}`);
   report(name, s, c);
 }
 
-function get(port, options = {}, pathname = '/x', refused = false) {
+function get(port, options = {}, pathname = '/x', refusedCert = false) {
   return new Promise((resolve) => {
     const req = https.get(`https://localhost:${port}${pathname}`, { agent: false, ...options }, (res) => {
       let body = '';
@@ -85,7 +93,7 @@ function get(port, options = {}, pathname = '/x', refused = false) {
       res.on('data', (d) => (body += d));
       res.on('end', () => resolve(`${res.statusCode} ${res.headers['content-type']} ${body}`));
     });
-    req.on('error', (err) => resolve(refused ? 'no response' : `error ${shown(err)}`));
+    req.on('error', (err) => resolve(refusedCert ? 'no response' : `error ${shown(err)}`));
   });
 }
 
@@ -98,7 +106,7 @@ async function httpsCase(name, serverOptions, requests) {
     res.end(`hello ${req.url}`);
   });
   const port = await listen(server);
-  for (const [label, options, refused] of requests) c.push(`${label}: ${await get(port, options, `/${label}`, refused)}`);
+  for (const [label, options, refusedCert] of requests) c.push(`${label}: ${await get(port, options, `/${label}`, refusedCert)}`);
   await close(server);
   report(name, s, c);
 }
@@ -129,8 +137,8 @@ function throws(name, f) {
 
   const mtls = { ca: clientCa, requestCert: true };
   await tlsCase('mTLS, a client cert the ca issued', mtls, good);
-  await tlsCase('mTLS, a self-signed client cert', mtls, rogue, { clientErrors: false });
-  await tlsCase('mTLS, no client cert', mtls, {}, { clientErrors: false });
+  await tlsCase('mTLS, a self-signed client cert', mtls, rogue, { refusedCert: true });
+  await tlsCase('mTLS, no client cert', mtls, {});
   await tlsCase('mTLS asked, not required, a self-signed client cert', { ...mtls, rejectUnauthorized: false }, rogue);
   await tlsCase('mTLS asked, not required, no client cert', { ...mtls, rejectUnauthorized: false }, {});
   await tlsCase('no client cert asked', {}, good);
@@ -138,7 +146,20 @@ function throws(name, f) {
   await httpsCase('https with requestCert: a rejected client never reaches the handler', mtls, [
     ['good', { ca: cert, ...good }],
     ['rogue', { ca: cert, ...rogue }, true],
-    ['none', { ca: cert }, true],
+    ['none', { ca: cert }],
+  ]);
+
+  const roots = { requestCert: true };
+  await tlsCase('requestCert without a ca, a client cert another ca issued', roots, good, { refusedCert: true });
+  await tlsCase('requestCert without a ca, a self-signed client cert', roots, rogue, { refusedCert: true });
+  await tlsCase('requestCert without a ca, no client cert', roots, {});
+  await tlsCase('requestCert without a ca, not required, a client cert another ca issued', { ...roots, rejectUnauthorized: false }, good);
+  await tlsCase('requestCert without a ca, not required, a self-signed client cert', { ...roots, rejectUnauthorized: false }, rogue);
+  await tlsCase('requestCert without a ca, not required, no client cert', { ...roots, rejectUnauthorized: false }, {});
+  await httpsCase('https with requestCert without a ca: a rejected client never reaches the handler', roots, [
+    ['good', { ca: cert, ...good }, true],
+    ['rogue', { ca: cert, ...rogue }, true],
+    ['none', { ca: cert }],
   ]);
 
   await tlsCase('ALPN: the server preference the client offers', { ALPNProtocols: ['h2', 'http/1.1'] }, { ALPNProtocols: ['http/1.1', 'h2'] });

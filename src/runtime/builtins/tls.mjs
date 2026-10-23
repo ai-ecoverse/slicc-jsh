@@ -1386,9 +1386,6 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       if (this.ALPNCallback) throw noTls("tls.Server option 'ALPNCallback'", 'the kernel chooses from ALPNProtocols');
       if (this[kSNICallback]) throw noTls("tls.Server option 'SNICallback'", 'the kernel serves one certificate');
       if (this._contexts.length) throw noTls('tls.Server.addContext', 'the kernel serves one certificate');
-      if (this.requestCert && !this._sharedCreds.context[kCa]) {
-        throw noTls("tls.Server option 'requestCert' without 'ca'", 'the kernel verifies a client certificate against the ca it is given');
-      }
       return Reflect.apply(net.Server.prototype.listen, this, args);
     },
   };
