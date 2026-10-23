@@ -220,7 +220,6 @@ const kPending = Symbol('kPending');
 const kFinishQueued = Symbol('kFinishQueued');
 const kRequestListener = Symbol('kRequestListener');
 const kFetchTimer = Symbol('kFetchTimer');
-const kDrain = Symbol('kDrain');
 export const kFetchVia = Symbol('slicc-jsh.http.fetchVia');
 export const httpInternals = new WeakMap();
 
@@ -840,6 +839,8 @@ function errorResponse(code) {
 /** Max buffered HTTP body (request or response). Over → 413 / error. */
 export const MAX_HTTP_BODY = 64 * 1024 * 1024;
 
+const SETTLE_TURNS = 6;
+
 const CRLF = new Uint8Array([13, 10]);
 const RE_CONN_CLOSE = /(?:^|\W)close(?:$|\W)/i;
 const RE_TE_CHUNKED = /(?:^|\W)chunked(?:$|\W)/i;
@@ -988,7 +989,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       this._dumped = true;
       this.removeAllListeners('data');
       this.resume();
-      this[kDrain]?.();
     }
   };
 
@@ -1813,26 +1813,24 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
   function handleConnection(socket, requestListener, server) {
     const resource = resourceHere();
     let buf = Buffer.alloc(0);
-    let busy = false;
     let served = 0;
     let idleTimer = null;
     let headersTimer = null;
     const conn = { socket, idle: true };
     server._connections.add(conn);
     let requestTimer = null;
-    let pending = null;
+    let body = null;
     let current = null;
     let dead = false;
-    let holding = false;
+    let stopped = false;
+    let closedAfter = false;
     let suppressWrite = false;
-    const wave = [];
     const outgoing = [];
     const incoming = [];
     let head = {};
     let peerEnded = false;
     let eofDone = false;
-    let waiting = false;
-    let draining = false;
+    let running = false;
     let broken = false;
     let timedOut = null;
     socket.once('close', () => {
@@ -1873,7 +1871,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     const timeout408 = () => {
       if (socket.destroyed || dead) return;
       dead = true;
-      pending = null;
+      body = null;
       clearTimeout(requestTimer);
       requestTimer = null;
       clearTimeout(headersTimer);
@@ -1888,7 +1886,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         server.emit('clientError', nodeError(Error, 'ERR_HTTP_REQUEST_TIMEOUT', 'Request timeout'), socket);
         return;
       }
-      if (busy && res?.headersSent) {
+      if (res?.headersSent) {
         destroy();
         return;
       }
@@ -1914,86 +1912,78 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       }, server.requestTimeout);
       requestTimer.unref?.();
     };
-    const pump = () => runInResource(resource, pumpNow, null, []);
-    const pumpNow = () => {
-      pumpWave();
+    const settle = async () => {
+      for (let turn = 0; turn < SETTLE_TURNS; turn++) {
+        process._tickCallback?.();
+        await new Promise((resolve) => queueMicrotask(() => queueMicrotask(resolve)));
+      }
+    };
+    const execute = () => {
+      running = true;
+      for (;;) {
+        let step;
+        try {
+          step = dead || stopped || socket.destroyed ? 'stop' : body ? body.step() : buf.length > 0 ? parseOne() : 'wait';
+        } catch (err) {
+          running = false;
+          throw err;
+        }
+        if (step === 'more') continue;
+        if (step === 'drain') {
+          settle()
+            .then(() => runInResource(resource, execute, null, []))
+            .catch((err) => {
+              running = false;
+              process._triggerUncaught(err);
+            });
+          return;
+        }
+        break;
+      }
+      running = false;
       eofSoon();
     };
     const eofSoon = () => {
       if (peerEnded && !eofDone) process.nextTick(eofCheck);
     };
-    const pumpWave = () => {
-      if (dead || socket.destroyed) return;
-      holding = true;
-      while (!busy && !socket.destroyed && !dead && buf.length > 0 && (draining || wave.length < 2)) {
-        const before = buf.length;
-        parseOne();
-        if (busy || dead || socket.destroyed || buf.length === before) break;
-        if (draining) continue;
-        if (wave.length >= 1 && wave[0].res.finished) break;
-        if (wave.length >= 2) break;
-      }
-      holding = false;
-      if (current && !current.bodyDone() && current.req._held?.length) {
-        const req = current.req;
-        const chunks = req._held;
-        req._held = [];
-        for (const chunk of chunks) {
-          if (!req.push(chunk)) socket.pause?.();
-        }
-      }
-      if (wave.length === 0) return;
-      const first = wave.shift();
-      first.deliver();
-      if (first.res._last || draining) {
-        while (wave.length > 0) wave.shift().deliver();
-      }
-    };
     const eofCheck = () => {
-      if (!peerEnded || eofDone || draining || dead || socket.destroyed) return;
+      if (!peerEnded || eofDone || running || dead || socket.destroyed) return;
       if (broken) {
         eofDone = true;
         if (socket.writable) socket.end();
         return;
       }
-      if (buf.length > 0 && !waiting) {
-        if (socket._httpMessage?.finished) return;
-        draining = true;
-        if (busy && current?.bodyDone()) {
-          busy = false;
-          current = null;
-        }
-        pumpWave();
-        draining = false;
-        if (dead || socket.destroyed || (buf.length > 0 && !waiting)) return;
-      }
       if (socket._httpMessage?.finished) return;
       eofDone = true;
-      while (wave.length > 0) wave.shift().deliver();
       socket.off('data', onData);
-      if (buf.length > 0 || head.start || (current && !current.bodyDone())) {
+      if (buf.length > 0 || head.start || body) {
         socketError(hpe('HPE_INVALID_EOF_STATE', 'Invalid EOF state'));
         return;
       }
       if (socket.writable) socket.end();
     };
     const parseOne = () => {
-      if (busy || socket.destroyed || dead || buf.length === 0) return;
+      if (closedAfter) {
+        stopped = true;
+        const closed = hpe('HPE_CLOSED_CONNECTION', 'Data after `Connection: close`');
+        if (server.listenerCount('clientError') > 0) server.emit('clientError', closed, socket);
+        else socketError(closed);
+        return 'stop';
+      }
       armRequest();
       armHeaders();
       if (buf.length > MAX_HTTP_BODY + 64 * 1024) {
         // Cap head+body growth while still reading the request line/headers.
         rejectPayloadTooLarge(socket, onData);
-        return;
+        return 'stop';
       }
       const parsed = parseHead(buf, Buffer, 'request', server.maxHeaderSize || maxHeaderSize(), head);
       if (!parsed) {
         buf = head.rest;
-        waiting = true;
-        return;
+        return 'wait';
       }
       head = {};
-      if (parsed.kind !== 'request') return;
+      if (parsed.kind !== 'request') return 'stop';
       clearTimeout(idleTimer);
       idleTimer = null;
       if (parsed.error) {
@@ -2001,14 +1991,14 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         socket.off('data', onData);
         if (server.listenerCount('clientError') > 0) {
           server.emit('clientError', parsed.error, socket);
-          return;
+          return 'stop';
         }
         try {
           socket.end(errorResponse(parsed.error.code), destroy);
         } catch {
           destroy();
         }
-        return;
+        return 'stop';
       }
       // The headers are in: headersTimeout is done, the body has requestTimeout.
       clearTimeout(headersTimer);
@@ -2024,15 +2014,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         socket.off('error', onSocketError);
         server._connections.delete(conn);
         buf = Buffer.alloc(0);
+        stopped = true;
         if (server.listenerCount('connect') === 0) {
           destroy();
-          return;
+          return 'stop';
         }
         const req = makeIncomingMessage(socket, Buffer.alloc(0));
         setRequestLine(req, parsed, headers);
         socket.readableFlowing = null;
         server.emit('connect', req, socket, Buffer.from(parsed.bodyPrefix));
-        return;
+        return 'stop';
       }
       // Node: an Upgrade request goes to 'upgrade' listeners, with what
       // followed the head; with none, it is an ordinary request.
@@ -2048,15 +2039,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         const req = makeIncomingMessage(socket, Buffer.alloc(0));
         setRequestLine(req, parsed, headers);
         buf = Buffer.alloc(0);
+        stopped = true;
         socket.readableFlowing = null;
         server.emit('upgrade', req, socket, Buffer.from(parsed.bodyPrefix));
-        return;
+        return 'stop';
       }
       if (parsed.httpVersion === '1.1' && parsed.method !== 'CONNECT' && server.requireHostHeader && headers.host === undefined) {
         clearTimeout(requestTimer);
         requestTimer = null;
         socket.off('data', onData);
-        busy = true;
+        stopped = true;
         buf = Buffer.alloc(0);
         const req = makeIncomingMessage(socket, Buffer.alloc(0));
         setRequestLine(req, parsed, headers);
@@ -2068,13 +2060,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         });
         res.writeHead(400, ['Connection', 'close']);
         res.end();
-        return;
+        return 'stop';
       }
       const headLength = buf.length - parsed.bodyPrefix.length;
       const chunked = parsed.chunked === true;
       let left = chunked ? 0n : (parsed.contentLength ?? 0n);
       buf = Buffer.from(buf.subarray(headLength));
-      busy = true;
       conn.idle = false;
       served++;
       const req = new IncomingMessage(socket);
@@ -2085,17 +2076,12 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       setRequestLine(req, parsed, headers);
       incoming.push(req);
       let bodyDone = false;
-      let primed = false;
       let resDone = false;
-      let failed = false;
-      let feeding = false;
       let handed = false;
       const chunk = { phase: 'size', left: 0n, trailers: null, line: {}, trailer: { size: 0 } };
       req[kIncomingRead] = () => {
         socket.resume?.();
-        feed();
       };
-      req[kDrain] = () => feed();
       req[kIncomingDestroy] = (err, callback) => {
         if (!req.readableEnded || !req.complete) {
           req.aborted = true;
@@ -2111,25 +2097,17 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         process.nextTick(() => callback(req.listenerCount('error') > 0 ? err : undefined));
       };
       const pushBody = (bytes) => {
-        if (bytes.length === 0 || req._dumped) return true;
-        if (holding) {
-          (req._held ??= []).push(Buffer.from(bytes));
-          return true;
-        }
-        const ok = req.push(Buffer.from(bytes));
-        if (!ok) socket.pause?.();
-        return ok;
+        if (bytes.length === 0 || req._dumped) return;
+        if (!req.push(Buffer.from(bytes))) socket.pause?.();
       };
       const complete = () => {
-        if (bodyDone) return;
         bodyDone = true;
-        pending = null;
+        body = null;
         clearTimeout(requestTimer);
         requestTimer = null;
         req.complete = true;
-        const extra = buf.length > 0 && res.shouldKeepAlive === false;
-        if (extra) {
-          failed = true;
+        if (buf.length > 0 && res.shouldKeepAlive === false) {
+          stopped = true;
           incoming.splice(incoming.indexOf(req), 1);
           const closed = hpe('HPE_CLOSED_CONNECTION', 'Data after `Connection: close`');
           if (server.listenerCount('clientError') > 0) server.emit('clientError', closed, socket);
@@ -2138,33 +2116,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
           handles?.notify?.();
           return;
         }
-        if (holding) {
-          handles?.notify?.();
-          return;
-        }
-        if (!res.finished && !dead && !socket.destroyed && buf.length > 0) {
-          const wasBusy = busy;
-          holding = true;
-          busy = false;
-          const before = buf.length;
-          parseOne();
-          holding = false;
-          if (buf.length === before) busy = wasBusy;
-          else primed = true;
-        }
+        if (res.shouldKeepAlive === false) closedAfter = true;
         req.push(null);
+        socket.resume?.();
         handles?.notify?.();
-        if (primed) {
-          if (current && current.req !== req && !current.bodyDone() && current.req._held?.length) {
-            const next = current.req;
-            const chunks = next._held;
-            next._held = [];
-            for (const chunk of chunks) {
-              if (!next.push(chunk)) socket.pause?.();
-            }
-          }
-          while (wave.length > 0) wave.shift().deliver();
-        }
         if (socket.destroyed || dead) return;
         if (resDone && res._last) {
           socket.unref?.();
@@ -2174,37 +2129,31 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (resDone && !res._last) keptAlive();
       };
       const badBody = (code, reason) => {
-        if (failed || bodyDone) return;
-        failed = true;
-        pending = null;
+        body = null;
         socketError(Object.assign(new Error(`Parse Error: ${reason}`), { code, reason }));
+        return 'stop';
       };
-      const feedBody = () => {
-        if (failed || bodyDone) return;
+      const step = () => {
         if (!chunked) {
-          while (left > 0n && buf.length > 0) {
+          if (left > 0n && buf.length > 0) {
             const n = left > BigInt(buf.length) ? buf.length : Number(left);
             const take = buf.subarray(0, n);
             buf = Buffer.from(buf.subarray(n));
             left -= BigInt(n);
-            const ok = pushBody(take);
-            if (left === 0n) {
-              complete();
-              return;
-            }
-            if (!ok) return;
+            pushBody(take);
+            return 'drain';
           }
-          if (left === 0n) complete();
-          return;
+          if (left > 0n) return 'wait';
+          complete();
+          return 'more';
         }
         for (;;) {
-          if (failed || bodyDone) return;
           if (chunk.phase === 'size') {
             const line = scanChunkSize(chunk.line, buf);
             if (line.error) return badBody(line.error.code, line.error.reason);
             if (line.need) {
               buf = Buffer.alloc(0);
-              return;
+              return 'wait';
             }
             buf = Buffer.from(buf.subarray(line.used));
             if (line.size === 0n) chunk.phase = 'trailer';
@@ -2216,8 +2165,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
             const line = readTrailer(chunk.trailer, buf, server.maxHeaderSize || maxHeaderSize());
             if (line.wait) {
               buf = line.rest;
-              waiting = true;
-              return;
+              return 'wait';
             }
             if (line.error) return badBody(line.error.code, line.error.reason);
             buf = line.rest;
@@ -2225,50 +2173,41 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
               req.rawTrailers = chunk.trailers ?? [];
               req[kTrailers] = null;
               complete();
-              return;
+              return 'more';
             }
             const name = line.header.name.toLowerCase();
             if (name === 'transfer-encoding') return badBody('HPE_INVALID_TRANSFER_ENCODING', 'Invalid `Transfer-Encoding` header value');
             if (name === 'content-length') return badBody('HPE_INVALID_CONTENT_LENGTH', "Content-Length can't be present with Transfer-Encoding");
             (chunk.trailers ??= []).push(line.header.name, line.header.value);
           } else if (chunk.phase === 'data') {
-            if (buf.length === 0) return;
+            if (buf.length === 0) return 'wait';
             const n = chunk.left > BigInt(buf.length) ? buf.length : Number(chunk.left);
             const take = buf.subarray(0, n);
             buf = Buffer.from(buf.subarray(n));
             chunk.left -= BigInt(n);
-            const ok = pushBody(take);
+            pushBody(take);
             if (chunk.left === 0n) chunk.phase = 'cr';
-            else if (!ok) return;
+            return 'drain';
           } else if (chunk.phase === 'cr') {
-            if (buf.length === 0) return;
+            if (buf.length === 0) return 'wait';
             const b = buf[0];
             if (b === 0x0a) return badBody('HPE_CR_EXPECTED', 'Missing expected CR after chunk data');
             if (b !== 0x0d) return badBody('HPE_STRICT', 'Expected LF after chunk data');
             buf = Buffer.from(buf.subarray(1));
             chunk.phase = 'lf';
           } else {
-            if (buf.length === 0) return;
+            if (buf.length === 0) return 'wait';
             if (buf[0] !== 0x0a) return badBody('HPE_STRICT', 'Expected LF after chunk data');
             buf = Buffer.from(buf.subarray(1));
             chunk.phase = 'size';
           }
         }
       };
-      const feed = () => {
-        if (feeding || failed || bodyDone) return;
-        feeding = true;
-        try {
-          feedBody();
-        } finally {
-          feeding = false;
-        }
-        eofSoon();
-      };
       const res = new ServerResponse(req);
       if (!suppressWrite && !socket.destroyed && !socket._httpMessage) res.assignSocket(socket);
       else outgoing.push(res);
-      current = { req, res, bodyDone: () => bodyDone };
+      const entry = { req, res, step };
+      current = entry;
       // Node's shouldKeepAlive: HTTP/1.1 unless the client says close, and
       // below maxRequestsPerSocket. A connection that is open when close()
       // is called keeps serving as before (Node 22): it closes when idle.
@@ -2281,21 +2220,14 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       const keptAlive = () => {
         if (handed) return;
         handed = true;
-        const ahead = current !== null && current.req !== req;
-        if (!primed && !ahead) {
+        const ahead = current !== entry;
+        if (!ahead) {
           current = null;
-          busy = false;
           conn.idle = true;
         }
-        // The request's 'close' (Node emits it once the response is done).
-        if (req.readableEnded) {
-          if (!req.destroyed) req.destroy();
-        } else req.once('end', () => req.destroy());
         const next = outgoing.shift();
         if (next && !suppressWrite && !socket.destroyed && !socket._httpMessage) next.assignSocket(socket);
-        if (primed || ahead) return;
-        if (!next) armIdle();
-        queueMicrotask(pump);
+        if (!ahead && !next) armIdle();
       };
       res.on('finish', () => {
         resDone = true;
@@ -2305,28 +2237,18 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         process.nextTick(() => res[kEmitClose]());
         if (socket.destroyed || dead) return;
         if (!res._last) {
-          if (bodyDone && !holding) keptAlive();
+          if (bodyDone) keptAlive();
           eofSoon();
           return;
         }
         suppressWrite = true;
-        if (bodyDone) {
-          holding = true;
-          while (!busy && !dead && !socket.destroyed && buf.length > 0 && wave.length < 8) {
-            const before = buf.length;
-            parseOne();
-            if (busy || buf.length === before) break;
-          }
-          holding = false;
-          while (wave.length > 0) wave.shift().deliver();
-        }
         if (server._closing) closeGracefully(socket);
         else {
           socket.unref?.();
           destroySoon();
         }
       });
-      pending = parsed.teAfter || bodyDone ? null : feed;
+      body = parsed.teAfter ? null : entry;
       const expect = headers.expect;
       if (expect !== undefined && req.httpVersionMajor === 1 && req.httpVersionMinor === 1) {
         if (/(?:^|\W)100-continue(?:$|\W)/i.test(String(expect).trim())) {
@@ -2342,27 +2264,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         }
       } else emitRequest(req, res);
       if (parsed.teAfter) {
-        failed = true;
         socketError(parsed.teAfter);
-        return;
+        return 'stop';
       }
-      if (pending && !socket.destroyed) pending();
-      if (holding && bodyDone && !failed) {
-        wave.push({
-          res,
-          deliver() {
-            const chunks = req._held ?? [];
-            req._held = null;
-            for (const chunk of chunks) {
-              if (chunk.length && !req._dumped && !req.destroyed) req.push(chunk);
-            }
-            if (!req.readableEnded && !req.destroyed) req.push(null);
-          },
-        });
-        busy = false;
-        pending = null;
-        if (current && current.req === req) current = null;
-      }
+      return 'more';
     };
     const emitRequest = (req, res) => {
       server.emit('request', req, res);
@@ -2387,12 +2292,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     };
     const onData = (chunk) => {
       if (dead || socket.destroyed) return;
-      waiting = false;
       if (idleTimer) armIdle();
-      if (!busy && buf.length === 0) armRequest();
+      if (!current && !body && buf.length === 0) armRequest();
       buf = Buffer.concat([buf, chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk)]);
-      if (pending) pending();
-      else pump();
+      if (!running) runInResource(resource, execute, null, []);
     };
     const onSocketEnd = () => {
       peerEnded = true;
