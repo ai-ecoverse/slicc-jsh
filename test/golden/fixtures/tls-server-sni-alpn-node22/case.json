@@ -1,6 +1,10 @@
 {
-  "description": "a tls.Server chooses its certificate and ALPN per connection on slicc-kernel 1.152's select, as Node 22: addContext by the client's SNI (wildcards, the last added first, a SecureContext), SNICallback (a context, later, a raw one, none, an error, never without SNI, over addContext), ALPNCallback (its choice, none, one not offered, a throw, never without ALPN, not with ALPNProtocols), both together, addContext with ALPNProtocols, an https.Server, and a server TLSSocket's SNICallback",
-  "argv": ["main.js"],
+  "description": "a tls.Server chooses its certificate and ALPN per connection on slicc-kernel 1.152's select, as Node 22: addContext by the client's SNI (wildcards, the last added first, a SecureContext), SNICallback (a context, later, a raw one, none, an error, never without SNI, over addContext), ALPNCallback (its choice, none, one not offered, a throw, never without ALPN, not with ALPNProtocols), both together, addContext with ALPNProtocols, an https.Server, a client certificate checked against the chosen context's ca (the same ca lets it in, another refuses it), and a server TLSSocket's SNICallback",
+  "argv": [
+    "main.js"
+  ],
   "shim": true,
-  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+  "packages": [
+    "@ai-ecoverse/wasm-tls-engine"
+  ]
 }

@@ -10,6 +10,8 @@ const own = pair('server');
 const a = pair('a');
 const wild = pair('wild');
 const any = pair('any');
+const clientCa = read('ca.crt');
+const client = pair('client');
 
 const shown = (err) => [err.code, err.library, err.reason ?? err.message].filter((v) => v !== undefined).join(' | ');
 const cn = (socket) => socket.getPeerCertificate()?.subject?.CN ?? 'none';
@@ -274,6 +276,53 @@ async function tlsCase(name, serverOptions, clientOptions, { contexts = [], s = 
     console.log('addContext, a key for another certificate: no throw');
   } catch (err) {
     console.log('addContext, a key for another certificate: throws', err.code, err.message);
+  }
+  {
+    const s = [];
+    await tlsCase(
+      'requestCert: a context with the same ca checks the client certificate',
+      {
+        ca: clientCa,
+        requestCert: true,
+        SNICallback(servername, cb) {
+          cb(null, tls.createSecureContext({ ...a, ca: clientCa }));
+        },
+      },
+      { servername: 'a.test', ...client },
+      { s }
+    );
+  }
+  {
+    const s = [];
+    const c = [];
+    const server = tls.createServer(
+      {
+        ...own,
+        ca: clientCa,
+        requestCert: true,
+        SNICallback(servername, cb) {
+          cb(null, tls.createSecureContext({ ...own, ca: read('rogue.crt') }));
+        },
+      },
+      (socket) => {
+        s.push(`secureConnection: authorized ${socket.authorized}`);
+        socket.end('hello');
+      }
+    );
+    server.on('tlsClientError', () => s.push('tlsClientError'));
+    const port = await listen(server);
+    await new Promise((resolve) => {
+      const socket = tls.connect({ host: '127.0.0.1', port, servername: 'localhost', rejectUnauthorized: false, ...client });
+      let data = '';
+      socket.on('data', (d) => (data += d));
+      socket.on('error', () => {});
+      socket.on('close', () => {
+        c.push(`got ${JSON.stringify(data)}`);
+        resolve();
+      });
+    });
+    await close(server);
+    report("requestCert: a context whose ca doesn't issue the client certificate refuses it", s, c);
   }
   await tlsCase('addContext and ALPNProtocols', { ALPNProtocols: ['h2', 'http/1.1'] }, { servername: 'a.test', ALPNProtocols: ['http/1.1', 'h2'] }, { contexts: [['a.test', a]] });
   await tlsCase('addContext and ALPNProtocols, none in common', { ALPNProtocols: ['h2'] }, { servername: 'a.test', ALPNProtocols: ['x-none'] }, { contexts: [['a.test', a]] });

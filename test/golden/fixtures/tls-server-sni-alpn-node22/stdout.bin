@@ -93,6 +93,13 @@ SNICallback without a certificate of its own, no SNI
   client error ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE | SSL routines | ssl/tls alert handshake failure
   client got ""
 addContext, a key for another certificate: throws ERR_OSSL_X509_KEY_VALUES_MISMATCH error:05800074:x509 certificate routines::key values mismatch
+requestCert: a context with the same ca checks the client certificate
+  server secureConnection: servername a.test, alpn false, cert a.test
+  client secureConnect: cert a.test, alpn false
+  client got "hello"
+requestCert: a context whose ca doesn't issue the client certificate refuses it
+  server tlsClientError
+  client got ""
 addContext and ALPNProtocols
   server secureConnection: servername a.test, alpn h2, cert a.test
   client secureConnect: cert a.test, alpn h2

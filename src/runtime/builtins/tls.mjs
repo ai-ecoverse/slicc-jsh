@@ -1031,6 +1031,12 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     return { made: held.made, release };
   }
 
+  function sameTrust(a, b) {
+    if (!a || !b) return !a && !b;
+    const text = (c) => (typeof c === 'string' ? c : Buffer.from(c.buffer, c.byteOffset, c.byteLength).toString('latin1'));
+    return a.length === b.length && a.every((c, i) => text(c) === text(b[i]));
+  }
+
   function SNICallback(servername, callback) {
     const contexts = this.server._contexts;
     for (let i = contexts.length - 1; i >= 0; --i) {
@@ -1120,6 +1126,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
         server: true,
         dial: () => ({ tls: request }),
         settled: () => {
+          this[kHeld].settled = true;
           for (const release of this[kHeld].splice(0)) release();
         },
         check: (session) => {
@@ -1167,7 +1174,13 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
           return this.#drop(err);
         }
       }
-      if (this.destroyed) return kDropHandshake;
+      if (this.destroyed || this[kHeld].settled) return kDropHandshake;
+      if (chosen && this._requestCert && !sameTrust(chosen[kCa], context[kCa])) {
+        return this.#drop(noTls(
+          "a client certificate checked against the ca of the context SNICallback or addContext chose",
+          "the kernel checks it against the server's own ca"
+        ));
+      }
       const own = chosen && clientCredentials(chosen) ? chosen : undefined;
       if (!own && !clientCredentials(context)) return this.#refuse('handshake_failure', sslReason('76', 'no suitable signature algorithm'));
       let made;
