@@ -830,7 +830,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           done(e);
           const emitClose = () => {
             release();
-            this.emit('close');
+            if (this.#handled) this.emit('close', Boolean(err));
+            else this.emit('close');
           };
           const during = timers.inCheck?.();
           nextTick(() => queueMicrotask(() => nextTick(() => (timers.afterCheck ? timers.afterCheck(emitClose, during) : emitClose()))));

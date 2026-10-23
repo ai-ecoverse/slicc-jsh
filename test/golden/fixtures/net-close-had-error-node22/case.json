@@ -1,0 +1,5 @@
+{
+  "description": "a net socket's 'close' says whether it closed on an error, as Node 22's isException: true after a refused connect, destroy(err) (also while connecting) and a failed TLS handshake, false after destroy() and end()",
+  "argv": ["script.js"],
+  "shim": true
+}

@@ -1,0 +1,10 @@
+refused error ECONNREFUSED
+refused close [true]
+destroy() close [false]
+destroy(err) error boom
+destroy(err) close [true]
+end(), then destroy() once finished close [false]
+destroy(err) while connecting error early
+destroy(err) while connecting close [true]
+tls to a plain server error (the handshake failed)
+tls to a plain server close [true]
