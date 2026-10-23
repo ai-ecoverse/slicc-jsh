@@ -1962,8 +1962,15 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       }
       if (socket.writable) socket.end();
     };
+    const skipLineEnds = () => {
+      let at = 0;
+      while (at < buf.length && (buf[at] === 0x0d || buf[at] === 0x0a)) at++;
+      if (at > 0) buf = Buffer.from(buf.subarray(at));
+    };
     const parseOne = () => {
       if (closedAfter) {
+        skipLineEnds();
+        if (buf.length === 0) return 'wait';
         stopped = true;
         const closed = hpe('HPE_CLOSED_CONNECTION', 'Data after `Connection: close`');
         if (server.listenerCount('clientError') > 0) server.emit('clientError', closed, socket);
@@ -2106,6 +2113,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         clearTimeout(requestTimer);
         requestTimer = null;
         req.complete = true;
+        if (res.shouldKeepAlive === false) skipLineEnds();
         if (buf.length > 0 && res.shouldKeepAlive === false) {
           stopped = true;
           incoming.splice(incoming.indexOf(req), 1);

@@ -1,0 +1,1 @@
+{ "description": "ai-ecoverse/slicc-jsh#960: after a request that closes the connection (Connection: close, HTTP/1.0), CR and LF are skipped as in llhttp's closed state, in the same packet or a later one, and the response is still sent; any other byte is HPE_CLOSED_CONNECTION (a 400 without a clientError listener)", "argv": ["script.js"], "shim": true }
