@@ -60,6 +60,18 @@ const shown = (t) => JSON.stringify(t.split('\r\n').filter((l) => !/^(Host|Conne
   }
   for (const [label, send] of [
     ['write(), then end() in one tick', (req) => { req.write('ab'); req.end('cd'); }],
+    ['a header set after write()', (req) => {
+      req.write('ab');
+      for (const [what, f] of [['setHeader', () => req.setHeader('Content-Length', '4')], ['removeHeader', () => req.removeHeader('x-a')]]) {
+        try {
+          f();
+          console.log(what, 'after write(): ok');
+        } catch (e) {
+          console.log(what, 'after write():', e.code);
+        }
+      }
+      req.end('cd');
+    }],
     ['end(data) alone', (req) => req.end('abcd')],
     ['object headers, a write, then end() once the server has it', (req, seen) => { req.write('ab'); seen.then(() => req.end('cd')); }],
   ]) {
@@ -79,7 +91,7 @@ const shown = (t) => JSON.stringify(t.split('\r\n').filter((l) => !/^(Host|Conne
       }, 5000);
       seen.then(() => clearTimeout(bound));
       send(req, seen);
-      if (label === 'end(data) alone' || label.startsWith('write(), then')) clearTimeout(bound);
+      if (label === 'end(data) alone' || label.startsWith('write(), then') || label.startsWith('a header')) clearTimeout(bound);
     });
     s.close();
   }

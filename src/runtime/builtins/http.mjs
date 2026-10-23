@@ -3450,7 +3450,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     [kWriteBody](buf, callback) {
       if (this._headerSent && this[kStreaming]) return this[kTrackWrite](this[kChunkedOut] ? chunkFrame(buf) : buf, callback);
       this[kChunks].push(buf);
-      if (!this._headerSent && !this[kEnded] && !this[kFetchMode] && !this[kFetchVia]) armChunked(this);
+      if (!this._headerSent && !this[kEnded] && !this[kFetchMode] && !this[kFetchVia]) {
+        armChunked(this);
+        this._header ||= this[kRenderHead]().toString('latin1');
+      }
       // Content-Length known and socket up: start streaming now.
       if (!this._headerSent && this[kConnected] && (rawHeader(this, 'content-length') != null || this[kChunkedOut])) this[kFlushHead]();
       process.nextTick(callback);
