@@ -1,0 +1,5 @@
+{
+  "description": "net.Socket#resetAndDestroy() as Node 22's, on the socket that calls it: it returns the socket, destroys a connected socket at once with 'close' false, and waits for the connect on one still connecting; a socket without a connection gets ERR_SOCKET_CLOSED and a 'close' with no argument, and an already destroyed one nothing more. The peer is only checked for what it received, as the kernel's loopback has no RST to send it",
+  "argv": ["script.js"],
+  "shim": true
+}

@@ -174,7 +174,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       const origEmit = this.emit.bind(this);
       this.emit = (event, ...args) => {
         if (event === 'close' && (args.length === 0 || args[0] === undefined)) {
-          return origEmit('close', false);
+          return this.#handled ? origEmit('close', false) : origEmit('close');
         }
         return origEmit(event, ...args);
       };
@@ -255,6 +255,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
 
     /** Bind an already-open kernel connection (server accept path). */
     _attach(conn, { quiet = false, deferRead = false } = {}) {
+      this.#handled = true;
       this.#conn = conn;
       this.#remoteAddress = conn.remote?.host;
       this.#remotePort = conn.remote?.port;
@@ -444,6 +445,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         throw err;
       }
       if (callback) this.once('connect', callback);
+      this.#handled = true;
       this.#resource = resourceHere();
       this.connecting = true;
       this.#connecting = true;
@@ -797,7 +799,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         callback(err);
         return;
       }
-      const halfClosedCleanly = this.#finishConnStarted;
+      const halfClosedCleanly = this.#finishConnStarted && !this.#resetting;
       this.#finishConnStarted = true;
       this.#dropHandle();
       const state = this._writableState;
@@ -846,6 +848,21 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         this.#lastWrite.then(flushed, flushed);
       } else if (!halfClosedCleanly) close();
       callback(err);
+    }
+
+    resetAndDestroy() {
+      if (this.#conn && !this.#detached) this.#reset();
+      else if (this.#connecting) this.once('connect', () => this.#reset());
+      else this.destroy(nodeError(Error, 'ERR_SOCKET_CLOSED', 'Socket is closed'));
+      return this;
+    }
+
+    #resetting = false;
+    #handled = false;
+
+    #reset() {
+      this.#resetting = true;
+      return this.destroy();
     }
 
     end(data, encoding, callback) {
