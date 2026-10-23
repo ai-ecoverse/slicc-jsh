@@ -89,6 +89,23 @@ function isIP(input) {
 }
 
 export function createNet({ ctx, process, Buffer, handles, getStream, timers = globalThis, getDns }) {
+  const connecting = new Map();
+  const connectingTo = (port, socket) => {
+    if (!connecting.has(port)) connecting.set(port, new Map());
+    const pending = connecting.get(port);
+    const done = new Promise((resolve) => {
+      const settle = () => {
+        socket.off('connect', settle);
+        socket.off('close', settle);
+        pending.delete(socket);
+        if (pending.size === 0 && connecting.get(port) === pending) connecting.delete(port);
+        resolve();
+      };
+      socket.once('connect', settle);
+      socket.once('close', settle);
+    });
+    pending.set(socket, done);
+  };
   const lookupHost = (name) =>
     new Promise((resolve, reject) => getDns().dns.lookup(name, (err, address) => (err ? reject(err) : resolve(address))));
   // Ports a server closed while its listen() was pending still holds until
@@ -469,6 +486,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this._host = host;
       const tlsRequest = options[kConnectTls];
       this.#tls = Boolean(tlsRequest);
+      if (!tlsRequest && (host === 'localhost' || /^127\./.test(host))) connectingTo(port, this);
       const dial = (tls) => ctx.net.connect({ host, port, signal: options.signal, ...(tls ? { tls } : {}) });
       let dialled = dial(tlsRequest?.tls);
       // tls's first choice refused (the kernel path for a host the uplink
@@ -1168,6 +1186,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           this.#connections++;
           socket[kServer] = this;
           socket._attach(conn, { deferRead: this[kServesTls] === true });
+          const ahead = connecting.get(listener.port);
+          if (ahead?.size) await Promise.all(ahead.values());
           makeCallback(process, resource, this.emit, this, ['connection', socket]);
           handles.notify();
         }

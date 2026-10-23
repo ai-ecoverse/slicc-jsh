@@ -1,0 +1,1 @@
+{ "description": "ai-ecoverse/slicc-jsh#982: a client in the program connecting to the program's own server on the loopback emits connect before the server emits connection, as Node 22 does", "argv": ["script.js"], "shim": true }
