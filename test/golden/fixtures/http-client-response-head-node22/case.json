@@ -1,0 +1,5 @@
+{
+  "description": "an http client parses a response head by llhttp's response rules, as Node 22: the status line (HTTP/, RTSP/ or ICE/, the version, a three-digit status, any reason), a bare LF or CR, a Transfer-Encoding without a final chunked read until close, Content-Length beside Transfer-Encoding, one error per bad head with its llhttp code; maxHeaderSize and the 16 KiB chunk extension limit apply to responses too",
+  "argv": ["script.js"],
+  "shim": true
+}

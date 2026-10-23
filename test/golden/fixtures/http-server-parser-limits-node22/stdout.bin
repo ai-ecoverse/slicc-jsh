@@ -1,0 +1,69 @@
+extension name of 16384 bytes | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+extension name of 16385 bytes | - | HPE_CHUNK_EXTENSIONS_OVERFLOW "Parse Error: Chunk extensions overflow" | - | closed
+name and value of 16384 bytes | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+name and value of 16385 bytes | - | HPE_CHUNK_EXTENSIONS_OVERFLOW "Parse Error: Chunk extensions overflow" | - | closed
+quoted value, 16384 with the quotes | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+quoted value, 16385 with the quotes | - | HPE_CHUNK_EXTENSIONS_OVERFLOW "Parse Error: Chunk extensions overflow" | - | closed
+quoted pairs count both bytes | - | HPE_CHUNK_EXTENSIONS_OVERFLOW "Parse Error: Chunk extensions overflow" | - | closed
+two extensions of 16384 bytes | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+two extensions of 16385 bytes | - | HPE_CHUNK_EXTENSIONS_OVERFLOW "Parse Error: Chunk extensions overflow" | - | closed
+an unterminated extension | - | HPE_CHUNK_EXTENSIONS_OVERFLOW "Parse Error: Chunk extensions overflow" | - | closed
+an unterminated extension over two packets | - | HPE_CHUNK_EXTENSIONS_OVERFLOW "Parse Error: Chunk extensions overflow" | - | closed
+a bad character past the limit | - | HPE_CHUNK_EXTENSIONS_OVERFLOW "Parse Error: Chunk extensions overflow" | - | closed
+a bad character before a long extension | - | HPE_STRICT "Parse Error: Invalid character in chunk extensions value" | - | closed
+the count starts again for each chunk | POST /c "zz" | - | HTTP/1.1 200 OK | closed
+an extension on the last chunk | - | HPE_CHUNK_EXTENSIONS_OVERFLOW "Parse Error: Chunk extensions overflow" | - | closed
+a long run of zeros | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+an extension overflow without a clientError listener | - | - | HTTP/1.1 413 Payload Too Large | closed
+a bad chunk size without a clientError listener | - | - | HTTP/1.1 400 Bad Request | closed
+a bad trailer before its line ends | - | HPE_INVALID_HEADER_TOKEN "Parse Error: Invalid header token" | - | closed
+chunk line: a space after the size | - | HPE_INVALID_CHUNK_SIZE "Parse Error: Invalid character in chunk size" | - | closed
+chunk line: a tab after the size | - | HPE_INVALID_CHUNK_SIZE "Parse Error: Invalid character in chunk size" | - | closed
+chunk line: a size that is not hex | - | HPE_INVALID_CHUNK_SIZE "Parse Error: Invalid character in chunk size" | - | closed
+chunk line: a bare LF after the size | - | HPE_CR_EXPECTED "Parse Error: Missing expected CR after chunk size" | - | closed
+chunk line: a CR without LF after the size | - | HPE_STRICT "Parse Error: Expected LF after chunk size" | - | closed
+chunk line: a semicolon and nothing | - | HPE_STRICT "Parse Error: Invalid character in chunk extensions" | - | closed
+chunk line: a space after the semicolon | - | HPE_STRICT "Parse Error: Invalid character in chunk extensions" | - | closed
+chunk line: a tab after the semicolon | - | HPE_STRICT "Parse Error: Invalid character in chunk extensions name" | - | closed
+chunk line: a space in the name | - | HPE_STRICT "Parse Error: Invalid character in chunk extensions name" | - | closed
+chunk line: an empty extension name | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+chunk line: an empty name with a value | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+chunk line: an empty value | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+chunk line: a space in the value | - | HPE_STRICT "Parse Error: Invalid character in chunk extensions value" | - | closed
+chunk line: a quoted value with a space | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+chunk line: a control character in a quoted value | - | HPE_STRICT "Parse Error: Invalid character in chunk extensions quoted value" | - | closed
+chunk line: a control character in a quoted pair | - | HPE_STRICT "Parse Error: Invalid quoted-pair in chunk extensions quoted value" | - | closed
+chunk line: junk after the closing quote | - | HPE_STRICT "Parse Error: Invalid character in chunk extensions quote value" | - | closed
+chunk line: a quote inside a token value | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+chunk line: a bare LF after a name | - | HPE_CR_EXPECTED "Parse Error: Missing expected CR after chunk extension name" | - | closed
+chunk line: a bare LF after a value | - | HPE_CR_EXPECTED "Parse Error: Missing expected CR after chunk extension value" | - | closed
+chunk line: a bare LF after a quoted value | - | HPE_CR_EXPECTED "Parse Error: Missing expected CR after chunk extension value" | - | closed
+chunk line: a DEL in a quoted value | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+chunk line: a high byte in a quoted value | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+chunk line: a semicolon after a quoted value | POST /c "hello" | - | HTTP/1.1 200 OK | closed
+a target of 63 bytes with maxHeaderSize 64 | - | - | HTTP/1.1 400 Bad Request | closed
+a target of 64 bytes with maxHeaderSize 64 | - | HPE_HEADER_OVERFLOW "Parse Error: Header overflow" | - | closed
+target, name and value make 64 | GET /aaaaaaaaaaaaaaaaaaa…(58) "" | - | HTTP/1.1 200 OK | closed
+leading whitespace is not counted | GET / "" | - | HTTP/1.1 200 OK | closed
+trailing whitespace is counted | GET / "" | - | HTTP/1.1 200 OK | closed
+separators and line ends are not counted | GET / "" | - | HTTP/1.1 200 OK | closed
+one header too many | - | HPE_HEADER_OVERFLOW "Parse Error: Header overflow" | - | closed
+empty values count nothing | GET / "" | - | HTTP/1.1 200 OK | closed
+a partial target over the limit | - | HPE_HEADER_OVERFLOW "Parse Error: Header overflow" | - | closed
+a partial value over the limit | - | HPE_HEADER_OVERFLOW "Parse Error: Header overflow" | - | closed
+a target split over the limit | - | HPE_HEADER_OVERFLOW "Parse Error: Header overflow" | - | closed
+a bad header name before the limit | - | HPE_INVALID_HEADER_TOKEN "Parse Error: Invalid header token" | - | closed
+a bad request line before a bad header | - | HPE_INVALID_METHOD "Parse Error: Invalid method encountered" | - | closed
+trailers count from the last chunk | POST / "z" | - | HTTP/1.1 200 OK | closed
+trailers over the limit | - | HPE_HEADER_OVERFLOW "Parse Error: Header overflow" | - | closed
+a header of 16383 counted bytes | GET / "" | - | HTTP/1.1 200 OK | closed
+a header of 16384 counted bytes | - | HPE_HEADER_OVERFLOW "Parse Error: Header overflow" | - | closed
+maxHeaderSize 0 is the default | GET / "" | - | HTTP/1.1 200 OK | closed
+a header overflow without a clientError listener | - | - | HTTP/1.1 431 Request Header Fields Too Large | closed
+leading CRLFs before a request | GET /lead "" | - | HTTP/1.1 200 OK | closed
+maxHeaderSize -1 | ERR_OUT_OF_RANGE The value of "maxHeaderSize" is out of range. It must be >= 0 && <= 9007199254740991. Received -1
+maxHeaderSize 1.5 | ERR_OUT_OF_RANGE The value of "maxHeaderSize" is out of range. It must be an integer. Received 1.5
+maxHeaderSize "64" | ERR_INVALID_ARG_TYPE The "maxHeaderSize" argument must be of type number. Received type string ('64')
+maxHeaderSize null | ERR_INVALID_ARG_TYPE The "maxHeaderSize" argument must be of type number. Received null
+http.maxHeaderSize 16384
+done
