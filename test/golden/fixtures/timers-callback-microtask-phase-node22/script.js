@@ -1,0 +1,38 @@
+const fs = require('fs');
+const net = require('net');
+const busy = () => { const start = Date.now(); while (Date.now() - start < 20) {} };
+const both = (out) => {
+  setTimeout(() => out.push('timeout 0'), 0);
+  setImmediate(() => out.push('immediate'));
+  busy();
+};
+const row = (label, start) => new Promise((done) => {
+  const out = [];
+  start(out);
+  setTimeout(() => { console.log(`${label} | ${out.join(', ')}`); done(); }, 60);
+});
+(async () => {
+  await row("an immediate's promise continuation", (out) => setImmediate(() => Promise.resolve().then(() => both(out))));
+  await row("an immediate's third await", (out) => setImmediate(async () => { await null; await null; await null; both(out); }));
+  await row("an immediate's queueMicrotask", (out) => setImmediate(() => queueMicrotask(() => both(out))));
+  await row("a nextTick from an immediate's promise continuation", (out) => setImmediate(() => Promise.resolve().then(() => process.nextTick(() => both(out)))));
+  await row("a promise continuation from an immediate's nextTick", (out) => setImmediate(() => process.nextTick(() => Promise.resolve().then(() => both(out)))));
+  await row("a nextTick in a nextTick from an immediate's promise continuation", (out) => setImmediate(() => Promise.resolve().then(() => process.nextTick(() => process.nextTick(() => both(out))))));
+  await row("a timer's promise continuation", (out) => setTimeout(() => Promise.resolve().then(() => both(out)), 1));
+  await row("a timer's third await", (out) => setTimeout(async () => { await null; await null; await null; both(out); }, 1));
+  await row("a nextTick from a timer's promise continuation", (out) => setTimeout(() => Promise.resolve().then(() => process.nextTick(() => both(out))), 1));
+  await row("a readFile callback's promise continuation", (out) => fs.readFile(__filename, () => Promise.resolve().then(() => both(out))));
+  await row("a nextTick from a readFile callback's promise continuation", (out) => fs.readFile(__filename, () => Promise.resolve().then(() => process.nextTick(() => both(out)))));
+  await row("a readFile callback's third await", (out) => fs.readFile(__filename, async () => { await null; await null; await null; both(out); }));
+  await row("an immediate after a readFile callback's promise continuation", (out) => fs.readFile(__filename, () => Promise.resolve().then(() => setImmediate(() => Promise.resolve().then(() => both(out))))));
+  await row("destroy() in an immediate's promise continuation", (out) => {
+    const srv = net.createServer((s) => s.once('data', () => setImmediate(() => Promise.resolve().then(() => {
+      s.on('close', () => out.push('close'));
+      s.destroy();
+      both(out);
+      srv.close();
+    }))));
+    srv.listen(0, '127.0.0.1', () => { const c = net.connect(srv.address().port, '127.0.0.1'); c.on('error', () => {}); c.on('connect', () => c.write('x')); });
+  });
+  console.log('done');
+})();

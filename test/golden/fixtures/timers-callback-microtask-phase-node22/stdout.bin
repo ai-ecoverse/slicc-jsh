@@ -1,0 +1,15 @@
+an immediate's promise continuation | timeout 0, immediate
+an immediate's third await | timeout 0, immediate
+an immediate's queueMicrotask | timeout 0, immediate
+a nextTick from an immediate's promise continuation | timeout 0, immediate
+a promise continuation from an immediate's nextTick | timeout 0, immediate
+a nextTick in a nextTick from an immediate's promise continuation | timeout 0, immediate
+a timer's promise continuation | immediate, timeout 0
+a timer's third await | immediate, timeout 0
+a nextTick from a timer's promise continuation | immediate, timeout 0
+a readFile callback's promise continuation | immediate, timeout 0
+a nextTick from a readFile callback's promise continuation | immediate, timeout 0
+a readFile callback's third await | immediate, timeout 0
+an immediate after a readFile callback's promise continuation | timeout 0, immediate
+destroy() in an immediate's promise continuation | close, timeout 0, immediate
+done

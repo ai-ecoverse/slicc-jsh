@@ -19,10 +19,11 @@ export function createTimers(
   // holdImmediate(seq): whether the program's immediate made `seq`th must
   // wait (Node's check phase comes after the poll phase that delivers port
   // messages).
-  let inImmediate = 0;
+  let checkPhase = false;
   let checkCut = 0;
   let timerAt = null;
-  const endTimerPhase = () => {
+  const endPhase = () => {
+    checkPhase = false;
     timerAt = null;
   };
   // The check phase that follows a message ports' turn (Node runs the
@@ -52,7 +53,6 @@ export function createTimers(
   const nativeClearTimeout = globalThis.clearTimeout.bind(globalThis);
   const nativeSetInterval = globalThis.setInterval.bind(globalThis);
   const nativeClearInterval = globalThis.clearInterval.bind(globalThis);
-  const nativeQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
 
   const byId = new Map();
   // Once the program is ending (process.exit(), a fatal error) no timer of
@@ -158,9 +158,9 @@ export function createTimers(
         state.due = Date.now() + state.delay;
         state.seq = made++;
       }
+      checkPhase = false;
       timerAt = Date.now();
       runMethod(handle, '_onTimeout', args, domain, frame);
-      nativeQueueMicrotask(endTimerPhase);
     };
     const fire = () => {
       if (stopped) return;
@@ -183,7 +183,7 @@ export function createTimers(
       }
     };
     state.run = run;
-    state.afterIo = looping && inImmediate === 0;
+    state.afterIo = looping && !checkPhase;
     state.seq = made++;
     // Node's delay: a number from 1 up (anything else is 1).
     state.delay = delay >= 1 && delay <= 2147483647 ? Number(delay) : 1;
@@ -224,14 +224,14 @@ export function createTimers(
       byId.delete(state.id);
       handles.delete(state);
       check.delete(state);
+      endPhase();
       if (inCheck) {
         if (state.seq >= checkCut) checkCut = made;
-        inImmediate++;
+        checkPhase = true;
       }
       try {
         runMethod(handle, '_onImmediate', args, domain, frame);
       } finally {
-        if (inCheck) inImmediate--;
         if (closing.length > 0) scheduleClose();
       }
     };
@@ -322,13 +322,14 @@ export function createTimers(
       looping = true;
     },
     /** @internal Node's close phase: fn runs now, or after the immediates pending now have run. */
-    afterCheck(fn, during = inImmediate > 0) {
+    afterCheck(fn, during = checkPhase) {
       const cut = during ? checkCut : made;
       if (!pendingBefore(cut)) return fn();
       closing.push({ cut, fn });
     },
-    /** @internal Whether one of the program's immediates is running (Node's check phase). */
-    inCheck: () => inImmediate > 0,
+    /** @internal Whether one of the program's immediates, or its ticks and promise jobs, is running (Node's check phase). */
+    inCheck: () => checkPhase,
+    endPhase,
     checkCut: () => checkCut,
     timerAt: () => timerAt,
     immediatePending(cut = Infinity) {
