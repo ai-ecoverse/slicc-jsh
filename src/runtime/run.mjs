@@ -849,47 +849,35 @@ export async function runNode(ctx, options = {}) {
           binding: importBinding = '__import',
         } = rewriteDynamicImports(code);
         const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
-        const body = parsed.print
-          ? `return (${/\S/.test(cjsCode) ? cjsCode : 'undefined'}\n)\n//# sourceURL=${evalName}`
-          : `${cjsCode}\n//# sourceURL=${evalName}`;
         const args = ['exports', 'require', 'module', '__filename', '__dirname'];
         const values = [exports, require, module, evalName, process.cwd()];
         if (hasImport) {
           args.push(importBinding);
           values.push(dynImport);
         }
-        let fn;
-        try {
-          fn = new Function(...args, body);
-        } catch (err) {
-          // Node's report: [eval]:line, the line, carets under the token.
-          // -p compiled the code as an expression: its own message is V8's for
-          // the code itself (not for the `return (…)` around it).
-          const report =
-            err instanceof SyntaxError &&
-            syntaxReport(code, { kind: 'commonjs', filename: evalName, error: parsed.print ? undefined : err });
-          if (report) {
-            Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
-            err.stack = report.stack;
-          }
+        const report = syntaxReport(code, { kind: 'script', filename: evalName });
+        if (report) {
+          const err = new SyntaxError(report.message);
+          Object.defineProperty(err, '_prettyStack', { value: report.stack, configurable: true, writable: true });
+          err.stack = report.stack;
           throw err;
         }
+        const run = () => {
+          args.forEach((name, i) => {
+            globalThis[name] = values[i];
+          });
+          return (0, eval)(`\n\n${cjsCode}\n//# sourceURL=${evalName}`);
+        };
         mainBegin();
         let result;
         try {
-          result = fn(...values);
+          result = run();
         } finally {
           mainEnd();
         }
-        // Keep the loop alive for floating async IIFEs: `(async () => { ... })()`.
-        if (result != null && typeof result.then === 'function') {
-          trackPromise(handles, result);
-        }
-        flushTicks();
         // Node -p: console.log semantics (strings unquoted), not util.inspect.
-        if (parsed.print) {
-          console.log(result);
-        }
+        if (parsed.print) process.on('exit', () => console.log(result));
+        flushTicks();
       }
     } catch (err) {
       if (isExitError(err)) throw err;

@@ -1,0 +1,22 @@
+const { spawnSync } = require('child_process');
+const run = (args, input) => {
+  const r = spawnSync(process.execPath, args, { cwd: __dirname, encoding: 'utf8', argv0: 'node', input });
+  console.log(`== ${JSON.stringify(args)}${input === undefined ? '' : ` < ${JSON.stringify(input)}`}: status ${r.status}`);
+  process.stdout.write(r.stdout);
+  process.stdout.write(r.stderr);
+};
+run(['-p', 'const a = 1; a']);
+run(['-p', 'if (1) { 7 }']);
+run(['-p', '{a: 1}']);
+run(['-p', 'function f() {}']);
+run(['-p', '"use strict"; 8']);
+run(['-p', 'var x = 2; globalThis.x']);
+run(['-p', 'setTimeout(() => console.log("timer")), 5']);
+run(['-p', 'process.on("exit", () => console.log("exit listener")), 5']);
+run(['-p', 'process.exitCode = 3; 4']);
+run(['-p', 'process.exit(2)']);
+run(['-p', 'import("node:path").then((p) => console.log("imported", typeof p.join)), 6']);
+run(['-p', '[typeof require, typeof module, typeof exports, __filename, typeof __dirname, typeof globalThis.require, this === globalThis]']);
+run(['-e', 'console.log(typeof globalThis.require, typeof globalThis.module, globalThis.__filename, this === globalThis); var v = 1; console.log(globalThis.v)']);
+run(['-p'], 'const b = 2;\nb * 3');
+run(['-p', '\n\n\nconst e = new Error("x");\ne.stack.split("\\n")[1]']);
