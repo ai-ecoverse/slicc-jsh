@@ -950,6 +950,7 @@ export function createChildProcess({ ctx, process, Buffer, handles, getStream, t
       try {
         pair = ctx.sync.socketpair();
       } catch (err) {
+        closeFds(shared ?? []);
         releaseAll();
         process.nextTick(() => {
           safeEmit(child, 'error', err);
