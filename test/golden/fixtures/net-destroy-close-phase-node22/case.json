@@ -1,0 +1,5 @@
+{
+  "description": "a destroyed net socket's 'close' comes in Node 22's close phase: after the ticks and microtasks of the destroy and of its 'error' listeners, and after the immediates pending then, including one queued right after destroy() or cleared again; before an immediate those immediates queue, and before a timer",
+  "argv": ["script.js"],
+  "shim": true
+}

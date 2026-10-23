@@ -319,6 +319,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
      */
     [kStartTls](parent, request) {
       this.#connecting = true;
+      this.#tls = true;
       this.#tlsParent = parent;
       this.#resource = resourceHere();
       const run = async () => {
@@ -362,8 +363,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         this.connecting = false;
         this.#connecting = false;
         this._attach(secure, { quiet: true });
-        for (const chunk of this.#pending) void this.#write(chunk);
-        this.#pending = [];
+        this.#flushPending();
         this.#flushFinal();
         request.secured?.();
       };
@@ -398,6 +398,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #unsettled = 0;
+    #tls = false;
 
     #settles(p) {
       this.#unsettled++;
@@ -446,6 +447,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       // Node's: the host connected to (tls's checkServerIdentity falls back on it).
       this._host = host;
       const tlsRequest = options[kConnectTls];
+      this.#tls = Boolean(tlsRequest);
       const dial = (tls) => ctx.net.connect({ host, port, signal: options.signal, ...(tls ? { tls } : {}) });
       let dialled = dial(tlsRequest?.tls);
       // tls's first choice refused (the kernel path for a host the uplink
@@ -485,8 +487,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
               }
             }
             this._attach(conn);
-            for (const chunk of this.#pending) void this.#write(chunk);
-            this.#pending = [];
+            this.#flushPending();
             this.#flushFinal();
           })
           .catch((err) => {
@@ -632,15 +633,54 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       if (this.#idleTimer) this._touch();
       const bytes = toBytes(chunk, encoding);
       if (!this.#writer) {
-        if (this.#connecting) {
-          this.#pending.push(bytes);
+        if (this.#connecting && this.#tls) {
+          this.#pending.push({ bytes, callback: () => {} });
           callback();
+          this.#startOnWrite?.();
+          return;
+        }
+        if (this.#connecting) {
+          const entry = { bytes, callback };
+          entry.onClose = () => {
+            this.#unpend(entry);
+            callback(nodeError(Error, 'ERR_SOCKET_CLOSED_BEFORE_CONNECTION', 'Socket closed before the connection was established'));
+          };
+          entry.onConnect = () => this.#flushEntry(entry);
+          this.once('close', entry.onClose);
+          this.once('connect', entry.onConnect);
+          this.#pending.push(entry);
           this.#startOnWrite?.();
           return;
         }
         callback(new Error('Socket is not connected'));
         return;
       }
+      this.#send(bytes, callback);
+    }
+
+    #unpend(entry) {
+      const at = this.#pending.indexOf(entry);
+      if (at < 0) return false;
+      this.#pending.splice(at, 1);
+      if (entry.onClose) {
+        this.off('close', entry.onClose);
+        this.off('connect', entry.onConnect);
+      }
+      return true;
+    }
+
+    #flushEntry(entry) {
+      if (!this.destroyed && !this.#writer) return;
+      if (!this.#unpend(entry)) return;
+      if (this.destroyed || !this.#writer) entry.callback(nodeError(Error, 'ERR_SOCKET_CLOSED', 'Socket is closed'));
+      else this.#send(entry.bytes, entry.callback);
+    }
+
+    #flushPending() {
+      for (const entry of [...this.#pending]) this.#flushEntry(entry);
+    }
+
+    #send(bytes, callback) {
       this.#writing = callback;
       const settled = (err) => {
         if (this.#writing !== callback) return;
@@ -725,14 +765,12 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         trackPromise(handles, new Promise((resolve) => (release = resolve))).catch(() => {});
         callback = (e) => {
           done(e);
-          nextTick(() =>
-            queueMicrotask(() =>
-              nextTick(() => {
-                release();
-                this.emit('close');
-              })
-            )
-          );
+          const emitClose = () => {
+            release();
+            this.emit('close');
+          };
+          const during = timers.inCheck?.();
+          nextTick(() => queueMicrotask(() => nextTick(() => (timers.afterCheck ? timers.afterCheck(emitClose, during) : emitClose()))));
         };
       }
       // Node's Socket._destroy: the server's count drops now, before this

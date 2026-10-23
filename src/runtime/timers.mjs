@@ -230,6 +230,7 @@ export function createTimers(
         runMethod(handle, '_onImmediate', args, domain, frame);
       } finally {
         if (inCheck) inImmediate--;
+        if (closing.length > 0) closePhase();
       }
     };
     state.seq = made++;
@@ -237,6 +238,19 @@ export function createTimers(
     byId.set(state.id, state);
     handles.add(state);
     return handle;
+  };
+
+  const pendingBefore = (cut) => {
+    for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < cut) return true;
+    return false;
+  };
+  const closing = [];
+  const closePhase = () => {
+    for (let i = 0; i < closing.length; i++) {
+      if (pendingBefore(closing[i].cut)) continue;
+      const [{ fn }] = closing.splice(i--, 1);
+      fn();
+    }
   };
 
   const clear = (handle, nativeClear) => {
@@ -251,6 +265,7 @@ export function createTimers(
       check.delete(state);
       held.delete(state);
       if (state.retry) nativeClearTimeout(state.retry);
+      if (closing.length > 0) nativeSetTimeout(closePhase, 0);
     }
     nativeClear(id);
   };
@@ -281,6 +296,12 @@ export function createTimers(
     /** @internal An immediate that is never held (the message ports' own steps). */
     setImmediateUnheld: (fn) => makeImmediate(fn, [], false),
     setImmediatePoll: (fn) => makeImmediate(fn, [], true, false),
+    /** @internal Node's close phase: fn runs now, or after the immediates pending now have run. */
+    afterCheck(fn, during = inImmediate > 0) {
+      const cut = during ? checkCut : made;
+      if (!pendingBefore(cut)) return fn();
+      closing.push({ cut, fn });
+    },
     /** @internal Whether one of the program's immediates is running (Node's check phase). */
     inCheck: () => inImmediate > 0,
     checkCut: () => checkCut,

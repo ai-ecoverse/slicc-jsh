@@ -1,0 +1,26 @@
+close listener before, destroy now close
+close listener before, destroy now end callback ERR_SOCKET_CLOSED_BEFORE_CONNECTION
+close listener before, destroy now with an error error boom
+close listener before, destroy now with an error close
+close listener before, destroy now with an error end callback boom
+close listener before, destroy in a microtask close
+close listener before, destroy in a microtask end callback ERR_SOCKET_CLOSED_BEFORE_CONNECTION
+close listener before, destroy in a microtask with an error error boom
+close listener before, destroy in a microtask with an error close
+close listener before, destroy in a microtask with an error end callback boom
+close listener after, destroy now end callback ERR_SOCKET_CLOSED_BEFORE_CONNECTION
+close listener after, destroy now close
+close listener after, destroy now with an error error boom
+close listener after, destroy now with an error end callback boom
+close listener after, destroy now with an error close
+close listener after, destroy in a microtask end callback ERR_SOCKET_CLOSED_BEFORE_CONNECTION
+close listener after, destroy in a microtask close
+close listener after, destroy in a microtask with an error error boom
+close listener after, destroy in a microtask with an error end callback boom
+close listener after, destroy in a microtask with an error close
+bare end callback ERR_STREAM_DESTROYED
+bare end close
+write while connecting returns true connecting true
+first write callback null
+end callback null
+written while connecting, then connected | peer got "abc"

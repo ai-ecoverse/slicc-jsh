@@ -1,0 +1,9 @@
+destroy() | sync, tick, microtask, immediate, close, timeout 0
+destroy(err) | sync, error, tick, tick from error, microtask, microtask from error, immediate, close, timeout 0
+write, then destroy() | sync, tick, microtask, immediate, close, timeout 0
+an immediate queued before destroy() | sync, immediate before, close
+two immediates after destroy() | sync, first immediate, second immediate, close
+an immediate from an immediate | sync, immediate, close, immediate from an immediate
+an immediate cleared again | sync, close, timeout 0
+destroy() inside an immediate | destroyed in an immediate, close, immediate after
+done
