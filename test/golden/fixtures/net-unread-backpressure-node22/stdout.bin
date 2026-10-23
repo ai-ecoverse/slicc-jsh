@@ -1,0 +1,6 @@
+readableHighWaterMark 65536 readableFlowing null
+holds about its highWaterMark true
+read on, got every byte
+a client that never reads what its peer sent and ended: status 0
+connected
+exit 0 true

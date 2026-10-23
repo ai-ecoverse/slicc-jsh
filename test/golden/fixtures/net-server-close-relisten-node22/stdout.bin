@@ -1,0 +1,5 @@
+close(); listen(port) at once: listening
+relisten from the close callback: listening true
+close(); listen(port) on the same server at once: listening
+the same server, close() then listen() in one tick: true
+_handle.close(); listen(port): listening
