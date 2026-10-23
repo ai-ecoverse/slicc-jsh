@@ -1077,6 +1077,8 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
           this.servername = session.servername || false;
         },
         refused: serverRefusal,
+        keeps: (err) => err.code === 'ERR_TLS_HANDSHAKE_TIMEOUT',
+        kept: (err) => this._tlsError(err),
         secured: () => this.emit('secure'),
       });
     }

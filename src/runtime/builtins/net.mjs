@@ -332,9 +332,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           const dialled = request.server ? ctx.net.secure(conn, tls) : ctx.net.connect({ socket: conn, ...(host ? { host } : {}), tls });
           secure = await dialled;
         } catch (err) {
+          const refusal = request.refused(err);
+          if (refusal && request.keeps?.(refusal)) {
+            this.#conn = conn;
+            request.kept(refusal);
+            return;
+          }
           // The connection is this socket's now: it goes with the failed handshake.
           void conn.close?.().catch(() => {});
-          const refusal = request.refused(err);
           if (refusal === null) {
             this.connecting = false;
             if (!this.destroyed) this.destroy();
