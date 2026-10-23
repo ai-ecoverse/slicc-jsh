@@ -1,0 +1,6 @@
+{
+  "description": "positioned reads across the kernel's 1 MiB and 16 MiB read sizes: readSync, fs.read, FileHandle.read, readvSync and a read stream with a start, at unaligned offsets, past the end, zero-length, into a buffer offset and a view, and whole-file passes at chunk sizes from 64 KiB to 64 MiB, all the same bytes as the file",
+  "argv": ["script.js"],
+  "shim": true,
+  "files": [{ "path": "/os/script.js", "from": "script.js" }]
+}
