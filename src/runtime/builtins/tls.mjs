@@ -43,6 +43,7 @@ const kThrown = Symbol('slicc-jsh.tls.thrown');
 // the certificate parsed, on the context and on a socket that has it.
 const kOwnCert = Symbol('slicc-jsh.tls.ownCert');
 const kOwnKey = Symbol('slicc-jsh.tls.ownKey');
+const kLeafRefusal = Symbol('slicc-jsh.tls.leafRefusal');
 const kOwnLeaf = Symbol('slicc-jsh.tls.ownLeaf');
 const kErrorEmitted = Symbol('slicc-jsh.tls.errorEmitted');
 const kHandshakeTimeout = Symbol('slicc-jsh.tls.handshakeTimeout');
@@ -637,8 +638,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
       const pass = keys[0]?.passphrase !== undefined ? keys[0].passphrase : options.passphrase;
       validateKeyOrCertOption(`${name}.key`, pem);
       if (pass !== undefined && pass !== null) validateString(pass, `${name}.passphrase`);
-      // What isn't a key at all, a DER key and a wrong passphrase fail here,
-      // as in Node; a key that doesn't match the certificate, at connect (the kernel's).
+      // What isn't a key at all, a DER key and a wrong passphrase fail here, as in Node.
       if (!isKeyMaterial(pem)) throw osslError('ERR_OSSL_UNSUPPORTED');
       const locked = lockedKeyError(pem, pass ?? '', getCrypto(), Buffer);
       if (locked) throw osslError(locked.code, locked.stack);
@@ -716,6 +716,10 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
     if (honorCipherOrder) secureOptions |= SSL_OP_CIPHER_SERVER_PREFERENCE;
     const c = new SecureContext(secureProtocol, secureOptions, minVersion, maxVersion);
     configSecureContext(c.context, options);
+    const own = clientCredentials(c.context);
+    const refused = own && typeof ctx?.sync?.net?.listen === 'function' ? leafRefusal(own) : null;
+    if (refused?.code === 'ERR_OSSL_X509_KEY_VALUES_MISMATCH') throw refused;
+    c.context[kLeafRefusal] = refused;
     return c;
   }
 
@@ -1530,8 +1534,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
         this[k] = options[k] || undefined;
       }
       this._sharedCreds = createSecureContext(options);
-      const request = serverRequest(this._sharedCreds.context, {});
-      if (request && typeof ctx?.sync?.net?.listen === 'function') checkLeaf(request);
+      if (this._sharedCreds.context[kLeafRefusal]) throw this._sharedCreds.context[kLeafRefusal];
     },
     getTicketKeys() {
       return (this._sharedCreds.context.ticketKeys ??= Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(48))));
@@ -1551,8 +1554,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
         `^${servername.replace(/([.^$+?\-\\[\]{}])/g, '\\$1').replace(/\*/g, '[^.]*')}$`
       );
       const secureContext = context instanceof SecureContext ? context : createSecureContext(context);
-      const request = serverRequest(secureContext.context, {});
-      if (request && typeof ctx?.sync?.net?.listen === 'function') checkLeaf(request);
+      if (secureContext.context[kLeafRefusal]) throw secureContext.context[kLeafRefusal];
       this._contexts.push([re, secureContext.context]);
     },
     listen(...args) {
@@ -1568,17 +1570,16 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
     return new Server(options, listener);
   }
 
-  function checkLeaf({ cert, key, passphrase }) {
+  function leafRefusal({ cert, key, passphrase }) {
     let listener;
     try {
       listener = ctx.sync.net.listen({ host: '127.0.0.1', port: 0, backlog: 1, tls: { cert, key, ...(passphrase !== undefined ? { passphrase } : {}) } });
     } catch (err) {
       const code = /^ERR_OSSL_[A-Z0-9_]+/.exec(String(err?.detail ?? ''))?.[0];
-      const refused = code ? serverRefusal({ code }) : null;
-      if (refused) throw refused;
-      return;
+      return code ? serverRefusal({ code }) : null;
     }
     void Promise.resolve(listener.close?.()).catch(() => {});
+    return null;
   }
 
   // Arguments: [port,] [host,] [options,] [cb]
