@@ -49,7 +49,7 @@ function trackingProxy() {
 
 const decoder = new TextDecoder();
 const kEvalImport = Symbol.for('slicc-jsh.evalImport');
-const EVAL_IMPORT = "globalThis[Symbol.for('slicc-jsh.evalImport')]";
+const EVAL_IMPORT = `({}).constructor.constructor("return globalThis[Symbol.for('slicc-jsh.evalImport')]")()`;
 
 /**
  * Install jsh bindings on globalThis (slicc-kernel Node-entry lockdown).

@@ -34,6 +34,8 @@ function object [eval] true
 1
 == ["-e","import(\"node:os\").then((os) => console.log(typeof os.cpus, typeof globalThis.__import))"]: status 0
 function undefined
+== ["-e","function f(globalThis, Symbol) { return import(\"node:os\"); } f(1, 2).then((os) => console.log(\"shadowed\", typeof os.cpus))"]: status 0
+shadowed function
 == ["-p"] < "const b = 2;\nb * 3": status 0
 6
 == ["-p","\n\n\nconst e = new Error(\"x\");\ne.stack.split(\"\\n\")[1]"]: status 0
