@@ -1,0 +1,2 @@
+spawnSync "err 1\nout 1\nerr 2\nout 2\n"
+spawn "err 1\nout 1\nerr 2\nout 2\n"
