@@ -1,4 +1,4 @@
-a 1 MiB write to a paused peer: write returned false
+writes to a paused peer until write() returns false: needDrain true
 destroyed true
 server close
 server closed
