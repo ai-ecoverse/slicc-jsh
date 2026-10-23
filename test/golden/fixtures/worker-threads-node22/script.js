@@ -80,6 +80,7 @@ test('transfers', async () => {
   const seen = [];
   const { port1, port2 } = new MessageChannel();
   port1.on('message', (m) => seen.push(`port1 ${json(m)}`));
+  const closed = new Promise((resolve) => port1.on('close', resolve));
   port1.postMessage('queued 1');
   port1.postMessage('queued 2');
   const buf = new ArrayBuffer(16);
@@ -98,7 +99,7 @@ test('transfers', async () => {
   Atomics.store(view, 0, 2);
   Atomics.notify(view, 0);
   await answered;
-  await new Promise((resolve) => port1.on('close', resolve));
+  await closed;
   await worker.terminate();
   log('transfers:', seen.sort().join(' | '));
 });

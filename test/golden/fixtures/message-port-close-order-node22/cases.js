@@ -1,16 +1,33 @@
 const { MessageChannel, receiveMessageOnPort } = require('worker_threads');
 const log = (...a) => console.log(...a);
+const busy = (ms) => {
+  const end = Date.now() + ms;
+  while (Date.now() < end);
+};
 const three = (mode) => {
   const chans = ['a', 'b', 'c'].map((name) => [name, new MessageChannel()]);
   for (const [name, { port1, port2 }] of chans) {
     if (mode.includes('m2')) port2.on('message', (m) => log(name, '2 message', m));
     if (mode.includes('c2')) port2.on('close', () => log(name, '2 closed'));
     if (mode.includes('m1')) port1.on('message', (m) => log(name, '1 message', m));
-    if (mode.includes('c1')) port1.on('close', () => log(name, '1 closed'));
+    if (mode.includes('c1')) port1.on('close', () => {
+      log(name, '1 closed');
+      if (mode.includes('busy-c1') || (mode.includes('busy-last') && name === 'b')) busy(80);
+    });
     if (mode.includes('post')) port1.postMessage(name);
   }
-  if (mode.includes('imm')) setImmediate(() => log('immediate'));
+  if (mode.includes('imm')) setImmediate(() => {
+    log('immediate');
+    if (mode.includes('busy-imm')) busy(80);
+  });
   if (mode.includes('t50')) setTimeout(() => log('timeout 50'), 50);
+  if (mode.includes('i50')) {
+    const interval = setInterval(() => {}, 50);
+    chans[0][1].port2.on('close', () => {
+      clearInterval(interval);
+      log('interval cleared');
+    });
+  }
   for (const i of [1, 0, 2]) chans[i][1][mode.includes('from2') ? 'port2' : 'port1'].close();
   log('closed 1, 0, 2');
 };
@@ -21,7 +38,10 @@ const cases = {
   'three c1': () => three('c1'),
   'three m2c2m1c1': () => three('m2c2m1c1'),
   'three c2c1 from2': () => three('c2c1-from2'),
-  'three c2 t50': () => three('c2-t50'),
+  'three c2 i50': () => three('c2-i50'),
+  'three c2c1 t50 busy-c1': () => three('c2c1-t50-busy-c1'),
+  'three c2c1 t50 busy-last': () => three('c2c1-t50-busy-last'),
+  'three c2c1 t50 imm busy-imm': () => three('c2c1-t50-imm-busy-imm'),
   'three c2c1 imm': () => three('c2c1-imm'),
   'three m2c2c1 post imm': () => three('m2c2c1-post-imm'),
   'one of three refd': () => {
