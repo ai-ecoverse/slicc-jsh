@@ -3,6 +3,9 @@ GET after flushHeaders: "GET / HTTP/1.1||"
 array headers, no length: the first chunk came before end()
 array headers, no length, two writes: "POST / HTTP/1.1|x-a: 1|Transfer-Encoding: chunked||2|ab|2|cd|0||"
 write(), then end() in one tick: "POST / HTTP/1.1|x-a: 1|Transfer-Encoding: chunked||2|ab|2|cd|0||"
+setHeader after write(): ERR_HTTP_HEADERS_SENT
+removeHeader after write(): ERR_HTTP_HEADERS_SENT
+a header set after write(): "POST / HTTP/1.1|x-a: 1|Transfer-Encoding: chunked||2|ab|2|cd|0||"
 end(data) alone: "POST / HTTP/1.1|x-a: 1|Content-Length: 4||abcd"
 object headers, a write, then end() once the server has it: "POST / HTTP/1.1|x-a: 1|Transfer-Encoding: chunked||2|ab|2|cd|0||"
 array headers with Transfer-Encoding chunked: "POST / HTTP/1.1|Transfer-Encoding: chunked||2|ab|2|cd|0||"
