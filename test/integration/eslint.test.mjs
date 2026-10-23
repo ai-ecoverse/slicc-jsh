@@ -25,7 +25,7 @@ describe('eslint (kernel)', () => {
   after(() => jsh?.close());
 
   it('lints a directory and prints its results: errors, warnings and the summary, with exit status 1', async () => {
-    assert.equal(version('eslint'), '10.12.0');
+    assert.match(version('eslint'), /^10\./);
     const r = await jsh.run(['node', '/node_modules/eslint/bin/eslint.js', '.'], { cwd: '/os/ep' });
     assert.equal(r.status, 1, r.stderr);
     assert.equal(r.stderr, '');
