@@ -192,8 +192,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     get localPort() {
       return this.#localPort;
     }
+    #bytesRead = 0;
+
     get bytesRead() {
-      return this._readableState?.bytesRead ?? 0;
+      return this.#bytesRead;
     }
     get bytesWritten() {
       return this._writableState?.length ?? 0;
@@ -586,6 +588,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             value instanceof Uint8Array
               ? Buffer.from(value.buffer, value.byteOffset, value.byteLength)
               : Buffer.from(value);
+          this.#bytesRead += buf.length;
           const more = runInResource(this.#resource, this.push, this, [buf]);
           handles.notify();
           await Promise.resolve();
