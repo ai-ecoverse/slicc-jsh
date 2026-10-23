@@ -1,0 +1,42 @@
+== ["-p","const a = 1; a"]: status 0
+1
+== ["-p","if (1) { 7 }"]: status 0
+7
+== ["-p","{a: 1}"]: status 0
+1
+== ["-p","function f() {}"]: status 0
+undefined
+== ["-p","\"use strict\"; 8"]: status 0
+8
+== ["-p","var x = 2; globalThis.x"]: status 0
+2
+== ["-p","setTimeout(() => console.log(\"timer\")), 5"]: status 0
+timer
+5
+== ["-p","process.on(\"exit\", () => console.log(\"exit listener\")), 5"]: status 0
+exit listener
+5
+== ["-p","process.exitCode = 3; 4"]: status 3
+4
+== ["-p","process.exit(2)"]: status 2
+== ["-p","import(\"node:path\").then((p) => console.log(\"imported\", typeof p.join)), 6"]: status 0
+imported function
+6
+== ["-p","[typeof require, typeof module, typeof exports, __filename, typeof __dirname, typeof globalThis.require, this === globalThis]"]: status 0
+[
+  'function', 'object',
+  'object',   '[eval]',
+  'string',   'function',
+  true
+]
+== ["-e","console.log(typeof globalThis.require, typeof globalThis.module, globalThis.__filename, this === globalThis); var v = 1; console.log(globalThis.v)"]: status 0
+function object [eval] true
+1
+== ["-e","import(\"node:os\").then((os) => console.log(typeof os.cpus, typeof globalThis.__import))"]: status 0
+function undefined
+== ["-e","function f(globalThis, Symbol) { return import(\"node:os\"); } f(1, 2).then((os) => console.log(\"shadowed\", typeof os.cpus))"]: status 0
+shadowed function
+== ["-p"] < "const b = 2;\nb * 3": status 0
+6
+== ["-p","\n\n\nconst e = new Error(\"x\");\ne.stack.split(\"\\n\")[1]"]: status 0
+    at [eval]:4:11
