@@ -1,0 +1,5 @@
+{
+  "description": "a setImmediate queued from an I/O or timer callback runs before a setTimeout(fn, 0) queued from the same callback, in either order, as Node 22's check phase comes before the next timers phase: fs.readFile and fs.stat callbacks, a socket's data and a server's listen callback, a timer callback, and a socket destroyed there whose close comes in between",
+  "argv": ["script.js"],
+  "shim": true
+}

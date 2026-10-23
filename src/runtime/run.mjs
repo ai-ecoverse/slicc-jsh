@@ -1193,6 +1193,7 @@ export async function runNode(ctx, options = {}) {
       return getExitCode();
     }
 
+    timers.startLoop();
     await drainLoop(handles, nextTick, {
       onBeforeExit: () => {
         emitBeforeExit();
