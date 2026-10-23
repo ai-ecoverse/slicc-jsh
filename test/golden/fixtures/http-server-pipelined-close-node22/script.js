@@ -1,6 +1,11 @@
 const http = require('http');
 const net = require('net');
 
+const blockMs = Number(process.env.INJECT_BLOCK_MS) || 0;
+const block = () => {
+  const until = Date.now() + blockMs;
+  while (Date.now() < until);
+};
 const strip = (s) => s.replace(/\r\nDate: [^\r\n]*/g, '');
 const post = (url, length, body = '', extra = '') => `POST ${url} HTTP/1.1\r\nHost: x\r\nContent-Length: ${length}\r\n${extra}\r\n${body}`;
 const get = (url, extra = '') => `GET ${url} HTTP/1.1\r\nHost: x\r\n${extra}\r\n`;
@@ -54,7 +59,7 @@ const shot = (label, { handler, send, create = {}, options = {}, clientError = t
       c.on('error', (e) => conn.push(`client error ${e.code}`));
       c.on('close', () => {
         clearTimeout(timer);
-        setTimeout(() => {
+        srv.close(() => setImmediate(() => {
           const rows = urls.map((url) => {
             const events = seen.get(url);
             const counted = ORDER.flatMap((name) => {
@@ -64,8 +69,9 @@ const shot = (label, { handler, send, create = {}, options = {}, clientError = t
             return `${url}: ${counted.join(', ')}`;
           });
           console.log(`${label} | ${rows.join(' | ') || 'no requests'} | ${conn.join(', ') || '-'}${open ? ' | open' : ' | closed'} | wire ${JSON.stringify(strip(got))}`);
-          srv.close(resolve);
-        }, 50);
+          resolve();
+        }));
+        block();
       });
     });
   });

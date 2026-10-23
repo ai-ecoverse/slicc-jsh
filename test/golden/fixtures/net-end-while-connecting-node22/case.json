@@ -1,0 +1,5 @@
+{
+  "description": "a net socket destroyed while it is still connecting, with end(data, cb) waiting, calls cb as Node 22 does: the write is held until the connect, and fails from a 'close' listener added with it, so cb comes in 'close' listener order, with ERR_SOCKET_CLOSED_BEFORE_CONNECTION or the destroy's error; a bare end() gets ERR_STREAM_DESTROYED before 'close'; written data still goes out once the socket connects",
+  "argv": ["script.js"],
+  "shim": true
+}
