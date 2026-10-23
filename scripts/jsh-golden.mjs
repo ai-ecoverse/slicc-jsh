@@ -125,6 +125,7 @@ async function runHost(dir, meta) {
     const env = { ...process.env, npm_config_yes: 'true' };
     delete env.FORCE_COLOR;
     delete env.NO_COLOR;
+    delete env.NODE_OPTIONS;
     Object.assign(env, meta.env ?? {});
     const result = await runChild(node22Bin(), [hostJsh, meta.entry ?? 'main.jsh', ...(meta.args ?? [])], {
       // As under npx: Node's own messages name it `node`.

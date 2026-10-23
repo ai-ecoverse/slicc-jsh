@@ -111,7 +111,7 @@ function runNode22(argv, { cwd, stdin, env, timeoutMs = TIMEOUT_MS } = {}) {
       // As under npx: Node's own messages name it `node`.
       argv0: 'node',
       cwd,
-      env: node22Env({ ...process.env, npm_config_yes: 'true', ...(env ?? {}) }),
+      env: node22Env({ ...process.env, NODE_OPTIONS: undefined, npm_config_yes: 'true', ...(env ?? {}) }),
     });
     const out = { stdout: [], stderr: [] };
     let size = 0;
