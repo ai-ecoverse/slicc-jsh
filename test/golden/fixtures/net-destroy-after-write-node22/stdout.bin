@@ -1,0 +1,13 @@
+write then destroy | client got "hello" | server got "hi" | server close
+two writes then destroy | client got "ab" | server got "hi" | server close
+write then destroy with an error | client got "hello" | server got "hi" | server error x, server close
+end then destroy | client got "bye" | server got "hi" | server close
+write, destroy on the next tick | client got "hello" | server got "hi" | server close
+corked write then destroy | client got "" | server got "hi" | server close
+a client writes then destroys | client got "" | server got "hello" | server close
+a client writes twice then destroys | client got "" | server got "ab" | server close
+write callback after destroy | client got "hello" | server got "hi" | write callback ok, server close
+two write callbacks after destroy | client got "ab" | server got "hi" | a ok, b ok, server close
+an http response, then a clientError listener destroys | "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 2\r\n\r\nok"
+res.end then res.socket.destroy | "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nKeep-Alive: timeout=5\r\nContent-Length: 2\r\n\r\nok"
+done

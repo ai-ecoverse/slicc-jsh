@@ -1,0 +1,6 @@
+writes to a paused peer until write() returns false: needDrain true
+destroyed true
+server close
+server closed
+a 16 MiB write, then destroy: server closed
+exit

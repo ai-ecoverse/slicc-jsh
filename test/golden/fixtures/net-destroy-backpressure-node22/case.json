@@ -1,0 +1,5 @@
+{
+  "description": "a net socket destroyed while a large write waits on a peer that does not read closes at once and lets the program exit, as Node 22: writes to a paused peer until write() returns false, and a 16 MiB write to an unref'd one",
+  "argv": ["script.js"],
+  "shim": true
+}

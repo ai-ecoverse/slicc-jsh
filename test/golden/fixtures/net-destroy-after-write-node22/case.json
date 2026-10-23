@@ -1,0 +1,5 @@
+{
+  "description": "a net socket destroyed right after a synchronous write still sends what it was given, as Node 22, whose writes reach the kernel at once: one or two writes, destroy with an error, end, a server's or a client's socket, the write callbacks, and an http response a clientError listener or the handler destroys the socket after; a corked write is dropped",
+  "argv": ["script.js"],
+  "shim": true
+}

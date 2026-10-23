@@ -381,8 +381,17 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       return Boolean(this.#conn) && !this.#detached;
     }
 
+    #unsettled = 0;
+
+    #settles(p) {
+      this.#unsettled++;
+      const settled = () => this.#unsettled--;
+      p.then(settled, settled);
+      return p;
+    }
+
     #write(bytes) {
-      const p = this.#writer.write(bytes);
+      const p = this.#settles(this.#writer.write(bytes));
       this.#lastWrite = p;
       if ((this.#readableEof || this.#readPaused) && this.#refed) trackPromise(handles, p).catch(() => {});
       return p;
@@ -605,12 +614,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
 
     _write(chunk, encoding, callback) {
       if (this.#idleTimer) this._touch();
-      const bytes =
-        typeof chunk === 'string'
-          ? Buffer.from(chunk, encoding)
-          : chunk instanceof Uint8Array
-            ? chunk
-            : Buffer.from(chunk);
+      const bytes = toBytes(chunk, encoding);
       if (!this.#writer) {
         if (this.#connecting) {
           this.#pending.push(bytes);
@@ -621,11 +625,19 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         callback(new Error('Socket is not connected'));
         return;
       }
+      this.#writing = callback;
+      const settled = (err) => {
+        if (this.#writing !== callback) return;
+        this.#writing = null;
+        callback(err);
+      };
       this.#write(bytes).then(
-        () => callback(),
-        (err) => callback(this[kIoError]?.(err) ?? errnoError(err, 'write'))
+        () => settled(),
+        (err) => settled(this[kIoError]?.(err) ?? errnoError(err, 'write'))
       );
     }
+
+    #writing = null;
 
     #flushFinal() {
       if (this.destroyed) return;
@@ -674,8 +686,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         callback();
         return;
       }
-      const closing = this.#writer
-        .close()
+      const closing = this.#settles(this.#writer.close())
         .catch(() => {})
         .finally(() => {
           this.#maybeFinishConn();
@@ -724,6 +735,19 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       const halfClosedCleanly = this.#finishConnStarted;
       this.#finishConnStarted = true;
       this.#dropHandle();
+      const state = this._writableState;
+      const flush = !halfClosedCleanly && !state.corked && !state.needDrain;
+      if (this.#writer && flush) {
+        const writing = this.#writing;
+        this.#writing = null;
+        if (writing) nextTick(writing);
+        for (const { chunk, encoding, callback: written } of state.buffered.splice(state.bufferedIndex)) {
+          this.#write(toBytes(chunk, encoding)).catch(() => {});
+          state.length -= state.objectMode ? 1 : chunk.length;
+          state.pendingcb--;
+          nextTick(written, null);
+        }
+      }
       // Match Node: destroy does not flush. Never await kernel close here —
       // conn.close() can deadlock with a peer blocked in read (fin.js).
       const reader = this.#reader;
@@ -734,7 +758,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#conn = undefined;
       // After a clean half-close, do not abort/cancel — that RSTs the peer and
       // they never see 'end' (fin.js server side). Only force-close on errors.
-      if (!halfClosedCleanly) {
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
         void reader?.cancel?.().catch(() => {});
         try {
           if (typeof writer?.abort === 'function') void writer.abort().catch(() => {});
@@ -743,7 +770,16 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           /* ignore */
         }
         void conn?.close?.().catch(() => {});
-      }
+      };
+      if (flush && this.#unsettled > 0) {
+        const timer = setTimeout(close, MAX_FLUSH_MS);
+        timer.unref?.();
+        const flushed = () => {
+          clearTimeout(timer);
+          close();
+        };
+        this.#lastWrite.then(flushed, flushed);
+      } else if (!halfClosedCleanly) close();
       callback(err);
     }
 
@@ -752,6 +788,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       if (typeof encoding === 'function') return super.end(data, encoding);
       return super.end(data, encoding, callback);
     }
+  }
+
+  const MAX_FLUSH_MS = 1000;
+
+  function toBytes(chunk, encoding) {
+    if (typeof chunk === 'string') return Buffer.from(chunk, encoding);
+    return chunk instanceof Uint8Array ? chunk : Buffer.from(chunk);
   }
 
   class TCP {
