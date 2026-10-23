@@ -133,9 +133,12 @@ srv.listen(0, '127.0.0.1', async () => {
   ]);
   flushLog('checkContinue');
   let ended = false;
+  let headSeen;
+  const sawHead = new Promise((resolve) => (headSeen = resolve));
   const head = net.createServer((s) => {
     s.once('data', (d) => {
       console.log('flushHeaders sends the head:', String(d).split('\r\n')[0], '| end() called yet:', ended);
+      headSeen();
       s.end('HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n');
     });
   });
@@ -146,10 +149,12 @@ srv.listen(0, '127.0.0.1', async () => {
       res.on('end', resolve);
     });
     req.flushHeaders();
-    setTimeout(() => {
+    const bound = setTimeout(headSeen, 5000);
+    sawHead.then(() => {
+      clearTimeout(bound);
       ended = true;
       req.end();
-    }, 50);
+    });
   });
   head.close();
   await raw(port, 'an unread body larger than the high water mark, then the next request', [
