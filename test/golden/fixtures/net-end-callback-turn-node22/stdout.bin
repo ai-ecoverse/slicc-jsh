@@ -1,0 +1,5 @@
+end(cb) with nothing written | tick, end callback, immediate
+end() and 'finish' | tick, finish, immediate
+end(cb) after a write that called back | tick, end callback, immediate
+end(cb) and 'finish' after a write that called back | tick, end callback, finish, immediate
+done

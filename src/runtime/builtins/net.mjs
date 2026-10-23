@@ -748,11 +748,13 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         callback();
         return;
       }
+      const flushed = this.#unsettled === 0;
+      if (flushed) nextTick(callback);
       const closing = this.#settles(this.#writer.close())
         .catch(() => {})
         .finally(() => {
           this.#maybeFinishConn();
-          callback();
+          if (!flushed) callback();
         });
       this.#lastWrite = closing;
       if ((this.#readableEof || this.#readPaused) && this.#refed) trackPromise(handles, closing).catch(() => {});
