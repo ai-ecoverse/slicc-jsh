@@ -224,6 +224,7 @@ An existing file keeps its mode. `copyFile` gives the copy the source's mode, wh
 
 **Other fds as stdio.** A stdio slot can be another fd.
 - The program's own fds go straight to the child, and stdout and stderr sent to one fd keep the child's write order. An fd from `fs.openSync` (jsh's own) is written after the run. With `spawn`, it is written as the child writes, and one such fd as both stdout and stderr is one pipe, so their writes keep the child's order (golden `child-process-fd-shared-order-node22`).
+- When the child exits, what it wrote is in the file before `'exit'`, and `'close'` comes right after, as in Node. A grandchild that inherits the fd doesn't hold `'close'` back, and what it writes later still reaches the file. The parent stays alive until the grandchild lets go of the fd, unless the child was `unref()`'d (golden `child-process-fd-grandchild-close-node22`).
 - stdio slots past fd 2 are not passed to the child.
 
 **`argv0`.** The child sees `options.argv0`, else the file as given, as its `argv[0]`. That holds for jsh's own `node` and `jsh` too, so a jsh child's `process.argv0` is the `argv0` it was given. A command whose manifest sets its own `argv0` keeps that.
