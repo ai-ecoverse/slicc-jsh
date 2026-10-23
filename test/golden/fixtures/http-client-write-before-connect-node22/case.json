@@ -1,0 +1,5 @@
+{
+  "description": "an http ClientRequest written to before its socket connects buffers the head and body and returns write() < highWaterMark (64 KiB, Node 22's default), as Node 22: false past it, with writableNeedDrain and writableLength, then 'drain' once the buffered data has gone to the socket, and no 'drain' for a request that has ended",
+  "argv": ["script.js"],
+  "shim": true
+}
