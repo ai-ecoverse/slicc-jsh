@@ -1,0 +1,59 @@
+https.get with the self-signed cert as ca
+  server request GET /with-ca: protocol TLSv1.3, alpn false, servername localhost, authorized false, authorizationError null, peer none, encrypted true
+  server request GET /unchecked: protocol TLSv1.3, alpn false, servername localhost, authorized false, authorizationError null, peer none, encrypted true
+  client with-ca: 200 text/plain hello /with-ca
+  client without-ca: error DEPTH_ZERO_SELF_SIGNED_CERT | self-signed certificate
+  client unchecked: 200 text/plain hello /unchecked
+https with an encrypted key and its passphrase
+  server request GET /ok: protocol TLSv1.3, alpn false, servername localhost, authorized false, authorizationError null, peer none, encrypted true
+  client ok: 200 text/plain hello /ok
+tls.createServer, wrong passphrase throws ERR_OSSL_BAD_DECRYPT error:1C800064:Provider routines::bad decrypt
+https.createServer, no passphrase throws ERR_OSSL_BAD_DECRYPT error:1C800064:Provider routines::bad decrypt
+tls.createServer, key for another cert throws ERR_OSSL_X509_KEY_VALUES_MISMATCH error:05800074:x509 certificate routines::key values mismatch
+mTLS, a client cert the ca issued
+  server secureConnection: protocol TLSv1.3, alpn false, servername localhost, authorized true, authorizationError null, peer good client <- jsh test client ca, encrypted true
+  client secureConnect: authorized true, alpn false
+  client got "hello from tls"
+mTLS, a self-signed client cert
+  server tlsClientError ECONNRESET | socket hang up, destroyed true
+  client secureConnect: authorized true, alpn false
+  client got ""
+mTLS, no client cert
+  server tlsClientError ERR_SSL_PEER_DID_NOT_RETURN_A_CERTIFICATE | SSL routines | peer did not return a certificate, destroyed true
+  client secureConnect: authorized true, alpn false
+  client got ""
+mTLS asked, not required, a self-signed client cert
+  server secureConnection: protocol TLSv1.3, alpn false, servername localhost, authorized false, authorizationError DEPTH_ZERO_SELF_SIGNED_CERT, peer rogue client <- rogue client, encrypted true
+  client secureConnect: authorized true, alpn false
+  client got "hello from tls"
+mTLS asked, not required, no client cert
+  server secureConnection: protocol TLSv1.3, alpn false, servername localhost, authorized false, authorizationError UNABLE_TO_GET_ISSUER_CERT, peer none, encrypted true
+  client secureConnect: authorized true, alpn false
+  client got "hello from tls"
+no client cert asked
+  server secureConnection: protocol TLSv1.3, alpn false, servername localhost, authorized false, authorizationError null, peer none, encrypted true
+  client secureConnect: authorized true, alpn false
+  client got "hello from tls"
+https with requestCert: a rejected client never reaches the handler
+  server request GET /good: protocol TLSv1.3, alpn false, servername localhost, authorized true, authorizationError null, peer good client <- jsh test client ca, encrypted true
+  client good: 200 text/plain hello /good
+  client rogue: no response
+  client none: no response
+ALPN: the server preference the client offers
+  server secureConnection: protocol TLSv1.3, alpn h2, servername localhost, authorized false, authorizationError null, peer none, encrypted true
+  client secureConnect: authorized true, alpn h2
+  client got "hello from tls"
+ALPN: nothing in common
+  server tlsClientError ERR_SSL_NO_APPLICATION_PROTOCOL | SSL routines | no application protocol, destroyed true
+  client error ERR_SSL_TLSV1_ALERT_NO_APPLICATION_PROTOCOL | SSL routines | tlsv1 alert no application protocol
+  client got ""
+https handshakeTimeout: a client that never says hello
+  server tlsClientError ERR_TLS_HANDSHAKE_TIMEOUT | TLS handshake timeout
+  client end
+  client close
+new tls.TLSSocket(socket, { isServer: true })
+  server secure: protocol TLSv1.3, alpn x-a, servername localhost, authorized false, authorizationError null, peer none, encrypted true, requestCert false, rejectUnauthorized false
+  client got "hello from a TLSSocket", alpn x-a
+express over https
+  client 200 application/json; charset=utf-8 {"hello":"express","secure":true,"protocol":"https"}
+  client 404 text/plain; charset=utf-8 none here

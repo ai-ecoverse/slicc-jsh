@@ -5,9 +5,9 @@
  * libuv's inet_pton/inet_ntop (canonicalizeIP): checkServerIdentity,
  * convertALPNProtocols, the DEFAULT_* settings, getCiphers(), the
  * SecureContext option checks. TLSSocket extends net.Socket and Server
- * extends net.Server. There is no TLS on ctx.net, so what needs a handshake
- * (connect, Server#listen, a TLSSocket over a socket, key material) throws
- * ERR_NOT_SUPPORTED when it is called, as https's createServer does.
+ * extends net.Server. Handshakes are the kernel's: a client's on ctx.net.connect,
+ * a server's on ctx.net.secure (slicc-kernel 1.149.0), with the program's own
+ * certificate and key.
  */
 import {
   ERR_INVALID_ARG_TYPE,
@@ -24,7 +24,7 @@ import {
   validateUint32,
 } from '../node-errors.mjs';
 import { deprecate } from './util.mjs';
-import { kConnectTls, kDetach, kIoError, kStartNow, kStartTls, kTlsSession } from './net.mjs';
+import { kConnectTls, kDetach, kIoError, kServesTls, kStartNow, kStartTls, kTlsSession } from './net.mjs';
 import { certificateObject, isIssuedBy, likelyIssued, parseCertificate } from './x509.mjs';
 import { lockedKeyError } from './tls-key.mjs';
 
@@ -44,6 +44,9 @@ const kThrown = Symbol('slicc-jsh.tls.thrown');
 const kOwnCert = Symbol('slicc-jsh.tls.ownCert');
 const kOwnKey = Symbol('slicc-jsh.tls.ownKey');
 const kOwnLeaf = Symbol('slicc-jsh.tls.ownLeaf');
+const kErrorEmitted = Symbol('slicc-jsh.tls.errorEmitted');
+const kHandshakeTimeout = Symbol('slicc-jsh.tls.handshakeTimeout');
+const kSNICallback = Symbol('slicc-jsh.tls.SNICallback');
 
 // OpenSSL 3.0's errors for key material, as Node 22.22.0 throws them.
 const OSSL_ERRORS = {
@@ -964,6 +967,55 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     return sslError(code, err.detail ?? err.cause?.detail, err.alert ?? err.cause?.alert);
   }
 
+  const SERVER_FAILURES = [
+    [/No client certification received/, 'C7', 'peer did not return a certificate'],
+    [/No ALPN protocols supported/, 'EB', 'no application protocol'],
+  ];
+
+  function sslReason(id, reason) {
+    const err = new Error(`error:0A0000${id}:SSL routines::${reason}`);
+    return Object.assign(err, { library: 'SSL routines', reason, code: `ERR_SSL_${reason.toUpperCase().replaceAll(' ', '_')}` });
+  }
+
+  function serverRefusal(err) {
+    const code = err?.code ?? err?.cause?.code;
+    const detail = String(err?.detail ?? err?.cause?.detail ?? '');
+    if (code === 'ERR_TLS_HANDSHAKE_TIMEOUT') return nodeError(Error, code, 'TLS handshake timeout');
+    for (const [pattern, id, reason] of SERVER_FAILURES) if (pattern.test(detail)) return sslReason(id, reason);
+    if (code === 'ERR_OSSL_CRYPTO_INTERRUPTED_OR_CANCELLED') return osslError('ERR_OSSL_BAD_DECRYPT');
+    if (typeof code === 'string' && Object.hasOwn(OSSL_ERRORS, code)) return osslError(code);
+    if (typeof code === 'string' && code.startsWith('ERR_SSL_') && !/Certificate verification failed/.test(detail)) {
+      return sslError(code, detail, err.alert ?? err.cause?.alert);
+    }
+    return null;
+  }
+
+  function serverRequest(context, options) {
+    const own = context?.[kOwnCert];
+    const key = context?.[kOwnKey];
+    if (!own || !key) return undefined;
+    const alpn = alpnNames(options.ALPNProtocols);
+    return {
+      server: true,
+      cert: own.cert,
+      ...key,
+      ...(context[kCa] ? { ca: context[kCa] } : {}),
+      ...(options.requestCert ? { requestCert: true } : {}),
+      ...(options.rejectUnauthorized ? {} : { rejectUnauthorized: false }),
+      ...(alpn ? { alpn } : {}),
+      ...(options.handshakeTimeout > 0 ? { handshakeTimeout: options.handshakeTimeout } : {}),
+    };
+  }
+
+  function clientVerifyError(socket, session) {
+    if (session?.authorized === true) return undefined;
+    if (!session?.peerCertificates?.length) return 'UNABLE_TO_GET_ISSUER_CERT';
+    const chain = peerChain(socket);
+    const code = session.authorizationError;
+    if (code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' && chain) return untrusted(chain);
+    return code || 'UNABLE_TO_GET_ISSUER_CERT';
+  }
+
   // --- _tls_wrap.js: TLSSocket --------------------------------------------
   class TLSSocket extends net.Socket {
     constructor(socket, opts) {
@@ -972,7 +1024,9 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       if (tlsOptions.ALPNProtocols) convertALPNProtocols(tlsOptions.ALPNProtocols, tlsOptions);
       if (socket) {
         if (!kernelTls) throw noTls('tls.TLSSocket over a socket');
-        if (tlsOptions.isServer) throw noTls('tls.TLSSocket over a socket as a server', "the kernel's TLS is a client's");
+        if (tlsOptions.isServer && typeof ctx.net.secure !== 'function') {
+          throw noTls('tls.TLSSocket over a socket as a server', "the kernel's TLS is a client's");
+        }
         if (!(socket instanceof net.Socket) || typeof socket[kDetach] !== 'function') {
           throw noTls('tls.TLSSocket over a stream that is not a net.Socket', 'the kernel upgrades its own connections');
         }
@@ -991,7 +1045,51 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       this.authorizationError = null;
       this.encrypted = true;
       this.ssl = null;
-      if (socket) this.#over(socket);
+      if (tlsOptions.isServer) {
+        this._requestCert = Boolean(tlsOptions.requestCert);
+        this._rejectUnauthorized = Boolean(tlsOptions.rejectUnauthorized);
+        this.on('error', this._tlsError);
+      }
+      if (socket && tlsOptions.isServer) this.#serve(socket);
+      else if (socket) this.#over(socket);
+    }
+
+    #serve(socket) {
+      this._parent = socket;
+      socket.on('error', (err) => {
+        if (!this.destroyed) this.destroy(err);
+      });
+      const tlsOptions = this._tlsOptions;
+      const context = (tlsOptions.secureContext ?? createSecureContext(tlsOptions)).context;
+      this[kStore] = caCertificates(context[kCa]);
+      this[kOwnLeaf] = context[kOwnCert]?.leaf;
+      const request = serverRequest(context, tlsOptions);
+      if (!request) {
+        process.nextTick(() => this.destroy(sslReason('76', 'no suitable signature algorithm')));
+        return;
+      }
+      this[kStartTls](socket, {
+        server: true,
+        dial: () => ({ tls: request }),
+        check: (session) => {
+          this._secureEstablished = true;
+          this.alpnProtocol = session.alpnProtocol || false;
+          this.servername = session.servername || false;
+        },
+        refused: serverRefusal,
+        secured: () => this.emit('secure'),
+      });
+    }
+
+    _tlsError(err) {
+      this.emit('_tlsError', err);
+      return this._controlReleased ? err : null;
+    }
+
+    _releaseControl() {
+      if (this._controlReleased) return false;
+      this._controlReleased = true;
+      return true;
     }
 
     /** STARTTLS: the handshake over `socket`, at the first write or `_start()`. */
@@ -1186,19 +1284,66 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
     self.setSecureContext(options);
     const handshakeTimeout = options.handshakeTimeout || 120 * 1000;
     validateNumber(handshakeTimeout, 'options.handshakeTimeout');
+    self[kHandshakeTimeout] = handshakeTimeout;
+    self[kServesTls] = true;
     if (options.SNICallback) validateFunction(options.SNICallback, 'options.SNICallback');
+    self[kSNICallback] = options.SNICallback;
     if (options.pskCallback) validateFunction(options.pskCallback, 'options.pskCallback');
     if (options.pskIdentityHint) validateString(options.pskIdentityHint, 'options.pskIdentityHint');
     if (listener) self.on('secureConnection', listener);
     return self;
   }
   function tlsConnectionListener(rawSocket) {
-    const err = noTls('tls.Server connection', 'no TLS server in slicc-kernel');
+    if (rawSocket instanceof net.Socket && typeof rawSocket[kDetach] === 'function' && typeof ctx?.net?.secure === 'function') {
+      const socket = new TLSSocket(rawSocket, {
+        secureContext: this._sharedCreds,
+        isServer: true,
+        server: this,
+        requestCert: this.requestCert,
+        rejectUnauthorized: this.rejectUnauthorized,
+        handshakeTimeout: this[kHandshakeTimeout],
+        ALPNProtocols: this.ALPNProtocols,
+      });
+      socket.on('secure', onServerSocketSecure);
+      socket[kErrorEmitted] = false;
+      socket.on('close', onSocketClose);
+      socket.on('_tlsError', onSocketTLSError);
+      return;
+    }
+    const err = noTls('tls.Server connection', 'the kernel secures its own connections');
     rawSocket.on?.('error', () => {});
     process.nextTick(() => {
       rawSocket.destroy?.();
       this.emit('tlsClientError', err, rawSocket);
     });
+  }
+  function onServerSocketSecure() {
+    if (this._requestCert) {
+      const code = clientVerifyError(this, this[kTlsSession]);
+      if (code) {
+        this.authorizationError = code;
+        if (this._rejectUnauthorized) this.destroy();
+      } else {
+        this.authorized = true;
+      }
+    }
+    if (!this.destroyed && this._releaseControl()) {
+      this.secureConnecting = false;
+      this._tlsOptions.server.emit('secureConnection', this);
+    }
+  }
+  function onSocketTLSError(err) {
+    if (!this._controlReleased && !this[kErrorEmitted]) {
+      this[kErrorEmitted] = true;
+      this._tlsOptions.server.emit('tlsClientError', err, this);
+    }
+  }
+  function onSocketClose(err) {
+    if (err) return;
+    if (!this._controlReleased && !this[kErrorEmitted]) {
+      this[kErrorEmitted] = true;
+      this._tlsOptions.server.emit('tlsClientError', Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }), this);
+    }
   }
   Object.setPrototypeOf(Server.prototype, net.Server.prototype);
   Object.setPrototypeOf(Server, net.Server);
@@ -1211,6 +1356,8 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
         this[k] = options[k] || undefined;
       }
       this._sharedCreds = createSecureContext(options);
+      const request = serverRequest(this._sharedCreds.context, {});
+      if (request && typeof ctx?.sync?.net?.listen === 'function') checkLeaf(request);
     },
     getTicketKeys() {
       return (this._sharedCreds.context.ticketKeys ??= Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(48))));
@@ -1232,9 +1379,15 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
       const secureContext = context instanceof SecureContext ? context : createSecureContext(context);
       this._contexts.push([re, secureContext.context]);
     },
-    // Serving TLS needs the handshake: there's no TLS on ctx.net.
-    listen() {
-      throw noTls('tls.Server.listen');
+    listen(...args) {
+      if (typeof ctx?.net?.secure !== 'function') throw noTls('tls.Server.listen');
+      if (this.ALPNCallback) throw noTls("tls.Server option 'ALPNCallback'", 'the kernel chooses from ALPNProtocols');
+      if (this[kSNICallback]) throw noTls("tls.Server option 'SNICallback'", 'the kernel serves one certificate');
+      if (this._contexts.length) throw noTls('tls.Server.addContext', 'the kernel serves one certificate');
+      if (this.requestCert && !this._sharedCreds.context[kCa]) {
+        throw noTls("tls.Server option 'requestCert' without 'ca'", 'the kernel verifies a client certificate against the ca it is given');
+      }
+      return Reflect.apply(net.Server.prototype.listen, this, args);
     },
   };
   for (const [k, v] of Object.entries(serverMethods)) {
@@ -1243,6 +1396,19 @@ export function createTls({ ctx, process, Buffer, net, getCrypto }) {
 
   function createServer(options, listener) {
     return new Server(options, listener);
+  }
+
+  function checkLeaf({ cert, key, passphrase }) {
+    let listener;
+    try {
+      listener = ctx.sync.net.listen({ host: '127.0.0.1', port: 0, backlog: 1, tls: { cert, key, ...(passphrase !== undefined ? { passphrase } : {}) } });
+    } catch (err) {
+      const code = /^ERR_OSSL_[A-Z0-9_]+/.exec(String(err?.detail ?? ''))?.[0];
+      const refused = code ? serverRefusal({ code }) : null;
+      if (refused) throw refused;
+      return;
+    }
+    void Promise.resolve(listener.close?.()).catch(() => {});
   }
 
   // Arguments: [port,] [host,] [options,] [cb]

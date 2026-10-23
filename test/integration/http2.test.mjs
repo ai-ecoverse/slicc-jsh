@@ -110,7 +110,7 @@ t('performServerHandshake', () => http2.performServerHandshake(null));
       "connect http ERR_NOT_SUPPORTED slicc-jsh: 'http2.connect' is not supported yet (no HTTP/2 sessions)",
       "connect https ERR_NOT_SUPPORTED slicc-jsh: 'http2.connect' is not supported yet (no TLS on ctx.net)",
       "listen ERR_NOT_SUPPORTED slicc-jsh: 'http2.Server.listen' is not supported yet (no HTTP/2 sessions)",
-      "secure listen ERR_NOT_SUPPORTED slicc-jsh: 'http2.Http2SecureServer.listen' is not supported yet (no TLS on ctx.net)",
+      "secure listen ERR_NOT_SUPPORTED slicc-jsh: 'http2.Http2SecureServer.listen' is not supported yet (no HTTP/2 sessions)",
       "performServerHandshake ERR_NOT_SUPPORTED slicc-jsh: 'http2.performServerHandshake' is not supported yet (no HTTP/2 sessions)",
       '',
     ]);

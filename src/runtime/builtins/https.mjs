@@ -1,12 +1,12 @@
 /**
- * node:https — createServer awaits kernel TLS; client request/get go through
+ * node:https — servers on tls.Server's kernel TLS; client request/get go through
  * the fetch client http shares (http-fetch.mjs): redirect: 'manual' where the
  * transport can, the response body streamed. A request with its own agent
  * or createConnection (a proxy agent's, ws's wss://) goes over a socket
  * instead, http's ClientRequest on tls.connect.
  */
 import { EventEmitter } from './events.mjs';
-import { connectError, createFetchClient, isLoopbackHost } from './http-fetch.mjs';
+import { createFetchClient, isLoopbackHost } from './http-fetch.mjs';
 import { httpInternals, kFetchVia } from './http.mjs';
 import { noTls as notSupported } from './tls.mjs';
 import { validateObject } from '../node-errors.mjs';
@@ -75,16 +75,6 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
   async function send({ host, port, path, method, headers, body, signal, req }) {
     if (typeof ctx.fetch !== 'function') throw notSupported('https.request');
     host = String(host ?? 'localhost').replace(/^\[|\]$/g, '');
-    if (isLoopbackHost(host) && typeof ctx.net?.connect === 'function') {
-      let conn;
-      try {
-        conn = await ctx.net.connect({ host: /localhost\.?$/i.test(host) ? '127.0.0.1' : host, port: Number(port) });
-      } catch (err) {
-        throw connectError(err?.code ?? err?.cause?.code ?? 'ECONNREFUSED', host, port, err);
-      }
-      void conn.close?.();
-      throw notSupported("https to the kernel's own loopback (it has no TLS)");
-    }
     return client.send({ protocol: 'https:', host, port, path, method, headers, body, signal, req });
   }
 
@@ -117,7 +107,8 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
 
   // Over a socket: a request with its own agent or createConnection, or with
   // a `ca`, a secureContext or a client certificate, which fetch can't take
-  // (the kernel's handshake, for a host the uplink routes). Its default
+  // (the kernel's handshake, for a host the uplink routes), or to the
+  // kernel's own loopback, whose servers fetch can't reach. Its default
   // agent is https's.
   const viaSocket = (options) =>
     typeof http?.request === 'function' &&
@@ -126,7 +117,8 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
       options?.ca != null ||
       options?.secureContext != null ||
       options?.cert != null ||
-      options?.key != null);
+      options?.key != null ||
+      (typeof ctx.net?.secure === 'function' && isLoopbackHost(options?.hostname ?? options?.host)));
 
   function request(input, options, callback) {
     const norm = normalize(input, options, callback);
