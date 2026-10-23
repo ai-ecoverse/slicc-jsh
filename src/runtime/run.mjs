@@ -4,6 +4,7 @@ import { installProcessMembers } from './process-members.mjs';
 import { installCredentials } from './process-credentials.mjs';
 import { installJshHandoff } from '../jsh/kernel.mjs';
 import { drainLoop, trackPromise } from './async-handles.mjs';
+import { onIo } from './callback-scope.mjs';
 import nodeInspect from 'node-inspect-extracted';
 import { createBuffer } from './buffer.mjs';
 import { createUtil } from './builtins/util.mjs';
@@ -564,6 +565,7 @@ export async function runNode(ctx, options = {}) {
       timers.clearPending();
     },
   });
+  onIo(() => timers.endPhase());
   // A signal handler runs from the loop, as an immediate (its throw is an
   // uncaught exception, handled as a timer callback's).
   // Like Node's signal handles it doesn't keep the loop alive: a signal
@@ -975,6 +977,7 @@ export async function runNode(ctx, options = {}) {
           shouldStop: () => settled || getDidExit() || exitStatus !== undefined,
           weakPending: () => !settled,
           onTickError: (err) => exceptionHandler(err),
+          onIdle: () => timers.endPhase(),
         });
         if (!settled || failure) skipEntry = true;
         if (failure) {
@@ -1203,6 +1206,7 @@ export async function runNode(ctx, options = {}) {
       onTickError: (err) => exceptionHandler(err),
       freeze: () => timers.freeze(),
       thaw: () => timers.thaw(),
+      onIdle: () => timers.endPhase(),
     });
     loopEnded = true;
 

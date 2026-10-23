@@ -2,7 +2,7 @@
  * Node-like fs / fs/promises over ctx.sync (sync) and ctx.fs (promises).
  * Async ops are tracked as ref'd handles so the event loop stays alive.
  */
-import { makeCallback } from '../callback-scope.mjs';
+import { ioMicrotask as queueMicrotask, ioSettled, makeCallback } from '../callback-scope.mjs';
 import { trackPromise } from '../async-handles.mjs';
 import { createCp } from './fs-cp.mjs';
 import { createStatWatchers } from './fs-watchers.mjs';
@@ -23,7 +23,6 @@ import {
   validateString,
   nodeError,
 } from '../node-errors.mjs';
-import { queueMicrotask } from '../async-context.mjs';
 import { kCustomPromisifyArgs } from './util.mjs';
 
 // Node's argument checks (lib/internal/fs/utils.js), before any call.
@@ -382,7 +381,7 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
     }
     return toBytes(data);
   };
-  const track = (p) => (handles ? trackPromise(handles, p) : p);
+  const track = (p) => (handles ? ioSettled(trackPromise(handles, p)) : p);
 
   /** @type {Map<number, { path: string, flags: string, pos: number, readable: boolean, writable: boolean }>} */
   const fdTable = new Map();

@@ -1,0 +1,5 @@
+{
+  "description": "a setTimeout(fn, 0) and a setImmediate queued from a callback's promise continuation, its await, its queueMicrotask or a nextTick nested in those keep the callback's phase, as in Node 22: an immediate's come in its check phase (the timeout, due, first), a timer's and an I/O callback's before the check phase (the immediate first); and a socket destroyed in an immediate's promise continuation closes before both",
+  "argv": ["script.js"],
+  "shim": true
+}

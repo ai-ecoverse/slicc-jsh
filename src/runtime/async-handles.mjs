@@ -91,12 +91,13 @@ function macrotask() {
  * does not keep the program alive: the loop ends once nothing is ref'd, after
  * the short grace above.
  */
-export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, weakPending, onTickError, freeze, thaw } = {}) {
+export async function drainLoop(handles, nextTick, { onBeforeExit, shouldStop, weakPending, onTickError, freeze, thaw, onIdle } = {}) {
   for (;;) {
     // A long tick / promise-job chain: go on with it (Node runs it to the end).
     while (await checkpoint(nextTick, onTickError)) {
       if (shouldStop?.()) return;
     }
+    onIdle?.();
     // process.exit() from a timer must unwind even while a server is listening.
     if (shouldStop?.()) return;
     if (handles.refCount > 0) {

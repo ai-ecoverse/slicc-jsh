@@ -1,5 +1,5 @@
 import { ERR_MISSING_ARGS, nodeError, validateFunction, validateUint32 } from '../node-errors.mjs';
-import { queueMicrotask } from '../async-context.mjs';
+import { ioMicrotask as queueMicrotask } from '../callback-scope.mjs';
 
 const ERR_DIR_CLOSED = () => nodeError(Error, 'ERR_DIR_CLOSED', 'Directory handle was closed');
 const ERR_DIR_CONCURRENT_OPERATION = () =>
