@@ -44,6 +44,7 @@ import { makeCa } from './tls-certs.mjs';
 // A placeholder as the vault makes them (fnox_proxy_<24 hex>).
 const PLACEHOLDER = 'fnox_proxy_0123456789abcdef01234567';
 const SECRET = 'jsh-1090-the-sealed-secret';
+const FILLER = '*'.repeat(SECRET.length);
 // A password of the program's own, not sealed: the SCRAM server's user `own`.
 const OWN = 'jsh-1224-a-password-of-its-own';
 // The host each protocol's secret is bound to, and the positions it may go to.
@@ -773,8 +774,7 @@ const connect = async (label, user, port, query) => {
     // The server refusing the secret's proof ends the session: the kernel
     // never passes on what answers a client-final it recomputed but R 12.
     assert.match(r.stdout, /^reflected error ERR_SSL_PROTOCOL_ERROR /m);
-    // The scrub hands back what the server quotes as the placeholder.
-    assert.match(r.stdout, new RegExp(`^echoed query error 42501 you authenticated with ${PLACEHOLDER}, sending c=biws,`, 'm'));
+    assert.match(r.stdout, new RegExp(`^echoed query error 42501 you authenticated with \\*{${SECRET.length}}, sending c=biws,`, 'm'));
     assert.deepEqual(
       got.map((g) => g.join(' ')),
       [
@@ -946,12 +946,11 @@ const connect = async (label, user, port, query) => {
       { label: 'pg scram, reflected', pg: pg('privScram', VERIFY_PRIV, { user: 'reflect' }) },
       { label: 'pg scram, echoed', pg: pg('privScram', VERIFY_PRIV, { user: 'echo' }) },
     ]);
-    // The scrub hands back the placeholder, cut to the secret's length.
-    assert.match(out['http echo'], /^200 you sent Bearer fnox_proxy_/);
+    assert.equal(out['http echo'], `200 you sent Bearer ${FILLER}`);
     assert.match(out.smtp, /^error EAUTH /);
-    assert.equal(out['pg cleartext'], `error 28P01 password authentication failed: ${PLACEHOLDER}`);
+    assert.equal(out['pg cleartext'], `error 28P01 password authentication failed: ${FILLER}`);
     assert.match(out['pg scram, reflected'], /^error ERR_SSL_PROTOCOL_ERROR /);
-    assert.match(out['pg scram, echoed'], new RegExp(`^connected, query error 42501 you authenticated with ${PLACEHOLDER}, sending c=biws,`));
+    assert.match(out['pg scram, echoed'], new RegExp(`^connected, query error 42501 you authenticated with \\*{${SECRET.length}}, sending c=biws,`));
     assert.deepEqual(
       got.map((g) => g.join(' ')),
       [
