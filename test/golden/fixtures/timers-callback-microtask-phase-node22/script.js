@@ -24,6 +24,13 @@ const row = (label, start) => new Promise((done) => {
   await row("an exists callback started from an immediate", (out) => setImmediate(() => fs.exists(__filename, () => both(out))));
   await row("an awaited fs.promises.realpath started from an immediate", (out) => setImmediate(async () => { await fs.promises.realpath(__filename); both(out); }));
   await row("an awaited fs.promises.stat started from an immediate", (out) => setImmediate(async () => { await fs.promises.stat(__filename); both(out); }));
+  await row("an awaited fs.promises.open started from an immediate", (out) => setImmediate(async () => { const h = await fs.promises.open(__filename); both(out); await h.close(); }));
+  const h = await fs.promises.open(__filename);
+  await row("an awaited FileHandle read started from an immediate", (out) => setImmediate(async () => { await h.read(Buffer.alloc(4), 0, 4, 0); both(out); }));
+  await row("an awaited FileHandle stat started from an immediate", (out) => setImmediate(async () => { await h.stat(); both(out); }));
+  await row("an awaited FileHandle readFile started from an immediate", (out) => setImmediate(async () => { await h.readFile(); both(out); }));
+  await row("an awaited fs.promises.readFile of a FileHandle started from an immediate", (out) => setImmediate(async () => { await fs.promises.readFile(h); both(out); }));
+  await row("an awaited FileHandle close started from an immediate", (out) => setImmediate(async () => { await h.close(); both(out); }));
   await row("a timer's promise continuation", (out) => setTimeout(() => Promise.resolve().then(() => both(out)), 1));
   await row("a timer's third await", (out) => setTimeout(async () => { await null; await null; await null; both(out); }, 1));
   await row("a nextTick from a timer's promise continuation", (out) => setTimeout(() => Promise.resolve().then(() => process.nextTick(() => both(out))), 1));
