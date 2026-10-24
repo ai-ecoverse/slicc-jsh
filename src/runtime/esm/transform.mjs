@@ -637,6 +637,9 @@ function collectScriptBindingNames(ast) {
   return used;
 }
 
+const MAYBE_DYNAMIC_IMPORT = /\bimport\s*(?:\(|\/[/*]|<!--|-->)/;
+const MAYBE_MODULE_SYNTAX = /\b(?:import|export|await)\b/;
+
 /**
  * Rewrite dynamic `import(expr)` → `<binding>(expr)` for CJS evaluation.
  * Picks a binding that does not collide with declarations in the script
@@ -644,6 +647,7 @@ function collectScriptBindingNames(ast) {
  * Returns `{ code, changed, binding? }`. No-op when there are no ImportExpressions.
  */
 export function rewriteDynamicImports(source, { callee } = {}) {
+  if (!MAYBE_DYNAMIC_IMPORT.test(source)) return { code: source, changed: false };
   const body = stripHashbang(source);
   let ast;
   try {
@@ -685,6 +689,7 @@ export function rewriteDynamicImports(source, { callee } = {}) {
  * module (static import/export, import.meta, or top-level await).
  */
 export function shouldRunAsEsm(source) {
+  if (!MAYBE_MODULE_SYNTAX.test(source)) return false;
   const body = stripHashbang(source);
   try {
     acorn.parse(body, {
