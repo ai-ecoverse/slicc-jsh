@@ -34,7 +34,7 @@ function isKernelFrame(frame) {
   // Decide on the name's start, before anything formats or scans the text
   // (a regex over it per frame made each stack take milliseconds).
   const file = frame.getFileName?.() || '';
-  if (file.startsWith('data:')) return true;
+  if (file.startsWith('data:') || file === 'node:vm') return true;
   // Code the bundle compiles (its vendored builtins) has no file: its eval
   // origin (`eval at evalCjs (data:…)`), and its text, hold the bundle's URL.
   // V8 builds that origin as a rope, and reading any of it copies it whole,

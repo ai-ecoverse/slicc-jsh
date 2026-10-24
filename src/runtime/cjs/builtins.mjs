@@ -330,6 +330,7 @@ export function createBuiltins({ ctx, process, Buffer, console, path, handles, t
         importFrom: (specifier, referrer, options) => process._importFrom(specifier, referrer, options),
         execArgv: () => process._options ?? process.execArgv ?? [],
         emitWarning: (message, type) => process.emitWarning(message, type),
+        runScript: (source, filename) => ctx.sync.runScript?.(source, { filename }),
       })),
     module: () => ModuleExport,
     fs: () => fs,

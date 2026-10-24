@@ -4,8 +4,9 @@
  * C++ bindings).
  *
  * - `runInThisContext` runs a classic script as V8 does: its top-level
- *   declarations stay in the global scope for the next script (an indirect
- *   eval keeps only `var` and function declarations, so top-level `let`,
+ *   declarations stay in the global scope for the next script (the kernel's
+ *   ctx.sync.runScript where it has one; otherwise an indirect eval keeps
+ *   only `var` and function declarations, so top-level `let`,
  *   `const` and `class` are declared with `var`: they stay, but `const`
  *   isn't read-only and a name can be declared again);
  * - a context (`createContext`, `runInContext`, `runInNewContext`) is the
@@ -170,6 +171,7 @@ function compile(code, filename, lineOffset, scriptId, mode = 'this', ast = pars
   const bareVars = new Set();
   const slice = (node) => code.slice(node.start, node.end);
   for (const node of ast.body) {
+    if (mode === 'script') continue;
     if (mode === 'this') {
       if (node.type === 'VariableDeclaration' && (node.kind === 'let' || node.kind === 'const')) {
         edits.push({ start: node.start, end: node.start + node.kind.length, text: 'var' });
@@ -250,6 +252,7 @@ export function createVm({
   importFrom = () => Promise.reject(new Error('no loader')),
   execArgv = () => [],
   emitWarning = () => {},
+  runScript = () => undefined,
 } = {}) {
   const experimentalVmModules = () => execArgv().includes('--experimental-vm-modules');
   let warnedMainContextLoader = false;
@@ -442,6 +445,18 @@ export function createVm({
     }
     runInThisContext(options) {
       try {
+        if (!globalThis[OVERLAY] && !(options?.displayErrors === false && hostArrows(runScript))) {
+          this._scriptCompiled ??= compile(this._code, this._filename, this._lineOffset, this._id, 'script', this._ast);
+          registerVmFile(this._filename, 0);
+          let script;
+          try {
+            script = runScript(`${this._scriptCompiled.lines}${this._scriptCompiled.body}`, this._filename);
+          } catch (err) {
+            undoHostArrow(err, runScript);
+            throw err;
+          }
+          if (script !== undefined) return script.value;
+        }
         return indirectEval(thisContextSource(this._compiled, this._filename));
       } catch (err) {
         if (options?.displayErrors !== false) decorateThrown(err, this);
@@ -588,6 +603,33 @@ function decorateThrown(err, script) {
     writable: true,
   });
   decorateErrorStack(err);
+}
+
+const hostChecked = new WeakSet();
+const HOST_ARROW = /^[^\n]*:\d+\n[^\n]*\n(?:[ \t]*\^*\n)?\n/;
+let hostDecorates;
+
+function hostDecoratesStacks(runScript) {
+  try {
+    runScript('throw new Error()', '[jsh probe]');
+  } catch (err) {
+    return typeof err?.stack === 'string' && err.stack.startsWith('[jsh probe]:1\n');
+  }
+  return false;
+}
+
+const hostArrows = (runScript) => (hostDecorates ??= hostDecoratesStacks(runScript));
+
+export function undoHostArrow(err, runScript) {
+  if (err === null || typeof err !== 'object' || hostChecked.has(err)) return;
+  hostChecked.add(err);
+  if (!hostArrows(runScript)) return;
+  try {
+    const stack = err.stack;
+    if (typeof stack === 'string' && HOST_ARROW.test(stack)) err.stack = stack.replace(HOST_ARROW, '');
+  } catch {
+    return;
+  }
 }
 
 /** internal/util's decorateErrorStack: the arrow V8 keeps on a SyntaxError, before its stack. */
