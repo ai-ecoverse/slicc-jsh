@@ -1,6 +1,7 @@
 import * as sourceMaps from '../source-maps.mjs';
 import { rewriteDynamicImports } from '../esm/transform.mjs';
 import { syntaxReport } from '../syntax-report.mjs';
+import { scriptFunction } from '../script-function.mjs';
 import { createPath } from '../path.mjs';
 import { createBuiltins } from './builtins.mjs';
 import { createResolver, isBuiltinName } from './resolve.mjs';
@@ -306,28 +307,10 @@ export function createCjs({
     // come from globalThis.
     // Its source map, when support is on (Node's wrapSafe / _compile).
     sourceMaps.cacheModuleSourceMap(filename, source, mod);
+    const params = ['exports', 'require', 'module', '__filename', '__dirname', ...(hasImport ? [importBinding] : [])];
     let wrapper;
     try {
-      if (hasImport) {
-        wrapper = new Function(
-          'exports',
-          'require',
-          'module',
-          '__filename',
-          '__dirname',
-          importBinding,
-          `${body}\n//# sourceURL=${filename}`
-        );
-      } else {
-        wrapper = new Function(
-          'exports',
-          'require',
-          'module',
-          '__filename',
-          '__dirname',
-          `${body}\n//# sourceURL=${filename}`
-        );
-      }
+      wrapper = scriptFunction(ctx, { params, body, filename }) ?? new Function(...params, `${body}\n//# sourceURL=${filename}`);
     } catch (err) {
       if (err instanceof SyntaxError) {
         // Top-level const/let of a wrapper name → Node retries as ESM when the

@@ -58,6 +58,8 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 
 **ESM.** `.mjs`, `"type": "module"`, static `import`/`export`, dynamic `import()`, `import.meta.url`, `import.meta.resolve`, `import.meta.dirname` and `import.meta.filename`, and JSON with `with { type: 'json' }`. The resolver, its errors and its stack frames are Node 22's. The transform uses acorn, so multi-line imports and exports, strings, comments and `$` identifiers parse correctly. Imports are hoisted, and export getters are registered before evaluation, so cycles work. `-e` and ambiguous `.js` files are detected as Node does; a dynamic `import()` alone stays CommonJS.
 
+**Compiling a module.** On the Node host, a CommonJS or ES module file's code is compiled as a classic script, through the kernel's `ctx.sync.runScript`, as Node compiles its modules. So V8 gives the eval code it runs a position in its eval origin, as in Node: `eval at f (/a.js:2:3)`, and an ES module's names its `file:` URL. An uncaught error in that code prints Node's `<anonymous_script>:N` header with the eval'd line and its caret (golden `eval-code-files-uncaught-node22`). In a browser the kernel has no such script, so a module's code is a `Function` body, and V8 names only the file in such an origin (`eval at f (/a.js)`), with no header.
+
 **Interop.**
 - `import` of CommonJS: the named exports are what Node's cjs-module-lexer finds in the source, re-exports included. The default export is `module.exports` itself, never its `.default`.
 - `require()` of an ES module with a default export returns Node's facade with `__esModule: true` and live bindings, or its `'module.exports'` export.
