@@ -1,5 +1,5 @@
 {
-  "description": "ai-ecoverse/slicc-jsh#958, ai-ecoverse/slicc-jsh#959: a connection a tls.Server keeps after handshakeTimeout sees its peer close, as Node 22: the client's end or destroy ends the server socket, which ends its side and closes, with a tlsClientError listener or without one, and server.close calls back; what the program writes to it meanwhile never reaches the client, and holds its end",
+  "description": "ai-ecoverse/slicc-jsh#958, ai-ecoverse/slicc-jsh#959: a connection a tls.Server keeps after handshakeTimeout sees its peer close, as Node 22: the client's end or destroy ends the server socket, which ends its side and closes, and its resetAndDestroy is the server socket's ECONNRESET (ai-ecoverse/slicc-jsh#966, slicc-kernel 1.155.0), with a tlsClientError listener or without one, and server.close calls back; what the program writes to it meanwhile never reaches the client, and holds its end",
   "argv": [
     "main.js"
   ],

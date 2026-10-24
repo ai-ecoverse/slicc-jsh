@@ -89,6 +89,8 @@ function kept(label, { listener = true, write = false, leave }) {
   await kept('the client ends after the timeout', { leave: (c) => c.end() });
   await kept('the client is destroyed after the timeout', { leave: (c) => c.destroy() });
   await kept('the program writes to the kept socket, then the client ends', { write: true, leave: (c) => c.end() });
+  await kept('the client resets after the timeout', { leave: (c) => c.resetAndDestroy() });
   await kept('no tlsClientError listener, the client ends', { listener: false, leave: (c) => c.end() });
+  await kept('no tlsClientError listener, the client resets', { listener: false, leave: (c) => c.resetAndDestroy() });
   console.log('done');
 })();

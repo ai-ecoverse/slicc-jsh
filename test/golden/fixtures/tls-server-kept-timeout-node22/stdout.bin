@@ -15,8 +15,17 @@ the program writes to the kept socket, then the client ends
   server tlsClientError ERR_TLS_HANDSHAKE_TIMEOUT, destroyed false
   server socket end, destroyed false
   server nothing more, still waiting for client close, server close callback, server socket close
+the client resets after the timeout
+  server tlsClientError ERR_TLS_HANDSHAKE_TIMEOUT, destroyed false
+  server close callback
+  server socket error ECONNRESET
+  server socket close true, destroyed true
+  client close, got 0 bytes
 no tlsClientError listener, the client ends
   server close callback
   client end
+  client close, got 0 bytes
+no tlsClientError listener, the client resets
+  server close callback
   client close, got 0 bytes
 done
