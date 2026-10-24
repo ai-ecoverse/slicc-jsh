@@ -972,10 +972,25 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
       const err = new Error(`error:${id}:SSL routines::${reason}:SSL alert number ${n}`);
       return Object.assign(err, { library: 'SSL routines', reason, code: `ERR_SSL_${reason.toUpperCase().replaceAll(' ', '_')}` });
     }
+    const record = RECORD_FAILURES[code];
+    if (record) {
+      const reason = code.slice('ERR_SSL_'.length).toLowerCase().replaceAll('_', ' ');
+      const err = new Error(`error:${record[0]}:SSL routines:${record[1]}:${reason}`);
+      return Object.assign(err, { library: 'SSL routines', reason, code });
+    }
     const err = new Error(String(detail ?? code).replace(/^ERR_SSL_[A-Z_]+: /, ''));
     const reason = code.slice('ERR_SSL_'.length).toLowerCase().replaceAll('_', ' ');
     return Object.assign(err, { library: 'SSL routines', reason, code });
   }
+
+  const RECORD_FAILURES = {
+    __proto__: null,
+    ERR_SSL_PACKET_LENGTH_TOO_LONG: ['0A0000C6', 'tls_get_more_records'],
+    ERR_SSL_WRONG_VERSION_NUMBER: ['0A00010B', 'tls_validate_record_header'],
+    ERR_SSL_HTTP_REQUEST: ['0A00009C', 'tls_validate_record_header'],
+    ERR_SSL_DATA_LENGTH_TOO_LONG: ['0A000092', 'tls_validate_record_header'],
+    ERR_SSL_UNEXPECTED_MESSAGE: ['0A0000F4', 'ossl_statem_client_read_transition'],
+  };
 
   /** A failed read or write on the kernel's session as Node's error, or undefined. */
   function sessionError(err) {

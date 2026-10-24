@@ -12,7 +12,10 @@ const listen = (server) => new Promise((resolve) => server.listen(0, '127.0.0.1'
 const plainHttp = (label, server) =>
   new Promise((resolve) => {
     const ev = [];
-    server.on('tlsClientError', (err, socket) => ev.push(`tlsClientError ${err.code}, destroyed ${socket.destroyed}`));
+    server.on('tlsClientError', (err, socket) => {
+      const message = err.message.replace(/^[0-9A-F]+:error:/, 'error:').replace(/:[^:]*:\d+:\n$/, '');
+      ev.push(`tlsClientError ${err.code} ${JSON.stringify(message)} (${err.library}, ${err.reason}), destroyed ${socket.destroyed}`);
+    });
     listen(server).then((port) => {
       const c = net.connect(port, '127.0.0.1');
       let got = '';
