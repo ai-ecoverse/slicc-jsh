@@ -1,5 +1,5 @@
 {
-  "description": "--tls-keylog=<file> on slicc-kernel 1.154's keylog, as Node 22: its warning once, and both ends' TLS 1.3 traffic secret lines appended to the file in NSS key log format, with mode 600 (Node's EXPORTER_SECRET lines, which the kernel's engine doesn't log, are left out)",
+  "description": "--tls-keylog=<file> on slicc-kernel 1.159's keylog, as Node 22: its warning once, and both ends' five TLS 1.3 lines, the four traffic secrets and EXPORTER_SECRET, appended to the file in NSS key log format, with mode 600",
   "argv": ["--tls-keylog=keys.log", "--no-warnings", "main.js"],
   "shim": true,
   "packages": ["@ai-ecoverse/wasm-tls-engine"]

@@ -13,20 +13,18 @@ function listen(server) {
 }
 
 function shape(all) {
-  const exporter = all.filter((b) => b.toString('latin1').startsWith('EXPORTER_SECRET '));
-  const lines = all.filter((b) => !exporter.includes(b));
-  const parsed = lines.map((b) => [Buffer.isBuffer(b), LINE.exec(b.toString('latin1'))]);
+  const parsed = all.map((b) => [Buffer.isBuffer(b), LINE.exec(b.toString('latin1'))]);
   const ok = parsed.every(([buffer, m]) => buffer && m);
   const labels = parsed.map(([, m]) => m?.[1]).sort();
-  return { ok, labels, parsed, count: lines.length };
+  return { ok, labels, parsed, count: all.length };
 }
 
 function compare(name, client, server, extra = []) {
   const c = shape(client);
   const s = shape(server);
   console.log(name);
-  console.log(`  client: ${c.count} traffic secret lines, NSS format ${c.ok}, ${c.labels.join(' ')}`);
-  console.log(`  server: ${s.count} traffic secret lines, NSS format ${s.ok}, ${s.labels.join(' ')}`);
+  console.log(`  client: ${c.count} lines, NSS format ${c.ok}, ${c.labels.join(' ')}`);
+  console.log(`  server: ${s.count} lines, NSS format ${s.ok}, ${s.labels.join(' ')}`);
   const randoms = new Set([...c.parsed, ...s.parsed].map(([, m]) => m?.[2]));
   console.log(`  one client random: ${randoms.size === 1}`);
   const secrets = (p) => p.map(([, m]) => `${m?.[1]} ${m?.[3]}`).sort().join('\n');

@@ -9,9 +9,9 @@ const LINE = /^([A-Z_0-9]+) ([0-9a-f]{64}) ([0-9a-f]+)$/;
 
 process.on('warning', (w) => console.log(`warning: ${w.message}`));
 
-const traffic = () => {
+const logged = () => {
   const text = fs.existsSync(file) ? fs.readFileSync(file, 'latin1') : '';
-  return text.split('\n').filter((l) => l && !l.startsWith('EXPORTER_SECRET '));
+  return text.split('\n').filter(Boolean);
 };
 
 (async () => {
@@ -24,10 +24,10 @@ const traffic = () => {
   });
   server.close();
   const started = Date.now();
-  while (traffic().length < 8 && Date.now() - started < 5000) await new Promise((r) => setTimeout(r, 20));
-  const lines = traffic();
+  while (logged().length < 10 && Date.now() - started < 5000) await new Promise((r) => setTimeout(r, 20));
+  const lines = logged();
   const parsed = lines.map((l) => LINE.exec(l));
-  console.log(`${lines.length} traffic secret lines, NSS format ${parsed.every(Boolean)}`);
+  console.log(`${lines.length} lines, NSS format ${parsed.every(Boolean)}`);
   console.log(parsed.map((m) => m?.[1]).sort().join(' '));
   console.log(`one client random: ${new Set(parsed.map((m) => m?.[2])).size === 1}`);
   console.log(`mode ${(fs.statSync(file).mode & 0o777).toString(8)}`);
