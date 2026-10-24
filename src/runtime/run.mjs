@@ -26,6 +26,7 @@ import { patchReplServer } from './node-lib.mjs';
 import { checkSyntax, syntaxReport } from './syntax-report.mjs';
 import { installStackPrepare } from './stack.mjs';
 import { createTimers } from './timers.mjs';
+import { hideNewerBuiltins } from './node22-globals.mjs';
 import { createFetch } from './web/fetch.mjs';
 import { createWebSocket } from './web/websocket.mjs';
 import { createPorts } from './web/broadcast-channel.mjs';
@@ -460,6 +461,7 @@ export async function runNode(ctx, options = {}) {
     getZlib: () => process._builtin('zlib'),
   });
   const restorePlatform = trackPlatformAsync(handles);
+  const restoreBuiltins = hideNewerBuiltins();
   const WebSocket = createWebSocket(ctx, { handles, trackPromise, getNet: () => process._builtin('net') });
   // Node's BroadcastChannel, in-process, where the kernel leaves the slot
   // writable and empty (slicc-kernel 1.92.0+). The platform's is never used.
@@ -1264,6 +1266,7 @@ export async function runNode(ctx, options = {}) {
       restoreGlobals();
       restoreFunctionImport();
       restorePlatform();
+      restoreBuiltins();
       restoreMessageEvent();
       removeJshHandoff();
     } catch {

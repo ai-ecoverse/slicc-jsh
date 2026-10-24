@@ -54,7 +54,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 
 ## Modules and ESM
 
-**CommonJS.** `require` resolves as Node does: `node_modules`, `package.json` `"exports"` and `"imports"`, `node:` builtins, JSON. `require('.')` and `require('..')` are paths, and a request that ends in `/`, `/.` or `/..` names a directory, never the file beside it (golden `require-dot`). The module wrapper is Node's five-argument form. `process`, `Buffer` and the timers are real globals. Modules resolve through symlinks to their real path, unless `--preserve-symlinks` (or `--preserve-symlinks-main`). `module.createRequire`, `Module._extensions`, `Module.builtinModules` and `isBuiltin` are there.
+**CommonJS.** `require` resolves as Node does: `node_modules`, `package.json` `"exports"` and `"imports"`, `node:` builtins, JSON. `require('.')` and `require('..')` are paths, and a request that ends in `/`, `/.` or `/..` names a directory, never the file beside it (golden `require-dot`). The module wrapper is Node's five-argument form. `process`, `Buffer` and the timers are real globals. The platform's newer V8 builtins that Node 22.22.0's V8 lacks, `Float16Array`, `Math.f16round` and `DataView`'s `getFloat16` and `setFloat16`, are taken out while a program runs, so a program that looks for them takes Node 22's path (golden `float16-absent-node22`). Modules resolve through symlinks to their real path, unless `--preserve-symlinks` (or `--preserve-symlinks-main`). `module.createRequire`, `Module._extensions`, `Module.builtinModules` and `isBuiltin` are there.
 
 **ESM.** `.mjs`, `"type": "module"`, static `import`/`export`, dynamic `import()`, `import.meta.url`, `import.meta.resolve`, `import.meta.dirname` and `import.meta.filename`, and JSON with `with { type: 'json' }`. The resolver, its errors and its stack frames are Node 22's. The transform uses acorn, so multi-line imports and exports, strings, comments and `$` identifiers parse correctly. Imports are hoisted, and export getters are registered before evaluation, so cycles work. `-e` and ambiguous `.js` files are detected as Node does; a dynamic `import()` alone stays CommonJS.
 
@@ -632,7 +632,6 @@ EventEmitter listeners run in the context of the code that emits, as in Node. `e
 Where V8's bytes depend on how it lays an object out in memory, which a program can't see, jsh writes what a literal gives:
 - An integral number is an int32 (`I`). V8 writes a double for a value it happens to hold as a heap number, such as an object field that held a fraction before.
 - An array with no holes is dense. V8 writes `new Array(n)` that was filled in afterwards as sparse.
-- A `Float16Array` (there's none in Node 22) is type index 13, as in later Node versions.
 
 Either way the value reads back the same.
 

@@ -1,0 +1,5 @@
+{
+  "description": "#1020: Float16Array, Math.f16round and DataView's getFloat16 and setFloat16 are absent, as in Node 22.22.0, whose V8 doesn't have them: in the main thread, a vm context and a Worker",
+  "argv": ["script.js"],
+  "shim": true
+}
