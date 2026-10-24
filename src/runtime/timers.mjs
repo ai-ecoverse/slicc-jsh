@@ -189,7 +189,7 @@ export function createTimers(
         return;
       }
       if (state.afterIo) state.cut ??= made;
-      if (closeTimer || hold(state.due) || (state.afterIo && immediatesFirst(state.cut))) {
+      if (closeTimer || hold(state.due) || (state.afterIo && immediatesFirst(state.cut, state.seq))) {
         held.add(state);
         state.retry ??= nativeSetTimeout(retry, 0);
         return;
@@ -223,6 +223,7 @@ export function createTimers(
       retry: null,
       repeating: false,
       inCheck,
+      nextCheck: inCheck && checkPhase,
     };
     const handle = new Immediate();
     handle._onImmediate = fn;
@@ -236,7 +237,7 @@ export function createTimers(
         due.set(fire, Infinity);
         return;
       }
-      if (held && (closeTimer || holdImmediate(state.seq))) {
+      if (held && (closeTimer || holdImmediate(state.seq) || (state.nextCheck && timersFirst(state.seq)) || (inCheck && waitingBefore(state.seq)))) {
         state.retry = nativeSetTimeout(fire, 0);
         return;
       }
@@ -266,9 +267,20 @@ export function createTimers(
     for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < cut) return true;
     return false;
   };
-  const immediatesFirst = (cut) => {
+  const immediatesFirst = (cut, seq) => {
     for (const state of byId.values()) {
-      if (state.kind === 'Immediate' && state.inCheck && state.seq < cut && !holdImmediate(state.seq)) return true;
+      if (state.kind === 'Immediate' && state.inCheck && state.seq < cut && !(state.nextCheck && state.seq > seq) && !holdImmediate(state.seq)) return true;
+    }
+    return false;
+  };
+  const waitingBefore = (seq) => {
+    for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < seq && state.retry !== null) return true;
+    return false;
+  };
+  const timersFirst = (seq) => {
+    const now = Date.now();
+    for (const state of byId.values()) {
+      if (state.kind === 'Timeout' && state.due <= now && (state.seq < seq || !state.afterIo) && !hold(state.due)) return true;
     }
     return false;
   };
