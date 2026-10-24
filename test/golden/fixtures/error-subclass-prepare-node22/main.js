@@ -1,0 +1,11 @@
+RangeError.prepareStackTrace = () => 'range';
+console.log(Object.hasOwn(RangeError, 'prepareStackTrace'), Object.keys(RangeError), new Error('x').stack.split('\n')[0]);
+console.log(new RangeError('r').stack.split('\n')[0], typeof TypeError.prepareStackTrace, TypeError.prepareStackTrace === Error.prepareStackTrace);
+const E = Object.create(Error);
+E.prepareStackTrace = 5;
+console.log(Object.getOwnPropertyDescriptor(E, 'prepareStackTrace'), new Error('y').stack.split('\n')[0]);
+Error.prepareStackTrace = () => 'all';
+console.log(new Error('z').stack, new TypeError('t').stack, RangeError.prepareStackTrace() === 'range');
+delete Error.prepareStackTrace;
+TypeError.prepareStackTrace = () => 'type';
+console.log(Object.keys(TypeError), new Error('w').stack.split('\n')[0]);
