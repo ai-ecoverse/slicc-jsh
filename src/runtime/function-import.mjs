@@ -10,6 +10,9 @@
  * that created the function. Bodies without one compile exactly as before.
  */
 import * as acorn from 'acorn';
+import { KERNEL_HINT, LONG_ORIGIN, callerSites, functionTag } from './stack.mjs';
+
+const NativeFunction = Function;
 
 const IMPORT_KEY = Symbol.for('slicc-jsh.functionImport');
 const MAYBE_IMPORT = /\bimport\s*\(/;
@@ -78,6 +81,16 @@ function callerFile(skip) {
   return undefined;
 }
 
+function userOrigin(skip) {
+  const site = callerSites(skip, 1)[0];
+  const origin = site?.getFileName?.() || site?.getEvalOrigin?.();
+  if (typeof origin !== 'string' || origin.length > LONG_ORIGIN || /^(?:data|node):/.test(origin) || KERNEL_HINT.test(origin)) return undefined;
+  const where = origin.startsWith('eval at ') ? origin : `${origin}:${site.getLineNumber?.()}:${site.getColumnNumber?.()}`;
+  const name = site.getFunctionName?.();
+  const label = name && !(site.isEval?.() && name === 'eval') ? name : '<anonymous>';
+  return `eval at ${label} (${where})`;
+}
+
 /**
  * @param {object} o
  * @param {(specifier: string, referrer: string) => Promise<object>} o.importFrom
@@ -106,6 +119,16 @@ export function installFunctionImport({ importFrom, cwd }) {
 
   set(globalThis, IMPORT_KEY, (referrer, specifier, options) => importFrom(String(specifier), referrer, options));
 
+  const construct = Reflect.construct;
+  const trampolines = new Map();
+  const trampoline = (tag) => {
+    let t = trampolines.get(tag);
+    if (!t) {
+      t = NativeFunction('construct', 'Native', 'args', 'target', `return construct(Native, args, target)\n//# sourceURL=${tag}`);
+      trampolines.set(tag, t);
+    }
+    return t;
+  };
   const natives = [
     ['Function', Function],
     ['AsyncFunction', (async () => {}).constructor],
@@ -121,8 +144,11 @@ export function installFunctionImport({ importFrom, cwd }) {
       const referrer = MAYBE_IMPORT.test(body) ? (callerFile(wrapped) ?? `${cwd()}/[eval]`) : undefined;
       const rewritten = referrer ? rewriteBody(prefix, params, body, referrer) : null;
       const target = new.target && new.target !== wrapped ? new.target : Native;
-      if (rewritten === null) return Reflect.construct(Native, args, target);
-      return Reflect.construct(Native, [...args.slice(0, -1), rewritten], target);
+      const compiled = rewritten === null ? args : [...args.slice(0, -1), rewritten];
+      const origin = userOrigin(wrapped);
+      if (origin === undefined) return construct(Native, compiled, target);
+      const tag = functionTag(origin, `(${prefix}${params}\n) {\n${body}\n})`);
+      return trampoline(tag)(construct, Native, compiled, target);
     };
     Object.defineProperty(wrapped, 'name', { value: name });
     Object.defineProperty(wrapped, 'prototype', { value: Native.prototype, writable: false });

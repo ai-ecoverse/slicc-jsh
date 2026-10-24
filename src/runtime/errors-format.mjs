@@ -4,7 +4,7 @@
  */
 
 import * as acorn from 'acorn';
-import { KERNEL_HINT, generatedLocation } from './stack.mjs';
+import { KERNEL_HINT, functionSource, generatedLocation } from './stack.mjs';
 import { sourceMapErrorSource } from './source-maps.mjs';
 
 function sanitizeStack(stack) {
@@ -111,7 +111,9 @@ function evalSource(outer, line, column) {
   return `(function anonymous(${texts.slice(0, -1).join(',')}\n) {\n${texts.at(-1)}\n})`;
 }
 
-function originSource(ctx, origin, frames, evalCode) {
+function originSource(ctx, origin, frames, evalCode, err) {
+  const recorded = functionSource(err, origin);
+  if (recorded !== undefined) return recorded;
   const parent = ORIGIN.exec(origin)?.[1];
   if (parent === undefined) return undefined;
   const site = ORIGIN_SITE.exec(parent);
@@ -120,16 +122,16 @@ function originSource(ctx, origin, frames, evalCode) {
     return typeof outer === 'string' ? evalSource(outer, Number(site[2]), Number(site[3])) : undefined;
   }
   const at = frames.find((f) => f[1] === parent);
-  const outer = at ? originSource(ctx, parent, frames, evalCode) : undefined;
+  const outer = at ? originSource(ctx, parent, frames, evalCode, err) : undefined;
   return typeof outer === 'string' ? evalSource(outer, Number(at[2]), Number(at[3])) : undefined;
 }
 
-function evalLocation(ctx, stack, evalCode) {
+function evalLocation(ctx, stack, evalCode, err) {
   const lines = stack.split('\n').filter((l) => l.startsWith('    at '));
   if (!lines[0]?.includes('(eval at ')) return undefined;
   const frames = lines.map((l) => EVAL_FRAME.exec(l)).filter(Boolean);
   const top = EVAL_FRAME.exec(lines[0]);
-  const source = top ? originSource(ctx, top[1], frames, evalCode) : undefined;
+  const source = top ? originSource(ctx, top[1], frames, evalCode, err) : undefined;
   if (source === undefined) return null;
   return { file: '<anonymous_script>', source, line: Number(top[2]), column: Number(top[3]) };
 }
@@ -394,7 +396,7 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     }
   }
 
-  const evalLoc = evalLocation(ctx, rawStack, evalCode);
+  const evalLoc = evalLocation(ctx, rawStack, evalCode, err);
   const loc = evalLoc === undefined ? frameLocation(rawStack) : evalLoc;
   const snip = snippetFor(ctx, loc, evalCode, fromPromise);
   if (snip) head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
