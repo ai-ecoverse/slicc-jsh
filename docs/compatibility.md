@@ -238,7 +238,7 @@ An existing file keeps its mode. `copyFile` gives the copy the source's mode, wh
 
 **`detached: true`** makes the child lead a new session and process group (`setsid`, as Node does on POSIX).
 
-**pnpm.** `fs.realpathSync`, `process.getuid`/`getgid` and `process.kill(self)` are there for pnpm's global command shims, which resolve their target and re-raise signals. Piped stdio loads `readable-stream` from sources embedded in the bundle, so a package installed with `pnpm add -g` (under `$PNPM_HOME/global/v11/<hash>/`) works.
+**pnpm.** `fs.realpathSync`, `process.getuid`/`getgid` and `process.kill(self)` are there for pnpm's global command shims, which resolve their target and re-raise signals. The vendored sources a process doesn't need at start (`readable-stream`, `string_decoder`, `crypto`, `zlib`, Brotli and zstd) aren't in the bundle: each is read on first use from `dist/vendor/` beside the command's module, which slicc-kernel 1.160.0 names in `ctx.module`, so a package installed with `pnpm add -g` (under `$PNPM_HOME/global/v11/<hash>/`), in an appended root or behind a pnpm `node_modules` link works. Without `ctx.module` (an older kernel, or a program run from inline source), they're read from `/node_modules/@ai-ecoverse/slicc-jsh` or pnpm's global directories.
 
 **`fork` and `'ipc'` in `stdio`** work on a kernel that makes socketpairs and passes a child more descriptors than its stdio ([slicc-kernel#1093](https://github.com/ai-ecoverse/slicc-kernel/issues/1093)). The channel is Node 22.22.0's (golden `fork-ipc-node22`):
 - It is one end of a unix socketpair. The child has the other end at the `'ipc'` index, fd 3 for `fork`, and finds it in `NODE_CHANNEL_FD`, which leaves its environment at start, as in Node.
