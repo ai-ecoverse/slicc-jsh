@@ -1,0 +1,17 @@
+{
+  "description": "a CommonJS file's import() with a comment or a line break before its parenthesis loads the module, and the word import in strings stays as it is",
+  "argv": [
+    "script.cjs"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.cjs",
+      "from": "script.cjs"
+    },
+    {
+      "path": "/os/target.mjs",
+      "from": "target.mjs"
+    }
+  ]
+}
