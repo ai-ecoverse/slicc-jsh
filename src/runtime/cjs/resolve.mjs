@@ -143,7 +143,9 @@ export function createResolver({
     return null;
   }
 
+  let exportsResolutions = 0;
   function resolveExports(exportsField, subpath, pkgJsonPath, pkgDir) {
+    exportsResolutions++;
     if (typeof exportsField === 'string' || Array.isArray(exportsField)) {
       if (subpath !== '.') throw packagePathNotExported(subpath, pkgJsonPath);
       return matchExportTarget(exportsField, pkgDir);
@@ -320,9 +322,11 @@ export function createResolver({
       throw moduleNotFound(request, stack);
     }
 
-    const cacheKey = esm ? undefined : `${request}\0${fromDir}`;
-    const cached = cacheKey === undefined ? undefined : pathCache.get(cacheKey);
+    const key = esm ? undefined : `${request}\0${fromDir}`;
+    const cached = key === undefined ? undefined : pathCache.get(key);
     if (cached !== undefined) return { type: 'file', filename: cached };
+    const before = exportsResolutions;
+    const cacheKey = () => (exportsResolutions === before ? key : undefined);
 
     if (request === '.' || request === '..' || request.startsWith('/') || request.startsWith('./') || request.startsWith('../')) {
       const abs = path.resolve(fromDir, request);
@@ -330,12 +334,12 @@ export function createResolver({
       // name a directory only, never a file beside it.
       const dirOnly = !esm && /(?:^|\/)\.{0,2}$/.test(request);
       const hit = dirOnly ? (tryStat(abs)?.isDirectory ? loadAsDirectory(abs) : null) : loadAsFileOrDir(abs);
-      if (hit) return fileHit(hit, cacheKey);
+      if (hit) return fileHit(hit, cacheKey());
       throw moduleNotFound(request, stack);
     }
 
     const nm = loadNodeModules(request, fromDir);
-    if (nm) return fileHit(nm, cacheKey);
+    if (nm) return fileHit(nm, cacheKey());
 
     if (esm) throw esmFail('package', packageNameOf(request));
     throw moduleNotFound(request, stack);
