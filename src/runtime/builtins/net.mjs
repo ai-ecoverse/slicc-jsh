@@ -802,6 +802,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #send(bytes, callback) {
+      if (bytes.length > 0) this.#wrote();
       const taken = this.#writeNow(bytes);
       if (taken.error) {
         callback(taken.error);
@@ -1013,8 +1014,16 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #handled = false;
 
     #reset() {
-      this.#resetting = true;
+      this.#resetting = !this.#freshWrite;
       return this.destroy();
+    }
+
+    #freshWrite = false;
+
+    #wrote() {
+      if (this.#freshWrite) return;
+      this.#freshWrite = true;
+      nextTick(() => queueMicrotask(() => (this.#freshWrite = false)));
     }
 
     end(data, encoding, callback) {

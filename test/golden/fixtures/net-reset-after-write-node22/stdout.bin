@@ -1,0 +1,13 @@
+write, then reset in the same tick
+  peer: data "hello", end, close false
+  socket: close false
+an empty write, then reset in the same tick
+  peer: error ECONNRESET read, close true
+  socket: close false
+write, then reset in a later timer
+  peer: data "hello", error ECONNRESET read, close true
+  socket: close false
+reset with nothing written
+  peer: error ECONNRESET read, close true
+  socket: close false
+done
