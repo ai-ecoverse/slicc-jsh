@@ -1,0 +1,6 @@
+tls.Server, the client resets before its hello | tlsClientError ECONNRESET "read ECONNRESET", syscall read, errno -ECONNRESET, own keys code errno syscall, destroyed true
+tls.Server, the client resets after part of its hello | tlsClientError ECONNRESET "read ECONNRESET", syscall read, errno -ECONNRESET, own keys code errno syscall, destroyed true
+https.Server, the client resets before its hello | tlsClientError ECONNRESET "read ECONNRESET", syscall read, errno -ECONNRESET, own keys code errno syscall, destroyed true
+tls.Server, the client closes before its hello | tlsClientError ECONNRESET "socket hang up", syscall undefined, errno none, own keys code, destroyed true
+tls.Server, the client closes after part of its hello | tlsClientError ECONNRESET "socket hang up", syscall undefined, errno none, own keys code, destroyed true
+done
