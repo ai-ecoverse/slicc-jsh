@@ -11,6 +11,7 @@ if (process.send) {
       server.emit('connection', socket);
       socket.resume();
     } else {
+      socket.on('close', () => process.send({ closed: m }));
       socket.end(`the child ended ${m}\n`);
     }
   });
@@ -20,7 +21,17 @@ if (process.send) {
 
 const out = [];
 const cp = fork(__filename);
-const nextMessage = () => new Promise((resolve) => cp.once('message', resolve));
+const closed = [];
+const messages = [];
+let onMessage = () => {};
+cp.on('message', (m) => {
+  if (m?.closed !== undefined) closed.push(m.closed);
+  else messages.push(m);
+  onMessage();
+});
+const until = (ready) => new Promise((resolve) => (onMessage = () => ready() && resolve())());
+const nextMessage = () => until(() => messages.length > 0).then(() => messages.shift());
+const allClosed = (n) => until(() => closed.length === n);
 let onSocket;
 const server = net.createServer({ pauseOnConnect: true }, (socket) => onSocket(socket));
 const accepted = () => new Promise((resolve) => (onSocket = resolve));
@@ -67,6 +78,8 @@ server.listen(0, '127.0.0.1', async () => {
   for (let i = 0; i < 4; i++) out.push(await nextMessage());
   out.push(`c callback ${await callback}`);
   for (const data of await Promise.all(clients)) out.push(`client read: ${data}`);
+  await allClosed(3);
+  out.push(`the child closed ${closed.sort().join(', ')}`);
   out.push(`connections ${await connections()}`);
 
   server.close(() => {
