@@ -202,9 +202,11 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     if (!body.includes('Node.js v')) body += trailer;
     return { body };
   }
+  const primitive = err === null || (typeof err !== 'object' && typeof err !== 'function');
+  const shownThrown = () => (!primitive ? util.inspect(err) : typeof err === 'symbol' ? '' : String(err));
   if (!(err instanceof Error) && esmEntry) {
     // Node: a primitive thrown by an ES module entry has no location of its own.
-    const shown = util.inspect(err);
+    const shown = shownThrown();
     return {
       body:
         `\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n${shown}\n` +
@@ -213,8 +215,7 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     };
   }
   if (!(err instanceof Error)) {
-    const primitive = err === null || (typeof err !== 'object' && typeof err !== 'function');
-    const shown = !primitive ? util.inspect(err) : typeof err === 'symbol' ? '' : String(err);
+    const shown = shownThrown();
     // A thrown primitive has no stack: in -e code, point at its first
     // `throw` (V8 gives Node the exact spot); else Node's shape for line 1.
     let where = `${evalName}:1\nthrow ${shown}\n^`;
