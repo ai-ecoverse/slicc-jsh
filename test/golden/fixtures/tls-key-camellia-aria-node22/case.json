@@ -1,0 +1,6 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#722: PBES2 PKCS#8 keys encrypted with Camellia or ARIA (128, 192 and 256-bit CBC) load, as in Node 22, on wasm-tls-engine 4.2.0-12 (ai-ecoverse/slicc-kernel#1564): with the right passphrase a secure context, a server and a client certificate work, and a wrong or missing passphrase is ERR_OSSL_BAD_DECRYPT with Node's opensslErrorStack, thrown by createSecureContext, createServer and tls.connect",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}
