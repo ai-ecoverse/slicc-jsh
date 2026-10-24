@@ -1,0 +1,7 @@
+a socket's close handler, destroyed in its data callback | timeout 0, immediate
+a socket's close handler's promise continuation, closed after the pending immediate | pending immediate, timeout 0, immediate
+a socket's close handler's nextTick, closed after the pending immediate | pending immediate, timeout 0, immediate
+a socket's close handler, closed after the pending immediate | pending immediate, timeout 0, immediate
+a socket's close handler, destroyed in an immediate | timeout 0, immediate
+a socket's close handler, destroyed in a timer | timeout 0, immediate
+done
