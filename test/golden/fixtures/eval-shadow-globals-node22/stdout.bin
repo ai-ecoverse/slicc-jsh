@@ -1,0 +1,70 @@
+== ["-e","const { setTimeout } = require(\"timers/promises\"); (async () => { await setTimeout(5); console.log(\"awaited\"); setImmediate(() => console.log(\"immediate\")) })()"]: status 0 
+awaited
+immediate
+== [] < "const { setTimeout } = require(\"timers/promises\"); (async () => { await setTimeout(5); console.log(\"awaited\"); setImmediate(() => console.log(\"immediate\")) })()": status 0 
+awaited
+immediate
+== ["-e","let setTimeout = 2; require(\"fs\").readFile(\"data.txt\", \"utf8\", (e, s) => { console.log(\"read\", s.trim(), typeof setTimeout); setInterval(function () { console.log(\"interval\"); clearInterval(this) }, 1) })"]: status 0 
+read hello number
+interval
+== [] < "let setTimeout = 2; require(\"fs\").readFile(\"data.txt\", \"utf8\", (e, s) => { console.log(\"read\", s.trim(), typeof setTimeout); setInterval(function () { console.log(\"interval\"); clearInterval(this) }, 1) })": status 0 
+read hello number
+interval
+== ["-e","const process = { fake: true }; globalThis.process.stdout.write(\"fake \" + process.fake + \"\\n\"); require(\"zlib\").gzip(\"x\", (e, b) => { globalThis.process.stdout.write(\"gzip \" + require(\"zlib\").gunzipSync(b) + \"\\n\"); globalThis.setTimeout(() => globalThis.process.stdout.write(\"timer\\n\"), 1) })"]: status 0 
+fake true
+gzip x
+timer
+== [] < "const process = { fake: true }; globalThis.process.stdout.write(\"fake \" + process.fake + \"\\n\"); require(\"zlib\").gzip(\"x\", (e, b) => { globalThis.process.stdout.write(\"gzip \" + require(\"zlib\").gunzipSync(b) + \"\\n\"); globalThis.setTimeout(() => globalThis.process.stdout.write(\"timer\\n\"), 1) })": status 0 
+fake true
+gzip x
+timer
+== ["-e","const Buffer = 1; require(\"stream\").Readable.from([\"a\", \"b\"]).on(\"data\", (d) => console.log(\"data\", String(d))).on(\"end\", () => console.log(\"end\", typeof Buffer, require(\"buffer\").Buffer.from(\"hi\").toString(\"hex\")))"]: status 0 
+data a
+data b
+end number 6869
+== [] < "const Buffer = 1; require(\"stream\").Readable.from([\"a\", \"b\"]).on(\"data\", (d) => console.log(\"data\", String(d))).on(\"end\", () => console.log(\"end\", typeof Buffer, require(\"buffer\").Buffer.from(\"hi\").toString(\"hex\")))": status 0 
+data a
+data b
+end number 6869
+== ["-e","const queueMicrotask = null; Promise.resolve().then(() => console.log(\"then\")); process.nextTick(() => console.log(\"tick\")); setImmediate(() => { console.log(\"immediate\"); require(\"fs\").promises.readFile(\"data.txt\", \"utf8\").then((s) => console.log(\"fsp\", s.trim())) })"]: status 0 
+tick
+then
+immediate
+fsp hello
+== [] < "const queueMicrotask = null; Promise.resolve().then(() => console.log(\"then\")); process.nextTick(() => console.log(\"tick\")); setImmediate(() => { console.log(\"immediate\"); require(\"fs\").promises.readFile(\"data.txt\", \"utf8\").then((s) => console.log(\"fsp\", s.trim())) })": status 0 
+tick
+then
+immediate
+fsp hello
+== ["-e","const Promise = 5; (async () => { await null; console.log(\"async\"); const s = await require(\"fs/promises\").readFile(\"data.txt\", \"utf8\"); console.log(\"fsp\", s.trim(), typeof Promise); await require(\"timers/promises\").setTimeout(1); console.log(\"timers/promises\") })()"]: status 0 
+async
+fsp hello number
+timers/promises
+== [] < "const Promise = 5; (async () => { await null; console.log(\"async\"); const s = await require(\"fs/promises\").readFile(\"data.txt\", \"utf8\"); console.log(\"fsp\", s.trim(), typeof Promise); await require(\"timers/promises\").setTimeout(1); console.log(\"timers/promises\") })()": status 0 
+async
+fsp hello number
+timers/promises
+== ["-e","const console = { log() {} }; globalThis.process.stdout.write(\"before\\n\"); new (require(\"console\").Console)(globalThis.process.stdout).log(\"own console\", require(\"util\").inspect({ a: 1 })); setTimeout(() => globalThis.process.stdout.write(\"timer\\n\"), 1)"]: status 0 
+before
+own console { a: 1 }
+timer
+== [] < "const console = { log() {} }; globalThis.process.stdout.write(\"before\\n\"); new (require(\"console\").Console)(globalThis.process.stdout).log(\"own console\", require(\"util\").inspect({ a: 1 })); setTimeout(() => globalThis.process.stdout.write(\"timer\\n\"), 1)": status 0 
+before
+own console { a: 1 }
+timer
+== ["-e","const Object = 1, Array = 2, Error = 3, JSON = 4, Symbol = 5, Map = 6; require(\"stream\").Readable.from([\"x\"]).pipe(require(\"zlib\").createGzip()).pipe(require(\"zlib\").createGunzip()).on(\"data\", (d) => console.log(\"piped\", String(d))).on(\"end\", () => setTimeout(() => console.log(\"timer\", typeof Object), 1))"]: status 0 
+piped x
+timer number
+== [] < "const Object = 1, Array = 2, Error = 3, JSON = 4, Symbol = 5, Map = 6; require(\"stream\").Readable.from([\"x\"]).pipe(require(\"zlib\").createGzip()).pipe(require(\"zlib\").createGunzip()).on(\"data\", (d) => console.log(\"piped\", String(d))).on(\"end\", () => setTimeout(() => console.log(\"timer\", typeof Object), 1))": status 0 
+piped x
+timer number
+== ["-e","const setImmediate = 0, clearTimeout = 0, structuredClone = 0, TextDecoder = 0, TextEncoder = 0, URL = 0; require(\"http\").createServer((q, s) => s.end(\"ok\")).listen(0, function () { require(\"http\").get(`http://127.0.0.1:${this.address().port}/`, (res) => { res.setEncoding(\"utf8\"); res.on(\"data\", (d) => { console.log(\"http\", d); this.close() }) }) })"]: status 0 
+http ok
+== [] < "const setImmediate = 0, clearTimeout = 0, structuredClone = 0, TextDecoder = 0, TextEncoder = 0, URL = 0; require(\"http\").createServer((q, s) => s.end(\"ok\")).listen(0, function () { require(\"http\").get(`http://127.0.0.1:${this.address().port}/`, (res) => { res.setEncoding(\"utf8\"); res.on(\"data\", (d) => { console.log(\"http\", d); this.close() }) }) })": status 0 
+http ok
+== ["-e","const globalThis = { fake: 1 }; require(\"crypto\").randomBytes(4, (e, b) => { console.log(\"random\", b.length); setTimeout(() => console.log(\"timer\", globalThis.fake), 1) })"]: status 0 
+random 4
+timer 1
+== [] < "const globalThis = { fake: 1 }; require(\"crypto\").randomBytes(4, (e, b) => { console.log(\"random\", b.length); setTimeout(() => console.log(\"timer\", globalThis.fake), 1) })": status 0 
+random 4
+timer 1

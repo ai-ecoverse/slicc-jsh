@@ -32,6 +32,7 @@ import { createWebSocket } from './web/websocket.mjs';
 import { createPorts } from './web/broadcast-channel.mjs';
 import { installPromiseState } from './node-bindings.mjs';
 import { setupChildChannel } from './builtins/ipc-channel.mjs';
+import { shadowsGlobal, undoHostArrow } from './builtins/vm.mjs';
 import { createRemotePorts, mailboxSerdes } from './web/remote-ports.mjs';
 import { createMessageEvent, installMessageEvent } from './web/message-event.mjs';
 
@@ -822,6 +823,7 @@ export async function runNode(ctx, options = {}) {
     return undefined;
   };
 
+  const runScript = (source, filename) => ctx.sync.runScript?.(source, { filename });
   const evaluate = (code, evalName) => {
     // --input-type, else Node's detect-module: CJS unless ESM-only syntax
     // (not mere import()).
@@ -845,10 +847,9 @@ export async function runNode(ctx, options = {}) {
         if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
         flushTicks();
       } else {
-        const evalParent = `${process.cwd()}/${evalName}`;
-        const require = cjs.makeRequire(evalParent);
-        const exports = {};
-        const module = { exports, id: evalName };
+        const { module, require } = cjs.evalModule(evalName);
+        const evalParent = module.filename;
+        const { exports } = module;
         // Dynamic import() is valid in CJS; rewrite to the kernel loader
         // (host import() cannot see the in-memory FS).
         const {
@@ -857,7 +858,7 @@ export async function runNode(ctx, options = {}) {
         } = rewriteDynamicImports(code, { callee: EVAL_IMPORT });
         const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
         const args = ['exports', 'require', 'module', '__filename', '__dirname'];
-        const values = [exports, require, module, evalName, process.cwd()];
+        const values = [exports, require, module, evalName, '.'];
         if (hasImport) globalThis[kEvalImport] = dynImport;
         const report = syntaxReport(code, { kind: 'script', filename: evalName });
         if (report) {
@@ -866,11 +867,20 @@ export async function runNode(ctx, options = {}) {
           err.stack = report.stack;
           throw err;
         }
+        const body = cjsCode.startsWith('#!') ? `//${cjsCode.slice(2)}` : cjsCode;
         const run = () => {
           args.forEach((name, i) => {
             globalThis[name] = values[i];
           });
-          return (0, eval)(`\n\n${cjsCode}\n//# sourceURL=${evalName}`);
+          let script;
+          try {
+            if (!shadowsGlobal(code)) script = runScript(`\n\n${body}`, evalName);
+          } catch (err) {
+            undoHostArrow(err, runScript);
+            throw err;
+          }
+          if (script !== undefined) return script.value;
+          return (0, eval)(`\n\n${body}\n//# sourceURL=${evalName}`);
         };
         mainBegin();
         let result;
@@ -1075,42 +1085,8 @@ export async function runNode(ctx, options = {}) {
         }
         return 0;
       }
-      if (parsed.print) {
-        const status = evaluate(source, '[stdin]');
-        if (status !== undefined) return status;
-      } else {
-        const asEsm = inputType ? inputType === 'module' : shouldRunAsEsm(source);
-        try {
-          if (asEsm) {
-            uncaughtFromEsm = true;
-            mainBegin();
-            let result;
-            try {
-              result = esm.runEsmEval(source, `${process.cwd().replace(/\/$/, '')}/[eval1]`);
-            } finally {
-              mainEnd();
-            }
-            uncaughtFromEsm = false;
-            if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
-          } else {
-            // Node: __filename is `[stdin]`; require.main is unset for piped scripts.
-            mainBegin();
-            try {
-              cjs.runMain('[stdin]', source, { setMain: false });
-            } finally {
-              mainEnd();
-            }
-          }
-          flushTicks();
-        } catch (err) {
-          if (isExitError(err)) throw err;
-          if (handleUncaught(err)) {
-            uncaughtFromEsm = false;
-          } else {
-            return dieUncaught(() => printUncaught(err));
-          }
-        }
-      }
+      const status = evaluate(source, '[stdin]');
+      if (status !== undefined) return status;
     } else if (parsed.mode === 'eval') {
       // -i with -e / -p: the REPL starts, then the code runs (Node's order).
       if (parsed.interactive) {

@@ -573,10 +573,19 @@ export function createCjs({
     return mod.exports;
   }
 
+  function evalModule(name) {
+    const mod = new Module(name, null);
+    mod.filename = path.join(process.cwd(), name);
+    mod.paths = nodeModulePaths(process.cwd());
+    mainModule = undefined;
+    return { module: mod, require: makeRequire(mod.filename, mod) };
+  }
+
   return {
     Module,
     createRequire: Module.createRequire,
     runMain,
+    evalModule,
     makeRequire,
     loadFile,
     /** node -r / --require: a module loaded before the entry, from the working directory (require stack: internal/preload). */
