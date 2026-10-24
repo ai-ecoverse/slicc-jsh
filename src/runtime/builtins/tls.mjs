@@ -27,6 +27,7 @@ import { deprecate } from './util.mjs';
 import { kConnectTls, kDetach, kDropHandshake, kIoError, kIpc, kServesTls, kStartNow, kStartTls, kTlsSession } from './net.mjs';
 import { certificateObject, isIssuedBy, likelyIssued, parseCertificate } from './x509.mjs';
 import { lockedKeyError } from './tls-key.mjs';
+import { ERRNO } from '../node-bindings.mjs';
 
 // tls.connect's options on its socket (Node's kConnectOptions).
 const kConnectOptions = Symbol('slicc-jsh.tls.connectOptions');
@@ -1013,6 +1014,9 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
     const code = err?.code ?? err?.cause?.code;
     const detail = String(err?.detail ?? err?.cause?.detail ?? '');
     if (code === 'ERR_TLS_HANDSHAKE_TIMEOUT') return nodeError(Error, code, 'TLS handshake timeout');
+    if (code === 'ECONNRESET' && /\bread ECONNRESET\b/.test(detail)) {
+      return Object.assign(new Error('read ECONNRESET'), { errno: -ERRNO.ECONNRESET, code, syscall: 'read' });
+    }
     for (const [pattern, id, reason] of SERVER_FAILURES) if (pattern.test(detail)) return sslReason(id, reason);
     if (code === 'ERR_OSSL_CRYPTO_INTERRUPTED_OR_CANCELLED') return osslError('ERR_OSSL_BAD_DECRYPT');
     if (typeof code === 'string' && Object.hasOwn(OSSL_ERRORS, code)) return osslError(code);

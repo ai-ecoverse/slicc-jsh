@@ -1,0 +1,6 @@
+{
+  "description": "a tls.Server or https.Server whose client resets during the handshake gets tlsClientError with Node 22's read ECONNRESET, errno and syscall read (slicc-kernel 1.159.4, ai-ecoverse/slicc-kernel#1578); one whose client closes gets socket hang up",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}
