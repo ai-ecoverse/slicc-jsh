@@ -18,7 +18,8 @@ c callback null
 client read: the child ended a
 client read: the child ended b
 client read: the child ended c
-connections null 3
+the child closed a, b, c
+connections null 2
 close called, listening false
 the clients end
 the server closed
