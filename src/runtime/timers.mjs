@@ -5,6 +5,7 @@
  */
 
 import { currentFrame, runInFrame } from './async-context.mjs';
+import { createMinHeap } from './min-heap.mjs';
 
 function Timeout() {}
 function Immediate() {}
@@ -178,6 +179,7 @@ export function createTimers(
         state.due = Date.now() + state.delay;
         state.seq = made++;
         state.timers = checkGen + 2;
+        indexTimeout(state);
       }
       checkPhase = false;
       closePhaseRan = false;
@@ -212,6 +214,7 @@ export function createTimers(
     state.due = Date.now() + state.delay;
     state.id = repeating ? nativeSetInterval(fire, delay ?? 0) : nativeSetTimeout(fire, delay ?? 0);
     byId.set(state.id, state);
+    indexTimeout(state);
     handles.add(state);
     return handle;
   };
@@ -242,16 +245,21 @@ export function createTimers(
       }
       if (held && (closeTimer || holdImmediate(state.seq) || (state.nextCheck && timersFirst(state.check)) || (inCheck && waitingBefore(state.seq)))) {
         state.retry = nativeSetTimeout(fire, 0);
+        if (inCheck && !state.retrying) {
+          state.retrying = true;
+          retrying.push(state);
+        }
         return;
       }
       state.retry = null;
+      state.retrying = false;
       byId.delete(state.id);
       handles.delete(state);
       check.delete(state);
       endPhase();
       if (inCheck) {
         if (state.seq >= checkCut) checkCut = made;
-        if (state.check > checkGen) checkGen = state.check;
+        if (state.check > checkGen) advance(state.check);
         checkPhase = true;
       }
       try {
@@ -263,30 +271,64 @@ export function createTimers(
     state.seq = made++;
     state.id = nativeSetTimeout(fire, 0);
     byId.set(state.id, state);
+    if (inCheck) indexImmediate(pendingImmediates, state);
     handles.add(state);
     return handle;
   };
 
+  const live = (state) => byId.get(state.id) === state;
+  const pendingImmediates = createMinHeap((a, b) => a.seq < b.seq);
+  const retrying = createMinHeap((a, b) => a.seq < b.seq);
+  const validRetry = (state) => state.retrying && live(state);
+  const indexImmediate = (heap, state) => {
+    heap.push(state);
+    if (heap.size > 64 && heap.size > 2 * byId.size) heap.keep(live);
+  };
+  const byDue = (a, b) => a.due < b.due;
+  let pastTimeouts = createMinHeap(byDue);
+  const nextTimeouts = new Map();
+  const validTimeout = (entry) => live(entry.state) && entry.state.due === entry.due && entry.state.timers === entry.timers;
+  const timeoutHeap = (timers) => {
+    if (timers <= checkGen) return pastTimeouts;
+    let heap = nextTimeouts.get(timers);
+    if (!heap) nextTimeouts.set(timers, (heap = createMinHeap(byDue)));
+    return heap;
+  };
+  const indexTimeout = (state) => {
+    const heap = timeoutHeap(state.timers);
+    heap.push({ state, due: state.due, timers: state.timers });
+    if (heap.size > 64 && heap.size > 2 * byId.size) heap.keep(validTimeout);
+  };
+  const advance = (gen) => {
+    checkGen = gen;
+    for (let [timers, heap] of nextTimeouts) {
+      if (timers > gen) continue;
+      nextTimeouts.delete(timers);
+      if (heap.size > pastTimeouts.size) [heap, pastTimeouts] = [pastTimeouts, heap];
+      for (const entry of heap.drain()) pastTimeouts.push(entry);
+    }
+  };
+  const firstImmediate = () => pendingImmediates.top(live);
   const pendingBefore = (cut) => {
-    for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < cut) return true;
-    return false;
+    const first = firstImmediate();
+    return first !== undefined && first.seq < cut;
   };
   const immediatesFirst = (timers) => {
-    for (const state of byId.values()) {
-      if (state.kind === 'Immediate' && state.inCheck && state.check < timers && !holdImmediate(state.seq)) return true;
-    }
-    return false;
+    const first = firstImmediate();
+    return first !== undefined && first.check < timers && !holdImmediate(first.seq);
   };
   const waitingBefore = (seq) => {
-    for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < seq && state.retry !== null) return true;
-    return false;
+    const first = retrying.top(validRetry);
+    return first !== undefined && first.seq < seq;
   };
   const timersFirst = (check) => {
-    const now = Date.now();
-    for (const state of byId.values()) {
-      if (state.kind === 'Timeout' && state.due <= now && state.timers <= check && !hold(state.due)) return true;
+    let first = pastTimeouts.top(validTimeout);
+    for (const [timers, heap] of nextTimeouts) {
+      if (timers > check) continue;
+      const entry = heap.top(validTimeout);
+      if (entry && (!first || entry.due < first.due)) first = entry;
     }
-    return false;
+    return first !== undefined && first.due <= Date.now() && !hold(first.due);
   };
   let looping = false;
   const closing = [];
@@ -315,6 +357,7 @@ export function createTimers(
       handles.delete(state);
       check.delete(state);
       held.delete(state);
+      state.retrying = false;
       if (state.retry) nativeClearTimeout(state.retry);
       if (closing.length > 0) scheduleClose();
     }
@@ -368,10 +411,7 @@ export function createTimers(
     endPhase,
     checkCut: () => checkCut,
     timerAt: () => timerAt,
-    immediatePending(cut = Infinity) {
-      for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < cut) return true;
-      return false;
-    },
+    immediatePending: (cut = Infinity) => pendingBefore(cut),
     /** @internal A message ports' turn ended: its check phase is the immediates pending now. */
     startCheck() {
       check.clear();
@@ -388,6 +428,10 @@ export function createTimers(
       }
       byId.clear();
       held.clear();
+      pendingImmediates.drain();
+      retrying.drain();
+      pastTimeouts = createMinHeap(byDue);
+      nextTimeouts.clear();
       handles.notify();
     },
     /** @internal The loop's final drain: no timer or immediate runs. */
