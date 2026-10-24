@@ -946,7 +946,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
       return noTls(what, "the kernel upgrades only a plain connection its uplink routes");
     }
     if (code === 'EINVAL') return noTls(what, `the kernel's TLS refuses the server name (${err?.detail ?? 'not a host name'})`);
-    if (code === 'ECONNRESET') return handshakeReset(options);
+    if (code === 'ECONNRESET') return readReset(err) ?? handshakeReset(options);
     if (typeof code === 'string' && Object.hasOwn(VERIFY_MESSAGES, code)) {
       return Object.assign(new Error(VERIFY_MESSAGES[code]), { code });
     }
@@ -1010,13 +1010,19 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
     return Object.assign(err, { library: 'SSL routines', reason, code: `ERR_SSL_${reason.toUpperCase().replaceAll(' ', '_')}` });
   }
 
+  function readReset(err) {
+    const code = err?.code ?? err?.cause?.code;
+    const detail = String(err?.detail ?? err?.cause?.detail ?? '');
+    if (code !== 'ECONNRESET' || !/\bread ECONNRESET\b/.test(detail)) return undefined;
+    return Object.assign(new Error('read ECONNRESET'), { errno: -ERRNO.ECONNRESET, code, syscall: 'read' });
+  }
+
   function serverRefusal(err) {
     const code = err?.code ?? err?.cause?.code;
     const detail = String(err?.detail ?? err?.cause?.detail ?? '');
     if (code === 'ERR_TLS_HANDSHAKE_TIMEOUT') return nodeError(Error, code, 'TLS handshake timeout');
-    if (code === 'ECONNRESET' && /\bread ECONNRESET\b/.test(detail)) {
-      return Object.assign(new Error('read ECONNRESET'), { errno: -ERRNO.ECONNRESET, code, syscall: 'read' });
-    }
+    const reset = readReset(err);
+    if (reset) return reset;
     for (const [pattern, id, reason] of SERVER_FAILURES) if (pattern.test(detail)) return sslReason(id, reason);
     if (code === 'ERR_OSSL_CRYPTO_INTERRUPTED_OR_CANCELLED') return osslError('ERR_OSSL_BAD_DECRYPT');
     if (typeof code === 'string' && Object.hasOwn(OSSL_ERRORS, code)) return osslError(code);

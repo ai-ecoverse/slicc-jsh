@@ -1,0 +1,12 @@
+tls.connect, the server resets on the ClientHello
+  error {"name":"Error","message":"read ECONNRESET","code":"ECONNRESET","errno":true,"syscall":"read","keys":["errno","code","syscall"]}
+  close true
+https.request, the server resets on the ClientHello
+  error {"name":"Error","message":"read ECONNRESET","code":"ECONNRESET","errno":true,"syscall":"read","keys":["errno","code","syscall"]}
+  close
+tls.connect, the server ends on the ClientHello
+  error {"name":"Error","message":"Client network socket disconnected before secure TLS connection was established","code":"ECONNRESET","keys":["code","path","host","port","localAddress"]}
+  close true
+https.request, the server ends on the ClientHello
+  error {"name":"Error","message":"Client network socket disconnected before secure TLS connection was established","code":"ECONNRESET","keys":["code","path","host","port","localAddress"]}
+  close
