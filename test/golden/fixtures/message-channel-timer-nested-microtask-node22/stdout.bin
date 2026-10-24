@@ -1,0 +1,7 @@
+posted by the timer: mc x | timer 0
+posted by the timer's microtask: mc x | timer 0
+posted two microtasks down: mc x | timer 0
+posted three microtasks down: mc x | timer 0
+posted after an await: mc x | timer 0
+posted after two awaits: mc x | timer 0
+posted from a then: mc x | timer 0

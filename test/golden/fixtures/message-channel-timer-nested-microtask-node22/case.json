@@ -1,0 +1,5 @@
+{
+  "description": "#704: a message posted from a timer's microtasks, nested a few deep (queueMicrotask, await, then), is part of the timer's task, as in Node 22: its turn comes in the same iteration's poll phase, before a setTimeout(0) the timer set",
+  "argv": ["script.js"],
+  "shim": true
+}
