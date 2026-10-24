@@ -228,7 +228,7 @@ export function createTimers(
       retry: null,
       repeating: false,
       inCheck,
-      nextCheck: inCheck && checkPhase,
+      nextCheck: inCheck && (checkPhase || closePhaseRan),
       check: checkGen + 1,
     };
     const handle = new Immediate();
