@@ -605,7 +605,7 @@ export function createCjs({
       return loadFile(resolved.filename, preloadParent);
     },
     /** The entry's file (an absolute path): as given, else with an extension, or a directory's main; null when there is none. */
-    resolveMain: (filename) => resolver.loadAsFileOrDir(filename, true),
+    resolveMain: (filename) => resolver.loadAsFileOrDir(filename),
     setRequireEsmHook,
     setImportModuleHook,
     findPackageType,

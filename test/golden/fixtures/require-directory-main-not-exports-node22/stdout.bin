@@ -1,0 +1,5 @@
+./dir -> dir main dir/m.js
+./only-exports -> only-exports index only-exports/index.js
+<abs>/dir -> dir main dir/m.js
+with-exports -> package exports node_modules/with-exports/e.js
+plain/sub -> sub main node_modules/plain/sub/m.js

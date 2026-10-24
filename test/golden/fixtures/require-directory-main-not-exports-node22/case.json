@@ -1,0 +1,7 @@
+{
+  "description": "a directory required by path, or a package's subdirectory, resolves to its package.json main (else index), never its exports; a package from node_modules still resolves through its exports",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true
+}
