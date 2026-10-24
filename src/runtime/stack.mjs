@@ -690,7 +690,7 @@ export function installStackPrepare() {
   }
 
   const setOwn = (target, fn) =>
-    Object.defineProperty(target, 'prepareStackTrace', { value: fn, writable: true, enumerable: true, configurable: true });
+    Reflect.defineProperty(target, 'prepareStackTrace', { value: fn, writable: true, enumerable: true, configurable: true });
   const own = {
     configurable: true,
     enumerable: false,

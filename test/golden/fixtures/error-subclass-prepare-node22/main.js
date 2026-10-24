@@ -9,3 +9,6 @@ console.log(new Error('z').stack, new TypeError('t').stack, RangeError.prepareSt
 delete Error.prepareStackTrace;
 TypeError.prepareStackTrace = () => 'type';
 console.log(Object.keys(TypeError), new Error('w').stack.split('\n')[0]);
+const frozen = Object.freeze(Object.create(Error));
+frozen.prepareStackTrace = 1;
+console.log(Object.hasOwn(frozen, 'prepareStackTrace'), new Error('v').stack.split('\n')[0]);
