@@ -1,0 +1,16 @@
+keepOpen: the child wrote for keepOpen
+keepOpen: send callback null
+keepOpen: the child read "the client wrote to keepOpen"
+keepOpen: connections 2, the parent's socket destroyed false
+keepOpen: the parent's write null
+keepOpen: the client read "the child wrote for keepOpen\nthe parent wrote\n"
+keepOpen: the server closed
+handed over: the child wrote for handed over
+handed over: send callback null
+handed over: the child read "the client wrote to handed over"
+handed over: connections 0, the parent's socket destroyed false
+handed over: the parent's write ERR_SOCKET_CLOSED
+handed over: the parent's socket error ERR_SOCKET_CLOSED
+handed over: the client read "the child wrote for handed over\n"
+handed over: the server closed
+child exit 0

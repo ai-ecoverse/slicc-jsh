@@ -1,0 +1,14 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#538: child_process.fork's send(message, server): the child gets a listening net.Server and accepts on it after the parent closed its copy; an Express app listens on a passed server (app.listen(handle)); the child's process.send passes a server of its own to the parent",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "packages": ["express"],
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

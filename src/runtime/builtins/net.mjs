@@ -75,6 +75,11 @@ export const kStartNow = Symbol('slicc-jsh.net.startNow');
 export const kIoError = Symbol('slicc-jsh.net.ioError');
 export const kServesTls = Symbol('slicc-jsh.net.servesTls');
 export const kDropHandshake = Symbol('slicc-jsh.net.dropHandshake');
+export const kIpc = Symbol('slicc-jsh.net.ipc');
+const kConn = Symbol('slicc-jsh.net.conn');
+const kListener = Symbol('slicc-jsh.net.listener');
+const kOwner = Symbol('slicc-jsh.net.owner');
+const kLend = Symbol('slicc-jsh.net.lend');
 
 function dropping(tls, conn) {
   if (typeof tls?.select !== 'function') return tls;
@@ -194,6 +199,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         }
         return origEmit(event, ...args);
       };
+      const adopted = options.handle instanceof TCP ? options.handle[kConn] : undefined;
+      if (adopted) this._attach(adopted, { quiet: true });
     }
 
     get remoteAddress() {
@@ -220,7 +227,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #refed = true;
     ref() {
       this.#refed = true;
-      if (this.#handle && !this.#readableEof && !this.#readPaused) handles.add(this.#handle);
+      if (this.#handle && !this.#readableEof && !this.#readPaused && !this.#lazyRead) handles.add(this.#handle);
       return this;
     }
     unref() {
@@ -272,7 +279,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     /** Bind an already-open kernel connection (server accept path). */
-    _attach(conn, { quiet = false, deferRead = false } = {}) {
+    _attach(conn, { quiet = false, deferRead = false, paused = false } = {}) {
       this.#handled = true;
       this.#conn = conn;
       this.#remoteAddress = conn.remote?.host;
@@ -284,12 +291,17 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#writer = conn.writable.getWriter();
       this.#reader = conn.readable.getReader();
       this.#handle = { kind: 'socket', fd: conn.fd };
-      handles.add(this.#handle);
-      if (!deferRead) void this.#pumpRead();
-      else {
-        nextTick(() => {
-          if (!this.#detached && this.#reader) void this.#pumpRead();
-        });
+      if (paused) {
+        this.#lazyRead = true;
+        this.readableFlowing = false;
+      } else {
+        handles.add(this.#handle);
+        if (!deferRead) void this.#pumpRead();
+        else {
+          nextTick(() => {
+            if (!this.#detached && this.#reader) void this.#pumpRead();
+          });
+        }
       }
       if (quiet) return;
       makeCallback(process, this.#resource, this.#emitConnect, this);
@@ -682,14 +694,49 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     _read() {
+      if (this.#lazyRead) {
+        this.#lazyRead = false;
+        if (this.#refed) handles.add(this.#handle);
+        void this.#pumpRead();
+      }
       this.#wantRead();
       this.emit('drain-read');
+    }
+
+    #lazyRead = false;
+    #handedOff = false;
+
+    [kIpc](keepOpen) {
+      if (this.destroyed || !this.#conn || this.#detached) return undefined;
+      const conn = this.#conn;
+      const server = this[kServer];
+      if (!keepOpen) {
+        this.#detached = true;
+        this.#handedOff = true;
+        this.#lazyRead = false;
+        this.setTimeout(0);
+        this.#wantRead();
+        this.#reader?.releaseLock();
+        this.#writer?.releaseLock();
+        this.#reader = undefined;
+        this.#writer = undefined;
+        if (this.#readHold) handles.delete(this.#readHold);
+        this.#readHold = null;
+        this.#dropHandle();
+        this[kServer] = undefined;
+        server?.[kServer](false);
+      }
+      return { handle: connHandle(conn), server, tls: this.#tls || Boolean(conn.tls) };
     }
 
     _write(chunk, encoding, callback) {
       if (this.#idleTimer) this._touch();
       const bytes = toBytes(chunk, encoding);
       if (this.#kept) return;
+      if (this.#handedOff) {
+        callback(nodeError(Error, 'ERR_SOCKET_CLOSED', 'Socket is closed'));
+        return;
+      }
       if (!this.#writer) {
         if (this.#connecting && this.#tls) {
           this.#pending.push({ bytes, callback: () => {} });
@@ -984,6 +1031,90 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
   }
 
+  const handleOps = (it, address) => {
+    let closing;
+    return {
+      address,
+      close(callback) {
+        closing ??= trackPromise(handles, Promise.resolve(it.close()).catch(() => {}));
+        if (typeof callback === 'function') closing.then(() => nextTick(callback));
+      },
+      closed: () => closing !== undefined,
+      ref() {},
+      unref() {},
+      hasRef: () => false,
+    };
+  };
+
+  function connHandle(conn) {
+    const tcp = new TCP(conn.fd, handleOps(conn, () => ({ address: conn.local?.host, family: 'IPv4', port: conn.local?.port })));
+    tcp[kConn] = conn;
+    return tcp;
+  }
+
+  async function adoptHandle(fd) {
+    const it = await ctx.net.adopt(fd);
+    return typeof it.accept === 'function' ? listenerHandle(it) : connHandle(it);
+  }
+
+  function listenerHandle(it) {
+    const tcp = new TCP(it.fd, handleOps(it, () => ({ address: it.host, family: 'IPv4', port: it.port })));
+    tcp[kListener] = it;
+    return tcp;
+  }
+
+  function queueListener(sockname) {
+    const queued = [];
+    const waiting = [];
+    let closed = false;
+    return {
+      fd: -1,
+      host: sockname?.address,
+      port: sockname?.port,
+      push(tcp) {
+        const conn = tcp[kConn];
+        if (closed || !conn) return tcp.close();
+        const next = waiting.shift();
+        if (next) next.resolve(conn);
+        else queued.push(conn);
+      },
+      accept({ signal } = {}) {
+        if (queued.length > 0) return Promise.resolve(queued.shift());
+        return new Promise((resolve, reject) => {
+          const entry = { resolve };
+          waiting.push(entry);
+          signal?.addEventListener(
+            'abort',
+            () => {
+              waiting.splice(waiting.indexOf(entry), 1);
+              reject(signal.reason);
+            },
+            { once: true }
+          );
+        });
+      },
+      close() {
+        closed = true;
+        for (const conn of queued.splice(0)) closeQuietly(conn);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  function passedListener(reply) {
+    if (reply.cancelled || reply.errno) return { reply };
+    if (reply.handle) return { reply, listener: reply.handle[kListener] };
+    const listener = queueListener(reply.sockname);
+    reply.accept(listener.push);
+    return { reply, listener };
+  }
+
+  const listenHandleOf = (arg) => {
+    if (arg instanceof TCP) return arg;
+    if (arg?._handle instanceof TCP) return arg._handle;
+    return arg?.handle instanceof TCP ? arg.handle : undefined;
+  };
+
   class Server extends EventEmitter {
     #listener;
     #listening = false;
@@ -1003,6 +1134,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     #generation = 0;
     #handleClosed;
     _handle = null;
+    _usingWorkers = false;
+    _workers = [];
     maxConnections = Infinity;
 
     constructor(options, connectionListener) {
@@ -1013,6 +1146,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       }
       this.#options = options ?? {};
       this.allowHalfOpen = this.#options.allowHalfOpen || false;
+      this.pauseOnConnect = !!this.#options.pauseOnConnect;
       if (connectionListener) this.on('connection', connectionListener);
     }
 
@@ -1043,6 +1177,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         queueMicrotask(() => this.emit('error', err));
         return this;
       }
+      const tcp = listenHandleOf(args[0]);
+      if (tcp) return this.#listenOn(tcp, typeof args.at(-1) === 'function' ? args.at(-1) : undefined);
       if (parsed.callback) this.once('listening', parsed.callback);
       if (typeof parsed.fd === 'number') {
         nextTick(() => this.emit('error', errnoError({ code: 'EINVAL' }, 'listen')));
@@ -1054,13 +1190,16 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#acceptAbort = new AbortController();
       const host = parsed.host ?? '127.0.0.1';
       const port = parsed.port ?? 0;
-      // A cluster worker's server (cluster.mjs): it listens on a loopback
-      // port of its own, and the primary listens where it asked, joining
-      // each connection to it.
+      this._connectionKey = parsed.host ? `${isIP(host) || 4}:${host}:${port}` : `6:::${port}`;
+      // A cluster worker's server (cluster.mjs): the primary listens where
+      // it asked and hands it each connection or the listener; on a kernel
+      // that can't pass a descriptor, it listens on a loopback port of its
+      // own, and the primary joins each connection to it.
       const cluster = !parsed.exclusive && process?._clusterWorker;
       if (!cluster) {
         const bindAt = (address) => {
           if (generation !== this.#generation) return;
+          if (parsed.host) this._connectionKey = `${isIP(address) || 4}:${address}:${port}`;
           const options = { port, host: address, backlog: parsed.backlog };
           if (port > 0 && releasing.has(port)) {
             this.#listenAsync(generation, releasing.get(port).then(() => ctx.net.listen(options)), false, port);
@@ -1082,16 +1221,16 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         }
         return this;
       }
+      const query = { address: parsed.host ?? null, port, addressType: 4, fd: -1 };
+      const asked = cluster._passesHandles?.()
+        ? cluster._getServer(this, query).then(passedListener)
+        : ctx.net.listen({ port: 0, host: '127.0.0.1', backlog: parsed.backlog }).then(async (listener) => ({
+            listener,
+            reply: await cluster._getServer(this, { ...query, proxy: { port: listener.port } }),
+          }));
       this.#listenAsync(
         generation,
-        ctx.net.listen({ port: 0, host: '127.0.0.1', backlog: parsed.backlog }).then(async (listener) => {
-          const reply = await cluster._getServer(this, {
-            address: parsed.host ?? null,
-            port,
-            addressType: 4,
-            fd: -1,
-            proxy: { port: listener.port },
-          });
+        asked.then(({ listener, reply }) => {
           if (reply.cancelled) {
             // The channel to the primary went first: no listening, as in Node.
             closeQuietly(listener);
@@ -1157,6 +1296,35 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       );
     }
 
+    #listenOn(tcp, callback) {
+      if (callback) this.once('listening', callback);
+      const listener = tcp[kListener];
+      if (!listener || tcp.getsockname({}) !== 0 || tcp[kOwner]?.[kLend](listener) === false) {
+        nextTick(() => this.emit('error', errnoError({ code: 'EINVAL' }, 'listen')));
+        return this;
+      }
+      this.#closed = false;
+      const generation = ++this.#generation;
+      this.#acceptAbort = new AbortController();
+      this.#bound(listener);
+      tcp[kOwner] = this;
+      this._connectionKey = '-1:null:-1';
+      nextTick(() => {
+        if (generation === this.#generation && this.#listener === listener) this.#announce();
+      });
+      return this;
+    }
+
+    [kLend](listener) {
+      if (this.#listener !== listener || this.#handleClosed === listener) return false;
+      this.#lent = listener;
+      this.#acceptAbort?.abort();
+      if (this.#handle) handles.delete(this.#handle);
+      return true;
+    }
+
+    #lent;
+
     #bound(listener) {
       this.#listener = listener;
       this.#listening = true;
@@ -1168,6 +1336,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         unref: () => this.unref(),
         hasRef: () => !this.#unref && !!this.#handle,
       });
+      this._handle[kListener] = listener;
+      this._handle[kOwner] = this;
       this.#handle = { kind: 'server', fd: listener.fd };
       if (!this.#unref) handles.add(this.#handle);
     }
@@ -1193,7 +1363,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       const resource = resourceHere();
       try {
         for (;;) {
-          if (this.#closed || this.#listener !== listener || this.#handleClosed === listener) break;
+          if (this.#closed || this.#listener !== listener || this.#handleClosed === listener || this.#lent === listener) break;
           // The server's handle keeps the loop alive (or not, unref'd): a
           // pending accept is not a handle of its own.
           const conn = await listener.accept({ signal: this.#acceptAbort.signal });
@@ -1204,12 +1374,12 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
           const socket = new Socket({ allowHalfOpen: Boolean(this.allowHalfOpen) });
           this.#connections++;
           socket[kServer] = this;
-          socket._attach(conn, { deferRead: this[kServesTls] === true });
+          socket._attach(conn, { deferRead: this[kServesTls] === true, paused: this.pauseOnConnect === true });
           makeCallback(process, resource, this.emit, this, ['connection', socket]);
           handles.notify();
         }
       } catch (err) {
-        if (!this.#closed && this.#listener === listener && this.#handleClosed !== listener && err?.name !== 'AbortError') {
+        if (!this.#closed && this.#listener === listener && this.#handleClosed !== listener && this.#lent !== listener && err?.name !== 'AbortError') {
           runInResource(resource, this.emit, this, ['error', errnoError(err, 'accept')]);
         }
       }
@@ -1271,7 +1441,16 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       // takes a process's requests in order, so a listen() on the same port
       // from the 'close' callback comes after this close.
       this.#listenerClosed = true;
-      this.#emitCloseIfDrained();
+      if (this._usingWorkers) {
+        let left = this._workers.length;
+        const onWorkerClose = () => {
+          if (--left !== 0) return;
+          this.#connections = 0;
+          this.#emitCloseIfDrained();
+        };
+        this.#connections++;
+        for (const worker of this._workers) worker.close(onWorkerClose);
+      } else this.#emitCloseIfDrained();
       return this;
     }
 
@@ -1302,9 +1481,15 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     /** One of this server's connections went (its socket's _destroy). */
-    [kServer]() {
+    [kServer](drained = true) {
       this.#connections--;
-      this.#emitCloseIfDrained();
+      if (drained) this.#emitCloseIfDrained();
+    }
+
+    _setupWorker(socketList) {
+      this._usingWorkers = true;
+      this._workers.push(socketList);
+      socketList.once('exit', (gone) => this._workers.splice(this._workers.indexOf(gone), 1));
     }
 
     #emitCloseIfDrained() {
@@ -1326,7 +1511,21 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
 
     getConnections(cb) {
       // Node's: the count, on a later tick.
-      if (typeof cb === 'function') nextTick(cb, null, this.#connections);
+      if (!this._usingWorkers) {
+        if (typeof cb === 'function') nextTick(cb, null, this.#connections);
+        return this;
+      }
+      let left = this._workers.length;
+      let total = this.#connections;
+      const oncount = (err, count) => {
+        if (err) {
+          left = -1;
+          return nextTick(cb, err);
+        }
+        total += count;
+        if (--left === 0) nextTick(cb, null, total);
+      };
+      for (const worker of this._workers) worker.getConnections(oncount);
       return this;
     }
   }
@@ -1350,7 +1549,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     return socket.connect(...args);
   }
 
-  return {
+  const exported = {
     Server,
     Socket,
     createServer,
@@ -1372,4 +1571,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       autoSelectFamilyAttemptTimeoutDefault = value < 10 ? 10 : value;
     },
   };
+  Object.defineProperty(exported, kIpc, {
+    value: { TCP, adopt: adoptHandle, listen: (options) => ctx.net.listen(options).then(listenerHandle) },
+  });
+  return exported;
 }

@@ -1,0 +1,13 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#538: child_process.fork's send(message, handle) with a handle that can't be sent: ERR_INVALID_HANDLE_TYPE for what is not a socket or a server; an unconnected or destroyed socket, and a server not listening or closed, send the message alone; a TLSSocket goes with no descriptor, the child refuses it (NODE_HANDLE_NACK) and the parent's resend throws ERR_INVALID_HANDLE_TYPE, as in Node",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

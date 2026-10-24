@@ -1,0 +1,13 @@
+send true
+send callback null
+parent got: child got a Server: net.Server true, listening true, port number
+the parent's copy is listening false
+the parent closed its copy
+client read: the child accepted an address
+the child closed its net server
+parent got: express listening true, on the passed port true
+express: 200 application/json; charset=utf-8 {"from":"child","name":"node"}
+the parent got a Server, listening true
+client read: the parent accepted on the child's server
+then: the child's send callback null
+child exit 0

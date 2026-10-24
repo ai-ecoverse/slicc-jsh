@@ -5,20 +5,22 @@
  * NODE_CLUSTER messages, with Node's events and states ('fork', 'online',
  * 'listening', 'message', 'disconnect', 'exit').
  *
- * A worker's server: in Node the primary listens and hands each connection
- * (round robin) or the listening socket to a worker, as a handle over the
- * IPC channel. The kernel can't pass a descriptor between processes, so here
- * the worker listens on a loopback port of its own, which it tells the
- * primary (queryServer's `proxy`); the primary listens where the worker
- * asked and joins each connection it accepts to the next worker's port. The
- * worker's server says the primary's address. What differs from Node: the
- * worker's socket sees the primary as its peer, and SCHED_NONE is round
- * robin too.
+ * A worker's server: the primary listens and hands each connection (round
+ * robin, round_robin_handle.js) or the listening socket (SCHED_NONE,
+ * shared_handle.js) to a worker, as a handle over the IPC channel, as in
+ * Node. On a kernel that can't pass a descriptor (the browser's), the worker
+ * listens on a loopback port of its own, which it tells the primary
+ * (queryServer's `proxy`); the primary listens where the worker asked and
+ * joins each connection it accepts to the next worker's port. The worker's
+ * server says the primary's address, its socket sees the primary as its
+ * peer, and SCHED_NONE is round robin too.
  *
  * Without fork (a kernel with no IPC channel), cluster is the primary that
  * can't fork: cluster.fork throws ERR_NOT_SUPPORTED, as before.
  */
 import { EventEmitter } from './events.mjs';
+import { kIpc } from './net.mjs';
+import { channelPassesHandles } from './ipc-channel.mjs';
 
 const SCHED_NONE = 1;
 const SCHED_RR = 2;
@@ -228,11 +230,13 @@ function createPrimary({ process, getChildProcess, getNet, canFork }) {
     const key = `${message.address}:${message.port}:${message.addressType}:${message.fd}:${message.index}`;
     let handle = handles.get(key);
     if (handle === undefined) {
-      handle = proxyHandle(key, message);
+      if (!channelPassesHandles(worker.process)) handle = proxyHandle(key, message);
+      else if (cluster.schedulingPolicy === SCHED_RR) handle = roundRobinHandle(key, message);
+      else handle = sharedHandle(message);
       handles.set(key, handle);
     }
     handle.data ||= message.data;
-    handle.add(worker, message.proxy, (errno, reply) => {
+    handle.add(worker, message.proxy, (errno, reply, sendHandle = null) => {
       // A worker that has asked to leave (acknowledged) doesn't wait for
       // the answer, and may be gone, its end closed, before this side has
       // read that: the write would be an EPIPE (#675). Node's primary
@@ -241,8 +245,102 @@ function createPrimary({ process, getChildProcess, getNet, canFork }) {
       // A bind that failed isn't kept, whoever asked for it.
       if (errno) handles.delete(key);
       if (worker.exitedAfterDisconnect) return;
-      sendHelper(worker.process, { errno, key, ack: message.seq, data, ...reply }, null, undefined, { swallowErrors: true });
+      sendHelper(worker.process, { errno, key, ack: message.seq, data, ...reply }, sendHandle, undefined, { swallowErrors: true });
     });
+  }
+
+  function roundRobinHandle(key, message) {
+    const all = new Map();
+    const free = new Map();
+    const queued = [];
+    let state = 'listening';
+    let failure;
+    const waiting = [];
+    const server = getNet().createServer({ pauseOnConnect: true }, (socket) => {
+      const sent = socket[kIpc](false);
+      if (sent) distribute(sent.handle);
+    });
+    server.on('error', (err) => {
+      state = 'failed';
+      failure = err;
+      for (const done of waiting.splice(0)) done();
+    });
+    server.listen({ host: message.address ?? undefined, port: message.port > 0 ? message.port : 0 }, () => {
+      state = 'ready';
+      for (const done of waiting.splice(0)) done();
+    });
+    function distribute(handle) {
+      queued.push(handle);
+      const [entry] = free;
+      if (entry) {
+        free.delete(entry[0]);
+        handoff(entry[1]);
+      }
+    }
+    function handoff(worker) {
+      if (!all.has(worker.id)) return;
+      const handle = queued.shift();
+      if (handle === undefined) {
+        free.set(worker.id, worker);
+        return;
+      }
+      sendHelper(worker.process, { act: 'newconn', key }, handle, (reply) => {
+        if (reply.accepted) handle.close();
+        else distribute(handle);
+        handoff(worker);
+      });
+    }
+    return {
+      data: null,
+      add(worker, proxy, cb) {
+        all.set(worker.id, worker);
+        const settle = () => {
+          if (!all.has(worker.id)) return;
+          if (state === 'failed') return cb(failure?.code ?? 'EADDRINUSE', { message: failure?.message });
+          cb(0, { sockname: server.address() });
+          handoff(worker);
+        };
+        if (state === 'listening') waiting.push(settle);
+        else settle();
+      },
+      remove(worker) {
+        if (!all.delete(worker.id)) return false;
+        free.delete(worker.id);
+        if (all.size !== 0) return false;
+        for (const handle of queued.splice(0)) handle.close();
+        server.close();
+        return true;
+      },
+    };
+  }
+
+  function sharedHandle(message) {
+    const workers = new Set();
+    let handle = null;
+    let failure;
+    const ready = getNet()
+      [kIpc].listen({ host: message.address ?? '127.0.0.1', port: message.port > 0 ? message.port : 0 })
+      .then(
+        (listening) => (handle = listening),
+        (err) => (failure = err)
+      );
+    return {
+      data: null,
+      add(worker, proxy, cb) {
+        workers.add(worker);
+        ready.then(() => {
+          if (!workers.has(worker)) return;
+          if (failure) cb(failure.code ?? 'EADDRINUSE', { message: failure.message });
+          else cb(0, {}, handle);
+        });
+      },
+      remove(worker) {
+        if (!workers.delete(worker)) return false;
+        if (workers.size !== 0) return false;
+        ready.then(() => handle?.close());
+        return true;
+      },
+    };
   }
 
   /**
@@ -369,10 +467,22 @@ function createChild({ process }) {
     });
     process.on('internalMessage', internal(worker, onmessage));
     send({ act: 'online' });
-    function onmessage(message) {
-      if (message.act === 'disconnect') Reflect.apply(_disconnect, worker, [true]);
+    function onmessage(message, handle) {
+      if (message.act === 'newconn') onconnection(message, handle);
+      else if (message.act === 'disconnect') Reflect.apply(_disconnect, worker, [true]);
     }
   };
+
+  cluster._passesHandles = () => channelPassesHandles(process);
+
+  function onconnection(message, handle) {
+    const entry = handles.get(message.key);
+    const accepted = entry !== undefined;
+    send({ ack: message.seq, accepted });
+    if (!accepted) handle.close();
+    else if (entry.push) entry.push(handle);
+    else entry.queued.push(handle);
+  }
 
   /**
    * net's listen() in a worker (net.mjs): the server, listening on its own
@@ -396,20 +506,32 @@ function createChild({ process }) {
         resolve({ cancelled: true });
       };
       queries.add(cancel);
-      send(message, (reply) => {
-        if (!queries.delete(cancel)) return;
+      send(message, (reply, handle) => {
+        if (!queries.delete(cancel)) return handle?.close();
         if (reply.errno) {
           removeIndexesKey(indexesKey, index);
           return resolve(reply);
         }
-        handles.set(reply.key, {
+        const entry = {
           server,
+          queued: [],
+          push: null,
           close: () => {
             send({ act: 'close', key: reply.key });
             handles.delete(reply.key);
             removeIndexesKey(indexesKey, index);
+            for (const queued of entry.queued.splice(0)) queued.close();
           },
-        });
+        };
+        handles.set(reply.key, entry);
+        reply = {
+          ...reply,
+          handle,
+          accept: (push) => {
+            entry.push = push;
+            for (const queued of entry.queued.splice(0)) push(queued);
+          },
+        };
         server.once('listening', () => {
           if (!indexes.has(indexesKey) || !handles.has(reply.key)) return;
           cluster.worker.state = 'listening';
@@ -436,6 +558,7 @@ function createChild({ process }) {
 
   function _disconnect(primaryInitiated) {
     this.exitedAfterDisconnect = true;
+    for (const cancel of [...queries]) cancel();
     let waitingCount = 1;
     function checkWaitingCount() {
       waitingCount--;

@@ -1,0 +1,13 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#538: child_process.fork's send(message, socket, { keepOpen }): with keepOpen both ends write to the socket and the parent's getConnections counts it on both; without it the parent's socket is handed over, its count drops, and its write fails with ERR_SOCKET_CLOSED",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
