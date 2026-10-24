@@ -977,7 +977,7 @@ export async function runNode(ctx, options = {}) {
           shouldStop: () => settled || getDidExit() || exitStatus !== undefined,
           weakPending: () => !settled,
           onTickError: (err) => exceptionHandler(err),
-          onIdle: () => timers.endPhase(),
+          onIdle: () => timers.idle(),
         });
         if (!settled || failure) skipEntry = true;
         if (failure) {
@@ -1206,7 +1206,7 @@ export async function runNode(ctx, options = {}) {
       onTickError: (err) => exceptionHandler(err),
       freeze: () => timers.freeze(),
       thaw: () => timers.thaw(),
-      onIdle: () => timers.endPhase(),
+      onIdle: () => timers.idle(),
     });
     loopEnded = true;
 
