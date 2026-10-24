@@ -32,6 +32,10 @@ const row = (label, act) =>
     c.write('hello');
     c.resetAndDestroy();
   });
+  await row('an empty write, then reset in the same tick', (c) => {
+    c.write('');
+    c.resetAndDestroy();
+  });
   await row('write, then reset in a later timer', (c) => {
     c.write('hello');
     setTimeout(() => c.resetAndDestroy(), 50);

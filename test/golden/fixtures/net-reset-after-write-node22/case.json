@@ -1,5 +1,5 @@
 {
-  "description": "ai-ecoverse/slicc-jsh#1057: net.Socket resetAndDestroy in the same tick as a write closes plainly, as Node 22 on Linux, whose libuv reads the peer's data and then reports the end the RST came with: the peer gets the data, its end and close false; a reset in a later tick, or with nothing written, is the peer's ECONNRESET. Linux's host output: on macOS Node's peer gets ECONNRESET in the same tick too",
+  "description": "ai-ecoverse/slicc-jsh#1057: net.Socket resetAndDestroy in the same tick as a write closes plainly, as Node 22 on Linux, whose libuv reads the peer's data and then reports the end the RST came with: the peer gets the data, its end and close false; a reset in a later tick, after an empty write or with nothing written, is the peer's ECONNRESET (ai-ecoverse/slicc-jsh#1063). Linux's host output: on macOS Node's peer gets ECONNRESET in the same tick too",
   "argv": ["script.js"],
   "shim": true,
   "hostPlatform": "linux"

@@ -791,7 +791,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #send(bytes, callback) {
-      this.#wrote();
+      if (bytes.length > 0) this.#wrote();
       const taken = this.#writeNow(bytes);
       if (taken.error) {
         callback(taken.error);
