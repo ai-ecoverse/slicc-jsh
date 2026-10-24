@@ -969,7 +969,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
     if (Object.hasOwn(ALERT_REASONS, n)) {
       const reason = ALERT_REASONS[n];
       const id = (0x0a000000 + 1000 + n).toString(16).toUpperCase().padStart(8, '0');
-      const err = new Error(`error:${id}:SSL routines::${reason}:SSL alert number ${n}`);
+      const err = new Error(`error:${id}:SSL routines:ssl3_read_bytes:${reason}:SSL alert number ${n}`);
       return Object.assign(err, { library: 'SSL routines', reason, code: `ERR_SSL_${reason.toUpperCase().replaceAll(' ', '_')}` });
     }
     const record = RECORD_FAILURES[code];

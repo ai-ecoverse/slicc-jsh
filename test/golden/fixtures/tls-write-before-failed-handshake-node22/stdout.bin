@@ -1,0 +1,46 @@
+a plain-text reply, nothing written
+  error ERR_SSL_PACKET_LENGTH_TOO_LONG, syscall undefined, errno none
+    message "error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library SSL routines, reason packet length too long, own keys code library reason
+  close
+a plain-text reply, written before the handshake
+  error EPROTO, syscall write, errno -EPROTO
+    message "write EPROTO error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library undefined, reason undefined, own keys code errno syscall
+  close
+a plain-text reply, ended before the handshake
+  error EPROTO, syscall write, errno -EPROTO
+    message "write EPROTO error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library undefined, reason undefined, own keys code errno syscall
+  close
+a plain-text reply over a socket, written before the handshake
+  error EPROTO, syscall write, errno -EPROTO
+    message "write EPROTO error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library undefined, reason undefined, own keys code errno syscall
+  close
+no ALPN protocol in common, written before the handshake
+  error EPROTO, syscall write, errno -EPROTO
+    message "write EPROTO error:0A000460:SSL routines:ssl3_read_bytes:tlsv1 alert no application protocol:SSL alert number 120"
+    library undefined, reason undefined, own keys code errno syscall
+  close
+a server that closes during the handshake, written before it
+  error ECONNRESET, syscall undefined, errno none
+    message "Client network socket disconnected before secure TLS connection was established"
+    library undefined, reason undefined, own keys code host localAddress path port
+  close
+a self-signed certificate refused, written before the handshake
+  error DEPTH_ZERO_SELF_SIGNED_CERT, syscall undefined, errno none
+    message "self-signed certificate"
+    library undefined, reason undefined, own keys code
+  close
+https.get to a plain-text server
+  error EPROTO, syscall write, errno -EPROTO
+    message "write EPROTO error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library undefined, reason undefined, own keys code errno syscall
+  close
+https.request not yet ended, to a plain-text server
+  error ERR_SSL_PACKET_LENGTH_TOO_LONG, syscall undefined, errno none
+    message "error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library SSL routines, reason packet length too long, own keys code library reason
+  close
+done

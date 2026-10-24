@@ -6,6 +6,7 @@ import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_OUT_OF_RANGE, nodeErro
 import { EventEmitter } from './events.mjs';
 import { createFetchClient, isLoopbackHost, kIncomingDestroy, kIncomingRead } from './http-fetch.mjs';
 import { queueMicrotask, resourceHere, runInResource } from '../async-context.mjs';
+import { writeRefusal } from './net.mjs';
 
 // Node 22's table (lib/_http_server.js), in its order.
 const STATUS_CODES = {
@@ -2909,7 +2910,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         if (this[kViaFetchOnNoRoute](err)) return;
         emitted = true;
         if (!this.listenerCount('error')) socket.destroy();
-        emitError(this, resetOfReused(this, err));
+        const wrote = !this[kConnected] && (this[kEnded] || this[kFlushAsked] || this[kChunkedOut] || this[kChunks].length > 0);
+        emitError(this, resetOfReused(this, wrote ? writeRefusal(err) : err));
         // Node: 'error', then the request's 'close'.
         if (!this.destroyed) this.destroy();
       });

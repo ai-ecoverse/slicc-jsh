@@ -7,6 +7,12 @@ import { EventEmitter } from './events.mjs';
 import { connectError } from './http-fetch.mjs';
 import { nodeError, validateBoolean, validateInt32 } from '../node-errors.mjs';
 import { queueMicrotask, resourceHere, runInResource } from '../async-context.mjs';
+import { ERRNO } from '../node-bindings.mjs';
+
+export function writeRefusal(err) {
+  if (err?.library !== 'SSL routines') return err;
+  return Object.assign(new Error(`write EPROTO ${err.message}`), { errno: -ERRNO.EPROTO, code: 'EPROTO', syscall: 'write' });
+}
 
 function errnoError(err, syscall) {
   const code = err?.code ?? err?.cause?.code ?? 'EIO';
@@ -381,6 +387,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             if (!this.destroyed) this.destroy();
             return;
           }
+          if (refusal && !request.server) throw this.#writeRefusal(refusal);
           throw refusal ?? errnoError(err, 'connect');
         } finally {
           this.#handshaking = null;
@@ -571,7 +578,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
             // What the kernel won't carry over TLS (tls.connect's to say).
             const refusal = tlsRequest?.refused(err);
             if (refusal) {
-              this.destroy(refusal);
+              this.destroy(this.#writeRefusal(refusal));
               return;
             }
             // Node's shapes: getaddrinfo ENOTFOUND <name> for a name the
@@ -581,6 +588,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       );
       void p;
       return this;
+    }
+
+    #writeRefusal(err) {
+      return this.#pending.length ? writeRefusal(err) : err;
     }
 
     #dropHandle() {
