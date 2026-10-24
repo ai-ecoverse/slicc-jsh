@@ -712,7 +712,7 @@ export function installStackPrepare() {
           Object.defineProperty(this, 'prepareStackTrace', { value: fn, writable: true, enumerable: true, configurable: true });
           return;
         }
-        Object.defineProperty(Error, 'prepareStackTrace', own);
+        Object.defineProperty(Error, 'prepareStackTrace', { ...own, enumerable: true });
         own.set(fn);
       },
     },
