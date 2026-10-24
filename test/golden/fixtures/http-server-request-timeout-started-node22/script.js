@@ -1,7 +1,8 @@
 const http = require('http'); const net = require('net');
 const row = (label, handler, { listener = false } = {}) => new Promise((resolve) => {
   const ev = [];
-  const srv = http.createServer({ requestTimeout: 300, connectionsCheckingInterval: 50 }, (req, res) => {
+  const srv = http.createServer({ requestTimeout: 0, connectionsCheckingInterval: 50 }, (req, res) => {
+    srv.requestTimeout = 300;
     req.on('aborted', () => ev.push('aborted'));
     req.on('error', (e) => ev.push(`req error ${e.code}`));
     req.on('close', () => ev.push('req close'));
