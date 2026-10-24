@@ -45,15 +45,20 @@ export function createCjs({
 
   const readPackageJson = (pkgPath) => {
     if (packageCache.has(pkgPath)) return packageCache.get(pkgPath);
+    let text;
     try {
-      const text = decoder.decode(fs.readFile(pkgPath));
-      const pkg = JSON.parse(text);
-      packageCache.set(pkgPath, pkg);
-      return pkg;
+      text = decoder.decode(fs.readFile(pkgPath));
     } catch {
-      packageCache.set(pkgPath, null);
       return null;
     }
+    let pkg;
+    try {
+      pkg = JSON.parse(text);
+    } catch {
+      pkg = null;
+    }
+    packageCache.set(pkgPath, pkg);
+    return pkg;
   };
 
   const resolver = createResolver({
@@ -212,6 +217,8 @@ export function createCjs({
     let dir = fromDir;
     for (;;) {
       const pkgPath = path.join(dir, 'package.json');
+      const known = packageCache.get(pkgPath);
+      if (known) return known;
       try {
         if (fs.exists(pkgPath)) {
           const pkg = readPackageJson(pkgPath);

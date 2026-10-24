@@ -47,6 +47,13 @@ export function createResolver({
       return filename;
     }
   };
+  const pathCache = new Map();
+  const fileHit = (hit, cacheKey) => {
+    const filename = real(hit);
+    parentDirs.set(filename, path.dirname(filename));
+    if (cacheKey !== undefined) pathCache.set(cacheKey, filename);
+    return { type: 'file', filename };
+  };
   // One stat, as Node's internalModuleStat (a missing path throws).
   const tryStat = (p) => {
     try {
@@ -74,8 +81,8 @@ export function createResolver({
   // "exports" Node never reads (only "main", else index).
   const loadAsDirectory = (dir, entry = false) => {
     const pkgPath = path.join(dir, 'package.json');
-    if (tryFile(pkgPath)) {
-      const pkg = readPackageJson(pkgPath);
+    const pkg = readPackageJson(pkgPath);
+    if (pkg) {
       if (pkg?.exports !== undefined && !entry) {
         const resolved = resolveExports(pkg.exports, '.', pkgPath, dir);
         if (resolved) return resolved;
@@ -188,8 +195,8 @@ export function createResolver({
     let dir = path.dirname(parentFilename);
     for (;;) {
       const pkgPath = path.join(dir, 'package.json');
-      if (tryFile(pkgPath)) {
-        const pkg = readPackageJson(pkgPath);
+      const pkg = readPackageJson(pkgPath);
+      if (pkg) {
         if (pkg?.imports && typeof pkg.imports === 'object') {
           const entry = pkg.imports[name];
           if (entry !== undefined) {
@@ -255,8 +262,8 @@ export function createResolver({
       const st = tryStat(pkgDir);
       if (!st?.isDirectory) continue;
       const pkgPath = path.join(pkgDir, 'package.json');
-      if (tryFile(pkgPath)) {
-        const pkg = readPackageJson(pkgPath);
+      const pkg = readPackageJson(pkgPath);
+      if (pkg) {
         if (pkg?.exports !== undefined) {
           return resolveExports(pkg.exports, subpath, pkgPath, pkgDir);
         }
@@ -309,9 +316,13 @@ export function createResolver({
 
     if (request.startsWith('#')) {
       const hit = packageImportsResolve(request, parentFilename);
-      if (hit) return { type: 'file', filename: real(hit) };
+      if (hit) return fileHit(hit);
       throw moduleNotFound(request, stack);
     }
+
+    const cacheKey = esm ? undefined : `${request}\0${fromDir}`;
+    const cached = cacheKey === undefined ? undefined : pathCache.get(cacheKey);
+    if (cached !== undefined) return { type: 'file', filename: cached };
 
     if (request === '.' || request === '..' || request.startsWith('/') || request.startsWith('./') || request.startsWith('../')) {
       const abs = path.resolve(fromDir, request);
@@ -319,12 +330,12 @@ export function createResolver({
       // name a directory only, never a file beside it.
       const dirOnly = !esm && /(?:^|\/)\.{0,2}$/.test(request);
       const hit = dirOnly ? (tryStat(abs)?.isDirectory ? loadAsDirectory(abs) : null) : loadAsFileOrDir(abs);
-      if (hit) return { type: 'file', filename: real(hit) };
+      if (hit) return fileHit(hit, cacheKey);
       throw moduleNotFound(request, stack);
     }
 
     const nm = loadNodeModules(request, fromDir);
-    if (nm) return { type: 'file', filename: real(nm) };
+    if (nm) return fileHit(nm, cacheKey);
 
     if (esm) throw esmFail('package', packageNameOf(request));
     throw moduleNotFound(request, stack);
