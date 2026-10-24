@@ -719,7 +719,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
     configSecureContext(c.context, options);
     const own = clientCredentials(c.context);
     const refused = own && typeof ctx?.sync?.net?.listen === 'function' ? leafRefusal(own) : null;
-    if (refused?.code === 'ERR_OSSL_X509_KEY_VALUES_MISMATCH') throw refused;
+    if (refused?.code === 'ERR_OSSL_X509_KEY_VALUES_MISMATCH' || refused?.code === 'ERR_OSSL_BAD_DECRYPT') throw refused;
     c.context[kLeafRefusal] = refused;
     return c;
   }

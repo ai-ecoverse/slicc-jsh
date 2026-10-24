@@ -1,0 +1,49 @@
+camellia-128-cbc
+  createSecureContext, the right passphrase: ok
+  createSecureContext, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createSecureContext, no passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createServer, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  a server with the key: the client got "hi"
+  a client certificate with the key: with a client certificate
+  tls.connect with the key, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+camellia-192-cbc
+  createSecureContext, the right passphrase: ok
+  createSecureContext, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createSecureContext, no passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createServer, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  a server with the key: the client got "hi"
+  a client certificate with the key: with a client certificate
+  tls.connect with the key, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+camellia-256-cbc
+  createSecureContext, the right passphrase: ok
+  createSecureContext, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createSecureContext, no passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createServer, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  a server with the key: the client got "hi"
+  a client certificate with the key: with a client certificate
+  tls.connect with the key, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+aria-128-cbc
+  createSecureContext, the right passphrase: ok
+  createSecureContext, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createSecureContext, no passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createServer, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  a server with the key: the client got "hi"
+  a client certificate with the key: with a client certificate
+  tls.connect with the key, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+aria-192-cbc
+  createSecureContext, the right passphrase: ok
+  createSecureContext, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createSecureContext, no passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createServer, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  a server with the key: the client got "hi"
+  a client certificate with the key: with a client certificate
+  tls.connect with the key, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+aria-256-cbc
+  createSecureContext, the right passphrase: ok
+  createSecureContext, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createSecureContext, no passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  createServer, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+  a server with the key: the client got "hi"
+  a client certificate with the key: with a client certificate
+  tls.connect with the key, a wrong passphrase: throws ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (Provider routines, bad decrypt) stack ["error:11800074:PKCS12 routines::pkcs12 cipherfinal error","error:1C800064:Provider routines::bad decrypt","error:11800074:PKCS12 routines::pkcs12 cipherfinal error"]
+done
