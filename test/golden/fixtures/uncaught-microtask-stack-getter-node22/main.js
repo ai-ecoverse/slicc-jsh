@@ -12,6 +12,8 @@ const cases = [
   'queueMicrotask(() => { throw 5n })',
   'setTimeout(() => queueMicrotask(() => { throw {t: 1} }))',
   'setTimeout(() => queueMicrotask(() => { throw null }))',
+  'queueMicrotask(() => { throw {get stack() { throw 1 }} })',
+  'queueMicrotask(() => { throw {get stack() { throw 1 }, name: "N", message: "m"} })',
   'throw {get stack() { throw 1 }}',
   'throw {get stack() { throw 1 }, toString() { return "custom" }}',
   'throw {get stack() { throw 1 }, name: "N", message: "m"}',

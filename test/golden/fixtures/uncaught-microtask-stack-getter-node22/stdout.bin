@@ -18,6 +18,14 @@
 "\n<anonymous_script>:0\n\nnull\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
 == [] < "setTimeout(() => queueMicrotask(() => { throw null }))": status 1
 "\n<anonymous_script>:0\n\nnull\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","queueMicrotask(() => { throw {get stack() { throw 1 }} })"]: status 1
+"\n<anonymous_script>:0\n\n[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "queueMicrotask(() => { throw {get stack() { throw 1 }} })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","queueMicrotask(() => { throw {get stack() { throw 1 }, name: \"N\", message: \"m\"} })"]: status 1
+"\n<anonymous_script>:0\n\nN: m\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "queueMicrotask(() => { throw {get stack() { throw 1 }, name: \"N\", message: \"m\"} })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\nN: m\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
 == ["-e","throw {get stack() { throw 1 }}"]: status 1
 "[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
 == [] < "throw {get stack() { throw 1 }}": status 1

@@ -304,14 +304,16 @@ function throwSite(evalName, evalCode, shown) {
 
 const MICROTASK_HEAD = '<anonymous_script>:0\n';
 const TICKS_HEAD = 'node:internal/process/task_queues:105\n    runMicrotasks();\n    ^';
+const microtaskHead = (evalName, firstTurn) => (firstTurn && evalName === '[stdin]' ? TICKS_HEAD : MICROTASK_HEAD);
 
-function unreadableStack(err, { evalName, evalCode, fromScript, hint, trailer }) {
+function unreadableStack(err, { evalName, evalCode, fromScript, microtask, firstTurn, hint, trailer }) {
   const name = attempt(() => err.name);
   const message = attempt(() => err.message);
   const named = name !== undefined && message !== undefined;
   const text = (value) => attempt(() => String(value)) ?? '';
   const shown = named ? `${text(name)}: ${text(message)}` : text(err);
   const where = throwSite(evalName, evalCode, shown);
+  if (!(err instanceof Error) && microtask) return { body: `\n${microtaskHead(evalName, firstTurn)}\n${shown}\n${hint}${trailer}` };
   if (!(err instanceof Error) && !fromScript) return { body: `\n${where}\n${shown}\n${hint}${trailer}` };
   return { body: named ? `${where}\n\n${shown}\n${hint}${trailer}` : `${shown}\n${hint}${trailer}` };
 }
@@ -339,11 +341,10 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     } catch {
       unreadable = true;
     }
-    if (unreadable) return unreadableStack(err, { evalName, evalCode, fromScript, hint: traceHint, trailer });
+    if (unreadable) return unreadableStack(err, { evalName, evalCode, fromScript, microtask, firstTurn, hint: traceHint, trailer });
   }
   if (!(err instanceof Error) && microtask) {
-    const head = firstTurn && evalName === '[stdin]' ? TICKS_HEAD : MICROTASK_HEAD;
-    return { body: `\n${head}\n${shownThrown()}\n${hint}${trailer}` };
+    return { body: `\n${microtaskHead(evalName, firstTurn)}\n${shownThrown()}\n${hint}${trailer}` };
   }
   if (!(err instanceof Error) && esmEntry) {
     // Node: a primitive thrown by an ES module entry has no location of its own.
