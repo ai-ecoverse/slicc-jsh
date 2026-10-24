@@ -1,0 +1,80 @@
+== ["-e","throw {a: 1}"]: status 1
+"[eval]:1\nthrow {a: 1}\n^\n\n{ a: 1 }\n\nNode.js v22.22.0\n"
+== [] < "throw {a: 1}": status 1
+"[stdin]:1\nthrow {a: 1}\n^\n\n{ a: 1 }\n\nNode.js v22.22.0\n"
+== ["-e","setTimeout(() => { throw {late: 1} })"]: status 1
+"\n[eval]:1\nsetTimeout(() => { throw {late: 1} })\n                   ^\n{ late: 1 }\n\nNode.js v22.22.0\n"
+== [] < "setTimeout(() => { throw {late: 1} })": status 1
+"\n[stdin]:1\nsetTimeout(() => { throw {late: 1} })\n                   ^\n{ late: 1 }\n\nNode.js v22.22.0\n"
+== ["-e","throw Object.create(null)"]: status 1
+"[eval]:1\nthrow Object.create(null)\n^\n\n[Object: null prototype] {}\n\nNode.js v22.22.0\n"
+== [] < "throw Object.create(null)": status 1
+"[stdin]:1\nthrow Object.create(null)\n^\n\n[Object: null prototype] {}\n\nNode.js v22.22.0\n"
+== ["-e","throw function f() {}"]: status 1
+"[eval]:1\nthrow function f() {}\n^\n\n[Function: f]\n\nNode.js v22.22.0\n"
+== [] < "throw function f() {}": status 1
+"[stdin]:1\nthrow function f() {}\n^\n\n[Function: f]\n\nNode.js v22.22.0\n"
+== ["-e","throw {stack: \"custom stack\"}"]: status 1
+"{ stack: '[eval]:1\\nthrow {stack: \"custom stack\"}\\n^\\n\\ncustom stack' }\n\nNode.js v22.22.0\n"
+== [] < "throw {stack: \"custom stack\"}": status 1
+"{\n  stack: '[stdin]:1\\nthrow {stack: \"custom stack\"}\\n^\\n\\ncustom stack'\n}\n\nNode.js v22.22.0\n"
+== ["-e","throw {message: \"m\", name: \"N\"}"]: status 1
+"[eval]:1\nthrow {message: \"m\", name: \"N\"}\n^\n\n{ message: 'm', name: 'N' }\n\nNode.js v22.22.0\n"
+== [] < "throw {message: \"m\", name: \"N\"}": status 1
+"[stdin]:1\nthrow {message: \"m\", name: \"N\"}\n^\n\n{ message: 'm', name: 'N' }\n\nNode.js v22.22.0\n"
+== ["-e","let x = 1;\nthrow {b: 2}"]: status 1
+"[eval]:2\nthrow {b: 2}\n^\n\n{ b: 2 }\n\nNode.js v22.22.0\n"
+== [] < "let x = 1;\nthrow {b: 2}": status 1
+"[stdin]:2\nthrow {b: 2}\n^\n\n{ b: 2 }\n\nNode.js v22.22.0\n"
+== ["-e","function f() {\n  throw {c: 3};\n}\nf()"]: status 1
+"[eval]:2\n  throw {c: 3};\n  ^\n\n{ c: 3 }\n\nNode.js v22.22.0\n"
+== [] < "function f() {\n  throw {c: 3};\n}\nf()": status 1
+"[stdin]:2\n  throw {c: 3};\n  ^\n\n{ c: 3 }\n\nNode.js v22.22.0\n"
+== ["-e","setImmediate(() => { throw {i: 1} })"]: status 1
+"\n[eval]:1\nsetImmediate(() => { throw {i: 1} })\n                     ^\n{ i: 1 }\n\nNode.js v22.22.0\n"
+== [] < "setImmediate(() => { throw {i: 1} })": status 1
+"\n[stdin]:1\nsetImmediate(() => { throw {i: 1} })\n                     ^\n{ i: 1 }\n\nNode.js v22.22.0\n"
+== ["-e","process.nextTick(() => { throw {n: 1} })"]: status 1
+"\n[eval]:1\nprocess.nextTick(() => { throw {n: 1} })\n                         ^\n{ n: 1 }\n\nNode.js v22.22.0\n"
+== [] < "process.nextTick(() => { throw {n: 1} })": status 1
+"\n[stdin]:1\nprocess.nextTick(() => { throw {n: 1} })\n                         ^\n{ n: 1 }\n\nNode.js v22.22.0\n"
+== ["-e","throw {stack: 5}"]: status 1
+"[eval]:1\nthrow {stack: 5}\n^\n\n{ stack: 5 }\n\nNode.js v22.22.0\n"
+== [] < "throw {stack: 5}": status 1
+"[stdin]:1\nthrow {stack: 5}\n^\n\n{ stack: 5 }\n\nNode.js v22.22.0\n"
+== ["-e","setTimeout(() => { throw {stack: \"late stack\"} })"]: status 1
+"\n[eval]:1\nsetTimeout(() => { throw {stack: \"late stack\"} })\n                   ^\n{ stack: 'late stack' }\n\nNode.js v22.22.0\n"
+== [] < "setTimeout(() => { throw {stack: \"late stack\"} })": status 1
+"\n[stdin]:1\nsetTimeout(() => { throw {stack: \"late stack\"} })\n                   ^\n{ stack: 'late stack' }\n\nNode.js v22.22.0\n"
+== ["-e","throw []"]: status 1
+"[eval]:1\nthrow []\n^\n\n[]\n\nNode.js v22.22.0\n"
+== [] < "throw []": status 1
+"[stdin]:1\nthrow []\n^\n\n[]\n\nNode.js v22.22.0\n"
+== ["-e","throw \"s\""]: status 1
+"\n[eval]:1\nthrow \"s\"\n^\ns\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "throw \"s\"": status 1
+"\n[stdin]:1\nthrow \"s\"\n^\ns\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","setTimeout(() => { throw \"late\" })"]: status 1
+"\n[eval]:1\nsetTimeout(() => { throw \"late\" })\n                   ^\nlate\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "setTimeout(() => { throw \"late\" })": status 1
+"\n[stdin]:1\nsetTimeout(() => { throw \"late\" })\n                   ^\nlate\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","throw Object.freeze({stack: \"frozen\"})"]: status 1
+"{ stack: 'frozen' }\n\nNode.js v22.22.0\n"
+== [] < "throw Object.freeze({stack: \"frozen\"})": status 1
+"{ stack: 'frozen' }\n\nNode.js v22.22.0\n"
+== ["--input-type=module","-e","throw {m: 1}"]: status 1
+"\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n{ m: 1 }\n\nNode.js v22.22.0\n"
+== ["-p","throw {p: 1}"]: status 1
+"[eval]:1\nthrow {p: 1}\n^\n\n{ p: 1 }\n\nNode.js v22.22.0\n"
+== ["obj.js"]: status 1
+"\nDIR/obj.js:2\nthrow {file: a};\n^\n{ file: 1 }\n\nNode.js v22.22.0\n"
+== ["timer.js"]: status 1
+"\nDIR/timer.js:2\n  throw {t: 1};\n  ^\n{ t: 1 }\n\nNode.js v22.22.0\n"
+== ["stack.js"]: status 1
+"\nDIR/stack.js:1\nthrow {stack: \"file stack\"};\n^\n{ stack: 'file stack' }\n\nNode.js v22.22.0\n"
+== ["obj.mjs"]: status 1
+"\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n{ esm: 1 }\n\nNode.js v22.22.0\n"
+== ["timer.mjs"]: status 1
+"\nfile://DIR/timer.mjs:2\n  throw {tm: 1};\n  ^\n{ tm: 1 }\n\nNode.js v22.22.0\n"
+== ["primitive.mjs"]: status 1
+"\nfile://DIR/primitive.mjs:2\n  throw \"tp\";\n  ^\ntp\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"

@@ -1,0 +1,1 @@
+throw {stack: "file stack"};

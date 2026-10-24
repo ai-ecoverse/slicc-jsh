@@ -25,6 +25,7 @@ import { installFunctionImport } from './function-import.mjs';
 import { patchReplServer } from './node-lib.mjs';
 import { checkSyntax, syntaxReport } from './syntax-report.mjs';
 import { installStackPrepare } from './stack.mjs';
+import { encodeFilePath } from './builtins/url.mjs';
 import { createTimers } from './timers.mjs';
 import { hideNewerBuiltins } from './node22-globals.mjs';
 import { createFetch } from './web/fetch.mjs';
@@ -246,6 +247,7 @@ export async function runNode(ctx, options = {}) {
   const util = createUtil();
   // Set while the error being reported comes from an ES module entry.
   let uncaughtFromEsm = false;
+  let uncaughtFromScript = false;
   const printUncaught = (err) => {
     const { body } = formatUncaughtError(err, {
       ctx,
@@ -254,6 +256,7 @@ export async function runNode(ctx, options = {}) {
       evalCode: lastEvalCode,
       evalName: lastEvalName,
       esmEntry: uncaughtFromEsm,
+      fromScript: uncaughtFromScript,
     });
     // process.report.reportOnUncaughtException: Node writes the report
     // between the error and its `Node.js v…` line.
@@ -889,6 +892,9 @@ export async function runNode(ctx, options = {}) {
         let result;
         try {
           result = run();
+        } catch (err) {
+          uncaughtFromScript = true;
+          throw err;
         } finally {
           mainEnd();
         }
@@ -900,6 +906,7 @@ export async function runNode(ctx, options = {}) {
       if (isExitError(err)) throw err;
       if (handleUncaught(err)) {
         uncaughtFromEsm = false;
+        uncaughtFromScript = false;
       } else {
         return dieUncaught(() => printUncaught(err));
       }
@@ -1148,6 +1155,7 @@ export async function runNode(ctx, options = {}) {
         // ambiguous .js (not explicit "type":"commonjs").
         const useEsm = esm.isEsmFilename(mainPath, source);
         uncaughtFromEsm = useEsm;
+        if (useEsm) lastEvalName = `file://${encodeFilePath(mainPath)}`;
         if (useEsm) {
           mainBegin();
           let result;

@@ -282,7 +282,15 @@ function glueStackAndProps(stack, props) {
   return `${frames} ${finalizeProps(props)}`;
 }
 
-export function formatUncaughtError(err, { ctx, util, version, evalCode, evalName = '[eval]', fromPromise, esmEntry } = {}) {
+function attempt(fn) {
+  try {
+    return fn();
+  } catch {
+    return undefined;
+  }
+}
+
+export function formatUncaughtError(err, { ctx, util, version, evalCode, evalName = '[eval]', fromPromise, esmEntry, fromScript } = {}) {
   const trailer = `\nNode.js v${version}\n`;
   if (err instanceof Error && err._fsPretty) {
     let body = err._fsPretty;
@@ -296,32 +304,30 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
   }
   const primitive = err === null || (typeof err !== 'object' && typeof err !== 'function');
   const shownThrown = () => (!primitive ? util.inspect(err) : typeof err === 'symbol' ? '' : String(err));
+  const hint = primitive ? `(Use \`node --trace-uncaught ...\` to show where the exception was thrown)\n` : '';
   if (!(err instanceof Error) && esmEntry) {
     // Node: a primitive thrown by an ES module entry has no location of its own.
     const shown = shownThrown();
     return {
-      body:
-        `\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n${shown}\n` +
-        `(Use \`node --trace-uncaught ...\` to show where the exception was thrown)\n` +
-        trailer,
+      body: `\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n${shown}\n${hint}${trailer}`,
     };
   }
   if (!(err instanceof Error)) {
-    const shown = shownThrown();
     // A thrown primitive has no stack: in -e code, point at its first
     // `throw` (V8 gives Node the exact spot); else Node's shape for line 1.
-    let where = `${evalName}:1\nthrow ${shown}\n^`;
+    let where = `${evalName}:1\nthrow ${shownThrown()}\n^`;
     if (typeof evalCode === 'string') {
       const lines = evalCode.split('\n');
       const n = lines.findIndex((l) => /\bthrow\b/.test(l));
       if (n >= 0) where = `${evalName}:${n + 1}\n${lines[n]}\n${' '.repeat(lines[n].search(/\bthrow\b/))}^`;
     }
-    return {
-      body:
-        `\n${where}\n${shown}\n` +
-        `(Use \`node --trace-uncaught ...\` to show where the exception was thrown)\n` +
-        trailer,
-    };
+    if (fromScript && !primitive) {
+      const stack = attempt(() => err.stack);
+      if (typeof stack !== 'string') return { body: `${where}\n\n${shownThrown()}\n${trailer}` };
+      attempt(() => Reflect.set(err, 'stack', `${where}\n\n${stack}`));
+      return { body: `${shownThrown()}\n${trailer}` };
+    }
+    return { body: `\n${where}\n${shownThrown()}\n${hint}${trailer}` };
   }
 
   const rawStack = sanitizeStack(err.stack) || `${err.name}: ${err.message}`;
