@@ -229,7 +229,48 @@ export function wrapCallSite(frame) {
   return new CallSite(wrapRaw(frame));
 }
 
+function originLine(file, line) {
+  if (vmFiles.has(file)) return line;
+  const extra = esmFrames.get(file);
+  return extra === undefined ? adjustLine(line) : adjustLine(line) - extra;
+}
+
+function evalOrigin(origin) {
+  return origin.replace(/\(([^()\s,]+):(\d+):(\d+)\)/g, (_, file, line, col) => `(${file}:${originLine(file, Number(line))}:${col})`);
+}
+
+function wrapEvalCallSite(frame, origin) {
+  const own = evalOrigin(origin);
+  const text = frame.toString();
+  return {
+    getThis: () => frame.getThis?.(),
+    getTypeName: () => frame.getTypeName?.(),
+    getFunction: () => frame.getFunction?.(),
+    getFunctionName: () => frame.getFunctionName?.(),
+    getMethodName: () => frame.getMethodName?.(),
+    getFileName: () => frame.getFileName?.(),
+    getLineNumber: () => frame.getLineNumber?.(),
+    getColumnNumber: () => frame.getColumnNumber?.(),
+    getEnclosingLineNumber: () => frame.getEnclosingLineNumber?.(),
+    getEnclosingColumnNumber: () => frame.getEnclosingColumnNumber?.(),
+    getEvalOrigin: () => own,
+    getScriptId: () => frame.getScriptId?.(),
+    isToplevel: () => frame.isToplevel?.(),
+    isEval: () => true,
+    isNative: () => frame.isNative?.() ?? false,
+    isConstructor: () => frame.isConstructor?.() ?? false,
+    isAsync: () => frame.isAsync?.() ?? false,
+    isPromiseAll: () => frame.isPromiseAll?.() ?? false,
+    getPromiseIndex: () => frame.getPromiseIndex?.(),
+    toString: () => text.replace(origin, own),
+  };
+}
+
 function wrapRaw(frame) {
+  const origin = frame.getEvalOrigin?.();
+  if (frame.isEval?.() && !frame.getFileName?.() && typeof origin === 'string' && origin.startsWith('eval at ')) {
+    return wrapEvalCallSite(frame, origin);
+  }
   const parsed = parseSite(frame);
   const resolved = resolveFile(frame, parsed);
   const rawLine = frame.getLineNumber?.() ?? parsed?.line;

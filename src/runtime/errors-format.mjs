@@ -3,6 +3,7 @@
  * Prefer util.inspect(err) for the props block (symbols, cause, AggregateError).
  */
 
+import * as acorn from 'acorn';
 import { KERNEL_HINT, generatedLocation } from './stack.mjs';
 import { sourceMapErrorSource } from './source-maps.mjs';
 
@@ -43,10 +44,73 @@ function frameLocation(stack) {
 }
 const isEvalFile = (file) => file === '[eval]' || file === '[stdin]';
 
+function sourceOf(ctx, file, evalCode) {
+  if (isEvalFile(file) || file.endsWith('/[eval1]')) return evalCode;
+  try {
+    return new TextDecoder().decode(ctx.sync.fs.readFile(file));
+  } catch {
+    return null;
+  }
+}
+
+const EVAL_FRAME = /^ {4}at [^\n]*?\(eval at [^()\n]*\((\[eval\]|\[stdin\]|\/[^:()\s]+):(\d+):(\d+)\), <anonymous>:(\d+):(\d+)\)$/m;
+
+function literalText(node) {
+  if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
+  return undefined;
+}
+
+function evalSource(outer, line, column) {
+  let ast;
+  try {
+    ast = acorn.parse(outer, { ecmaVersion: 'latest', sourceType: 'script', allowHashBang: true, allowReturnOutsideFunction: true });
+  } catch {
+    return undefined;
+  }
+  const lines = outer.split('\n');
+  if (line < 1 || line > lines.length) return undefined;
+  const at = lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0) + column - 1;
+  let best;
+  const walk = (node) => {
+    if (!node || typeof node.type !== 'string') return;
+    if ((node.type === 'CallExpression' || node.type === 'NewExpression') && node.arguments.length > 0) {
+      const callee = node.callee.type === 'SequenceExpression' ? node.callee.expressions.at(-1) : node.callee;
+      const name = callee.type === 'Identifier' ? callee.name : undefined;
+      if ((name === 'eval' || name === 'Function') && at >= node.start && at <= node.arguments[0].start) {
+        if (!best || node.start >= best.start) best = { node, name };
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === 'start' || key === 'end') continue;
+      const v = node[key];
+      if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v.type === 'string') walk(v);
+    }
+  };
+  walk(ast);
+  if (!best) return undefined;
+  const texts = best.node.arguments.map(literalText);
+  if (texts.some((t) => t === undefined)) return undefined;
+  if (best.name === 'eval') return texts[0];
+  return `(function anonymous(${texts.slice(0, -1).join(',')}\n) {\n${texts.at(-1)}\n})`;
+}
+
+function evalLocation(ctx, stack, evalCode) {
+  const top = stack.split('\n').find((l) => l.startsWith('    at ')) ?? '';
+  if (!top.includes('(eval at ')) return undefined;
+  const m = EVAL_FRAME.exec(top);
+  const outer = m ? sourceOf(ctx, m[1], evalCode) : undefined;
+  const source = typeof outer === 'string' ? evalSource(outer, Number(m[2]), Number(m[3])) : undefined;
+  if (source === undefined) return null;
+  return { file: '<anonymous_script>', source, line: Number(m[4]), column: Number(m[5]) };
+}
+
 function snippetFor(ctx, loc, evalCode, fromPromise = false) {
   if (!loc) return null;
   let source;
-  if (isEvalFile(loc.file) || loc.file.endsWith('/[eval1]')) source = evalCode;
+  if (loc.source !== undefined) source = loc.source;
+  else if (isEvalFile(loc.file) || loc.file.endsWith('/[eval1]')) source = evalCode;
   else {
     try {
       source = new TextDecoder().decode(ctx.sync.fs.readFile(loc.file));
@@ -296,7 +360,8 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     }
   }
 
-  const loc = frameLocation(rawStack);
+  const evalLoc = evalLocation(ctx, rawStack, evalCode);
+  const loc = evalLoc === undefined ? frameLocation(rawStack) : evalLoc;
   const snip = snippetFor(ctx, loc, evalCode, fromPromise);
   if (snip) head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
   // Source maps: the position in the code as run, mapped (Node's GetErrorSource).
