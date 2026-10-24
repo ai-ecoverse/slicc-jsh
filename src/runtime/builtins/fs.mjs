@@ -2217,9 +2217,8 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         })()
       );
     },
-    async open(p, flags = 'r', mode) {
-      const fd = syncApi.openSync(p, flags, mode);
-      return createFileHandle(fd);
+    open(p, flags = 'r', mode) {
+      return track((async () => createFileHandle(syncApi.openSync(p, flags, mode)))());
     },
   };
 
@@ -2318,6 +2317,10 @@ export function createFs({ ctx, path, process, Buffer, handles, getStream, timer
         if (!closed) await handle.close();
       },
     };
+    for (const name of Object.keys(handle)) {
+      const method = handle[name];
+      if (typeof method === 'function') handle[name] = { [name]: (...args) => track(method(...args)) }[name];
+    }
     fileHandles.add(handle);
     return handle;
   }

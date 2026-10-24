@@ -10,6 +10,12 @@ a stat callback's promise continuation, started from an immediate | immediate, t
 an exists callback started from an immediate | immediate, timeout 0
 an awaited fs.promises.realpath started from an immediate | immediate, timeout 0
 an awaited fs.promises.stat started from an immediate | immediate, timeout 0
+an awaited fs.promises.open started from an immediate | immediate, timeout 0
+an awaited FileHandle read started from an immediate | immediate, timeout 0
+an awaited FileHandle stat started from an immediate | immediate, timeout 0
+an awaited FileHandle readFile started from an immediate | immediate, timeout 0
+an awaited fs.promises.readFile of a FileHandle started from an immediate | immediate, timeout 0
+an awaited FileHandle close started from an immediate | immediate, timeout 0
 a timer's promise continuation | immediate, timeout 0
 a timer's third await | immediate, timeout 0
 a nextTick from a timer's promise continuation | immediate, timeout 0
