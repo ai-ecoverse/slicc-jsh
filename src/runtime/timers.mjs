@@ -248,6 +248,7 @@ export function createTimers(
         if (inCheck && !state.retrying) {
           state.retrying = true;
           retrying.push(state);
+          bound(retrying, validRetry);
         }
         return;
       }
@@ -280,9 +281,12 @@ export function createTimers(
   const pendingImmediates = createMinHeap((a, b) => a.seq < b.seq);
   const retrying = createMinHeap((a, b) => a.seq < b.seq);
   const validRetry = (state) => state.retrying && live(state);
+  const bound = (heap, valid) => {
+    if (heap.size > 16 + 2 * byId.size) heap.keep(valid);
+  };
   const indexImmediate = (heap, state) => {
     heap.push(state);
-    if (heap.size > 64 && heap.size > 2 * byId.size) heap.keep(live);
+    bound(heap, live);
   };
   const byDue = (a, b) => a.due < b.due;
   let pastTimeouts = createMinHeap(byDue);
@@ -297,7 +301,7 @@ export function createTimers(
   const indexTimeout = (state) => {
     const heap = timeoutHeap(state.timers);
     heap.push({ state, due: state.due, timers: state.timers });
-    if (heap.size > 64 && heap.size > 2 * byId.size) heap.keep(validTimeout);
+    bound(heap, validTimeout);
   };
   const advance = (gen) => {
     checkGen = gen;
@@ -305,7 +309,8 @@ export function createTimers(
       if (timers > gen) continue;
       nextTimeouts.delete(timers);
       if (heap.size > pastTimeouts.size) [heap, pastTimeouts] = [pastTimeouts, heap];
-      for (const entry of heap.drain()) pastTimeouts.push(entry);
+      for (const entry of heap.drain()) if (validTimeout(entry)) pastTimeouts.push(entry);
+      bound(pastTimeouts, validTimeout);
     }
   };
   const firstImmediate = () => pendingImmediates.top(live);
