@@ -41,7 +41,7 @@ function isKernelFrame(frame) {
   // so its length decides: no path is that long, only a data: URL.
   if (!file) {
     const origin = frame.getEvalOrigin?.();
-    if (typeof origin === 'string' && (origin.length > LONG_ORIGIN || KERNEL_HINT.test(origin))) return true;
+    if (typeof origin === 'string' && (origin.length > LONG_ORIGIN || KERNEL_HINT.test(origin) || origin.startsWith(FUNCTION_TAG))) return true;
   }
   // An ES module's loader lines (export getters, hoisted imports) come
   // before its own first line: they are the runtime's, not the file's.
@@ -237,8 +237,49 @@ function originSite(file, line, col) {
   return `${esmUrls.get(file) ?? fileUrl(file)}:${own}:${esmColumn(file, own, col)}`;
 }
 
+const FUNCTION_TAG = 'slicc-jsh-function:';
+const TAGGED = /eval at [^()]* \((slicc-jsh-function:\d+)\)/g;
+const FUNCTION_SOURCE_BUDGET = 1 << 20;
+let functionSourceLength = 0;
+const functionOrigins = new Map();
+const functionTags = new Map();
+const functionSources = new WeakMap();
+const untagged = (origin) => origin.replace(TAGGED, (m, tag) => functionTags.get(tag)?.origin ?? m);
+
+export function functionTag(origin, source) {
+  let bySource = functionOrigins.get(origin);
+  if (!bySource) functionOrigins.set(origin, (bySource = new Map()));
+  const kept = bySource.has(source) || functionSourceLength + source.length <= FUNCTION_SOURCE_BUDGET;
+  const key = kept ? source : null;
+  let entry = bySource.get(key);
+  if (!entry) {
+    if (kept) functionSourceLength += source.length;
+    entry = { tag: `${FUNCTION_TAG}${functionTags.size}`, origin: untagged(origin), source: key };
+    entry.shown = evalOrigin(entry.origin);
+    bySource.set(key, entry);
+    functionTags.set(entry.tag, entry);
+  }
+  return entry.tag;
+}
+
+function noteFunctionSources(err, frames) {
+  let shown;
+  for (const frame of frames) {
+    if (!isEvalCode(frame)) continue;
+    for (const [, tag] of frame.getEvalOrigin().matchAll(TAGGED)) {
+      const entry = functionTags.get(tag);
+      if (entry?.source != null) (shown ??= new Map()).set(entry.shown, entry.source);
+    }
+  }
+  if (shown && err && typeof err === 'object') functionSources.set(err, shown);
+}
+
+export function functionSource(err, origin) {
+  return err && typeof err === 'object' ? functionSources.get(err)?.get(origin) : undefined;
+}
+
 function evalOrigin(origin) {
-  return origin.replace(/\(([^()\s,]+):(\d+):(\d+)\)/g, (_, file, line, col) => `(${originSite(file, Number(line), Number(col))})`);
+  return untagged(origin).replace(/\(([^()\s,]+):(\d+):(\d+)\)/g, (_, file, line, col) => `(${originSite(file, Number(line), Number(col))})`);
 }
 
 function isEvalCode(frame) {
@@ -248,7 +289,7 @@ function isEvalCode(frame) {
 }
 
 function wrapEvalCallSite(frame, origin) {
-  const own = evalOrigin(origin);
+  const own = origin === undefined ? undefined : evalOrigin(origin);
   const text = frame.toString();
   return {
     getThis: () => frame.getThis?.(),
@@ -264,18 +305,19 @@ function wrapEvalCallSite(frame, origin) {
     getEvalOrigin: () => own,
     getScriptId: () => frame.getScriptId?.(),
     isToplevel: () => frame.isToplevel?.(),
-    isEval: () => true,
+    isEval: () => frame.isEval?.() ?? false,
     isNative: () => frame.isNative?.() ?? false,
     isConstructor: () => frame.isConstructor?.() ?? false,
     isAsync: () => frame.isAsync?.() ?? false,
     isPromiseAll: () => frame.isPromiseAll?.() ?? false,
     getPromiseIndex: () => frame.getPromiseIndex?.(),
-    toString: () => text.replace(origin, own),
+    toString: () => (own === undefined ? text : text.replace(origin, own)),
   };
 }
 
 function wrapRaw(frame) {
   if (isEvalCode(frame)) return wrapEvalCallSite(frame, frame.getEvalOrigin());
+  if (isNativeEval(frame)) return wrapEvalCallSite(frame, undefined);
   const parsed = parseSite(frame);
   const resolved = resolveFile(frame, parsed);
   const rawLine = frame.getLineNumber?.() ?? parsed?.line;
@@ -542,7 +584,7 @@ function takeOverride(err, frames) {
   const override = err && typeof err === 'object' ? overrideStackTrace.get(err) : undefined;
   if (!override) return undefined;
   overrideStackTrace.delete(err);
-  return { value: override(err, frames.filter((f) => !isKernelFrame(f)).map(wrapCallSite)) };
+  return { value: override(err, keptFrames(frames).map(wrapCallSite)) };
 }
 
 /**
@@ -565,9 +607,39 @@ export function generatedLocation(err) {
   return err && typeof err === 'object' ? generatedAt.get(err) : undefined;
 }
 
+function isNativeEval(frame) {
+  return !frame.getFileName?.() && frame.getLineNumber?.() == null && frame.getFunctionName?.() === 'eval' && !frame.isEval?.();
+}
+
+function keptFrames(frames) {
+  const kernel = frames.map(isKernelFrame);
+  return frames.filter((f, i) => !kernel[i] || (kernel[i + 1] === false && isNativeEval(f)));
+}
+
+let rawSites = false;
+const captureStackTrace = Error.captureStackTrace;
+
+export function callerSites(skip, limit) {
+  const holder = {};
+  const prevLimit = Error.stackTraceLimit;
+  rawSites = true;
+  try {
+    Error.stackTraceLimit = limit;
+    captureStackTrace(holder, skip);
+    const sites = holder.stack;
+    return Array.isArray(sites) ? sites : [];
+  } catch {
+    return [];
+  } finally {
+    rawSites = false;
+    if (Error.stackTraceLimit !== prevLimit) Error.stackTraceLimit = prevLimit;
+  }
+}
+
 function defaultPrepare(err, frames) {
   if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
-  const kept = frames.filter((f) => !isKernelFrame(f));
+  const kept = keptFrames(frames);
+  noteFunctionSources(err, kept);
   if (internalPrepare) {
     try {
       const sites = kept.map(wrapCallSite);
@@ -589,10 +661,11 @@ export function installStackPrepare() {
 
   function prepareWith(user) {
     return function prepare(err, frames) {
+      if (rawSites) return frames;
       const overridden = takeOverride(err, frames);
       if (overridden) return overridden.value;
       if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
-      if (typeof user === 'function') return user(err, frames.filter((f) => !isKernelFrame(f)).map(wrapCallSite));
+      if (typeof user === 'function') return user(err, keptFrames(frames).map(wrapCallSite));
       return defaultPrepare(err, frames);
     };
   }
@@ -627,4 +700,4 @@ export function installStackPrepare() {
   });
 }
 
-export { isKernelFrame, KERNEL_HINT, adjustLine };
+export { isKernelFrame, KERNEL_HINT, LONG_ORIGIN, adjustLine };
