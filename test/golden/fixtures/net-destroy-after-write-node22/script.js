@@ -3,22 +3,27 @@ const http = require('http');
 const row = (label, onConn, clientSide) => new Promise((resolve) => {
   const notes = [];
   let received = '';
+  let got = '';
+  let closes = 0;
+  const closed = () => {
+    if (++closes < 2) return;
+    setTimeout(() => {
+      console.log(`${label} | client got ${JSON.stringify(got)} | server got ${JSON.stringify(received)} | ${notes.join(', ')}`);
+      srv.close(resolve);
+    }, 0);
+  };
   const srv = net.createServer((s) => {
     s.on('error', (e) => notes.push(`server error ${e.message}`));
     s.on('data', (d) => (received += d));
-    s.on('close', () => notes.push('server close'));
+    s.on('close', () => { notes.push('server close'); closed(); });
     if (!clientSide) onConn(s, notes);
   });
   srv.listen(0, '127.0.0.1', () => {
     const c = net.connect(srv.address().port, '127.0.0.1');
-    let got = '';
     c.on('connect', () => (clientSide ? onConn(c, notes) : c.write('hi')));
     c.on('data', (d) => (got += d));
     c.on('error', (e) => notes.push(`client error ${e.code}`));
-    c.on('close', () => setTimeout(() => {
-      console.log(`${label} | client got ${JSON.stringify(got)} | server got ${JSON.stringify(received)} | ${notes.join(', ')}`);
-      srv.close(resolve);
-    }, 50));
+    c.on('close', closed);
   });
 });
 (async () => {
