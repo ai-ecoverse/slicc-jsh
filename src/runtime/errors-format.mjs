@@ -25,7 +25,7 @@ function frameLocation(stack) {
   if (!stack) return null;
   // An ES module's frame: its file: URL (Node prints the URL as the label).
   const esm = /at (?:[^\n]*?\()?(file:\/\/[^\s:)]+):(\d+):(\d+)/.exec(stack);
-  const plain = /at [^\n]*?(?:\[eval\]|(\/[^:\n\)]+)):(\d+):(\d+)/.exec(stack);
+  const plain = /at [^\n]*?(?:\[(?:eval|stdin)\]|(\/[^:\n\)]+)):(\d+):(\d+)/.exec(stack);
   if (esm && (!plain || esm.index <= plain.index)) {
     // Its path: the URL less its query and fragment.
     let file = esm[1].slice('file://'.length).replace(/[?#].*$/, '');
@@ -36,18 +36,17 @@ function frameLocation(stack) {
     }
     return { file, url: esm[1], line: Number(esm[2]), column: Number(esm[3]), esm: true };
   }
-  const m =
-    /at [^\n]*?(?:\[eval\]|(\/[^:\n\)]+)):(\d+):(\d+)/.exec(stack) ||
-    /at (\[eval\]):(\d+):(\d+)/.exec(stack);
+  const m = /at [^\n]*?(?:\[(eval|stdin)\]|(\/[^:\n\)]+)):(\d+):(\d+)/.exec(stack);
   if (!m) return null;
-  const file = m[1] === undefined || m[0].includes('[eval]') ? '[eval]' : m[1];
-  return { file, line: Number(m[2]), column: Number(m[3]) };
+  const file = m[1] === undefined ? m[2] : `[${m[1]}]`;
+  return { file, line: Number(m[3]), column: Number(m[4]) };
 }
+const isEvalFile = (file) => file === '[eval]' || file === '[stdin]';
 
 function snippetFor(ctx, loc, evalCode, fromPromise = false) {
   if (!loc) return null;
   let source;
-  if (loc.file === '[eval]' || loc.file.endsWith('/[eval1]')) source = evalCode;
+  if (isEvalFile(loc.file) || loc.file.endsWith('/[eval1]')) source = evalCode;
   else {
     try {
       source = new TextDecoder().decode(ctx.sync.fs.readFile(loc.file));
@@ -72,7 +71,7 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false) {
     // A rejection: Node points at the frame's own column (the error's
     // construction in an async function), not at the `throw`.
     col = loc.column;
-  } else if (loc.file === '[eval]' && throwAt === 0) {
+  } else if (isEvalFile(loc.file) && throwAt === 0) {
     col = 1;
   } else if (throwAt >= 0 && isAsyncLine && /\bthrow\s+new\b/.test(text)) {
     col = text.indexOf('new', throwAt) + 1;
@@ -191,7 +190,7 @@ function glueStackAndProps(stack, props) {
   return `${frames} ${finalizeProps(props)}`;
 }
 
-export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPromise, esmEntry } = {}) {
+export function formatUncaughtError(err, { ctx, util, version, evalCode, evalName = '[eval]', fromPromise, esmEntry } = {}) {
   const trailer = `\nNode.js v${version}\n`;
   if (err instanceof Error && err._fsPretty) {
     let body = err._fsPretty;
@@ -217,11 +216,11 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, fromPro
     const shown = util.inspect(err);
     // A thrown primitive has no stack: in -e code, point at its first
     // `throw` (V8 gives Node the exact spot); else Node's shape for line 1.
-    let where = `[eval]:1\nthrow ${shown}\n^`;
+    let where = `${evalName}:1\nthrow ${shown}\n^`;
     if (typeof evalCode === 'string') {
       const lines = evalCode.split('\n');
       const n = lines.findIndex((l) => /\bthrow\b/.test(l));
-      if (n >= 0) where = `[eval]:${n + 1}\n${lines[n]}\n${' '.repeat(lines[n].search(/\bthrow\b/))}^`;
+      if (n >= 0) where = `${evalName}:${n + 1}\n${lines[n]}\n${' '.repeat(lines[n].search(/\bthrow\b/))}^`;
     }
     return {
       body:
@@ -416,10 +415,10 @@ function collapseMatchingCauseFrames(body, err) {
   }
 }
 
-export function formatUnhandledRejection(reason, { ctx, util, version, evalCode } = {}) {
+export function formatUnhandledRejection(reason, { ctx, util, version, evalCode, evalName } = {}) {
   // Node: Error rejections print like uncaught errors (reject-site snippet).
   if (reason instanceof Error) {
-    return formatUncaughtError(reason, { ctx, util, version, evalCode, fromPromise: true });
+    return formatUncaughtError(reason, { ctx, util, version, evalCode, evalName, fromPromise: true });
   }
   const trailer = `\nNode.js v${version}\n`;
   void util;

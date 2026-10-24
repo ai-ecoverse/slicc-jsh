@@ -239,6 +239,7 @@ export async function runNode(ctx, options = {}) {
   const nextTick = createNextTick(() => handles.notify());
   let exitStatus;
   let lastEvalCode;
+  let lastEvalName = '[eval]';
   let restoreGlobals = () => {};
   let removeJshHandoff = () => {};
   const removeCtxHooks = [];
@@ -251,6 +252,7 @@ export async function runNode(ctx, options = {}) {
       util,
       version: NODE_SHIM_VERSION,
       evalCode: lastEvalCode,
+      evalName: lastEvalName,
       esmEntry: uncaughtFromEsm,
     });
     // process.report.reportOnUncaughtException: Node writes the report
@@ -644,6 +646,7 @@ export async function runNode(ctx, options = {}) {
       util,
       version: NODE_SHIM_VERSION,
       evalCode: lastEvalCode,
+      evalName: lastEvalName,
     });
     exitStatus = dieUncaught(() => writeStderr(body));
     timers.stop();
@@ -1073,6 +1076,7 @@ export async function runNode(ctx, options = {}) {
       }
       const source = decoder.decode(merged);
       lastEvalCode = source;
+      lastEvalName = '[stdin]';
       process._evalCode = source;
       const inputType = inputTypeOf(process._options);
       if (parsed.check) {
