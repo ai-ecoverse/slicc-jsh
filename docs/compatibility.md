@@ -72,7 +72,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 
 **Source maps**, as Node 22's own `lib/internal/source_map`: `--enable-source-maps`, `process.setSourceMapsEnabled`, `module.findSourceMap`, `SourceMap`, `getSourceMapsSupport` and `setSourceMapsSupport`. Stacks and uncaught reports go through them.
 
-**Stacks.** Frames name a module by its URL (query and fragment included) and count a CommonJS file's hashbang line, as Node's do. Timer callbacks' stacks keep the script's URL.
+**Stacks.** Frames name a module by its URL (query and fragment included) and count a CommonJS file's hashbang line, as Node's do. Timer callbacks' stacks keep the script's URL. `Error.prepareStackTrace` is the runtime's formatter, which drops the runtime's own frames. A `delete Error.prepareStackTrace` leaves stacks in Node's default format, as in Node, and a formatter set after it works (golden `stack-delete-prepare-node22`). The runtime's formatter then comes from an object between `Error` and `Function.prototype`, so `Error.prepareStackTrace` is still a function there, where Node's is `undefined`.
 
 **`--expose-internals`** makes the internal modules carried in `src/node-lib` requirable (for Node's own tests).
 
