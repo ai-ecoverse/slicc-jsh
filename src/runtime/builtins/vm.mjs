@@ -144,6 +144,28 @@ function patternNames(node, out) {
   return out;
 }
 
+function lexicalNames(ast) {
+  const names = new Set();
+  for (const node of ast.body) {
+    if (node.type === 'VariableDeclaration' && node.kind !== 'var') for (const d of node.declarations) patternNames(d.id, names);
+    else if (node.type === 'ClassDeclaration' && node.id) names.add(node.id.name);
+  }
+  return names;
+}
+
+export function shadowsGlobal(codeOrAst) {
+  let ast = codeOrAst;
+  if (typeof codeOrAst === 'string') {
+    try {
+      ast = acorn.parse(codeOrAst, PARSE);
+    } catch {
+      return false;
+    }
+  }
+  for (const name of lexicalNames(ast)) if (name in globalThis) return true;
+  return false;
+}
+
 function parseScript(code, filename, lineOffset) {
   try {
     return acorn.parse(code, PARSE);
@@ -445,7 +467,7 @@ export function createVm({
     }
     runInThisContext(options) {
       try {
-        if (!globalThis[OVERLAY] && !(options?.displayErrors === false && hostArrows(runScript))) {
+        if (!globalThis[OVERLAY] && !(options?.displayErrors === false && hostArrows(runScript)) && !shadowsGlobal(this._ast)) {
           this._scriptCompiled ??= compile(this._code, this._filename, this._lineOffset, this._id, 'script', this._ast);
           registerVmFile(this._filename, 0);
           let script;

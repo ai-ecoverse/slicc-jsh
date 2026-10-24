@@ -9,6 +9,8 @@
 
 import { VENDOR } from './vendor-embedded.mjs';
 
+const realGlobal = globalThis;
+const helperGlobals = [Object, Uint8Array];
 const decoder = new TextDecoder();
 const cache = new Map();
 
@@ -23,8 +25,8 @@ function evalCjs(source, filename, requires = {}, scope = {}) {
     }
     throw new Error(`vendor bundle unexpected require(${JSON.stringify(id)}) in ${filename}`);
   };
-  const fn = new Function('exports', 'module', 'require', '__filename', '__dirname', ...Object.keys(scope), source);
-  fn(module.exports, module, require, filename, '/', ...Object.values(scope));
+  const fn = new Function('exports', 'module', 'require', '__filename', '__dirname', 'Object', 'Uint8Array', '__jshGlobal', ...Object.keys(scope), source);
+  fn(module.exports, module, require, filename, '/', ...helperGlobals, scope.globalThis ?? realGlobal, ...Object.values(scope));
   return module.exports;
 }
 

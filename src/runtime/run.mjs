@@ -32,7 +32,7 @@ import { createWebSocket } from './web/websocket.mjs';
 import { createPorts } from './web/broadcast-channel.mjs';
 import { installPromiseState } from './node-bindings.mjs';
 import { setupChildChannel } from './builtins/ipc-channel.mjs';
-import { undoHostArrow } from './builtins/vm.mjs';
+import { shadowsGlobal, undoHostArrow } from './builtins/vm.mjs';
 import { createRemotePorts, mailboxSerdes } from './web/remote-ports.mjs';
 import { createMessageEvent, installMessageEvent } from './web/message-event.mjs';
 
@@ -874,7 +874,7 @@ export async function runNode(ctx, options = {}) {
           });
           let script;
           try {
-            script = runScript(`\n\n${body}`, evalName);
+            if (!shadowsGlobal(code)) script = runScript(`\n\n${body}`, evalName);
           } catch (err) {
             undoHostArrow(err, runScript);
             throw err;

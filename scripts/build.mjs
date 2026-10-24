@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 import { packagesFromMetafiles, renderNotice } from './generate-notice.mjs';
+import { shieldedBuild } from './global-shield.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = join(root, 'dist');
@@ -30,7 +31,7 @@ const vendorBufferAlias = {
   'safe-buffer': bufferShim,
 };
 
-const stream = await esbuild.build({
+const stream = await shieldedBuild(esbuild, {
   entryPoints: [require.resolve('readable-stream/lib/ours/browser.js')],
   outfile: join(dist, 'vendor/readable-stream.cjs'),
   bundle: true,
@@ -115,9 +116,9 @@ const stream = await esbuild.build({
       },
     },
   ],
-});
+}, { kind: 'cjs' });
 
-const decoder = await esbuild.build({
+const decoder = await shieldedBuild(esbuild, {
   entryPoints: [sdPath],
   outfile: join(dist, 'vendor/string_decoder.cjs'),
   bundle: true,
@@ -173,11 +174,11 @@ const decoder = await esbuild.build({
       },
     },
   ],
-});
+}, { kind: 'cjs' });
 
 // node-lib: Node v22.22.0's own lib files (src/node-lib/README.md).
 const nodeLibRoot = join(root, 'src/node-lib/lib');
-const nodeLib = await esbuild.build({
+const nodeLib = await shieldedBuild(esbuild, {
   entryPoints: [join(root, 'src/node-lib/entry.cjs')],
   outfile: join(dist, 'vendor/node-lib.cjs'),
   bundle: true,
@@ -218,13 +219,13 @@ const nodeLib = await esbuild.build({
       },
     },
   ],
-});
+}, { kind: 'cjs' });
 
 // crypto: @noble/hashes (digests, HMAC, PBKDF2, HKDF, scrypt) and
 // browserify-aes / browserify-des (block ciphers); Node's API over them is
 // src/runtime/builtins/crypto.mjs. cipher-base's stream and string_decoder are
 // the runtime's.
-const crypto = await esbuild.build({
+const crypto = await shieldedBuild(esbuild, {
   entryPoints: [join(root, 'src/vendor-shims/crypto-entry.cjs')],
   outfile: join(dist, 'vendor/crypto.cjs'),
   bundle: true,
@@ -267,11 +268,11 @@ const crypto = await esbuild.build({
       },
     },
   ],
-});
+}, { kind: 'cjs' });
 
 // zlib: browserify-zlib (Node's zlib.js over pako 1.x). stream, util and
 // assert stay external: the runtime hands its own to the bundle's require().
-const zlib = await esbuild.build({
+const zlib = await shieldedBuild(esbuild, {
   entryPoints: [require.resolve('browserify-zlib/lib/index.js')],
   outfile: join(dist, 'vendor/zlib.cjs'),
   bundle: true,
@@ -375,10 +376,10 @@ const zlib = await esbuild.build({
   minify: true,
   keepNames: true,
   legalComments: 'inline',
-});
+}, { kind: 'cjs' });
 
 // zstd: Facebook's C decoder (v1.5.7) ported to JavaScript (src/zstd).
-const zstd = await esbuild.build({
+const zstd = await shieldedBuild(esbuild, {
   entryPoints: [join(root, 'src/zstd/decompress.mjs')],
   outfile: join(dist, 'vendor/zstd.cjs'),
   bundle: true,
@@ -390,11 +391,11 @@ const zstd = await esbuild.build({
   minify: true,
   keepNames: true,
   legalComments: 'inline',
-});
+}, { kind: 'cjs' });
 
 // brotli: Google's C decoder ported to JavaScript (src/brotli), its static
 // dictionary embedded in the Brotli encoding it decodes itself from.
-const brotli = await esbuild.build({
+const brotli = await shieldedBuild(esbuild, {
   entryPoints: [join(root, 'src/brotli/decode.mjs')],
   outfile: join(dist, 'vendor/brotli.cjs'),
   bundle: true,
@@ -407,7 +408,7 @@ const brotli = await esbuild.build({
   minify: true,
   keepNames: true,
   legalComments: 'inline',
-});
+}, { kind: 'cjs' });
 
 copyFileSync(join(root, 'src/brotli/encoder.wasm'), join(dist, 'vendor/brotli-enc.wasm'));
 copyFileSync(join(root, 'src/zstd/compress.wasm'), join(dist, 'vendor/zstd-enc.wasm'));
@@ -447,7 +448,7 @@ ${entries.join(',\n')},
 
 writeVendorEmbedded(true);
 
-const main = await esbuild.build({
+const main = await shieldedBuild(esbuild, {
   entryPoints: {
     node: join(root, 'src/node.mjs'),
     jsh: join(root, 'src/jsh.mjs'),
@@ -486,7 +487,7 @@ const main = await esbuild.build({
       },
     },
   ],
-});
+}, { kind: 'esm', injectFile: join(root, 'scripts/global-object.mjs') });
 
 // Keep the source tree small; dist bundles already inlined the map.
 writeVendorEmbedded(false);
