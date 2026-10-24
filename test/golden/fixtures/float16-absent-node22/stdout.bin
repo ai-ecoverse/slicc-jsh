@@ -1,0 +1,5 @@
+main | Float16Array undefined | in globalThis false | own name false | Math.f16round undefined | DataView getFloat16 undefined | DataView setFloat16 undefined
+vm | undefined | undefined | undefined
+reference | ReferenceError: Float16Array is not defined
+util.types.isFloat16Array | function false
+worker | Float16Array undefined | in globalThis false | own name false | Math.f16round undefined | DataView getFloat16 undefined | DataView setFloat16 undefined
