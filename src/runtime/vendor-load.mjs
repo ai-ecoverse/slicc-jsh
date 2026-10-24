@@ -1,10 +1,10 @@
 /**
- * Lazy-eval vendored CJS (readable-stream, string_decoder).
+ * Lazy-eval vendored CJS (readable-stream, string_decoder, zlib, crypto, …).
  *
- * Prefer sources embedded at build time so abi:js programs loaded via data:
- * URLs still work when the package is not at
- * /node_modules/@ai-ecoverse/slicc-jsh (pnpm global v11 layout). Fall back to
- * reading dist/vendor/ from packageRoot for older layouts / host tooling.
+ * node-lib, which every start needs, is embedded at build time. The others are
+ * read on first use from dist/vendor/ beside the command's module
+ * (ctx.module.path, slicc-kernel 1.160.0), else from the package roots below
+ * (an older kernel, a program run from inline source).
  */
 
 import { VENDOR } from './vendor-embedded.mjs';
@@ -31,8 +31,11 @@ function evalCjs(source, filename, requires = {}, scope = {}) {
 }
 
 function readVendorFile(ctx, packageRoot, file, text = true) {
+  return readAt(ctx, `${packageRoot}/dist/vendor/${file}`, text);
+}
+
+function readAt(ctx, path, text) {
   if (!ctx?.sync?.fs?.readFile) return null;
-  const path = `${packageRoot}/dist/vendor/${file}`;
   try {
     const bytes = ctx.sync.fs.readFile(path);
     if (!text) return bytes instanceof Uint8Array ? bytes : null;
@@ -61,6 +64,12 @@ function packageRoots(packageRoot, process) {
 }
 
 function findOnDisk(ctx, packageRoot, file, process, text = true) {
+  const module = ctx?.module?.path;
+  if (typeof module === 'string') {
+    const path = `${module.slice(0, module.lastIndexOf('/'))}/vendor/${file}`;
+    const source = readAt(ctx, path, text);
+    if (source != null) return { source, path };
+  }
   const { roots, homes } = packageRoots(packageRoot, process);
   for (const root of roots) {
     const source = readVendorFile(ctx, root, file, text);
