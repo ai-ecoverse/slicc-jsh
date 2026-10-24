@@ -2482,6 +2482,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     this.on('free', (socket, options) => this[kOnFree](socket, options));
     this.on('newListener', maybeEnableKeylog);
   }
+  function freeSocketErrorListener() {
+    this.destroy();
+    this.emit('agentRemove');
+  }
   function maybeEnableKeylog(eventName) {
     if (eventName !== 'keylog') return;
     this.removeListener('newListener', maybeEnableKeylog);
@@ -2513,6 +2517,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       const i = list ? list.indexOf(socket) : -1;
       if (i !== -1) list.splice(i, 1);
       if (list && !list.length) delete this.sockets[name];
+      socket.once('error', freeSocketErrorListener);
       free.push(socket);
     },
     /** Node's: every socket, in use or free, goes. */
@@ -2568,6 +2573,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       return keep;
     },
     reuseSocket(socket, req) {
+      socket.removeListener('error', freeSocketErrorListener);
       req.reusedSocket = true;
       socket.ref?.();
     },

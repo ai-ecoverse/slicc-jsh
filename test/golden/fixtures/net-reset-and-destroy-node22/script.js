@@ -3,14 +3,22 @@ const net = require('net');
 const row = (label, act) =>
   new Promise((resolve) => {
     const ev = [];
+    const peer = [];
     let got = '';
     const srv = net.createServer((s) => {
-      s.on('error', () => {});
-      s.on('data', (d) => (got += d));
-      s.on('close', () => srv.close(() => setImmediate(() => {
-        console.log(`${label} | ${ev.join(', ')} | the peer got ${JSON.stringify(got)} and closed`);
-        resolve();
-      })));
+      s.on('error', (e) => peer.push(`error ${e.code} ${e.syscall}`));
+      s.on('end', () => peer.push('end'));
+      s.on('data', (d) => {
+        got += d;
+        s.write('ok');
+      });
+      s.on('close', (hadError) => {
+        peer.push(`close ${hadError}`);
+        srv.close(() => setImmediate(() => {
+          console.log(`${label} | ${ev.join(', ')} | the peer got ${JSON.stringify(got)}: ${peer.join(', ')}`);
+          resolve();
+        }));
+      });
     });
     srv.listen(0, '127.0.0.1', () => {
       const c = net.connect(srv.address().port, '127.0.0.1');
@@ -40,6 +48,13 @@ const row = (label, act) =>
       ev.push(`destroyed ${c.destroyed}`);
     })
   );
+  await row('reset once the peer has read what was written', (c, ev) => {
+    c.on('connect', () => c.write('hello'));
+    c.on('data', () => {
+      c.resetAndDestroy();
+      ev.push(`destroyed ${c.destroyed}`);
+    });
+  });
   await row('destroyed, then reset', (c, ev) =>
     c.on('connect', () => {
       c.destroy();

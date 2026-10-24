@@ -1,7 +1,8 @@
 resetAndDestroy is a function
-connected | returns the socket true, destroyed true, close [false], destroyed true | the peer got "" and closed
-still connecting | connecting true, destroyed false, connect, close [false], destroyed true | the peer got "" and closed
-reset twice | destroyed true, close [false], destroyed true | the peer got "" and closed
-destroyed, then reset | returns the socket true, close [false], destroyed true | the peer got "" and closed
+connected | returns the socket true, destroyed true, close [false], destroyed true | the peer got "": error ECONNRESET read, close true
+still connecting | connecting true, destroyed false, connect, close [false], destroyed true | the peer got "": error ECONNRESET read, close true
+reset twice | destroyed true, close [false], destroyed true | the peer got "": error ECONNRESET read, close true
+reset once the peer has read what was written | destroyed true, close [false], destroyed true | the peer got "hello": error ECONNRESET read, close true
+destroyed, then reset | returns the socket true, close [false], destroyed true | the peer got "": end, close false
 a socket without a connection | returns the socket true, destroyed true, error ERR_SOCKET_CLOSED Socket is closed, close []
 done

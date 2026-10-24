@@ -1,0 +1,11 @@
+http.globalAgent: first ok, free 1
+http.globalAgent: the idle socket closed, hadError true, free 0, sockets 0
+http.globalAgent: second ok, reused false
+a keep-alive http.Agent: first ok, free 1
+a keep-alive http.Agent: the idle socket closed, hadError true, free 0, sockets 0
+a keep-alive http.Agent: second ok, reused false
+a keep-alive https.Agent: first ok, free 1
+a keep-alive https.Agent: the idle socket closed, hadError true, free 0, sockets 0
+a keep-alive https.Agent: second ok, reused false
+done
+exit 0

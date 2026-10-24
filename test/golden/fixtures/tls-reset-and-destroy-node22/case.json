@@ -1,0 +1,6 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#966: resetAndDestroy and TLS, as Node 22 on slicc-kernel 1.155's reset: a TLSSocket's throws ERR_INVALID_HANDLE_TYPE until it is destroyed, and the net.Socket under tls.connect({ socket }) resets the connection, after the handshake (the server's socket gets ECONNRESET, also once it has read what the client wrote) or during it (tlsClientError ECONNRESET); destroyed during the handshake, it closes the connection, so the server sees the client leave",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}

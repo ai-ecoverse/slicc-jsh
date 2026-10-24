@@ -317,6 +317,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       if (!this.#conn || this.#detached) {
         throw Object.assign(new Error('slicc-jsh: the socket has no connection to upgrade'), { code: 'ERR_NOT_SUPPORTED' });
       }
+      const conn = this.#conn;
       this.#detached = true;
       this.#owner = owner;
       this.#wantRead();
@@ -337,7 +338,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       this.#reader = undefined;
       this.#writer = undefined;
       this.#dropHandle();
-      return this.#conn;
+      return conn;
     }
 
     /**
@@ -356,6 +357,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       const run = async () => {
         if (this.destroyed) return;
         const conn = await parent[kDetach](this);
+        if (this.destroyed) {
+          void (this.#resetting && typeof conn.reset === 'function' ? conn.reset() : conn.close?.())?.catch(() => {});
+          return;
+        }
         const { host, tls } = request.dial();
         let secure;
         this.#handshaking = conn;
@@ -647,7 +652,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         // Peer half-close/close can race into EBADF; treat as readable EOF when
         // we are not already destroyed so listeners still see 'end'.
         const code = err?.code ?? err?.cause?.code;
-        if (!this.destroyed && (code === 'EBADF' || code === 'ECONNRESET' || code === 'EPIPE')) {
+        if (!this.destroyed && (code === 'EBADF' || code === 'EPIPE')) {
           this.#readableEof = true;
           runInResource(this.#resource, this.#endRead, this, []);
         } else if (!this.destroyed) {
@@ -914,7 +919,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       }
       if (this.#idleTimer) clearTimeout(this.#idleTimer);
       this.#idleTimer = null;
-      void this.#handshaking?.close?.().catch(() => {});
+      const handshaking = this.#handshaking;
+      if (this.#resetting && typeof handshaking?.reset === 'function') void handshaking.reset().catch(() => {});
+      else void handshaking?.close?.().catch(() => {});
       this.#dialAbort?.abort();
       // Handed to a TLS socket, the connection is that socket's to close.
       if (this.#detached) {
@@ -952,9 +959,14 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       // After a clean half-close, do not abort/cancel — that RSTs the peer and
       // they never see 'end' (fin.js server side). Only force-close on errors.
       let closed = false;
+      const resets = this.#resetting && typeof conn?.reset === 'function';
       const close = () => {
         if (closed) return;
         closed = true;
+        if (resets) {
+          void conn.reset().catch(() => {});
+          return;
+        }
         void reader?.cancel?.().catch(() => {});
         try {
           if (typeof writer?.abort === 'function') void writer.abort().catch(() => {});
@@ -978,7 +990,10 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
 
     resetAndDestroy() {
       if (this.#conn && !this.#detached) this.#reset();
-      else if (this.#connecting) this.once('connect', () => this.#reset());
+      else if (this.#detached && this.#owner && !this.#owner.destroyed) {
+        this.#owner.#resetting = true;
+        this.destroy();
+      } else if (this.#connecting) this.once('connect', () => this.#reset());
       else this.destroy(nodeError(Error, 'ERR_SOCKET_CLOSED', 'Socket is closed'));
       return this;
     }

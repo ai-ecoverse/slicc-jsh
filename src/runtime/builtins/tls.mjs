@@ -1335,11 +1335,15 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
       this[kStartNow]();
     }
 
+    resetAndDestroy() {
+      if (!this.destroyed) throw nodeError(TypeError, 'ERR_INVALID_HANDLE_TYPE', 'This handle type cannot be sent');
+      return super.resetAndDestroy();
+    }
+
     _destroy(err, callback) {
       const parent = this._parent;
       super._destroy(err, (e) => {
-        callback(e);
-        if (!parent) return;
+        if (!parent) return callback(e);
         // Node's TLSWrap#close: the socket under it goes, then this one's 'close'.
         const closed = () => this.emit('close', Boolean(err));
         if (parent._readableState?.closeEmitted) process.nextTick(closed);
@@ -1347,6 +1351,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
           parent.once('close', closed);
           if (!parent.destroyed) parent.destroy();
         }
+        callback(e);
       });
     }
 

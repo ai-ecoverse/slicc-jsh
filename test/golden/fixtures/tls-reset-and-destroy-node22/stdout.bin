@@ -1,0 +1,23 @@
+a TLS socket resets
+  server end
+  server close false
+  client throws TypeError ERR_INVALID_HANDLE_TYPE This handle type cannot be sent
+  client returns the socket once destroyed true
+  client tls close false
+the socket under TLS resets
+  server error ECONNRESET
+  server close true
+  client reset, raw destroyed true
+  client raw close false
+  client tls close false
+the socket under TLS resets once the server has read what the client wrote
+  server data "ping"
+  server error ECONNRESET
+  server close true
+  client raw close false
+  client tls close false
+the socket under TLS resets during the handshake, as the server sees it
+  server tlsClientError ECONNRESET
+the socket under TLS is destroyed during the handshake, as the server sees it
+  server tlsClientError ECONNRESET
+done
