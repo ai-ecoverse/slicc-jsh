@@ -1,0 +1,118 @@
+== [] < "let a = 1;\nnull.x": status 1
+[stdin]:2
+null.x
+     ^
+
+TypeError: Cannot read properties of null (reading 'x')
+
+Node.js v22.22.0
+== ["-e","let a = 1;\nnull.x"]: status 1
+[eval]:2
+null.x
+     ^
+
+TypeError: Cannot read properties of null (reading 'x')
+
+Node.js v22.22.0
+== [] < "throw new TypeError(\"t\")": status 1
+[stdin]:1
+throw new TypeError("t")
+^
+
+TypeError: t
+
+Node.js v22.22.0
+== ["-e","throw new TypeError(\"t\")"]: status 1
+[eval]:1
+throw new TypeError("t")
+^
+
+TypeError: t
+
+Node.js v22.22.0
+== [] < "let a = 1;\n  throw 7": status 1
+
+[stdin]:2
+  throw 7
+  ^
+7
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","let a = 1;\n  throw 7"]: status 1
+
+[eval]:2
+  throw 7
+  ^
+7
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== [] < "function f() {\n  return g();\n}\nfunction g() { throw new Error(\"deep\") }\nf()": status 1
+[stdin]:4
+function g() { throw new Error("deep") }
+               ^
+
+Error: deep
+
+Node.js v22.22.0
+== ["-e","function f() {\n  return g();\n}\nfunction g() { throw new Error(\"deep\") }\nf()"]: status 1
+[eval]:4
+function g() { throw new Error("deep") }
+               ^
+
+Error: deep
+
+Node.js v22.22.0
+== [] < "Promise.reject(new Error(\"rej\"))": status 1
+[stdin]:1
+Promise.reject(new Error("rej"))
+               ^
+
+Error: rej
+
+Node.js v22.22.0
+== ["-e","Promise.reject(new Error(\"rej\"))"]: status 1
+[eval]:1
+Promise.reject(new Error("rej"))
+               ^
+
+Error: rej
+
+Node.js v22.22.0
+== [] < "setTimeout(() => { null.y }, 1)": status 1
+[stdin]:1
+setTimeout(() => { null.y }, 1)
+                        ^
+
+TypeError: Cannot read properties of null (reading 'y')
+
+Node.js v22.22.0
+== ["-e","setTimeout(() => { null.y }, 1)"]: status 1
+[eval]:1
+setTimeout(() => { null.y }, 1)
+                        ^
+
+TypeError: Cannot read properties of null (reading 'y')
+
+Node.js v22.22.0
+== [] < "const e = new Error(\"own\"); e.code = \"E_OWN\"; throw e": status 1
+[stdin]:1
+const e = new Error("own"); e.code = "E_OWN"; throw e
+                                              ^
+
+Error: own
+  code: 'E_OWN'
+}
+
+Node.js v22.22.0
+== ["-e","const e = new Error(\"own\"); e.code = \"E_OWN\"; throw e"]: status 1
+[eval]:1
+const e = new Error("own"); e.code = "E_OWN"; throw e
+                                              ^
+
+Error: own
+  code: 'E_OWN'
+}
+
+Node.js v22.22.0
