@@ -1,0 +1,12 @@
+const util = require('util');
+console.log(util.inspect(Error));
+console.log(Object.keys(Error));
+const seen = [];
+for (const k in Error) seen.push(k);
+console.log(seen);
+console.log(Object.keys(Object.assign({}, Error)), Object.keys({ ...Error }));
+console.log(Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace').enumerable, Object.hasOwn(Error, 'prepareStackTrace'));
+Error.prepareStackTrace = (e, sites) => `custom ${sites.length > 0}`;
+console.log(Object.keys(Error), new Error('x').stack);
+Error.prepareStackTrace = undefined;
+console.log(util.inspect(Error), util.inspect(RangeError), Object.keys(TypeError));

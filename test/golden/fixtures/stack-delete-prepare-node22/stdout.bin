@@ -5,8 +5,9 @@ Error: x
 TypeError: Cannot read properties of null (reading 'p')
     at Object.<anonymous> (DIR/main.js:8:8)
 custom true 13
+["stackTraceLimit","prepareStackTrace"] true
 Error: z
-    at Object.<anonymous> (DIR/main.js:15:6)
+    at Object.<anonymous> (DIR/main.js:16:6)
 Error: u
-    at Object.<anonymous> (DIR/main.js:17:6)
+    at Object.<anonymous> (DIR/main.js:18:6)
 true RangeError: r

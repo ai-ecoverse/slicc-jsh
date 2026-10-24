@@ -11,6 +11,7 @@ try {
 }
 Error.prepareStackTrace = (e, sites) => `custom ${sites[0].getFileName() === __filename} ${sites[0].getLineNumber()}`;
 show(new Error('y').stack);
+show(JSON.stringify(Object.keys(Error)), Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace').enumerable);
 delete Error.prepareStackTrace;
 show(new Error('z').stack.split('\n').slice(0, 2).join('\n'));
 Error.prepareStackTrace = undefined;

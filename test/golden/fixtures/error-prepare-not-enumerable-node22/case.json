@@ -1,0 +1,1 @@
+{ "description": "ai-ecoverse/slicc-jsh#1097: Error.prepareStackTrace is an own property of Error that isn't enumerable, as in Node 22.22.0, so util.inspect(Error), Object.keys, for…in, Object.assign and a spread list only stackTraceLimit, before and after a formatter is set", "argv": ["main.js"], "shim": true }
