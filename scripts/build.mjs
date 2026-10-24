@@ -483,7 +483,7 @@ const main = await esbuild.build({
           patch('t.exports={identicalSequenceRange:or,', 't.exports={getPromiseDetails:ke,identicalSequenceRange:or,');
           patch(
             'do{if(null===c){let e=t.stylize("<Revoked Proxy>","special");for(let n=0;n<s;n++)e=`${t.stylize("Proxy(","special")}${e}${t.stylize(")","special")}`;return e}c=je(e=c,!1),s+=1}while(void 0!==c)',
-            'if(null===c)return t.stylize("<Revoked Proxy>","special");e=c'
+            'if(null===c)return t.stylize("<Revoked Proxy>","special");e=c,s=-1'
           );
           return { contents: src, loader: 'js' };
         });

@@ -14,3 +14,10 @@ Proxy [ [ 1, 2, 3, [length]: 3 ], {} ] | { a: 1, nested: { b: [ 1, 2 ] } } | { s
 { a: [33m1[39m, nested: { b: [ [33m1[39m, [33m2[39m ] } } [36m<Revoked Proxy>[39m
 traps []
 true true false
+custom 2 function true [ custom 1 function true ] {
+  [Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]]
+}
+{ swapped: true } Proxy [
+  custom 1 function false,
+  { getPrototypeOf: [Function: getPrototypeOf] }
+]

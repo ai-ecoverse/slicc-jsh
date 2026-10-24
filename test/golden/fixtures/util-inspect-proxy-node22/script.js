@@ -19,3 +19,8 @@ console.log(util.format('%o | %O | %s | %j', arr, obj, new Proxy({ s: 1 }, {}), 
 console.log(util.inspect(obj, { colors: true }), util.inspect(revoked, { colors: true }));
 console.log('traps', JSON.stringify(traps));
 console.log(util.types.isProxy(obj), util.types.isProxy(nested), util.types.isProxy({}));
+const custom = new Proxy({ [util.inspect.custom](depth, options) { return `custom ${depth} ${typeof options.stylize} ${this === custom}`; } }, {
+  getPrototypeOf() { throw new Error('getPrototypeOf trap ran'); },
+});
+console.log(util.inspect(custom), [custom], util.inspect(custom, { customInspect: false }));
+console.log(util.inspect(new Proxy({ [util.inspect.custom]: () => ({ swapped: true }) }, {})), util.inspect(custom, { showProxy: true }));
