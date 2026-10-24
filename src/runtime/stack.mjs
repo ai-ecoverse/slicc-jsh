@@ -239,7 +239,8 @@ function originSite(file, line, col) {
 
 const FUNCTION_TAG = 'slicc-jsh-function:';
 const TAGGED = /eval at [^()]* \((slicc-jsh-function:\d+)\)/g;
-const FUNCTION_SOURCES = 1000;
+const FUNCTION_SOURCE_BUDGET = 1 << 20;
+let functionSourceLength = 0;
 const functionOrigins = new Map();
 const functionTags = new Map();
 const functionSources = new WeakMap();
@@ -248,9 +249,11 @@ const untagged = (origin) => origin.replace(TAGGED, (m, tag) => functionTags.get
 export function functionTag(origin, source) {
   let bySource = functionOrigins.get(origin);
   if (!bySource) functionOrigins.set(origin, (bySource = new Map()));
-  const key = functionTags.size < FUNCTION_SOURCES ? source : null;
+  const kept = bySource.has(source) || functionSourceLength + source.length <= FUNCTION_SOURCE_BUDGET;
+  const key = kept ? source : null;
   let entry = bySource.get(key);
   if (!entry) {
+    if (kept) functionSourceLength += source.length;
     entry = { tag: `${FUNCTION_TAG}${functionTags.size}`, origin: untagged(origin), source: key };
     entry.shown = evalOrigin(entry.origin);
     bySource.set(key, entry);
