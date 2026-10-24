@@ -30,18 +30,21 @@ export function createTimers(
     closePhaseRan = false;
     timerAt = null;
   };
-  const runClose = (fn, linger) => {
-    const was = [checkPhase, closePhaseRan, timerAt];
+  const runClose = ({ fn, frame }) => {
     endPhase();
     closePhaseRan = true;
     closeDepth++;
     try {
-      return fn();
+      runInFrame(frame, fn, undefined, []);
+      afterCallback?.();
+    } catch (err) {
+      if (onCallbackError) onCallbackError(err);
+      else throw err;
     } finally {
       closeDepth--;
-      if (!linger) [checkPhase, closePhaseRan, timerAt] = was;
     }
   };
+  const atIdle = [];
   // The check phase that follows a message ports' turn (Node runs the
   // immediates queued by the end of the poll phase before its next timers
   // phase): the immediates pending when the turn ended. While any of them
@@ -276,14 +279,8 @@ export function createTimers(
     closeTimer = null;
     for (let i = 0; i < closing.length; i++) {
       if (pendingBefore(closing[i].cut)) continue;
-      const [{ fn }] = closing.splice(i--, 1);
-      try {
-        runClose(fn, true);
-        afterCallback?.();
-      } catch (err) {
-        if (onCallbackError) onCallbackError(err);
-        else throw err;
-      }
+      const [entry] = closing.splice(i--, 1);
+      runClose(entry);
     }
   };
   const scheduleClose = () => {
@@ -338,11 +335,17 @@ export function createTimers(
     startLoop() {
       looping = true;
     },
-    /** @internal Node's close phase: fn runs now, or after the immediates pending now have run. */
+    /** @internal Node's close phase: fn runs once the loop is idle, or after the immediates pending now have run. */
     afterCheck(fn, during = checkPhase) {
       const cut = during ? checkCut : made;
-      if (!pendingBefore(cut)) return runClose(fn, false);
-      closing.push({ cut, fn });
+      const entry = { cut, fn, frame: currentFrame() };
+      if (!pendingBefore(cut)) atIdle.push(entry);
+      else closing.push(entry);
+    },
+    /** @internal The loop has run every tick and promise job it had: the close callbacks due now run. */
+    idle() {
+      endPhase();
+      for (const entry of atIdle.splice(0)) runClose(entry);
     },
     /** @internal Whether one of the program's immediates, or its ticks and promise jobs, is running (Node's check phase). */
     inCheck: () => checkPhase,

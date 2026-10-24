@@ -1,0 +1,7 @@
+a close handler's promise continuation | timeout 0, immediate
+a close handler's nextTick | timeout 0, immediate
+a close handler's third await | timeout 0, immediate
+a close handler's queueMicrotask, destroyed in an immediate | timeout 0, immediate
+a close handler's promise continuation, destroyed in a timer | timeout 0, immediate
+a data callback's nextTick and promise job, then the close | tick, promise job, close
+done

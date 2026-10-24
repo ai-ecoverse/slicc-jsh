@@ -1,0 +1,5 @@
+{
+  "description": "a socket's 'close' handler run with no immediate pending keeps Node 22's close phase through its promise jobs, its nextTicks and its awaits: a setTimeout(fn, 0) queued there runs, once due, before a setImmediate queued with it (destroyed in a data callback, an immediate or a timer); and the close comes after the ticks and promise jobs of the callback that destroyed the socket",
+  "argv": ["script.js"],
+  "shim": true
+}
