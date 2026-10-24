@@ -30,6 +30,7 @@ import { hideNewerBuiltins } from './node22-globals.mjs';
 import { createFetch } from './web/fetch.mjs';
 import { createWebSocket } from './web/websocket.mjs';
 import { createPorts } from './web/broadcast-channel.mjs';
+import { installPromiseState } from './node-bindings.mjs';
 import { setupChildChannel } from './builtins/ipc-channel.mjs';
 import { createRemotePorts, mailboxSerdes } from './web/remote-ports.mjs';
 import { createMessageEvent, installMessageEvent } from './web/message-event.mjs';
@@ -230,6 +231,7 @@ const platformSetTimeout = globalThis.setTimeout.bind(globalThis);
  */
 export async function runNode(ctx, options = {}) {
   installStackPrepare();
+  installPromiseState(ctx);
   useHostContext(ctx.asyncContext);
   const handles = createHandleTable();
   // A tick wakes the loop when it waits on a handle (drainLoop).

@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#974: util.inspect and console.log show a settled promise's state as Node 22.22.0: Promise { 1 }, Promise { <rejected> 'x' } (an Error's stack indented), Promise { <pending> }, nested, at depth 0, in color, for a subclass, with %o and %O, and in a Worker; inspecting an unhandled rejection doesn't handle it: 'unhandledRejection' still comes, 'rejectionHandled' never does. Needs slicc-kernel 1.159.0's ctx.sync.promiseState",
+  "argv": ["script.js"],
+  "shim": true
+}

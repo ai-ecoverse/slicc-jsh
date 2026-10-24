@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#974: node -p prints a fulfilled promise on exit as Node 22.22.0 does, Promise { 1 }, not <pending>",
+  "argv": ["-p", "Promise.resolve(1)"],
+  "shim": true
+}
