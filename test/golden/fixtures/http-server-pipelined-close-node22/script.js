@@ -3,6 +3,7 @@ const net = require('net');
 
 const blockMs = Number(process.env.INJECT_BLOCK_MS) || 0;
 const sendDelayMs = Number(process.env.SEND_DELAY_MS) || 0;
+const resCloseDelayMs = Number(process.env.RES_CLOSE_DELAY_MS) || 0;
 const block = () => {
   const until = Date.now() + blockMs;
   while (Date.now() < until);
@@ -12,7 +13,7 @@ const post = (url, length, body = '', extra = '') => `POST ${url} HTTP/1.1\r\nHo
 const get = (url, extra = '') => `GET ${url} HTTP/1.1\r\nHost: x\r\n${extra}\r\n`;
 const ORDER = ['request', 'aborted', 'req error', 'end', 'finish', 'res close', 'req close'];
 
-const shot = (label, { handler, send, create = {}, options = {}, clientError = true, onClientError, until, bound = 10000 }) =>
+const shot = (label, { handler, send, create = {}, options = {}, clientError = true, onClientError, until, settled = () => true, bound = 10000 }) =>
   new Promise((resolve) => {
     const urls = [];
     const seen = new Map();
@@ -23,7 +24,28 @@ const shot = (label, { handler, send, create = {}, options = {}, clientError = t
         urls.push(url);
       }
       seen.get(url).push(event);
+      report();
     };
+    let closed = false;
+    let reported = false;
+    const report = () => {
+      if (!closed || reported || !settled(seen)) return;
+      reported = true;
+      srv.close(() => setImmediate(() => {
+        const rows = urls.map((url) => {
+          const events = seen.get(url);
+          const counted = ORDER.flatMap((name) => {
+            const hits = events.filter((e) => e === name || e.startsWith(`${name} `));
+            return hits.length ? [hits.join(' ')] : [];
+          });
+          return `${url}: ${counted.join(', ')}`;
+        });
+        console.log(`${label} | ${rows.join(' | ') || 'no requests'} | ${conn.join(', ') || '-'}${open ? ' | open' : ' | closed'} | wire ${JSON.stringify(strip(got))}`);
+        resolve();
+      }));
+    };
+    let got = '';
+    let open = false;
     const srv = http.createServer(create, (req, res) => {
       const url = req.url;
       note(url, 'request');
@@ -32,7 +54,7 @@ const shot = (label, { handler, send, create = {}, options = {}, clientError = t
       req.on('end', () => note(url, 'end'));
       req.on('close', () => note(url, 'req close'));
       res.on('finish', () => note(url, 'finish'));
-      res.on('close', () => note(url, 'res close'));
+      res.on('close', () => (resCloseDelayMs ? setTimeout(() => note(url, 'res close'), resCloseDelayMs) : note(url, 'res close')));
       handler(req, res, srv);
     });
     Object.assign(srv, options);
@@ -45,8 +67,6 @@ const shot = (label, { handler, send, create = {}, options = {}, clientError = t
     }
     srv.listen(0, '127.0.0.1', () => {
       const c = net.connect(srv.address().port, '127.0.0.1');
-      let got = '';
-      let open = false;
       const timer = setTimeout(() => {
         open = true;
         c.destroy();
@@ -60,18 +80,8 @@ const shot = (label, { handler, send, create = {}, options = {}, clientError = t
       c.on('error', (e) => conn.push(`client error ${e.code}`));
       c.on('close', () => {
         clearTimeout(timer);
-        srv.close(() => setImmediate(() => {
-          const rows = urls.map((url) => {
-            const events = seen.get(url);
-            const counted = ORDER.flatMap((name) => {
-              const hits = events.filter((e) => e === name || e.startsWith(`${name} `));
-              return hits.length ? [hits.join(' ')] : [];
-            });
-            return `${url}: ${counted.join(', ')}`;
-          });
-          console.log(`${label} | ${rows.join(' | ') || 'no requests'} | ${conn.join(', ') || '-'}${open ? ' | open' : ' | closed'} | wire ${JSON.stringify(strip(got))}`);
-          resolve();
-        }));
+        closed = true;
+        report();
         block();
       });
     });
@@ -159,6 +169,7 @@ const three = (last = '') => post('/a', 3, 'foo') + post('/b', 3, 'foo') + post(
       req.on('end', () => req.destroy());
     },
     send: (c) => c.write(post('/', 1, 'x')),
+    settled: (seen) => ['res close', 'req close'].every((e) => seen.get('/')?.includes(e)),
     bound: 300,
   });
   await shot('an early Connection: close 413 before the upload', {
