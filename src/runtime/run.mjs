@@ -1125,6 +1125,8 @@ export async function runNode(ctx, options = {}) {
       // require of itself, resolve as for any module); process.argv[1] keeps
       // the path as given. --preserve-symlinks-main keeps the link.
       const mainPath = realMainPath(ctx, entryPath, process._options);
+      lastEvalName = mainPath;
+      lastEvalCode = source;
       if (parsed.check) {
         // --check: compiled as the module it is, under its real path, never run.
         let kind = esm.isEsmFilename(mainPath, source) ? 'module' : 'commonjs';

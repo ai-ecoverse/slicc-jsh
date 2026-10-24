@@ -1,0 +1,72 @@
+== string.mjs: status 1
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+s
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== bigint.mjs: status 1
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+5
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== symbol.mjs: status 1
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== late.mjs: status 1
+
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+late
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== bigint.js: status 1
+
+DIR/bigint.js:2
+throw 5n
+^
+5
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== hashbang.js: status 1
+
+DIR/hashbang.js:3
+  throw "two words"
+  ^
+two words
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== timer.js: status 1
+
+DIR/timer.js:1
+setTimeout(() => { throw "t" })
+                   ^
+t
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== null.js: status 1
+
+DIR/null.js:1
+throw null
+^
+null
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
