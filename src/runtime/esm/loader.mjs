@@ -8,7 +8,7 @@ import { createPath } from '../path.mjs';
 import { preserveSymlinks } from '../cjs/loader.mjs';
 import { createResolver } from '../cjs/resolve.mjs';
 import { nodeError } from '../node-errors.mjs';
-import { registerEsmFrames } from '../stack.mjs';
+import { isModuleUrl, registerEsmFrames } from '../stack.mjs';
 import { scriptFunction } from '../script-function.mjs';
 import { shouldRunAsEsm, transformEsm } from './transform.mjs';
 
@@ -271,7 +271,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     let suffix = '';
     if (scheme === 'file' || spec.startsWith('/') || spec.startsWith('./') || spec.startsWith('../')) {
       // A data: module is no base for a relative URL (Node).
-      if (scheme !== 'file' && parentFilename?.startsWith('data:')) {
+      if (scheme !== 'file' && isModuleUrl(parentFilename)) {
         throw nodeError(
           TypeError,
           'ERR_UNSUPPORTED_RESOLVE_REQUEST',
@@ -341,7 +341,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
    * the module, say so ("Did you mean to import "pkg/sub.js"?").
    */
   function commonJsHint(err, specifier, parentFilename) {
-    if (!parentFilename || parentFilename.startsWith('[') || parentFilename.startsWith('data:')) return;
+    if (!parentFilename || parentFilename.startsWith('[') || isModuleUrl(parentFilename)) return;
     let found;
     try {
       found = cjs.makeRequire(parentFilename).resolve(specifier);
@@ -398,7 +398,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
   function makeImportMeta(filename) {
     // Node: ES module input from -e or stdin is `<cwd>/[eval1]` (a file URL,
     // with filename and dirname) — its import.meta and relative imports.
-    if (filename.startsWith('data:')) {
+    if (isModuleUrl(filename)) {
       // Node: a data: module's import.meta has only its url (and resolve).
       return {
         url: filename,

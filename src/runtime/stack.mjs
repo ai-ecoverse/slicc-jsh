@@ -10,10 +10,12 @@
 import { encodeFilePath } from './builtins/url.mjs';
 
 const KERNEL_HINT =
-  /node-process-worker|runJsProcess|createNodeKernel|data:text\/javascript|@ai-ecoverse\/slicc-kernel|\/slicc-kernel\/|slicc-jsh\/dist\/|at new Function\b/i;
+  /node-process-worker|runJsProcess|createNodeKernel|data:text\/javascript|slicc-module:|@ai-ecoverse\/slicc-kernel|\/slicc-kernel\/|slicc-jsh\/dist\/|at new Function\b/i;
 
 /** An eval origin this long names a data: URL (a path is at most PATH_MAX). */
 const LONG_ORIGIN = 65536;
+
+export const isModuleUrl = (url) => typeof url === 'string' && (url.startsWith('data:') || url.startsWith('slicc-module:'));
 
 function isLoaderImplFrame(frame) {
   // Our Module.prototype._compile / Module._extensions['.js'] live in the bundle.
@@ -34,7 +36,7 @@ function isKernelFrame(frame) {
   // Decide on the name's start, before anything formats or scans the text
   // (a regex over it per frame made each stack take milliseconds).
   const file = frame.getFileName?.() || '';
-  if (file.startsWith('data:') || file === 'node:vm') return true;
+  if (isModuleUrl(file) || file === 'node:vm') return true;
   // Code the bundle compiles (its vendored builtins) has no file: its eval
   // origin (`eval at evalCjs (data:…)`), and its text, hold the bundle's URL.
   // V8 builds that origin as a rope, and reading any of it copies it whole,
@@ -116,7 +118,7 @@ function adjustLine(n) {
 
 function remapFileName(file) {
   if (!file) return file;
-  if (file.startsWith('data:')) return null;
+  if (isModuleUrl(file)) return null;
   if (file.startsWith('node:internal')) return null;
   if (file === 'unknown') return null;
   return file;
