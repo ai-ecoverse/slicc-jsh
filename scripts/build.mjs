@@ -468,12 +468,12 @@ const main = await esbuild.build({
   legalComments: 'inline',
   plugins: [
     {
-      name: 'inspect-promise-state',
+      name: 'inspect-node22',
       setup(b) {
         b.onLoad({ filter: /node-inspect-extracted[\\/]dist[\\/]inspect\.js$/ }, (args) => {
           let src = readFileSync(args.path, 'utf8');
           const patch = (from, to) => {
-            if (!src.includes(from)) throw new Error(`inspect-promise-state: inspect.js changed (${from})`);
+            if (!src.includes(from)) throw new Error(`inspect-node22: inspect.js changed (${from})`);
             src = src.replace(from, to);
           };
           patch(
@@ -481,6 +481,10 @@ const main = await esbuild.build({
             'getPromiseDetails:function getPromiseDetails(p){const s=getPromiseDetails.state?.(p);return s===void 0||s.state==="pending"?[g,void 0]:[s.state==="rejected"?h:1,s.value]}'
           );
           patch('t.exports={identicalSequenceRange:or,', 't.exports={getPromiseDetails:ke,identicalSequenceRange:or,');
+          patch(
+            'do{if(null===c){let e=t.stylize("<Revoked Proxy>","special");for(let n=0;n<s;n++)e=`${t.stylize("Proxy(","special")}${e}${t.stylize(")","special")}`;return e}c=je(e=c,!1),s+=1}while(void 0!==c)',
+            'if(null===c)return t.stylize("<Revoked Proxy>","special");e=c,s=-1'
+          );
           return { contents: src, loader: 'js' };
         });
       },

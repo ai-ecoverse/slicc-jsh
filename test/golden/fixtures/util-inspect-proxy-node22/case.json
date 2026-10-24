@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#1040: util.inspect and console.log show a Proxy as its target when showProxy is off, as Node 22.22.0 does: an object, a promise, an array, a function, a class, a Map, nested proxies, a revoked one (<Revoked Proxy>), inside objects and arrays, with %o, %O, %s and %j, in color; with showProxy on it is Proxy [ target, handler ]; a proxied [util.inspect.custom] runs on the proxy without its getPrototypeOf trap (#1053); no trap of the handler runs",
+  "argv": ["script.js"],
+  "shim": true
+}
