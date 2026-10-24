@@ -1,0 +1,132 @@
+== ["-e","eval(\"null.q\")"]: status 1
+<anonymous_script>:1
+null.q
+     ^
+
+TypeError: Cannot read properties of null (reading 'q')
+
+Node.js v22.22.0
+== [] < "eval(\"null.q\")": status 1
+<anonymous_script>:1
+null.q
+     ^
+
+TypeError: Cannot read properties of null (reading 'q')
+
+Node.js v22.22.0
+== ["-e","function f() { eval(\"null.z\") }\nf()"]: status 1
+<anonymous_script>:1
+null.z
+     ^
+
+TypeError: Cannot read properties of null (reading 'z')
+
+Node.js v22.22.0
+== [] < "function f() { eval(\"null.z\") }\nf()": status 1
+<anonymous_script>:1
+null.z
+     ^
+
+TypeError: Cannot read properties of null (reading 'z')
+
+Node.js v22.22.0
+== ["-e","eval(`\n\n  throw new Error(\"e3\")`)"]: status 1
+<anonymous_script>:3
+  throw new Error("e3")
+  ^
+
+Error: e3
+
+Node.js v22.22.0
+== [] < "eval(`\n\n  throw new Error(\"e3\")`)": status 1
+<anonymous_script>:3
+  throw new Error("e3")
+  ^
+
+Error: e3
+
+Node.js v22.22.0
+== ["-e","eval(\"function g() { null.g }\\ng()\")"]: status 1
+<anonymous_script>:1
+function g() { null.g }
+                    ^
+
+TypeError: Cannot read properties of null (reading 'g')
+
+Node.js v22.22.0
+== [] < "eval(\"function g() { null.g }\\ng()\")": status 1
+<anonymous_script>:1
+function g() { null.g }
+                    ^
+
+TypeError: Cannot read properties of null (reading 'g')
+
+Node.js v22.22.0
+== ["-e","let a = 1;\neval('null.q2')"]: status 1
+<anonymous_script>:1
+null.q2
+     ^
+
+TypeError: Cannot read properties of null (reading 'q2')
+
+Node.js v22.22.0
+== [] < "let a = 1;\neval('null.q2')": status 1
+<anonymous_script>:1
+null.q2
+     ^
+
+TypeError: Cannot read properties of null (reading 'q2')
+
+Node.js v22.22.0
+== ["-e","(0, eval)(\"null.i\")"]: status 1
+<anonymous_script>:1
+null.i
+     ^
+
+TypeError: Cannot read properties of null (reading 'i')
+
+Node.js v22.22.0
+== [] < "(0, eval)(\"null.i\")": status 1
+<anonymous_script>:1
+null.i
+     ^
+
+TypeError: Cannot read properties of null (reading 'i')
+
+Node.js v22.22.0
+== ["-e","setTimeout(() => eval(\"null.t\"))"]: status 1
+<anonymous_script>:1
+null.t
+     ^
+
+TypeError: Cannot read properties of null (reading 't')
+
+Node.js v22.22.0
+== [] < "setTimeout(() => eval(\"null.t\"))": status 1
+<anonymous_script>:1
+null.t
+     ^
+
+TypeError: Cannot read properties of null (reading 't')
+
+Node.js v22.22.0
+== ["-e","try { eval(\"null.c\") } catch (e) { console.log(e.stack.split(\"\\n\").filter((l) => !l.includes(\"node:\") && !l.includes(\"-wrapper\")).join(\"\\n\")) }"]: status 0
+TypeError: Cannot read properties of null (reading 'c')
+    at eval (eval at <anonymous> ([eval]:1:7), <anonymous>:1:6)
+    at [eval]:1:7
+== [] < "try { eval(\"null.c\") } catch (e) { console.log(e.stack.split(\"\\n\").filter((l) => !l.includes(\"node:\") && !l.includes(\"-wrapper\")).join(\"\\n\")) }": status 0
+TypeError: Cannot read properties of null (reading 'c')
+    at eval (eval at <anonymous> ([stdin]:1:7), <anonymous>:1:6)
+    at [stdin]:1:7
+== ["-e","let b = 1;\nfunction h() { return eval(\"function inner() { return null.n }\\ninner()\") }\ntry { h() } catch (e) { console.log(e.stack.split(\"\\n\").filter((l) => !l.includes(\"node:\") && !l.includes(\"-wrapper\")).join(\"\\n\")) }"]: status 0
+TypeError: Cannot read properties of null (reading 'n')
+    at inner (eval at h ([eval]:2:23), <anonymous>:1:32)
+    at eval (eval at h ([eval]:2:23), <anonymous>:2:1)
+    at h ([eval]:2:23)
+    at [eval]:3:7
+== [] < "let b = 1;\nfunction h() { return eval(\"function inner() { return null.n }\\ninner()\") }\ntry { h() } catch (e) { console.log(e.stack.split(\"\\n\").filter((l) => !l.includes(\"node:\") && !l.includes(\"-wrapper\")).join(\"\\n\")) }": status 0
+TypeError: Cannot read properties of null (reading 'n')
+    at inner (eval at h ([stdin]:2:23), <anonymous>:1:32)
+    at eval (eval at h ([stdin]:2:23), <anonymous>:2:1)
+    at h ([stdin]:2:23)
+    at [stdin]:3:7
