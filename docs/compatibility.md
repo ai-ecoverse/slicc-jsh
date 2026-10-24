@@ -64,7 +64,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - `import` of CommonJS: the named exports are what Node's cjs-module-lexer finds in the source, re-exports included. The default export is `module.exports` itself, never its `.default`.
 - `require()` of an ES module with a default export returns Node's facade with `__esModule: true` and live bindings, or its `'module.exports'` export.
 - `package.json` `"exports"` with `import`/`require` conditions.
-- `import()` inside `new Function` and `AsyncFunction` bodies loads through the runtime, resolved against the calling script.
+- `import()` inside `new Function` and `AsyncFunction` bodies loads through the runtime, resolved against the calling script. jsh wraps the Function constructors for that, but a function they make still has V8's frames, with its eval origin at the caller's call, as in Node: `at eval (eval at f ([eval]:1:23), <anonymous>:3:13)`. An uncaught error in one prints the `<anonymous_script>:N` header, its body a string or not. An indirect eval keeps its native `at eval (<anonymous>)` frame (golden `function-eval-frames-node22`).
 
 **ES module input.** With `--input-type=module`, the program is `<cwd>/[eval1]`, as in Node (`import.meta.url`, `filename`, `dirname`). Its `import.meta.resolve` gives a missing file's URL rather than throwing.
 
