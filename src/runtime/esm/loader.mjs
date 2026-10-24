@@ -97,14 +97,20 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
   const readPackageJson = (pkgPath) => {
     if (packageCache.has(pkgPath)) return packageCache.get(pkgPath);
+    let text;
     try {
-      const pkg = JSON.parse(decoder.decode(fs.readFile(pkgPath)));
-      packageCache.set(pkgPath, pkg);
-      return pkg;
+      text = decoder.decode(fs.readFile(pkgPath));
     } catch {
-      packageCache.set(pkgPath, null);
       return null;
     }
+    let pkg;
+    try {
+      pkg = JSON.parse(text);
+    } catch {
+      pkg = null;
+    }
+    packageCache.set(pkgPath, pkg);
+    return pkg;
   };
 
   const resolver = createResolver({
@@ -152,6 +158,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     let dir = fromDir;
     for (;;) {
       const pkgPath = path.join(dir, 'package.json');
+      if (packageCache.has(pkgPath)) return packageCache.get(pkgPath);
       try {
         if (fs.exists(pkgPath)) return readPackageJson(pkgPath);
       } catch {

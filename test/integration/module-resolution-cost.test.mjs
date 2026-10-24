@@ -54,6 +54,13 @@ const pkg = (dir, name, n) => `
   fs.writeFileSync(dir + '/index.js', src + 'export const n = f${n - 1} + 1;\\n');
   fs.writeFileSync('${dir}/${name}.mjs', "const { n } = await import('${name}'); console.log(n);"); }`;
 
+const chain = (dir, name, n) => `
+{ const dir = '${dir}/node_modules/${name}';
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(dir + '/package.json', JSON.stringify({ name: '${name}', main: 'f0.js' }));
+  for (let i = 0; i < ${n}; i++) fs.writeFileSync(dir + '/f' + i + '.js', i < ${n - 1} ? "require('dep'); module.exports = require('./f" + (i + 1) + ".js') + 1;\\n" : "module.exports = require('dep');\\n");
+  fs.writeFileSync('${dir}/${name}.js', "console.log(require('${name}'));"); }`;
+
 describe('module resolution cost does not grow with the path depth (kernel)', () => {
   let jsh;
   before(async () => {
@@ -95,5 +102,25 @@ describe('module resolution cost does not grow with the path depth (kernel)', ()
     assert.ok(total(perImportShallow) <= 20 * 8, `at most 8 fs calls per import: ${report}`);
     assert.deepEqual(minus(d40, s40), minus(d20, s20), `the depth costs the same calls for 20 and 40 imports: ${report}`);
     assert.ok(total(minus(d40, s40)) <= 48 * 4, `at most 4 fs calls per extra directory: ${report}`);
+  });
+
+  it('a CommonJS file in a package costs one stat, one lstat and one read: its package.json, its own directory and a repeated require are not looked up again', async () => {
+    const dir = '/os/cjs';
+    const setup = await jsh.run([
+      'node',
+      '-e',
+      `const fs = require('fs'); fs.mkdirSync('${dir}/node_modules/dep', { recursive: true }); fs.writeFileSync('${dir}/node_modules/dep/package.json', JSON.stringify({ name: 'dep' })); fs.writeFileSync('${dir}/node_modules/dep/index.js', 'module.exports = 0;'); ${chain(dir, 'small', 20)} ${chain(dir, 'large', 40)}`,
+    ]);
+    assert.equal(setup.status, 0, setup.stderr);
+    const counts = async (name, n) => {
+      const file = `${dir}/counts-${name}.json`;
+      const r = await jsh.run(['counted-node', `${dir}/${name}.js`], { env: { JSH_FS_COUNTS: file } });
+      assert.deepEqual({ status: r.status, stdout: r.stdout, stderr: r.stderr }, { status: 0, stdout: `${n - 1}\n`, stderr: '' });
+      return JSON.parse(new TextDecoder().decode(await jsh.kernel.readFile(file)));
+    };
+    const small = await counts('small', 20);
+    const large = await counts('large', 40);
+    const minus = (a, b) => Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].sort().map((k) => [k, (a[k] ?? 0) - (b[k] ?? 0)]).filter(([, v]) => v !== 0));
+    assert.deepEqual(minus(large, small), { 'sync.fs.lstat': 20, 'sync.fs.readFile': 20, 'sync.fs.stat': 20 }, JSON.stringify({ small, large }));
   });
 });
