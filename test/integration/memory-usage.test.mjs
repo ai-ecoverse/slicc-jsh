@@ -2,7 +2,7 @@
  * process.memoryUsage() reports what jsh measures and 0 for what nothing in
  * its process worker can measure (#397): `arrayBuffers` counts the live
  * Buffers jsh allocated, `external` is at least `arrayBuffers`, and `rss()`
- * is `memoryUsage().rss`. Heap figures need the
+ * is measured where `memoryUsage().rss` is. Heap figures need the
  * kernel's ctx.memory(); until a kernel has it they are 0 together, never
  * an estimate. The shape is host Node's.
  */
@@ -24,7 +24,7 @@ describe('process.memoryUsage (kernel)', () => {
     return JSON.parse(r.stdout);
   };
 
-  it("has host Node's keys, types and invariants, and rss() is memoryUsage().rss", async () => {
+  it("has host Node's keys, types and invariants, and rss() is measured where memoryUsage().rss is", async () => {
     const m = await json(
       'const m = process.memoryUsage(); console.log(JSON.stringify({ m, rss: process.memoryUsage.rss(), rssType: typeof process.memoryUsage.rss() }))'
     );
@@ -34,7 +34,8 @@ describe('process.memoryUsage (kernel)', () => {
     assert.ok(m.m.heapUsed <= m.m.heapTotal);
     assert.ok(m.m.arrayBuffers <= m.m.external);
     assert.equal(m.rssType, typeof process.memoryUsage.rss());
-    assert.equal(m.rss, m.m.rss);
+    assert.ok(Number.isInteger(m.rss) && m.rss >= 0, `rss(): ${m.rss}`);
+    assert.equal(m.rss > 0, m.m.rss > 0, `rss() ${m.rss}, memoryUsage().rss ${m.m.rss}`);
   });
 
   it('arrayBuffers grows by a Buffer jsh allocates, external includes it, and views add nothing', async () => {

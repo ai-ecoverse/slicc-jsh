@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#539: process.memoryUsage().rss and process.memoryUsage.rss() are the host process's resident set size, in the main thread and in a Worker, as Node 22.22.0's: an integer above 1 MiB and above heapUsed. Needs slicc-kernel 1.158.0's ctx.memory().rss",
+  "argv": ["script.js"],
+  "shim": true
+}

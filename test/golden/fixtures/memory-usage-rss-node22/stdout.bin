@@ -1,0 +1,2 @@
+main { rss: true, aboveHeap: true, rssFn: true }
+worker { rss: true, aboveHeap: true, rssFn: true }
