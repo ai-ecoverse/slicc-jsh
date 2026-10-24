@@ -1,0 +1,1 @@
+{ "description": "ai-ecoverse/slicc-jsh#1051: an uncaught thrown primitive prints as Node 22.22.0 prints it after the arrow: a string raw, a bigint without its n, a Symbol as an empty line, null, undefined, booleans and numbers as they are, from -e, a timer and piped stdin, then the --trace-uncaught hint", "argv": ["main.js"], "shim": true }

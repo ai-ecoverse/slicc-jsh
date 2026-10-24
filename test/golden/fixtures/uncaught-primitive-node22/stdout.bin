@@ -1,0 +1,135 @@
+== ["-e","throw \"s\""]: status 1
+
+[eval]:1
+throw "s"
+^
+s
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","throw \"two words\""]: status 1
+
+[eval]:1
+throw "two words"
+^
+two words
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","throw 1n"]: status 1
+
+[eval]:1
+throw 1n
+^
+1
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","throw -12345678901234567890n"]: status 1
+
+[eval]:1
+throw -12345678901234567890n
+^
+-12345678901234567890
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","throw Symbol(\"q\")"]: status 1
+
+[eval]:1
+throw Symbol("q")
+^
+
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","throw null"]: status 1
+
+[eval]:1
+throw null
+^
+null
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","throw undefined"]: status 1
+
+[eval]:1
+throw undefined
+^
+undefined
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","throw true"]: status 1
+
+[eval]:1
+throw true
+^
+true
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","throw 1.5"]: status 1
+
+[eval]:1
+throw 1.5
+^
+1.5
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","throw -0"]: status 1
+
+[eval]:1
+throw -0
+^
+0
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","let x = 1;\n  throw \"t2\""]: status 1
+
+[eval]:2
+  throw "t2"
+  ^
+t2
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","setTimeout(() => { throw \"late\" })"]: status 1
+
+[eval]:1
+setTimeout(() => { throw "late" })
+                   ^
+late
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== ["-e","setTimeout(() => { throw 3n })"]: status 1
+
+[eval]:1
+setTimeout(() => { throw 3n })
+                   ^
+3
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== [] < "throw \"from stdin\"": status 1
+
+[stdin]:1
+throw "from stdin"
+^
+from stdin
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0
+== [] < "let y = 1;\nthrow 4n": status 1
+
+[stdin]:2
+throw 4n
+^
+4
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v22.22.0

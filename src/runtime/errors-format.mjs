@@ -213,7 +213,8 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     };
   }
   if (!(err instanceof Error)) {
-    const shown = util.inspect(err);
+    const primitive = err === null || (typeof err !== 'object' && typeof err !== 'function');
+    const shown = !primitive ? util.inspect(err) : typeof err === 'symbol' ? '' : String(err);
     // A thrown primitive has no stack: in -e code, point at its first
     // `throw` (V8 gives Node the exact spot); else Node's shape for line 1.
     let where = `${evalName}:1\nthrow ${shown}\n^`;
