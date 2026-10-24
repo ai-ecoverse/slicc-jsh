@@ -1,0 +1,5 @@
+{
+  "description": "an immediate queued from a socket's 'close' handler, or its promise continuation, runs in the next check phase, after the next timers phase, as in Node 22: a setTimeout 0 queued after it there that has come due runs first, for a socket destroyed in a data callback (with an immediate pending or not), in an immediate and in a timer",
+  "argv": ["script.js"],
+  "shim": true
+}

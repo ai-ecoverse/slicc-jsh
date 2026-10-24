@@ -1,0 +1,6 @@
+a close handler's immediate, then its setTimeout 0, destroyed in a data callback | timeout 0, immediate
+a close handler's promise continuation's immediate, then its setTimeout 0 | timeout 0, immediate
+a close handler's immediate, then its setTimeout 0, closed after the pending immediate | pending immediate, timeout 0, immediate
+a close handler's immediate, then its setTimeout 0, destroyed in an immediate | timeout 0, immediate
+a close handler's immediate, then its setTimeout 0, destroyed in a timer | timeout 0, immediate
+done
