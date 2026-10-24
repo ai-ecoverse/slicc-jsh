@@ -20,11 +20,27 @@ export function createTimers(
   // wait (Node's check phase comes after the poll phase that delivers port
   // messages).
   let checkPhase = false;
+  let closePhaseRan = false;
+  let closeDepth = 0;
   let checkCut = 0;
   let timerAt = null;
   const endPhase = () => {
+    if (closeDepth > 0) return;
     checkPhase = false;
+    closePhaseRan = false;
     timerAt = null;
+  };
+  const runClose = (fn, linger) => {
+    const was = [checkPhase, closePhaseRan, timerAt];
+    endPhase();
+    closePhaseRan = true;
+    closeDepth++;
+    try {
+      return fn();
+    } finally {
+      closeDepth--;
+      if (!linger) [checkPhase, closePhaseRan, timerAt] = was;
+    }
   };
   // The check phase that follows a message ports' turn (Node runs the
   // immediates queued by the end of the poll phase before its next timers
@@ -159,6 +175,7 @@ export function createTimers(
         state.seq = made++;
       }
       checkPhase = false;
+      closePhaseRan = false;
       timerAt = Date.now();
       runMethod(handle, '_onTimeout', args, domain, frame);
     };
@@ -183,7 +200,7 @@ export function createTimers(
       }
     };
     state.run = run;
-    state.afterIo = looping && !checkPhase;
+    state.afterIo = looping && !checkPhase && !closePhaseRan;
     state.seq = made++;
     // Node's delay: a number from 1 up (anything else is 1).
     state.delay = delay >= 1 && delay <= 2147483647 ? Number(delay) : 1;
@@ -261,7 +278,7 @@ export function createTimers(
       if (pendingBefore(closing[i].cut)) continue;
       const [{ fn }] = closing.splice(i--, 1);
       try {
-        fn();
+        runClose(fn, true);
         afterCallback?.();
       } catch (err) {
         if (onCallbackError) onCallbackError(err);
@@ -324,7 +341,7 @@ export function createTimers(
     /** @internal Node's close phase: fn runs now, or after the immediates pending now have run. */
     afterCheck(fn, during = checkPhase) {
       const cut = during ? checkCut : made;
-      if (!pendingBefore(cut)) return fn();
+      if (!pendingBefore(cut)) return runClose(fn, false);
       closing.push({ cut, fn });
     },
     /** @internal Whether one of the program's immediates, or its ticks and promise jobs, is running (Node's check phase). */

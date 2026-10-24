@@ -1,0 +1,5 @@
+{
+  "description": "a setTimeout(fn, 0) queued from a socket's 'close' handler, or (when the close comes after a pending immediate) its promise continuation or nextTick runs, once due, before a setImmediate queued with it, as Node 22's close phase is followed by the next timers phase: for a socket destroyed in its data callback, in an immediate and in a timer",
+  "argv": ["script.js"],
+  "shim": true
+}
