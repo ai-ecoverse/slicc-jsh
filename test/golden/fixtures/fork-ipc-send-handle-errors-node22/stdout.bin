@@ -1,0 +1,29 @@
+an object: TypeError ERR_INVALID_HANDLE_TYPE This handle type cannot be sent
+a number: TypeError ERR_INVALID_HANDLE_TYPE This handle type cannot be sent
+a string: TypeError ERR_INVALID_HANDLE_TYPE This handle type cannot be sent
+an array: TypeError ERR_INVALID_HANDLE_TYPE This handle type cannot be sent
+a function as the handle: returned true
+options not an object: TypeError ERR_INVALID_ARG_TYPE The "options" argument must be of type object. Received type string ('nope')
+a null handle: returned true
+an unconnected socket: returned true
+a server not listening: returned true
+fn callback null
+unconnected callback null
+not listening callback null
+the child got fn with no handle
+the child got null with no handle
+the child got unconnected socket with no handle
+the child got server not listening with no handle
+a closed server: returned true
+closed server callback null
+the child got closed server with no handle
+a destroyed socket: returned true
+destroyed callback null
+the child got destroyed socket with no handle
+a server after disconnect: returned false
+late callback Error [ERR_IPC_CHANNEL_CLOSED]: Channel closed
+a TLSSocket: returned true
+a send behind it: returned true
+tls callback null
+uncaught TypeError ERR_INVALID_HANDLE_TYPE This handle type cannot be sent
+the child got a NODE_HANDLE for a net.Socket without its handle

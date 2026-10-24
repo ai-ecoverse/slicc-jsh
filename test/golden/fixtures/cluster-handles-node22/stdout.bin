@@ -1,0 +1,17 @@
+the default policy is SCHED_RR true
+SCHED_RR: every worker listens on one port true
+SCHED_RR: their address() is that port true
+SCHED_RR: request 1: the worker's socket sees 127.0.0.1 the client's own port
+SCHED_RR: request 2: the worker's socket sees 127.0.0.1 the client's own port
+SCHED_RR: request 3: the worker's socket sees 127.0.0.1 the client's own port
+SCHED_RR: request 4: the worker's socket sees 127.0.0.1 the client's own port
+SCHED_RR: answered by every worker
+SCHED_RR: disconnected
+SCHED_NONE: every worker listens on one port true
+SCHED_NONE: their address() is that port true
+SCHED_NONE: request 1: the worker's socket sees 127.0.0.1 the client's own port
+SCHED_NONE: request 2: the worker's socket sees 127.0.0.1 the client's own port
+SCHED_NONE: request 3: the worker's socket sees 127.0.0.1 the client's own port
+SCHED_NONE: request 4: the worker's socket sees 127.0.0.1 the client's own port
+SCHED_NONE: answered by every worker
+SCHED_NONE: disconnected

@@ -1,0 +1,13 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#538: sticky sessions, child_process.fork's send(message, socket): a pauseOnConnect net.Server hands each accepted socket to the child, whose http.Server takes it ('connection') and answers; the parent's getConnections counts the child's sockets and its close waits for them; handle sends queue behind the child's acknowledgement, a plain send with them, in order",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

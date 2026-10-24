@@ -1,0 +1,25 @@
+send callback null
+the child got request /one: a net.Socket true, readable true, writable true, remote 127.0.0.1
+client /one read: the child answered /one
+after /one: the parent's socket destroyed false, connections null 1
+send callback null
+the child got request /two: a net.Socket true, readable true, writable true, remote 127.0.0.1
+client /two read: the child answered /two
+after /two: the parent's socket destroyed false, connections null 2
+send a: true
+send plain: true
+send b: false
+send c: false
+the child got a: a net.Socket true, readable true, writable true, remote 127.0.0.1
+the child got plain
+the child got b: a net.Socket true, readable true, writable true, remote 127.0.0.1
+the child got c: a net.Socket true, readable true, writable true, remote 127.0.0.1
+c callback null
+client read: the child ended a
+client read: the child ended b
+client read: the child ended c
+connections null 3
+close called, listening false
+the clients end
+the server closed
+child exit 0

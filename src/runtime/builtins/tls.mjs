@@ -24,7 +24,7 @@ import {
   validateUint32,
 } from '../node-errors.mjs';
 import { deprecate } from './util.mjs';
-import { kConnectTls, kDetach, kDropHandshake, kIoError, kServesTls, kStartNow, kStartTls, kTlsSession } from './net.mjs';
+import { kConnectTls, kDetach, kDropHandshake, kIoError, kIpc, kServesTls, kStartNow, kStartTls, kTlsSession } from './net.mjs';
 import { certificateObject, isIssuedBy, likelyIssued, parseCertificate } from './x509.mjs';
 import { lockedKeyError } from './tls-key.mjs';
 
@@ -1147,6 +1147,11 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
       }
       if (socket && tlsOptions.isServer) this.#serve(socket);
       else if (socket) this.#over(socket);
+    }
+
+    [kIpc](keepOpen) {
+      if (this.destroyed) return undefined;
+      return { ...super[kIpc](keepOpen), tls: true };
     }
 
     #serve(socket) {

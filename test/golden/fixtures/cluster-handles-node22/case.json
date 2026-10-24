@@ -1,0 +1,13 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#538: cluster schedules as Node does, by handle passing: under SCHED_RR the primary accepts and hands each connection to a worker, under SCHED_NONE it hands the listening socket to the worker, which accepts on it; either way the worker's socket sees the client as its peer, and every worker's server is on the one port",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
