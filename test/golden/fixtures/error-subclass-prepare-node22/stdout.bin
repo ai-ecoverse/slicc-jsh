@@ -1,0 +1,6 @@
+true [ 'prepareStackTrace' ] Error: x
+RangeError: r function true
+{ value: 5, writable: true, enumerable: true, configurable: true } Error: y
+all all true
+[ 'prepareStackTrace' ] Error: w
+false Error: v

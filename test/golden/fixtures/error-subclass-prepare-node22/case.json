@@ -1,0 +1,1 @@
+{ "description": "ai-ecoverse/slicc-jsh#1100: assigning prepareStackTrace on an error subclass (RangeError, TypeError) or an object made from Error creates that object's own enumerable property (a frozen one is left as it is, in sloppy mode), as in Node 22.22.0, and every error's stack keeps Error's formatter, also after a delete", "argv": ["main.js"], "shim": true }

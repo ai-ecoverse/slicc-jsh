@@ -689,6 +689,8 @@ export function installStackPrepare() {
     return f;
   }
 
+  const setOwn = (target, fn) =>
+    Reflect.defineProperty(target, 'prepareStackTrace', { value: fn, writable: true, enumerable: true, configurable: true });
   const own = {
     configurable: true,
     enumerable: false,
@@ -696,7 +698,8 @@ export function installStackPrepare() {
       return userPrepare ? formatterFor(userPrepare) : wrapper;
     },
     set(fn) {
-      if (typeof fn !== 'function' || fn === wrapper) userPrepare = null;
+      if (this !== Error) setOwn(this, fn);
+      else if (typeof fn !== 'function' || fn === wrapper) userPrepare = null;
       else userPrepare = userOf.get(fn) ?? fn;
     },
   };
@@ -708,12 +711,8 @@ export function installStackPrepare() {
         return wrapper;
       },
       set(fn) {
-        if (this !== Error) {
-          Object.defineProperty(this, 'prepareStackTrace', { value: fn, writable: true, enumerable: true, configurable: true });
-          return;
-        }
-        Object.defineProperty(Error, 'prepareStackTrace', { ...own, enumerable: true });
-        own.set(fn);
+        if (this === Error) Object.defineProperty(Error, 'prepareStackTrace', { ...own, enumerable: true });
+        Reflect.apply(own.set, this, [fn]);
       },
     },
   });
