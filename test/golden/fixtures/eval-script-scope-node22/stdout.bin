@@ -36,6 +36,12 @@ Error: e|    at [eval]:1:24
 undefined [eval] true Module false function true true
 == [] < "console.log(require.main, module.id, module.filename === require(\"path\").join(process.cwd(), \"[stdin]\"), module.constructor.name, module.loaded, typeof module.require, globalThis.module === module, this === globalThis)": status 0
 undefined [stdin] true Module false function true true
+== [] < "#!/usr/bin/env node\nlet h = 1; console.log(\"stdin shebang\", (0, eval)(\"h\"), __dirname, __filename)": status 0
+stdin shebang 1 . [stdin]
+== ["-e","#!/usr/bin/env node\nlet h = 1; console.log(\"eval shebang\", (0, eval)(\"h\"), __dirname, __filename)"]: status 0
+eval shebang 1 . [eval]
+== ["-p","__dirname"]: status 0
+.
 == [] < "let x = 1; console.log(\"stdin\", (0, eval)(\"typeof x\"))": status 0
 stdin number
 == [] < "\"use strict\"; var x = 1; console.log(\"stdin\", globalThis.x)": status 0

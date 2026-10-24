@@ -25,6 +25,9 @@ run(['-e', 'let u = 1;\n\nfunction g() { return new Error("g").stack.split("\\n"
 const moduleRow = (name) => `console.log(require.main, module.id, module.filename === require("path").join(process.cwd(), "${name}"), module.constructor.name, module.loaded, typeof module.require, globalThis.module === module, this === globalThis)`;
 run(['-e', moduleRow('[eval]')]);
 run([], moduleRow('[stdin]'));
+run([], '#!/usr/bin/env node\nlet h = 1; console.log("stdin shebang", (0, eval)("h"), __dirname, __filename)');
+run(['-e', '#!/usr/bin/env node\nlet h = 1; console.log("eval shebang", (0, eval)("h"), __dirname, __filename)']);
+run(['-p', '__dirname']);
 run([], 'let x = 1; console.log("stdin", (0, eval)("typeof x"))');
 run([], '"use strict"; var x = 1; console.log("stdin", globalThis.x)');
 run(['-e', 'const vm = require("vm"); vm.runInThisContext("let l = 1; const k = 2; class Q {}"); console.log(typeof l, typeof k, typeof Q, "l" in globalThis, "Q" in globalThis)']);

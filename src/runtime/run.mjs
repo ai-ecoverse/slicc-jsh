@@ -858,7 +858,7 @@ export async function runNode(ctx, options = {}) {
         } = rewriteDynamicImports(code, { callee: EVAL_IMPORT });
         const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
         const args = ['exports', 'require', 'module', '__filename', '__dirname'];
-        const values = [exports, require, module, evalName, process.cwd()];
+        const values = [exports, require, module, evalName, '.'];
         if (hasImport) globalThis[kEvalImport] = dynImport;
         const report = syntaxReport(code, { kind: 'script', filename: evalName });
         if (report) {
@@ -867,19 +867,20 @@ export async function runNode(ctx, options = {}) {
           err.stack = report.stack;
           throw err;
         }
+        const body = cjsCode.startsWith('#!') ? `//${cjsCode.slice(2)}` : cjsCode;
         const run = () => {
           args.forEach((name, i) => {
             globalThis[name] = values[i];
           });
           let script;
           try {
-            script = runScript(`\n\n${cjsCode}`, evalName);
+            script = runScript(`\n\n${body}`, evalName);
           } catch (err) {
             undoHostArrow(err, runScript);
             throw err;
           }
           if (script !== undefined) return script.value;
-          return (0, eval)(`\n\n${cjsCode}\n//# sourceURL=${evalName}`);
+          return (0, eval)(`\n\n${body}\n//# sourceURL=${evalName}`);
         };
         mainBegin();
         let result;
