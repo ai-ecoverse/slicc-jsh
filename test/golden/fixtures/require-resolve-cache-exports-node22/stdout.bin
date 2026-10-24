@@ -1,0 +1,7 @@
+with-exports node_modules/with-exports/index.js
+with-main node_modules/with-main/index.js
+./local local.js
+with-exports MODULE_NOT_FOUND
+with-main node_modules/with-main/index.js
+./local local.js
+./other MODULE_NOT_FOUND

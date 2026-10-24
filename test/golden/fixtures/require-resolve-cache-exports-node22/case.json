@@ -1,0 +1,13 @@
+{
+  "description": "after the main script, require.resolve answers from its cache for a package main and a relative file that were removed since, as Node's Module._pathCache does, but checks a package exports target again",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}
