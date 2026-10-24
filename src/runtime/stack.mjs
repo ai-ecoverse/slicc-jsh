@@ -614,7 +614,7 @@ export function installStackPrepare() {
     return f;
   }
 
-  Object.defineProperty(Error, 'prepareStackTrace', {
+  const own = {
     configurable: true,
     enumerable: true,
     get() {
@@ -624,7 +624,25 @@ export function installStackPrepare() {
       if (typeof fn !== 'function' || fn === wrapper) userPrepare = null;
       else userPrepare = userOf.get(fn) ?? fn;
     },
+  };
+  Object.defineProperty(Error, 'prepareStackTrace', own);
+  const deleted = Object.create(Object.getPrototypeOf(Error), {
+    prepareStackTrace: {
+      configurable: true,
+      get() {
+        return wrapper;
+      },
+      set(fn) {
+        if (this !== Error) {
+          Object.defineProperty(this, 'prepareStackTrace', { value: fn, writable: true, enumerable: true, configurable: true });
+          return;
+        }
+        Object.defineProperty(Error, 'prepareStackTrace', own);
+        own.set(fn);
+      },
+    },
   });
+  Reflect.setPrototypeOf(Error, deleted);
 }
 
 export { isKernelFrame, KERNEL_HINT, adjustLine };
