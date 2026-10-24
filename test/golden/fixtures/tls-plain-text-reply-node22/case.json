@@ -1,0 +1,6 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#996: tls.connect to a server whose reply isn't TLS, or over a socket to one, fails with Node 22's error, told apart by the reply's first record as OpenSSL does (slicc-kernel 1.156.0): ERR_SSL_PACKET_LENGTH_TOO_LONG for most plain text, ERR_SSL_WRONG_VERSION_NUMBER for a major version other than 3, ERR_SSL_HTTP_REQUEST for GET and PUT, ERR_SSL_DATA_LENGTH_TOO_LONG for a record over 16384 bytes and ERR_SSL_UNEXPECTED_MESSAGE for a handshake record that isn't a ServerHello, with Node's library, reason and message past its thread and before its source position",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}

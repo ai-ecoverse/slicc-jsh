@@ -1,0 +1,66 @@
+a word
+  error ERR_SSL_PACKET_LENGTH_TOO_LONG
+    message "error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library SSL routines, reason packet length too long
+  close true
+an HTTP response
+  error ERR_SSL_PACKET_LENGTH_TOO_LONG
+    message "error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library SSL routines, reason packet length too long
+  close true
+an IMAP greeting
+  error ERR_SSL_PACKET_LENGTH_TOO_LONG
+    message "error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library SSL routines, reason packet length too long
+  close true
+an SMTP greeting
+  error ERR_SSL_WRONG_VERSION_NUMBER
+    message "error:0A00010B:SSL routines:tls_validate_record_header:wrong version number"
+    library SSL routines, reason wrong version number
+  close true
+an SSH banner
+  error ERR_SSL_WRONG_VERSION_NUMBER
+    message "error:0A00010B:SSL routines:tls_validate_record_header:wrong version number"
+    library SSL routines, reason wrong version number
+  close true
+a POP3 greeting
+  error ERR_SSL_WRONG_VERSION_NUMBER
+    message "error:0A00010B:SSL routines:tls_validate_record_header:wrong version number"
+    library SSL routines, reason wrong version number
+  close true
+six zero bytes
+  error ERR_SSL_WRONG_VERSION_NUMBER
+    message "error:0A00010B:SSL routines:tls_validate_record_header:wrong version number"
+    library SSL routines, reason wrong version number
+  close true
+a handshake record of 16385 bytes
+  error ERR_SSL_DATA_LENGTH_TOO_LONG
+    message "error:0A000092:SSL routines:tls_validate_record_header:data length too long"
+    library SSL routines, reason data length too long
+  close true
+a handshake record that is no ServerHello
+  error ERR_SSL_UNEXPECTED_MESSAGE
+    message "error:0A0000F4:SSL routines:ossl_statem_client_read_transition:unexpected message"
+    library SSL routines, reason unexpected message
+  close true
+an HTTP GET
+  error ERR_SSL_HTTP_REQUEST
+    message "error:0A00009C:SSL routines:tls_validate_record_header:http request"
+    library SSL routines, reason http request
+  close true
+an HTTP PUT
+  error ERR_SSL_HTTP_REQUEST
+    message "error:0A00009C:SSL routines:tls_validate_record_header:http request"
+    library SSL routines, reason http request
+  close true
+over a socket, a word
+  error ERR_SSL_PACKET_LENGTH_TOO_LONG
+    message "error:0A0000C6:SSL routines:tls_get_more_records:packet length too long"
+    library SSL routines, reason packet length too long
+  close true
+over a socket, an SMTP greeting
+  error ERR_SSL_WRONG_VERSION_NUMBER
+    message "error:0A00010B:SSL routines:tls_validate_record_header:wrong version number"
+    library SSL routines, reason wrong version number
+  close true
+done
