@@ -23,6 +23,7 @@ export function createTimers(
   let closePhaseRan = false;
   let closeDepth = 0;
   let checkCut = 0;
+  let checkGen = 0;
   let timerAt = null;
   const endPhase = () => {
     if (closeDepth > 0) return;
@@ -176,6 +177,7 @@ export function createTimers(
         // at the end of its delay's list.
         state.due = Date.now() + state.delay;
         state.seq = made++;
+        state.timers = checkGen + 2;
       }
       checkPhase = false;
       closePhaseRan = false;
@@ -188,8 +190,7 @@ export function createTimers(
         if (!due.has(fire)) due.set(fire, state.due);
         return;
       }
-      if (state.afterIo) state.cut ??= made;
-      if (closeTimer || hold(state.due) || (state.afterIo && immediatesFirst(state.cut))) {
+      if (closeTimer || hold(state.due) || (state.afterIo && immediatesFirst(state.timers))) {
         held.add(state);
         state.retry ??= nativeSetTimeout(retry, 0);
         return;
@@ -204,6 +205,7 @@ export function createTimers(
     };
     state.run = run;
     state.afterIo = looping && !checkPhase && !closePhaseRan;
+    state.timers = checkGen + (state.afterIo ? 2 : 1);
     state.seq = made++;
     // Node's delay: a number from 1 up (anything else is 1).
     state.delay = delay >= 1 && delay <= 2147483647 ? Number(delay) : 1;
@@ -223,6 +225,8 @@ export function createTimers(
       retry: null,
       repeating: false,
       inCheck,
+      nextCheck: inCheck && checkPhase,
+      check: checkGen + 1,
     };
     const handle = new Immediate();
     handle._onImmediate = fn;
@@ -236,7 +240,7 @@ export function createTimers(
         due.set(fire, Infinity);
         return;
       }
-      if (held && (closeTimer || holdImmediate(state.seq))) {
+      if (held && (closeTimer || holdImmediate(state.seq) || (state.nextCheck && timersFirst(state.check)) || (inCheck && waitingBefore(state.seq)))) {
         state.retry = nativeSetTimeout(fire, 0);
         return;
       }
@@ -247,6 +251,7 @@ export function createTimers(
       endPhase();
       if (inCheck) {
         if (state.seq >= checkCut) checkCut = made;
+        if (state.check > checkGen) checkGen = state.check;
         checkPhase = true;
       }
       try {
@@ -266,9 +271,20 @@ export function createTimers(
     for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < cut) return true;
     return false;
   };
-  const immediatesFirst = (cut) => {
+  const immediatesFirst = (timers) => {
     for (const state of byId.values()) {
-      if (state.kind === 'Immediate' && state.inCheck && state.seq < cut && !holdImmediate(state.seq)) return true;
+      if (state.kind === 'Immediate' && state.inCheck && state.check < timers && !holdImmediate(state.seq)) return true;
+    }
+    return false;
+  };
+  const waitingBefore = (seq) => {
+    for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < seq && state.retry !== null) return true;
+    return false;
+  };
+  const timersFirst = (check) => {
+    const now = Date.now();
+    for (const state of byId.values()) {
+      if (state.kind === 'Timeout' && state.due <= now && state.timers <= check && !hold(state.due)) return true;
     }
     return false;
   };

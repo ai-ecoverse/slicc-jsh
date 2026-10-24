@@ -1,0 +1,12 @@
+an immediate, then a setTimeout 0, from an immediate | timeout 0, immediate
+an immediate, then a setTimeout 0, from an immediate's promise continuation | timeout 0, immediate
+an immediate, a setTimeout 0 and an immediate, from an immediate | timeout 0, immediate 1, immediate 2
+an immediate, then a setTimeout 10 that comes due, from an immediate | timeout 10, immediate
+an immediate, then a setTimeout 10000 not yet due, from an immediate | immediate
+a readFile callback's setTimeout 0, then an immediate from its immediate | immediate 1, timeout 0, immediate 2
+a timer's immediate, then its setTimeout 0 | immediate, timeout 0
+a busy interval from the main script | immediate soon
+a busy interval from an immediate | immediate soon
+a readFile callback's setTimeout 0, the readFile started from an immediate | A I io T
+20 of them, with a 1 ms readFile callback | A I io T
+done
