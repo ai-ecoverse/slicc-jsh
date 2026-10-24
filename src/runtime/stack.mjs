@@ -45,7 +45,7 @@ function isKernelFrame(frame) {
   }
   // An ES module's loader lines (export getters, hoisted imports) come
   // before its own first line: they are the runtime's, not the file's.
-  const esmFile = resolveFile(frame, parseSite(frame));
+  const esmFile = isEvalCode(frame) ? null : resolveFile(frame, parseSite(frame));
   const esmExtra = esmFile ? esmFrames.get(esmFile) : undefined;
   if (esmExtra !== undefined && adjustLine(frame.getLineNumber?.()) - esmExtra < 1) return true;
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
@@ -229,14 +229,22 @@ export function wrapCallSite(frame) {
   return new CallSite(wrapRaw(frame));
 }
 
-function originLine(file, line) {
-  if (vmFiles.has(file)) return line;
+function originSite(file, line, col) {
+  if (vmFiles.has(file)) return `${file}:${line}:${col}`;
   const extra = esmFrames.get(file);
-  return extra === undefined ? adjustLine(line) : adjustLine(line) - extra;
+  if (extra === undefined) return `${file}:${adjustLine(line)}:${col}`;
+  const own = adjustLine(line) - extra;
+  return `${esmUrls.get(file) ?? fileUrl(file)}:${own}:${esmColumn(file, own, col)}`;
 }
 
 function evalOrigin(origin) {
-  return origin.replace(/\(([^()\s,]+):(\d+):(\d+)\)/g, (_, file, line, col) => `(${file}:${originLine(file, Number(line))}:${col})`);
+  return origin.replace(/\(([^()\s,]+):(\d+):(\d+)\)/g, (_, file, line, col) => `(${originSite(file, Number(line), Number(col))})`);
+}
+
+function isEvalCode(frame) {
+  if (!frame.isEval?.() || frame.getFileName?.()) return false;
+  const origin = frame.getEvalOrigin?.();
+  return typeof origin === 'string' && origin.startsWith('eval at ');
 }
 
 function wrapEvalCallSite(frame, origin) {
@@ -267,10 +275,7 @@ function wrapEvalCallSite(frame, origin) {
 }
 
 function wrapRaw(frame) {
-  const origin = frame.getEvalOrigin?.();
-  if (frame.isEval?.() && !frame.getFileName?.() && typeof origin === 'string' && origin.startsWith('eval at ')) {
-    return wrapEvalCallSite(frame, origin);
-  }
+  if (isEvalCode(frame)) return wrapEvalCallSite(frame, frame.getEvalOrigin());
   const parsed = parseSite(frame);
   const resolved = resolveFile(frame, parsed);
   const rawLine = frame.getLineNumber?.() ?? parsed?.line;
@@ -355,7 +360,7 @@ function wrapRaw(frame) {
     getTypeName: () => (ctor ? null : typeName),
     getFunction: () => frame.getFunction?.(),
     getFunctionName: () => {
-      if (anonymous || fn === 'Object.<anonymous>') return null;
+      if (!userName || anonymous || fn === 'Object.<anonymous>') return null;
       if (isToplevel && !ctor) return null;
       const as = fn && /^[^.[]+\.([^ ]+) \[as /.exec(fn);
       if (as) return as[1];

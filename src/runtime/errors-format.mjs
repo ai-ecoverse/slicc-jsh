@@ -53,7 +53,18 @@ function sourceOf(ctx, file, evalCode) {
   }
 }
 
-const EVAL_FRAME = /^ {4}at [^\n]*?\(eval at [^()\n]*\((\[eval\]|\[stdin\]|\/[^:()\s]+):(\d+):(\d+)\), <anonymous>:(\d+):(\d+)\)$/m;
+const EVAL_FRAME = /^ {4}at [^(\n]*\((eval at [^\n]*), <anonymous>:(\d+):(\d+)\)$/;
+const ORIGIN = /^eval at [^()]* \((.*)\)$/;
+const ORIGIN_SITE = /^(\[eval\]|\[stdin\]|file:\/\/\/[^\s]*|\/[^\s]*):(\d+):(\d+)$/;
+
+function urlPath(file) {
+  if (!file.startsWith('file://')) return file;
+  try {
+    return decodeURIComponent(file.slice('file://'.length).replace(/[?#].*$/, ''));
+  } catch {
+    return file;
+  }
+}
 
 function literalText(node) {
   if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
@@ -66,7 +77,11 @@ function evalSource(outer, line, column) {
   try {
     ast = acorn.parse(outer, { ecmaVersion: 'latest', sourceType: 'script', allowHashBang: true, allowReturnOutsideFunction: true });
   } catch {
-    return undefined;
+    try {
+      ast = acorn.parse(outer, { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true });
+    } catch {
+      return undefined;
+    }
   }
   const lines = outer.split('\n');
   if (line < 1 || line > lines.length) return undefined;
@@ -96,14 +111,27 @@ function evalSource(outer, line, column) {
   return `(function anonymous(${texts.slice(0, -1).join(',')}\n) {\n${texts.at(-1)}\n})`;
 }
 
+function originSource(ctx, origin, frames, evalCode) {
+  const parent = ORIGIN.exec(origin)?.[1];
+  if (parent === undefined) return undefined;
+  const site = ORIGIN_SITE.exec(parent);
+  if (site) {
+    const outer = sourceOf(ctx, urlPath(site[1]), evalCode);
+    return typeof outer === 'string' ? evalSource(outer, Number(site[2]), Number(site[3])) : undefined;
+  }
+  const at = frames.find((f) => f[1] === parent);
+  const outer = at ? originSource(ctx, parent, frames, evalCode) : undefined;
+  return typeof outer === 'string' ? evalSource(outer, Number(at[2]), Number(at[3])) : undefined;
+}
+
 function evalLocation(ctx, stack, evalCode) {
-  const top = stack.split('\n').find((l) => l.startsWith('    at ')) ?? '';
-  if (!top.includes('(eval at ')) return undefined;
-  const m = EVAL_FRAME.exec(top);
-  const outer = m ? sourceOf(ctx, m[1], evalCode) : undefined;
-  const source = typeof outer === 'string' ? evalSource(outer, Number(m[2]), Number(m[3])) : undefined;
+  const lines = stack.split('\n').filter((l) => l.startsWith('    at '));
+  if (!lines[0]?.includes('(eval at ')) return undefined;
+  const frames = lines.map((l) => EVAL_FRAME.exec(l)).filter(Boolean);
+  const top = EVAL_FRAME.exec(lines[0]);
+  const source = top ? originSource(ctx, top[1], frames, evalCode) : undefined;
   if (source === undefined) return null;
-  return { file: '<anonymous_script>', source, line: Number(m[4]), column: Number(m[5]) };
+  return { file: '<anonymous_script>', source, line: Number(top[2]), column: Number(top[3]) };
 }
 
 function snippetFor(ctx, loc, evalCode, fromPromise = false) {

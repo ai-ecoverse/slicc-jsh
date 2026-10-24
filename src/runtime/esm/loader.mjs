@@ -9,6 +9,7 @@ import { preserveSymlinks } from '../cjs/loader.mjs';
 import { createResolver } from '../cjs/resolve.mjs';
 import { nodeError } from '../node-errors.mjs';
 import { registerEsmFrames } from '../stack.mjs';
+import { scriptFunction } from '../script-function.mjs';
 import { shouldRunAsEsm, transformEsm } from './transform.mjs';
 
 const decoder = new TextDecoder();
@@ -499,13 +500,9 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     // Its frames: the file's own lines, as a file: URL (see stack.mjs).
     registerEsmFrames(frameKeyOf(filename), 1 + preambleLines, columnShifts, frameUrlOf(filename));
     try {
-      const fn = new Function(
-        '__meta',
-        '__importSync',
-        '__import',
-        '__exports',
-        `"use strict";\n${code}`
-      );
+      const params = ['__meta', '__importSync', '__import', '__exports'];
+      const body = `"use strict";\n${code}`;
+      const fn = scriptFunction(ctx, { params, body, filename: frameKeyOf(filename) }) ?? new Function(...params, body);
       fn(__meta, __importSync, __import, exportsObj);
     } catch (err) {
       cache.delete(filename);
@@ -573,16 +570,12 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
 
       const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
       const prefix = [...exportSetup, 'await __preload();', ...hoistImports].join('\n');
-      const parts = [prefix, bodyCode, `//# sourceURL=${frameKeyOf(filename)}`];
+      const code = `"use strict";\n${prefix}\n${bodyCode}`;
+      const params = ['__meta', '__importSync', '__import', '__exports', '__preload'];
       registerEsmFrames(frameKeyOf(filename), 1 + (prefix.match(/\n/g) || []).length + 1, columnShifts, frameUrlOf(filename));
-      const fn = new AsyncFunction(
-        '__meta',
-        '__importSync',
-        '__import',
-        '__exports',
-        '__preload',
-        `"use strict";\n${parts.join('\n')}`
-      );
+      const fn =
+        scriptFunction(ctx, { kind: 'async function', params, body: code, filename: frameKeyOf(filename) }) ??
+        new AsyncFunction(...params, `${code}\n//# sourceURL=${frameKeyOf(filename)}`);
       await fn(__meta, __importSync, __import, exportsObj, __preload);
       const ns = finalizeNamespace(exportsObj);
       entry.namespace = ns;

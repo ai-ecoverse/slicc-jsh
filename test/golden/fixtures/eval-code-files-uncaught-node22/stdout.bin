@@ -1,0 +1,91 @@
+== cjs.js: status 1
+<anonymous_script>:1
+null.fileq
+     ^
+
+TypeError: Cannot read properties of null (reading 'fileq')
+    at eval (eval at f (DIR/cjs.js:2:3), <anonymous>:1:6)
+
+Node.js v22.22.0
+== esm.mjs: status 1
+<anonymous_script>:1
+null.esmq
+     ^
+
+TypeError: Cannot read properties of null (reading 'esmq')
+    at eval (eval at f (file://DIR/esm.mjs:3:22), <anonymous>:1:6)
+
+Node.js v22.22.0
+== shift.mjs: status 1
+<anonymous_script>:1
+null.shift
+     ^
+
+TypeError: Cannot read properties of null (reading 'shift')
+    at eval (eval at k (file://DIR/shift.mjs:2:29), <anonymous>:1:6)
+
+Node.js v22.22.0
+== nested.js: status 1
+<anonymous_script>:1
+null.inner
+     ^
+
+TypeError: Cannot read properties of null (reading 'inner')
+    at eval (eval at <anonymous> (eval at f (DIR/nested.js:2:3)), <anonymous>:1:6)
+    at eval (eval at f (DIR/nested.js:2:3), <anonymous>:2:1)
+
+Node.js v22.22.0
+== hashbang.js: status 1
+<anonymous_script>:1
+null.bang
+     ^
+
+TypeError: Cannot read properties of null (reading 'bang')
+    at eval (eval at <anonymous> (DIR/hashbang.js:3:1), <anonymous>:1:6)
+
+Node.js v22.22.0
+== promise.js: status 1
+<anonymous_script>:2
+  null.later
+       ^
+
+TypeError: Cannot read properties of null (reading 'later')
+    at eval (eval at <anonymous> (DIR/promise.js:2:3), <anonymous>:2:8)
+
+Node.js v22.22.0
+== required.js: status 1
+<anonymous_script>:1
+null.dep
+     ^
+
+TypeError: Cannot read properties of null (reading 'dep')
+    at eval (eval at d (DIR/dep.js:2:23), <anonymous>:1:6)
+
+Node.js v22.22.0
+== later.js: status 1
+<anonymous_script>:2
+  return null.g;
+              ^
+
+TypeError: Cannot read properties of null (reading 'g')
+    at g (eval at <anonymous> (DIR/later.js:1:1), <anonymous>:2:15)
+
+Node.js v22.22.0
+== caught.js: status 0
+TypeError: Cannot read properties of null (reading 'c')
+    at eval (eval at k (DIR/caught.js:2:10), <anonymous>:1:13)
+    at eval (eval at k (DIR/caught.js:2:10), <anonymous>:1:15)
+== caught.mjs: status 0
+TypeError: Cannot read properties of null (reading 'm')
+    at eval (eval at k (file://DIR/caught.mjs:1:17), <anonymous>:1:6)
+== escaping.js: status 0
+SyntaxError
+== return.js: status 1
+<anonymous_script>:1
+null.ret
+     ^
+
+TypeError: Cannot read properties of null (reading 'ret')
+    at eval (eval at <anonymous> (DIR/return.js:2:3), <anonymous>:1:6)
+
+Node.js v22.22.0
