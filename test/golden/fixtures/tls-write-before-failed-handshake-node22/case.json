@@ -1,0 +1,6 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#1045: a TLS client that wrote before its handshake failed gets Node 22's write EPROTO error, with OpenSSL's message past its thread and before its source position, for a plain-text reply (also ended, over a socket, and an https.get) and a server's alert; without a write, a server that closes, a refused certificate and an https request not yet ended keep their own errors",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}
