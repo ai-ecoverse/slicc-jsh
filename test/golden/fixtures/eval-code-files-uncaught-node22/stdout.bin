@@ -78,3 +78,14 @@ TypeError: Cannot read properties of null (reading 'c')
 == caught.mjs: status 0
 TypeError: Cannot read properties of null (reading 'm')
     at eval (eval at k (file://DIR/caught.mjs:1:17), <anonymous>:1:6)
+== escaping.js: status 0
+SyntaxError
+== return.js: status 1
+<anonymous_script>:1
+null.ret
+     ^
+
+TypeError: Cannot read properties of null (reading 'ret')
+    at eval (eval at <anonymous> (DIR/return.js:2:3), <anonymous>:1:6)
+
+Node.js v22.22.0

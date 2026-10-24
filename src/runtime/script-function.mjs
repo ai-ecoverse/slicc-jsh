@@ -1,8 +1,10 @@
 const toSource = Function.prototype.toString;
+const NativeFunction = Function;
 
-export function scriptFunction(ctx, { kind = 'function', params, body, filename }) {
+export function scriptFunction(ctx, { kind = 'function', params, body, filename, checked = false }) {
   const runScript = ctx?.sync?.runScript;
   if (typeof runScript !== 'function') return undefined;
+  if (checked) NativeFunction(...params, body);
   const source = `(${kind} (${params.join(', ')}\n) {\n${body}\n})`;
   let fn;
   try {

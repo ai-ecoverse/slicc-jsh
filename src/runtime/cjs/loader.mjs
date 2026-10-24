@@ -30,6 +30,8 @@ export function preserveSymlinks(process) {
   );
 }
 
+const MAYBE_EVAL = /\beval\b/;
+
 export function createCjs({
   ctx,
   process,
@@ -310,7 +312,8 @@ export function createCjs({
     const params = ['exports', 'require', 'module', '__filename', '__dirname', ...(hasImport ? [importBinding] : [])];
     let wrapper;
     try {
-      wrapper = scriptFunction(ctx, { params, body, filename }) ?? new Function(...params, `${body}\n//# sourceURL=${filename}`);
+      if (MAYBE_EVAL.test(body)) wrapper = scriptFunction(ctx, { params, body, filename, checked: true });
+      wrapper ??= new Function(...params, `${body}\n//# sourceURL=${filename}`);
     } catch (err) {
       if (err instanceof SyntaxError) {
         // Top-level const/let of a wrapper name → Node retries as ESM when the
