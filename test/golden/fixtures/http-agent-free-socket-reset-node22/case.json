@@ -1,0 +1,6 @@
+{
+  "description": "a keep-alive socket idle in an agent's free pool that the server resets is destroyed and leaves the pool, as Node 22's freeSocketErrorListener does, so the program doesn't crash on its ECONNRESET and the next request takes a new socket: http.globalAgent, a keep-alive http.Agent and a keep-alive https.Agent",
+  "argv": ["main.js"],
+  "shim": true,
+  "packages": ["@ai-ecoverse/wasm-tls-engine"]
+}
