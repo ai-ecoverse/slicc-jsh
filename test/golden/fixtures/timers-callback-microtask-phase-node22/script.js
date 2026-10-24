@@ -6,10 +6,13 @@ const both = (out) => {
   setImmediate(() => out.push('immediate'));
   busy();
 };
-const row = (label, start) => new Promise((done) => {
+const row = (label, start, count = 2) => new Promise((done) => {
   const out = [];
+  out.push = (entry) => {
+    Array.prototype.push.call(out, entry);
+    if (out.length === count) setTimeout(() => { console.log(`${label} | ${out.join(', ')}`); done(); }, 0);
+  };
   start(out);
-  setTimeout(() => { console.log(`${label} | ${out.join(', ')}`); done(); }, 60);
 });
 (async () => {
   await row("an immediate's promise continuation", (out) => setImmediate(() => Promise.resolve().then(() => both(out))));
@@ -46,6 +49,6 @@ const row = (label, start) => new Promise((done) => {
       srv.close();
     }))));
     srv.listen(0, '127.0.0.1', () => { const c = net.connect(srv.address().port, '127.0.0.1'); c.on('error', () => {}); c.on('connect', () => c.write('x')); });
-  });
+  }, 3);
   console.log('done');
 })();
