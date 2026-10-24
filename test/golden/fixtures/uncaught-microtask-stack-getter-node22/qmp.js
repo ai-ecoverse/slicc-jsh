@@ -1,0 +1,3 @@
+queueMicrotask(() => {
+  throw "fs";
+});

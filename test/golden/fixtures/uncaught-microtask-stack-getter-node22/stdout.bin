@@ -1,0 +1,60 @@
+== ["-e","queueMicrotask(() => { throw {q: 1} })"]: status 1
+"\n<anonymous_script>:0\n\n{ q: 1 }\n\nNode.js v22.22.0\n"
+== [] < "queueMicrotask(() => { throw {q: 1} })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n{ q: 1 }\n\nNode.js v22.22.0\n"
+== ["-e","queueMicrotask(() => { throw \"qs\" })"]: status 1
+"\n<anonymous_script>:0\n\nqs\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "queueMicrotask(() => { throw \"qs\" })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\nqs\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","queueMicrotask(() => { throw 5n })"]: status 1
+"\n<anonymous_script>:0\n\n5\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "queueMicrotask(() => { throw 5n })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n5\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","setTimeout(() => queueMicrotask(() => { throw {t: 1} }))"]: status 1
+"\n<anonymous_script>:0\n\n{ t: 1 }\n\nNode.js v22.22.0\n"
+== [] < "setTimeout(() => queueMicrotask(() => { throw {t: 1} }))": status 1
+"\n<anonymous_script>:0\n\n{ t: 1 }\n\nNode.js v22.22.0\n"
+== ["-e","setTimeout(() => queueMicrotask(() => { throw null }))"]: status 1
+"\n<anonymous_script>:0\n\nnull\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "setTimeout(() => queueMicrotask(() => { throw null }))": status 1
+"\n<anonymous_script>:0\n\nnull\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","throw {get stack() { throw 1 }}"]: status 1
+"[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "throw {get stack() { throw 1 }}": status 1
+"[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","throw {get stack() { throw 1 }, toString() { return \"custom\" }}"]: status 1
+"custom\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "throw {get stack() { throw 1 }, toString() { return \"custom\" }}": status 1
+"custom\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","throw {get stack() { throw 1 }, name: \"N\", message: \"m\"}"]: status 1
+"[eval]:1\nthrow {get stack() { throw 1 }, name: \"N\", message: \"m\"}\n^\n\nN: m\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "throw {get stack() { throw 1 }, name: \"N\", message: \"m\"}": status 1
+"[stdin]:1\nthrow {get stack() { throw 1 }, name: \"N\", message: \"m\"}\n^\n\nN: m\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","throw Object.create(null, {stack: {get() { throw 1 }}})"]: status 1
+"\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "throw Object.create(null, {stack: {get() { throw 1 }}})": status 1
+"\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","throw {get stack() { throw 1 }, name: {toString() { throw 4 }}, message: \"m\"}"]: status 1
+"[eval]:1\nthrow {get stack() { throw 1 }, name: {toString() { throw 4 }}, message: \"m\"}\n^\n\n: m\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "throw {get stack() { throw 1 }, name: {toString() { throw 4 }}, message: \"m\"}": status 1
+"[stdin]:1\nthrow {get stack() { throw 1 }, name: {toString() { throw 4 }}, message: \"m\"}\n^\n\n: m\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","setTimeout(() => { throw {get stack() { return null.g }} })"]: status 1
+"\n[eval]:1\nsetTimeout(() => { throw {get stack() { return null.g }} })\n                   ^\n[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "setTimeout(() => { throw {get stack() { return null.g }} })": status 1
+"\n[stdin]:1\nsetTimeout(() => { throw {get stack() { return null.g }} })\n                   ^\n[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","const e = new Error(\"x\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e"]: status 1
+"[eval]:1\nconst e = new Error(\"x\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e\n                                                                                          ^\n\nError: x\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "const e = new Error(\"x\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e": status 1
+"[stdin]:1\nconst e = new Error(\"x\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e\n                                                                                          ^\n\nError: x\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","setTimeout(() => { const e = new TypeError(\"t\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e })"]: status 1
+"[eval]:1\nsetTimeout(() => { const e = new TypeError(\"t\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e })\n                                                                                                                 ^\n\nTypeError: t\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "setTimeout(() => { const e = new TypeError(\"t\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e })": status 1
+"[stdin]:1\nsetTimeout(() => { const e = new TypeError(\"t\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e })\n                                                                                                                 ^\n\nTypeError: t\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["qm.js"]: status 1
+"\n<anonymous_script>:0\n\n{ f: 1 }\n\nNode.js v22.22.0\n"
+== ["qmp.js"]: status 1
+"\n<anonymous_script>:0\n\nfs\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["qm.mjs"]: status 1
+"\n<anonymous_script>:0\n\n{ m: 1 }\n\nNode.js v22.22.0\n"
+== ["err.js"]: status 1
+"DIR/err.js:3\nthrow e;\n^\n\nError: x\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
