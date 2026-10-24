@@ -58,6 +58,7 @@ export function createTimers(
   // timer is due (on a tie, the older list first), and runs each list's due
   // timers before the next list's.
   const held = new Set();
+  const awaitingTimers = new Set();
   const nodeOrder = (timers) => {
     const lists = new Map();
     for (const t of timers) {
@@ -163,6 +164,8 @@ export function createTimers(
       fire();
     };
     const run = () => {
+      for (const next of awaitingTimers) next.phase = { at: Date.now(), made };
+      awaitingTimers.clear();
       held.delete(state);
       if (state.retry) {
         nativeClearTimeout(state.retry);
@@ -237,7 +240,7 @@ export function createTimers(
         due.set(fire, Infinity);
         return;
       }
-      if (held && (closeTimer || holdImmediate(state.seq) || (state.nextCheck && timersFirst(state.seq)) || (inCheck && waitingBefore(state.seq)))) {
+      if (held && (closeTimer || holdImmediate(state.seq) || (state.nextCheck && timersFirst(state)) || (inCheck && waitingBefore(state.seq)))) {
         state.retry = nativeSetTimeout(fire, 0);
         return;
       }
@@ -245,6 +248,7 @@ export function createTimers(
       byId.delete(state.id);
       handles.delete(state);
       check.delete(state);
+      awaitingTimers.delete(state);
       endPhase();
       if (inCheck) {
         if (state.seq >= checkCut) checkCut = made;
@@ -257,6 +261,7 @@ export function createTimers(
       }
     };
     state.seq = made++;
+    if (state.nextCheck) awaitingTimers.add(state);
     state.id = nativeSetTimeout(fire, 0);
     byId.set(state.id, state);
     handles.add(state);
@@ -277,10 +282,11 @@ export function createTimers(
     for (const state of byId.values()) if (state.kind === 'Immediate' && state.inCheck && state.seq < seq && state.retry !== null) return true;
     return false;
   };
-  const timersFirst = (seq) => {
+  const timersFirst = ({ seq, phase }) => {
     const now = Date.now();
     for (const state of byId.values()) {
-      if (state.kind === 'Timeout' && state.due <= now && (state.seq < seq || !state.afterIo) && !hold(state.due)) return true;
+      if (state.kind !== 'Timeout' || state.due > now || hold(state.due)) continue;
+      if (phase ? state.due <= phase.at && state.seq < phase.made : state.seq < seq || !state.afterIo) return true;
     }
     return false;
   };
@@ -311,6 +317,7 @@ export function createTimers(
       handles.delete(state);
       check.delete(state);
       held.delete(state);
+      awaitingTimers.delete(state);
       if (state.retry) nativeClearTimeout(state.retry);
       if (closing.length > 0) scheduleClose();
     }
@@ -384,6 +391,7 @@ export function createTimers(
       }
       byId.clear();
       held.clear();
+      awaitingTimers.clear();
       handles.notify();
     },
     /** @internal The loop's final drain: no timer or immediate runs. */

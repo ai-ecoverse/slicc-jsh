@@ -5,4 +5,6 @@ an immediate, then a setTimeout 10 that comes due, from an immediate | timeout 1
 an immediate, then a setTimeout 100 not yet due, from an immediate | immediate, timeout 100
 a readFile callback's setTimeout 0, then an immediate from its immediate | immediate 1, timeout 0, immediate 2
 a timer's immediate, then its setTimeout 0 | immediate, timeout 0
+a busy interval from the main script | immediate soon
+a busy interval from an immediate | immediate soon
 done

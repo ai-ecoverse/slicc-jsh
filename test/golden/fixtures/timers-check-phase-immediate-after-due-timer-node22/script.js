@@ -1,5 +1,6 @@
 const fs = require('fs');
 const busy = () => { const start = Date.now(); while (Date.now() - start < 20) {} };
+const busy2 = () => { const start = Date.now(); while (Date.now() - start < 2) {} };
 const row = (label, start) => new Promise((done) => {
   const out = [];
   start(out);
@@ -45,5 +46,15 @@ const row = (label, start) => new Promise((done) => {
     setTimeout(() => out.push('timeout 0'), 0);
     busy();
   }, 1));
+  await new Promise((done) => {
+    let n = 0;
+    const iv = setInterval(() => { n++; busy2(); if (n > 300) { console.log('a busy interval from the main script | starved'); clearInterval(iv); done(); } }, 1);
+    setImmediate(() => setImmediate(() => { console.log(`a busy interval from the main script | immediate ${n < 50 ? 'soon' : `late ${n}`}`); clearInterval(iv); done(); }));
+  });
+  await new Promise((done) => setImmediate(() => {
+    let n = 0;
+    const iv = setInterval(() => { n++; busy2(); if (n > 300) { console.log('a busy interval from an immediate | starved'); clearInterval(iv); done(); } }, 1);
+    setImmediate(() => { console.log(`a busy interval from an immediate | immediate ${n < 50 ? 'soon' : `late ${n}`}`); clearInterval(iv); done(); });
+  }));
   console.log('done');
 })();

@@ -1,5 +1,5 @@
 {
-  "description": "an immediate queued in the check phase runs in the next check phase, after the next timers phase, as in Node 22: a setTimeout queued after it in the same check phase that has come due runs first (from an immediate or its promise continuation, with another immediate after it, with a 10 ms delay), one not yet due does not, a due timeout queued from I/O before the check phase runs before it, and a timer callback's immediate still comes before its setTimeout 0",
+  "description": "an immediate queued in the check phase runs in the next check phase, after the next timers phase, as in Node 22: a setTimeout queued after it in the same check phase that has come due runs first (from an immediate or its promise continuation, with another immediate after it, with a 10 ms delay), one not yet due does not, a due timeout queued from I/O before the check phase runs before it, a timer callback's immediate still comes before its setTimeout 0, and an immediate waits for one timers phase at most, so a busy interval (set from the main script or an immediate) never starves it",
   "argv": ["script.js"],
   "shim": true
 }
