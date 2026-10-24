@@ -1,0 +1,5 @@
+{
+  "description": "ai-ecoverse/slicc-jsh#974: node -p of a rejected promise prints Promise { <rejected> 2 } on exit, and the rejection stays unhandled: ERR_UNHANDLED_REJECTION and status 1, as Node 22.22.0",
+  "argv": ["-p", "Promise.reject(2)"],
+  "shim": true
+}

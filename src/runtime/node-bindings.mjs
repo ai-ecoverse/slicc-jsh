@@ -437,6 +437,17 @@ bindings.util = {
   previewEntries: (value, isIterator) => (isIterator ? [[], false] : []),
 };
 
+export function installPromiseState(ctx, details = nodeInspect.getPromiseDetails) {
+  if (typeof details !== 'function') return;
+  details.state = (promise) => {
+    try {
+      return ctx.sync.promiseState(promise);
+    } catch {
+      return undefined;
+    }
+  };
+}
+
 /** libuv's errors (UV_ERRNO_MAP, v1.51.0) with Linux's numbers: util.getSystemErrorMap(). */
 export const UV_ERRORS = [
   [-7, 'E2BIG', 'argument list too long'],

@@ -1,0 +1,15 @@
+sync Promise { { a: 1 } } Promise { <pending> }
+unhandled Promise { <rejected> 7 }
+unhandledRejection 7 true
+Promise { 1 } Promise { <rejected> 'x' } Promise { <pending> }
+Promise {
+  <rejected> Error: boom
+      at somewhere (/app/x.js:1:1)
+}
+{ a: [ Promise { { x: 1 } } ], n: Promise { undefined } }
+Promise { 's' } Promise { null } Promise { -0 }
+Sub [Promise] { 5 } Sub [Promise] { <pending> } Sub [Promise] { <rejected> 8 }
+Promise { 3 } Promise { 9 }
+Promise { [33m10[39m } Promise { [Object] }
+unhandledRejection 8 false
+worker [ Promise { 10 }, Promise { <rejected> 11 }, Promise { <pending> } ]

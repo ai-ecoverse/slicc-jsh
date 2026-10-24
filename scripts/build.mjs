@@ -466,6 +466,26 @@ const main = await esbuild.build({
   // (`#<process>`, `Class constructor ZstdDecompress …`), so no renaming.
   minifyWhitespace: true,
   legalComments: 'inline',
+  plugins: [
+    {
+      name: 'inspect-promise-state',
+      setup(b) {
+        b.onLoad({ filter: /node-inspect-extracted[\\/]dist[\\/]inspect\.js$/ }, (args) => {
+          let src = readFileSync(args.path, 'utf8');
+          const patch = (from, to) => {
+            if (!src.includes(from)) throw new Error(`inspect-promise-state: inspect.js changed (${from})`);
+            src = src.replace(from, to);
+          };
+          patch(
+            'getPromiseDetails:()=>[g,void 0]',
+            'getPromiseDetails:function getPromiseDetails(p){const s=getPromiseDetails.state?.(p);return s===void 0||s.state==="pending"?[g,void 0]:[s.state==="rejected"?h:1,s.value]}'
+          );
+          patch('t.exports={identicalSequenceRange:or,', 't.exports={getPromiseDetails:ke,identicalSequenceRange:or,');
+          return { contents: src, loader: 'js' };
+        });
+      },
+    },
+  ],
 });
 
 // Keep the source tree small; dist bundles already inlined the map.
