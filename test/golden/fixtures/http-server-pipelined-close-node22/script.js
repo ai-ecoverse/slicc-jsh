@@ -2,6 +2,7 @@ const http = require('http');
 const net = require('net');
 
 const blockMs = Number(process.env.INJECT_BLOCK_MS) || 0;
+const sendDelayMs = Number(process.env.SEND_DELAY_MS) || 0;
 const block = () => {
   const until = Date.now() + blockMs;
   while (Date.now() < until);
@@ -32,7 +33,7 @@ const shot = (label, { handler, send, create = {}, options = {}, clientError = t
       req.on('close', () => note(url, 'req close'));
       res.on('finish', () => note(url, 'finish'));
       res.on('close', () => note(url, 'res close'));
-      handler(req, res);
+      handler(req, res, srv);
     });
     Object.assign(srv, options);
     if (clientError) {
@@ -183,9 +184,12 @@ const three = (last = '') => post('/a', 3, 'foo') + post('/b', 3, 'foo') + post(
     send: (c) => c.write('POST / HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nab'),
   });
   await shot('a 408 for an upload that stops', {
-    create: { requestTimeout: 100, headersTimeout: 50, connectionsCheckingInterval: 20 },
-    handler: never,
-    send: (c) => c.write(post('/', 10, 'ab')),
+    create: { requestTimeout: 0, headersTimeout: 0, connectionsCheckingInterval: 20 },
+    handler: (req, res, srv) => {
+      Object.assign(srv, { headersTimeout: 50, requestTimeout: 100 });
+      never(req);
+    },
+    send: (c) => setTimeout(() => c.write(post('/', 10, 'ab')), sendDelayMs),
   });
   console.log('done');
 })();

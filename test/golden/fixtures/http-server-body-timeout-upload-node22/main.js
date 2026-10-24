@@ -3,7 +3,8 @@ const net = require('net');
 (async () => {
   {
     const log = [];
-    const srv = http.createServer({ requestTimeout: 300, connectionsCheckingInterval: 50 }, (req) => {
+    const srv = http.createServer({ requestTimeout: 0, connectionsCheckingInterval: 50 }, (req) => {
+      srv.requestTimeout = 300;
       log.push('request');
       req.on('data', () => {});
       req.on('aborted', () => log.push('aborted'));

@@ -221,6 +221,8 @@ const kMaybeFinish = Symbol('kMaybeFinish');
 const kPending = Symbol('kPending');
 const kFinishQueued = Symbol('kFinishQueued');
 const kRequestListener = Symbol('kRequestListener');
+const kConnectionsCheckingInterval = Symbol('kConnectionsCheckingInterval');
+const monotonic = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 const kFetchTimer = Symbol('kFetchTimer');
 const kBuffered = Symbol('kBuffered');
 export const kFetchVia = Symbol('slicc-jsh.http.fetchVia');
@@ -857,7 +859,7 @@ function responseHasNoBody(method, statusCode) {
 }
 
 export function createHttp({ ctx, process, Buffer, handles, getStream, timers = globalThis, net, getFetch }) {
-  const { setTimeout, clearTimeout } = timers;
+  const { setTimeout, clearTimeout, setInterval, clearInterval } = timers;
   void ctx;
   void process;
   const stream = getStream();
@@ -1818,10 +1820,9 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     let buf = Buffer.alloc(0);
     let served = 0;
     let idleTimer = null;
-    let headersTimer = null;
-    const conn = { socket, idle: true };
+    const conn = { socket, idle: true, start: monotonic(), headersDone: false, active: true, timeout: null };
     server._connections.add(conn);
-    let requestTimer = null;
+    let begun = false;
     let body = null;
     let current = null;
     let dead = false;
@@ -1839,8 +1840,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     socket.once('close', () => {
       server._connections.delete(conn);
       clearTimeout(idleTimer);
-      clearTimeout(headersTimer);
-      clearTimeout(requestTimer);
       for (const req of incoming.splice(0)) {
         if (!req.destroyed) req.destroy(Object.assign(new Error('aborted'), { code: 'ECONNRESET' }));
       }
@@ -1869,16 +1868,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         idleTimer.unref?.();
       }
     };
-    // Node's 408: the headers within headersTimeout (from the connection, or
-    // a kept-alive one's next request), the whole request within requestTimeout.
-    const timeout408 = () => {
+    conn.timeout = () => {
       if (socket.destroyed || dead) return;
       dead = true;
       body = null;
-      clearTimeout(requestTimer);
-      requestTimer = null;
-      clearTimeout(headersTimer);
-      headersTimer = null;
       const res = current?.res;
       if (res && !res.headersSent) {
         res.detachSocket(socket);
@@ -1898,22 +1891,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       } catch {
         destroy();
       }
-    };
-    const armHeaders = () => {
-      if (headersTimer || !(server.headersTimeout > 0)) return;
-      headersTimer = setTimeout(() => {
-        headersTimer = null;
-        timeout408();
-      }, server.headersTimeout);
-      headersTimer.unref?.();
-    };
-    const armRequest = () => {
-      if (requestTimer || !(server.requestTimeout > 0)) return;
-      requestTimer = setTimeout(() => {
-        requestTimer = null;
-        timeout408();
-      }, server.requestTimeout);
-      requestTimer.unref?.();
     };
     const settle = async () => {
       for (let turn = 0; turn < SETTLE_TURNS; turn++) {
@@ -1980,8 +1957,16 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         else socketError(closed);
         return 'stop';
       }
-      armRequest();
-      armHeaders();
+      if (!begun) {
+        if (buf.every((b) => b === 0x0d || b === 0x0a)) {
+          buf = Buffer.alloc(0);
+          return 'wait';
+        }
+        begun = true;
+        conn.start = monotonic();
+        conn.headersDone = false;
+        conn.active = true;
+      }
       if (buf.length > MAX_HTTP_BODY + 64 * 1024) {
         // Cap head+body growth while still reading the request line/headers.
         rejectPayloadTooLarge(socket, onData);
@@ -2010,15 +1995,10 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         }
         return 'stop';
       }
-      // The headers are in: headersTimeout is done, the body has requestTimeout.
-      clearTimeout(headersTimer);
-      headersTimer = null;
-      armRequest();
+      conn.headersDone = true;
       const headers = headerObj(parsed.rawHeaders);
       const connectionTokens = String(headers.connection || '').toLowerCase();
       if (parsed.method === 'CONNECT') {
-        clearTimeout(requestTimer);
-        requestTimer = null;
         socket.off('data', onData);
         socket.off('end', onSocketEnd);
         socket.off('error', onSocketError);
@@ -2038,10 +2018,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       // Node: an Upgrade request goes to 'upgrade' listeners, with what
       // followed the head; with none, it is an ordinary request.
       if (headers.upgrade && /\bupgrade\b/.test(connectionTokens) && server.listenerCount('upgrade') > 0) {
-        clearTimeout(headersTimer);
-        headersTimer = null;
-        clearTimeout(requestTimer);
-        requestTimer = null;
         socket.off('data', onData);
         socket.off('end', onSocketEnd);
         socket.off('error', onSocketError);
@@ -2055,8 +2031,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         return 'stop';
       }
       if (parsed.httpVersion === '1.1' && parsed.method !== 'CONNECT' && server.requireHostHeader && headers.host === undefined) {
-        clearTimeout(requestTimer);
-        requestTimer = null;
+        conn.active = false;
         socket.off('data', onData);
         stopped = true;
         buf = Buffer.alloc(0);
@@ -2113,8 +2088,8 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
       const complete = () => {
         bodyDone = true;
         body = null;
-        clearTimeout(requestTimer);
-        requestTimer = null;
+        begun = false;
+        conn.active = false;
         req.complete = true;
         if (res.shouldKeepAlive === false) skipLineEnds();
         if (buf.length > 0 && res.shouldKeepAlive === false) {
@@ -2304,7 +2279,6 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     const onData = (chunk) => {
       if (dead || socket.destroyed) return;
       if (idleTimer) armIdle();
-      if (!current && !body && buf.length === 0) armRequest();
       buf = Buffer.concat([buf, chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(chunk)]);
       if (!running) runInResource(resource, execute, null, []);
     };
@@ -2316,8 +2290,35 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     socket.on('end', onSocketEnd);
     socket.on('data', onData);
     socket.on('error', onSocketError);
-    // A connection that sends nothing still gets headersTimeout's 408.
-    armHeaders();
+  }
+
+  function checkConnections(server) {
+    if (server.headersTimeout === 0 && server.requestTimeout === 0) return;
+    let headers = Number(server.headersTimeout) >>> 0;
+    let request = Number(server.requestTimeout) >>> 0;
+    if (request > 0 && headers > request) [headers, request] = [request, headers];
+    const now = monotonic();
+    const expired = [];
+    for (const conn of server._connections) {
+      if (!conn.active) continue;
+      const age = now - conn.start;
+      if ((!conn.headersDone && headers > 0 && age > headers) || (request > 0 && age > request)) {
+        conn.active = false;
+        expired.push(conn);
+      }
+    }
+    expired.sort((a, b) => a.start - b.start);
+    for (const conn of expired) conn.timeout();
+  }
+
+  function setupConnectionsTracking() {
+    clearInterval(this[kConnectionsCheckingInterval]);
+    this[kConnectionsCheckingInterval] = setInterval(() => checkConnections(this), this.connectionsCheckingInterval);
+    this[kConnectionsCheckingInterval].unref?.();
+  }
+
+  function stopConnectionsChecking(server) {
+    clearInterval(server[kConnectionsCheckingInterval]);
   }
 
   function setRequestLine(req, parsed, headers) {
@@ -2346,6 +2347,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     self.on('connection', function connectionListener(socket) {
       handleConnection(socket, self[kRequestListener], self);
     });
+    self.on('listening', setupConnectionsTracking);
     self.on('listening', () => {
       self._closing = false;
     });
@@ -2358,6 +2360,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     self.keepAliveTimeoutBuffer = 1000;
     self.headersTimeout = 60000;
     self.requestTimeout = 300000;
+    self.connectionsCheckingInterval = 30000;
     self.maxRequestsPerSocket = 0;
     self.maxHeadersCount = null;
     self.timeout = 0;
@@ -2371,7 +2374,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     self._connectionGone = null;
     // Node's options for them (lib/_http_server.js storeHTTPOptions):
     // integers >= 0, and headersTimeout no longer than requestTimeout.
-    for (const key of ['requestTimeout', 'headersTimeout', 'keepAliveTimeout', 'keepAliveTimeoutBuffer']) {
+    for (const key of ['requestTimeout', 'headersTimeout', 'keepAliveTimeout', 'keepAliveTimeoutBuffer', 'connectionsCheckingInterval']) {
       const value = options?.[key];
       if (value === undefined) continue;
       validateInteger(value, key, 0);
@@ -2426,6 +2429,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
         fn(err);
       };
       this._connectionGone = () => done();
+      stopConnectionsChecking(this);
       const r = net.Server.prototype.close.call(this, (err) => {
         listenerClosed = true;
         done(err);
@@ -3517,7 +3521,7 @@ export function createHttp({ ctx, process, Buffer, handles, getStream, timers = 
     setMaxIdleHTTPParsers,
   };
   Object.defineProperty(exports, 'maxHeaderSize', { configurable: true, enumerable: true, get: maxHeaderSize });
-  httpInternals.set(exports, { storeHttpOptions, handleConnection });
+  httpInternals.set(exports, { storeHttpOptions, handleConnection, setupConnectionsTracking, stopConnectionsChecking });
   return exports;
 }
 

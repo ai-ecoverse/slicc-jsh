@@ -1,7 +1,7 @@
 /**
  * Keep-alive where the goldens can't follow: a client exits at once with
  * a free socket in globalAgent's pool (to a server in another process), and
- * headersTimeout's 408 (Node checks it every 30 s, so host timing differs).
+ * headersTimeout's 408.
  */
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -50,7 +50,7 @@ describe('http keep-alive (kernel)', () => {
       '-e',
       [
         "const http = require('http'); const net = require('net');",
-        "const server = http.createServer((req, res) => res.end('never'));",
+        "const server = http.createServer({ connectionsCheckingInterval: 20 }, (req, res) => res.end('never'));",
         'server.headersTimeout = 200;',
         "server.listen(0, '127.0.0.1', () => {",
         "  const s = net.connect(server.address().port, '127.0.0.1', () => s.write('GET / HTTP/1.1\\r\\nHost: x\\r\\n'));",
@@ -67,14 +67,14 @@ describe('http keep-alive (kernel)', () => {
     const script = [
       "const http = require('http'); const net = require('net');",
       'const ev = [];',
-      'const server = http.createServer((req, res) => {',
+      'const server = http.createServer({ connectionsCheckingInterval: 50 }, (req, res) => {',
+      '  server.headersTimeout = 300; server.requestTimeout = 3000;',
       "  let b = ''; req.on('data', (d) => (b += d));",
       "  req.on('end', () => {",
       "    if (req.url === '/slowres') { setTimeout(() => { res.end('late'); ev.push('response sent'); }, 150); server.close(() => { ev.push('close cb'); console.log(ev.join(' | ')); }); return; }",
       "    res.end('body ' + b);",
       '  });',
       '});',
-      'server.headersTimeout = 300; server.requestTimeout = 3000;',
       "server.listen(0, '127.0.0.1', async () => {",
       '  const port = server.address().port;',
       "  const r = await new Promise((resolve) => { const s = net.connect(port, '127.0.0.1', () => { s.write('POST /slow HTTP/1.1\\r\\nHost: x\\r\\nContent-Length: 4\\r\\nConnection: close\\r\\n\\r\\n'); setTimeout(() => s.write('data'), 500); }); let out = ''; s.on('data', (d) => (out += d)); s.on('close', () => resolve(out.split('\\r\\n')[0] + ' ' + out.split('\\r\\n\\r\\n')[1])); });",
@@ -86,8 +86,6 @@ describe('http keep-alive (kernel)', () => {
     ].join('\n');
     const r = await jsh.run(['node', '-e', script]);
     assert.equal(r.status, 0, r.stderr);
-    // Node checks headersTimeout every 30 s (connectionsCheckingInterval), so
-    // its 408 for the silent connection comes later; jsh's comes on time.
     assert.equal(
       r.stdout,
       'slow body: HTTP/1.1 200 OK body data\nsilent connection: "HTTP/1.1 408 Request Timeout\\r\\nConnection: close\\r\\n\\r\\n"\nresponse sent | close cb\n'
@@ -99,7 +97,7 @@ describe('http keep-alive (kernel)', () => {
       "const http = require('http'); const net = require('net');",
       'const t0 = Date.now();',
       'const ev = [];',
-      "const server = http.createServer({ headersTimeout: 800, requestTimeout: 800 }, (req, res) => {",
+      "const server = http.createServer({ headersTimeout: 800, requestTimeout: 800, connectionsCheckingInterval: 50 }, (req, res) => {",
       "  if (req.url === '/slow') { server.close(() => ev.push('close cb')); setTimeout(() => res.end('slow done'), 300); } else res.end('ok');",
       '});',
       "console.log('options', server.headersTimeout, server.requestTimeout);",
@@ -120,7 +118,8 @@ describe('http keep-alive (kernel)', () => {
     const script = [
       "const http = require('http'); const net = require('net');",
       'const seen = [];',
-      'const server = http.createServer({ headersTimeout: 0, requestTimeout: 40 }, (req, res) => {',
+      'const server = http.createServer({ headersTimeout: 0, requestTimeout: 0, connectionsCheckingInterval: 10 }, (req, res) => {',
+      '  server.requestTimeout = 40;',
       '  seen.push(req.url);',
       '  req.resume();',
       "  setTimeout(() => { try { res.end('LATE'); } catch { /* detached */ } }, 100);",

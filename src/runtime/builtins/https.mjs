@@ -27,7 +27,7 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
   const client = createFetchClient({ ctx, Buffer, handles, STATUS_CODES: http?.STATUS_CODES, IncomingMessage: http?.IncomingMessage });
 
   const tls = getTls();
-  const { storeHttpOptions, handleConnection } = httpInternals.get(http);
+  const { storeHttpOptions, handleConnection, setupConnectionsTracking, stopConnectionsChecking } = httpInternals.get(http);
 
   function Server(options, requestListener) {
     if (!new.target) return new Server(options, requestListener);
@@ -50,6 +50,7 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
     self.on('tlsClientError', function onTlsClientError(err, conn) {
       if (!this.emit('clientError', err, conn)) conn.destroy(err);
     });
+    self.on('listening', setupConnectionsTracking);
     self.on('listening', () => {
       self._closing = false;
     });
@@ -62,6 +63,7 @@ export function createHttps({ ctx, Buffer, http, handles, getTls }) {
   Server.prototype.setTimeout = http.Server.prototype.setTimeout;
   Server.prototype.close = function close(...args) {
     this.closeIdleConnections();
+    stopConnectionsChecking(this);
     return tls.Server.prototype.close.apply(this, args);
   };
   Server.prototype[Symbol.asyncDispose ?? Symbol.for('nodejs.asyncDispose')] = async function asyncDispose() {
