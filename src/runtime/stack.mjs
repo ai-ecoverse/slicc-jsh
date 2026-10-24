@@ -691,7 +691,7 @@ export function installStackPrepare() {
 
   const own = {
     configurable: true,
-    enumerable: true,
+    enumerable: false,
     get() {
       return userPrepare ? formatterFor(userPrepare) : wrapper;
     },

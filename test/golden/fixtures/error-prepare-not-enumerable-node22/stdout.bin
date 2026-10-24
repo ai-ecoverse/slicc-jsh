@@ -1,0 +1,7 @@
+[Function: Error] { stackTraceLimit: 10 }
+[ 'stackTraceLimit' ]
+[ 'stackTraceLimit' ]
+[ 'stackTraceLimit' ] [ 'stackTraceLimit' ]
+false true
+[ 'stackTraceLimit' ] custom true
+[Function: Error] { stackTraceLimit: 10 } [Function: RangeError] []
