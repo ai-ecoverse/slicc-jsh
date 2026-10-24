@@ -103,7 +103,7 @@ case_node() {
   pass "a failed upgrade keeps $PREV"
 
   # Re-run from the file: upgrades in place to the registry's latest.
-  HOME="$h" SHELL=/bin/zsh no_tty sh "$installer" || fail "upgrade"
+  HOME="$h" SHELL=/bin/zsh JSH_VERSION="$latest" no_tty sh "$installer" || fail "upgrade"
   check_wrapper_version "$h" "$h/.local/bin" "$latest"
   got=$(env -i HOME="$h" PATH="$h/.local/bin:/usr/bin:/bin" "$h/smoke.jsh" a b)
   [ "$got" = "ok  | a,b" ] || fail "smoke.jsh after upgrade said: $got"
@@ -113,7 +113,7 @@ case_node() {
   pass "re-run upgrades $PREV → $latest"
 
   # JSH_HOME / JSH_BIN_DIR, and a bin dir already on PATH (no PATH line).
-  HOME="$h" JSH_HOME="$h/alt" JSH_BIN_DIR="$h/altbin" PATH="$h/altbin:$PATH" no_tty sh "$installer" >"$work/alt.txt" 2>&1 ||
+  HOME="$h" JSH_VERSION="$latest" JSH_HOME="$h/alt" JSH_BIN_DIR="$h/altbin" PATH="$h/altbin:$PATH" no_tty sh "$installer" >"$work/alt.txt" 2>&1 ||
     fail "JSH_HOME install: $(cat "$work/alt.txt")"
   ! grep -q 'export PATH' "$work/alt.txt" || fail "printed a PATH line for a bin dir on PATH"
   check_wrapper_version "$h" "$h/altbin" "$latest"
@@ -126,7 +126,7 @@ case_node() {
   odd="$h/odd \$dir \"q\" 'x'"
   mkdir -p "$h/rel"
   ln -s "$(command -v node)" "$h/rel/node"
-  (cd "$h" && HOME="$h" JSH_HOME="$h/odd-home" JSH_BIN_DIR="$odd" SHELL=/bin/sh PATH="rel:$PATH" no_tty sh "$installer") >"$work/odd.txt" 2>&1 ||
+  (cd "$h" && HOME="$h" JSH_VERSION="$latest" JSH_HOME="$h/odd-home" JSH_BIN_DIR="$odd" SHELL=/bin/sh PATH="rel:$PATH" no_tty sh "$installer") >"$work/odd.txt" 2>&1 ||
     fail "odd bin dir: $(cat "$work/odd.txt")"
   line=$(grep -A 1 'add this line to' "$work/odd.txt" | tail -n 1)
   got=$(sh -c "$line"'; printf "%s" "${PATH%%:*}"')
@@ -177,7 +177,7 @@ case_pty() {
   pass "pty: answering no stops with instructions"
 
   h=$(fresh_home pty-yes)
-  HOME="$h" PATH="$sb" SHELL=/bin/bash "$py" "$here/answer-tty.py" \
+  HOME="$h" PATH="$sb" SHELL=/bin/bash JSH_VERSION="$latest" "$py" "$here/answer-tty.py" \
     --expect 'Download Node 22.*\[y/N\]' --send 'y\n' \
     --expect 'Add it to PATH in .*\[y/N\]' --send 'y\n' \
     -- sh "$installer" || fail "pty yes"
@@ -193,7 +193,7 @@ case_pty() {
   pass "pty: yes installs Node $("$h/.jsh/node/bin/node" --version) and the rc line"
 
   # Re-run: keeps the private Node (no question), says it is up to date.
-  HOME="$h" PATH="$sb" SHELL=/bin/bash no_tty sh "$installer" >"$work/pty-rerun.txt" 2>&1 ||
+  HOME="$h" PATH="$sb" SHELL=/bin/bash JSH_VERSION="$latest" no_tty sh "$installer" >"$work/pty-rerun.txt" 2>&1 ||
     fail "re-run with private node: $(cat "$work/pty-rerun.txt")"
   grep -q 'is up to date in' "$work/pty-rerun.txt" || fail "re-run: $(cat "$work/pty-rerun.txt")"
   grep -q 'already adds' "$work/pty-rerun.txt" || fail "re-run asked about PATH again"
