@@ -9,6 +9,7 @@
 
 import * as acorn from 'acorn';
 import { encodeFilePath } from './builtins/url.mjs';
+import { scriptFunction } from './script-function.mjs';
 
 const KERNEL_HINT =
   /node-process-worker|runJsProcess|createNodeKernel|data:text\/javascript|slicc-module:|@ai-ecoverse\/slicc-kernel|\/slicc-kernel\/|slicc-jsh\/dist\/|at new Function\b/i;
@@ -36,7 +37,7 @@ function isKernelFrame(frame) {
   // Decide on the name's start, before anything formats or scans the text
   // (a regex over it per frame made each stack take milliseconds).
   const file = frame.getFileName?.() || '';
-  if (isModuleUrl(file) || file === 'node:vm' || KERNEL_HINT.test(file)) return true;
+  if (isModuleUrl(file) || file === 'node:vm' || file.startsWith('node:internal') || file.startsWith(FUNCTION_TAG) || KERNEL_HINT.test(file)) return true;
   if (isLoaderImplFrame(frame)) return true;
   // Code the bundle compiles (its vendored builtins) has no file: its eval
   // origin (`eval at evalCjs (data:…)`), and its text, hold the bundle's URL.
@@ -241,7 +242,7 @@ function originSite(file, line, col) {
 }
 
 const FUNCTION_TAG = 'slicc-jsh-function:';
-const TAGGED = /eval at [^()]* \((slicc-jsh-function:\d+)\)/g;
+const TAGGED = /eval at [^()]* \((slicc-jsh-function:\d+)(?::\d+:\d+)?\)/g;
 const FUNCTION_SOURCE_BUDGET = 1 << 20;
 let functionSourceLength = 0;
 const functionOrigins = new Map();
@@ -423,7 +424,7 @@ function wrapRaw(frame) {
     getEnclosingColumnNumber: () => frame.getEnclosingColumnNumber?.(),
     getEvalOrigin: () => frame.getEvalOrigin?.(),
     getScriptId: () => frame.getScriptId?.(),
-    isToplevel: () => !!isToplevel,
+    isToplevel: () => (ctor ? false : (v8Top ?? isToplevel)),
     isEval: () => frame.isEval?.() ?? false,
     isNative: () => frame.isNative?.() ?? false,
     isConstructor: () => !!ctor,
@@ -763,8 +764,59 @@ function useKernelFormatter(sync) {
   return nodePrepare;
 }
 
+const OWN_FORMATTER_KERNEL = [1, 165, 1];
+
+function kernelAtLeast(version, floor) {
+  const parts = /^(\d+)\.(\d+)\.(\d+)/.exec(typeof version === 'string' ? version : '');
+  if (!parts) return false;
+  for (let i = 0; i < floor.length; i++) {
+    const n = Number(parts[i + 1]);
+    if (n !== floor[i]) return n > floor[i];
+  }
+  return true;
+}
+
+function formatOwn(err, sites, own) {
+  if (rawSites) return sites;
+  const overridden = takeOverride(err, sites);
+  if (overridden) return overridden.value;
+  if (err?.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
+  if (typeof own === 'function' && own !== programDefault) return Reflect.apply(own, Error, [err, keptFrames(sites).map(wrapCallSite)]);
+  return defaultPrepare(err, sites, sites[0]);
+}
+
+const programDefault = {
+  ErrorPrepareStackTrace: function (error, trace) {
+    return internalPrepare ? internalPrepare(error, trace) : ErrorPrepareStackTrace(error, trace);
+  },
+}.ErrorPrepareStackTrace;
+
+let trampolineCtx = null;
+
+export function functionTrampoline(tag) {
+  if (!trampolineCtx) return undefined;
+  return scriptFunction(trampolineCtx, { params: ['construct', 'Native', 'args', 'target'], body: 'return construct(Native, args, target)', filename: tag });
+}
+
+function useOwnFormatter(ctx) {
+  const sync = ctx?.sync;
+  if (!kernelAtLeast(ctx?.kernel?.version, OWN_FORMATTER_KERNEL)) return false;
+  if (typeof sync?.setStackFormatter !== 'function' || typeof sync.errorSource !== 'function') return false;
+  try {
+    sync.setStackFormatter(formatOwn, { own: true });
+  } catch {
+    return false;
+  }
+  errorSourceOf = sync.errorSource;
+  trampolineCtx = ctx;
+  const native = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+  if (typeof native?.value === 'function') Object.defineProperty(Error, 'prepareStackTrace', { ...native, value: programDefault });
+  return true;
+}
+
 /** Install once per runNode — wraps user prepareStackTrace CallSites. */
 export function installStackPrepare(ctx) {
+  if (useOwnFormatter(ctx)) return;
   let userPrepare = null;
   const viaKernel = useKernelFormatter(ctx?.sync);
 

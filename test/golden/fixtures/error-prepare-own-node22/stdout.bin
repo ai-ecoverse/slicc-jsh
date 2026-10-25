@@ -1,0 +1,100 @@
+descriptor: [ 'function', 'ErrorPrepareStackTrace', true, false, true ]
+proto is Function.prototype: true
+keys: [ 'stackTraceLimit' ]
+inspect: [Function: Error] { stackTraceLimit: 10 }
+callsites first: DIR/main.js:27:10 where top=true
+callsites strange: 0
+depd message: old() is gone
+depd stack: DeprecationError: my-mod deprecated old() is gone
+own formatter: f|true
+own formatter this: true
+own formatter top: DIR/main.js:50:10 formatted top=true
+own formatter strange: 0
+own formatter proto methods: true
+own formatter own props: 0
+typeof set: function
+array result: true
+throwing formatter: THROW RangeError: from fmt
+nested: outer out [Error: in]
+undefined formatter: Error: u
+    at DIR/main.js:81:42
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:81:1)
+non-function formatter: Error: n
+    at DIR/main.js:83:45
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:83:1)
+restored: Error: r
+    at DIR/main.js:85:31
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:85:1)
+save and restore: [ true, 'ErrorPrepareStackTrace', true ]
+chained to the original: Error: f
+    at formatted (DIR/main.js:50:10)
+    at DIR/main.js:95:46
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:95:1)
+original on saved sites: Error: later
+    at DIR/main.js:98:17
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:96:1)
+original with no sites: [ 'Error: none', 'N: m' ]
+cloned sites to the original: Error: f
+    at formatted (DIR/main.js:50:10)
+    at <anonymous> (DIR/main.js:112:51)
+    at show (DIR/main.js:7:13)
+    at <anonymous> (DIR/main.js:112:1)
+babel loads: function
+babel transform: const a = 1;
+babel syntax error: [
+  'SyntaxError',
+  'DIR/bad.js: Unexpected token (1:8)',
+  'SyntaxError: DIR/bad.js: Unexpected token (1:8)'
+]
+babel rewriter: [
+  'stackTraceRewriter',
+  'Error: f\n' +
+    '    at formatted (DIR/main.js:50:10)\n' +
+    '    at DIR/main.js:124:68\n' +
+    '    at show (DIR/main.js:7:13)\n' +
+    '    at Object.<anonymous> (DIR/main.js:124:1)'
+]
+subclass formatter: [
+  'RangeError: x\n' +
+    '    at DIR/main.js:128:42\n' +
+    '    at show (DIR/main.js:7:13)\n' +
+    '    at Object.<anonymous> (DIR/main.js:128:1)',
+  'Error: y\n' +
+    '    at DIR/main.js:128:77\n' +
+    '    at show (DIR/main.js:7:13)\n' +
+    '    at Object.<anonymous> (DIR/main.js:128:1)'
+]
+subclass own: [ 'prepareStackTrace' ]
+delete: true
+typeof after delete: undefined
+in after delete: false
+proto after delete: true
+stack after delete: Error: d
+    at DIR/main.js:136:41
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:136:1)
+TypeError after delete: TypeError: Cannot read properties of null (reading 'x')
+    at DIR/main.js:139:10
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:137:1)
+inspect after delete: [Function: Error] { stackTraceLimit: 50 }
+set after delete: again s
+keys after set: [ 'stackTraceLimit', 'prepareStackTrace' ]
+inspect after set: [Function: Error] {
+  stackTraceLimit: 50,
+  prepareStackTrace: [Function: again]
+}
+descriptor after set: [ 'again', true, true, true, false ]
+sloppy frozen subclass: false
+strict frozen subclass: THROW TypeError: Cannot add property prepareStackTrace, object is not extensible
+strict frozen object from Error: THROW TypeError: Cannot add property prepareStackTrace, object is not extensible
+strict frozen subclass with Error own: THROW TypeError: Cannot add property prepareStackTrace, object is not extensible
+final: Error: end
+    at DIR/main.js:180:28
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:180:1)
