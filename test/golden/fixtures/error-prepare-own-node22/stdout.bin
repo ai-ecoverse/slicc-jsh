@@ -1,0 +1,70 @@
+descriptor: [ 'function', 'ErrorPrepareStackTrace', true, false, true ]
+proto is Function.prototype: true
+keys: [ 'stackTraceLimit' ]
+inspect: [Function: Error] { stackTraceLimit: 10 }
+callsites first: DIR/main.js:27:10 where top=true
+callsites strange: 0
+depd message: old() is gone
+depd stack: DeprecationError: my-mod deprecated old() is gone
+own formatter: f|true
+own formatter this: true
+own formatter top: DIR/main.js:50:10 formatted top=true
+own formatter strange: 0
+own formatter proto methods: true
+own formatter own props: 0
+typeof set: function
+array result: true
+throwing formatter: THROW RangeError: from fmt
+nested: outer out [Error: in]
+undefined formatter: Error: u
+    at DIR/main.js:81:42
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:81:1)
+non-function formatter: Error: n
+    at DIR/main.js:83:45
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:83:1)
+restored: Error: r
+    at DIR/main.js:85:31
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:85:1)
+save and restore: [ true, 'ErrorPrepareStackTrace', true ]
+subclass formatter: [
+  'RangeError: x\n' +
+    '    at DIR/main.js:94:42\n' +
+    '    at show (DIR/main.js:7:13)\n' +
+    '    at Object.<anonymous> (DIR/main.js:94:1)',
+  'Error: y\n' +
+    '    at DIR/main.js:94:77\n' +
+    '    at show (DIR/main.js:7:13)\n' +
+    '    at Object.<anonymous> (DIR/main.js:94:1)'
+]
+subclass own: [ 'prepareStackTrace' ]
+delete: true
+typeof after delete: undefined
+in after delete: false
+proto after delete: true
+stack after delete: Error: d
+    at DIR/main.js:102:41
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:102:1)
+TypeError after delete: TypeError: Cannot read properties of null (reading 'x')
+    at DIR/main.js:105:10
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:103:1)
+inspect after delete: [Function: Error] { stackTraceLimit: 10 }
+set after delete: again s
+keys after set: [ 'stackTraceLimit', 'prepareStackTrace' ]
+inspect after set: [Function: Error] {
+  stackTraceLimit: 10,
+  prepareStackTrace: [Function: again]
+}
+descriptor after set: [ 'again', true, true, true, false ]
+sloppy frozen subclass: false
+strict frozen subclass: THROW TypeError: Cannot add property prepareStackTrace, object is not extensible
+strict frozen object from Error: THROW TypeError: Cannot add property prepareStackTrace, object is not extensible
+strict frozen subclass with Error own: THROW TypeError: Cannot add property prepareStackTrace, object is not extensible
+final: Error: end
+    at DIR/main.js:146:28
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:146:1)

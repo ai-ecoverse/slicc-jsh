@@ -10,7 +10,7 @@
  * that created the function. Bodies without one compile exactly as before.
  */
 import * as acorn from 'acorn';
-import { KERNEL_HINT, LONG_ORIGIN, callerSites, functionTag } from './stack.mjs';
+import { KERNEL_HINT, LONG_ORIGIN, callerSites, functionTag, functionTrampoline } from './stack.mjs';
 
 const NativeFunction = Function;
 
@@ -124,7 +124,9 @@ export function installFunctionImport({ importFrom, cwd }) {
   const trampoline = (tag) => {
     let t = trampolines.get(tag);
     if (!t) {
-      t = NativeFunction('construct', 'Native', 'args', 'target', `return construct(Native, args, target)\n//# sourceURL=${tag}`);
+      t =
+        functionTrampoline(tag) ??
+        NativeFunction('construct', 'Native', 'args', 'target', `return construct(Native, args, target)\n//# sourceURL=${tag}`);
       trampolines.set(tag, t);
     }
     return t;
