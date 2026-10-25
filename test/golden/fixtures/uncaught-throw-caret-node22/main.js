@@ -18,6 +18,11 @@ const lines = [
   'const o = {};\nthrow o.f()',
   'throw new Array(-1)',
   'try { throw 1 } catch {} throw new Error("after")',
+  'const f = (a, e) => e;\nthrow f(/\'/, new Error("r"))',
+  'const f = (e) => e;\nthrow f(/* it\'s */ new Error("c"))',
+  'const tag = (s, e) => e;\nthrow tag`x${new Error("g")}`',
+  'const foo = 1;\nthrow new foo()',
+  'const o = {};\nthrow new o.Missing("x")',
 ];
 for (const code of lines) {
   run(['-e', code]);
@@ -25,3 +30,4 @@ for (const code of lines) {
   run(['-e', `const s = ${JSON.stringify(code)};\neval(s)`]);
 }
 run(['cjs.js']);
+run(['use.js']);

@@ -7,6 +7,7 @@
  * module; those CallSites are filtered as kernel frames.
  */
 
+import * as acorn from 'acorn';
 import { encodeFilePath } from './builtins/url.mjs';
 
 const KERNEL_HINT =
@@ -666,39 +667,27 @@ let routedErr = null;
 let routedFrames = null;
 
 const RAISED = new Set([TypeError, RangeError, ReferenceError, SyntaxError, EvalError, URIError].map((type) => type.prototype));
+const NOT_CONSTRUCTOR = / is not a constructor$/;
 const BUILT_AT = /^(new\s+)?((?:[\w$]+\s*\.\s*)*([\w$]+))/;
-const QUOTES = new Set(['"', "'", '`']);
-const OPENS = new Set(['(', '[', '{']);
+const OPENS = new Set(['(', '[', '{', '${']);
 const CLOSES = new Set([')', ']', '}']);
 
-function quoteEnd(line, at, to) {
-  for (let i = at + 1; i < to; i++) {
-    if (line[i] === '\\') i++;
-    else if (line[i] === line[at]) return i;
-  }
-  return -1;
-}
-
-function inStatement(line, from, to) {
-  let depth = 0;
-  for (let i = from; i < to; i++) {
-    const c = line[i];
-    if (QUOTES.has(c)) {
-      i = quoteEnd(line, i, to);
-      if (i < 0) return false;
-    } else if (OPENS.has(c)) depth++;
-    else if (CLOSES.has(c) && --depth < 0) return false;
-    else if (c === ';' && depth === 0) return false;
-  }
-  return true;
-}
-
 function enclosingThrow(line, start) {
-  const throws = [...line.slice(0, start).matchAll(/\bthrow\b/g)];
-  for (let k = throws.length - 1; k >= 0; k--) {
-    if (inStatement(line, throws[k].index + 5, start)) return throws[k].index;
+  const open = [];
+  let depth = 0;
+  try {
+    for (const token of acorn.tokenizer(line, { ecmaVersion: 'latest', allowHashBang: true })) {
+      if (token.start >= start) break;
+      const label = token.type.label;
+      if (label === 'throw') open.push({ at: token.start, depth });
+      else if (OPENS.has(label)) depth++;
+      else if (CLOSES.has(label)) depth--;
+      while (open.length && (depth < open.at(-1).depth || (label === ';' && depth === open.at(-1).depth))) open.pop();
+    }
+  } catch {
+    return -1;
   }
-  return -1;
+  return open.length ? open.at(-1).at : -1;
 }
 
 function globalFunction(path, except) {
@@ -718,6 +707,7 @@ function raisedByV8(err, at) {
     if (!built) return true;
     const made = err.constructor;
     if (built[3] === made?.name) return false;
+    if (NOT_CONSTRUCTOR.test(err.message)) return true;
     return !built[1] || globalFunction(built[2], made);
   } catch {
     return false;
