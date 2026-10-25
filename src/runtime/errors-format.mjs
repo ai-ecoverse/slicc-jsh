@@ -322,6 +322,36 @@ function attempt(fn) {
   }
 }
 
+function firstThrow(evalName, evalCode) {
+  if (!isEvalFile(evalName) || typeof evalCode !== 'string') return undefined;
+  const lines = evalCode.split('\n');
+  let token;
+  try {
+    for (const t of acorn.tokenizer(evalCode, { ecmaVersion: 'latest', allowHashBang: true, locations: true })) {
+      if (t.type.label === 'throw') {
+        token = t;
+        break;
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  if (!token) return undefined;
+  const { line, column } = token.loc.start;
+  return `${evalName}:${line}\n${lines[line - 1]}\n${lines[line - 1].slice(0, column).replace(/[^\t]/g, ' ')}^`;
+}
+
+const ESM_PRINT_FRAMES = {
+  '[eval]': ['    at node:internal/main/eval_string:38:3'],
+  '[stdin]': [
+    '    at node:internal/main/eval_stdin:36:5',
+    '    at Socket.<anonymous> (node:internal/process/execution:201:5)',
+    '    at Socket.emit (node:events:531:35)',
+    '    at endReadableNT (node:internal/streams/readable:1698:12)',
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)',
+  ],
+};
+
 function throwSite(evalName, evalCode, shown) {
   let where = `${evalName}:1\nthrow ${shown}\n^`;
   if (typeof evalCode === 'string') {
@@ -419,6 +449,13 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     };
   }
 
+  if (err.code === 'ERR_EVAL_ESM_CANNOT_PRINT' && ESM_PRINT_FRAMES[evalName] && !/\n {4}at /.test(rawStack)) {
+    const frames = ['    at evalModuleEntryPoint (node:internal/process/execution:69:11)', ...ESM_PRINT_FRAMES[evalName]].join('\n');
+    return {
+      body: `node:internal/process/execution:69\n    throw new ERR_EVAL_ESM_CANNOT_PRINT();\n    ^\n\n${rawStack}\n${frames} {\n  code: 'ERR_EVAL_ESM_CANNOT_PRINT'\n}\n${trailer}`,
+    };
+  }
+
   if (err.code === 'MODULE_NOT_FOUND') {
     head = `node:internal/modules/cjs/loader:1386\n  throw err;\n  ^\n\n`;
     const rs = err.requireStack?.[0];
@@ -490,10 +527,9 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     body = collapseMatchingCauseFrames(body, err);
   }
 
-  if (!rawStack.includes('\n    at ') && !head && typeof evalCode === 'string' && /\bthrow\b/.test(evalCode) && !(err instanceof SyntaxError)) {
-    const where = throwSite(evalName, evalCode, '');
+  const where = fromScript && !head && !rawStack.includes('\n    at ') && !(err instanceof SyntaxError) ? firstThrow(evalName, evalCode) : undefined;
+  if (where !== undefined) {
     const stack = attempt(() => err.stack);
-    if (!isEvalFile(evalName)) return { body: `${where}\n\n${sanitizeInspected(util.inspect(err, { depth: 10 }))}\n${trailer}` };
     if (attempt(() => Reflect.set(err, 'stack', `${where}\n\n${typeof stack === 'string' ? sanitizeStack(stack) : rawStack}`)) === true) {
       return { body: `${sanitizeInspected(util.inspect(err, { depth: 10 }))}\n${trailer}` };
     }

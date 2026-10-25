@@ -12,9 +12,12 @@ const cases = [
   'Error.stackTraceLimit = 0;\nconst e = new Error("x");\ne.code = 1;\nthrow e',
   'Error.stackTraceLimit = 0; throw new TypeError("t")',
   'const e = new RangeError("r"); e.stack = "RangeError: r"; e.info = { a: 1, b: [1, 2] }; throw e',
+  '// we never throw here\nconst e = new Error("c"); e.stack = "c";\nthrow e',
+  'const s = "throw";\nconst e = new Error("q"); e.stack = "q"; throw e',
 ];
 for (const code of cases) {
   run(['-e', code]);
   run([], code);
 }
-run(['cjs.js']);
+run(['--input-type=module', '-p', '1']);
+run(['--input-type=module', '-p'], '1');
