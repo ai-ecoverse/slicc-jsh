@@ -1,0 +1,34 @@
+== ["top.js"]: status 1
+<anonymous_script>:2
+	undefinedFn()
+	^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== ["fn.js"]: status 1
+<anonymous_script>:1
+null.f
+     ^
+
+TypeError: Cannot read properties of null (reading 'f')
+
+Node.js v22.22.0
+== ["timer.js"]: status 1
+<anonymous_script>:2
+o.g()
+  ^
+
+TypeError: o.g is not a function
+
+Node.js v22.22.0
+== ["req.js"]: status 1
+<anonymous_script>:1
+new Array(-1)
+^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== ["caught.js"]: status 0
+true
