@@ -254,10 +254,13 @@ function sanitizeInspected(inspected) {
  * util.inspect(Error) yields `{ TypeError: msg\n    at …\n  prop: … }`.
  * Node's uncaught printer wants only the own-prop block glued to err.stack.
  */
-function extractInspectProps(inspected) {
-  const brace = inspected.indexOf('{');
+function extractInspectProps(inspected, stack) {
+  const shown = typeof stack === 'string' ? stack.replace(/\n+$/, '') : '';
+  const at = shown ? inspected.indexOf(shown) : -1;
+  const text = at < 0 ? inspected : `{${inspected.slice(at + shown.length).replace(/^ \{/, '')}`;
+  const brace = text.indexOf('{');
   if (brace < 0) return null;
-  const lines = inspected.slice(brace + 1).split('\n');
+  const lines = text.slice(brace + 1).split('\n');
   let i = 0;
   while (i < lines.length) {
     const l = lines[i];
@@ -482,7 +485,7 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
       compact: isAgg ? false : true,
     })
   );
-  let props = extractInspectProps(inspected);
+  let props = extractInspectProps(inspected, rawStack);
   // Node omits commas between Error entries in AggregateError's [errors] array.
   if (isAgg && props) {
     props = props.replace(/(\n\s+at [^\n]+),(\n\s+)/g, '$1$2');
