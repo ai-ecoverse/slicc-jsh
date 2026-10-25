@@ -30,7 +30,6 @@ export function preserveSymlinks(process) {
   );
 }
 
-const MAYBE_EVAL = /\beval\b/;
 
 export function createCjs({
   ctx,
@@ -312,7 +311,7 @@ export function createCjs({
     const params = ['exports', 'require', 'module', '__filename', '__dirname', ...(hasImport ? [importBinding] : [])];
     let wrapper;
     try {
-      if (MAYBE_EVAL.test(body)) wrapper = scriptFunction(ctx, { params, body, filename, checked: true });
+      wrapper = scriptFunction(ctx, { params, body, filename, checked: true });
       wrapper ??= new Function(...params, `${body}\n//# sourceURL=${filename}`);
     } catch (err) {
       if (err instanceof SyntaxError) {
