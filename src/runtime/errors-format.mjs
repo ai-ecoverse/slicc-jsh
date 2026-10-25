@@ -182,6 +182,31 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false, v8 = undefined, esm
   return { file: loc.url ?? loc.file, lineNo: n, text, caret: `${text.slice(0, col - 1).replace(/[^\t]/g, ' ')}^` };
 }
 
+function throwsAfter(text, column) {
+  let depth = 0;
+  let called = false;
+  try {
+    for (const token of acorn.tokenizer(text, { ecmaVersion: 'latest', allowHashBang: true })) {
+      if (token.start < column) continue;
+      const label = token.type.label;
+      if (label === 'throw' && (called || depth === 0)) return true;
+      if (label === '(') depth++;
+      else if (label === ')' && --depth === 0) called = true;
+    }
+  } catch {
+    return /\bthrow\b/.test(text.slice(column));
+  }
+  return false;
+}
+
+function jsonParseHead(v8, top, snip, loc) {
+  if (!v8 || top !== '    at JSON.parse (<anonymous>)') return undefined;
+  if (snip && throwsAfter(snip.text, loc.column - 1)) return undefined;
+  const text = v8.sourceLine;
+  const caret = v8.startColumn < text.length ? `${text.slice(0, v8.startColumn).replace(/[^\t]/g, ' ')}^\n` : '';
+  return `<anonymous_script>:${v8.lineNumber}\n${text}\n${caret}\n`;
+}
+
 /** With source maps, the original `file:line`, line and caret of `err`'s throw. */
 function mappedErrorSource(ctx, err, evalCode, fromPromise, v8, esmEntry) {
   const gen = generatedLocation(err);
@@ -441,8 +466,10 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
   const atTop = evalLoc !== undefined || (loc && top?.includes(`:${loc.line}:${loc.column}`));
   const snip = snippetFor(ctx, loc, evalCode, fromPromise, atTop ? v8 : undefined, esmEntry);
   if (snip) head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
+  const json = jsonParseHead(v8, top, snip, loc);
+  if (json !== undefined) head = json;
   // Source maps: the position in the code as run, mapped (Node's GetErrorSource).
-  const mapped = mappedErrorSource(ctx, err, evalCode, fromPromise, v8, esmEntry);
+  const mapped = json === undefined ? mappedErrorSource(ctx, err, evalCode, fromPromise, v8, esmEntry) : undefined;
   if (mapped) head = mapped;
   if (attempt(() => err[kDecorated]) === true) head = '';
 
