@@ -292,8 +292,6 @@ function finalizeProps(props) {
   let p = props.replace(/^\{\n\n/, '{\n');
   // compact inspect leaves `}` on the last prop line — split it out.
   p = p.replace(/([^?\s])\s*\}\s*$/, '$1\n}');
-  // [cause] nested stacks: Node uses 6 spaces before `at` (not 7 from inspect).
-  p = p.replace(/(\[cause\]:[^\n]*\n)[ \t]+at /g, '$1      at ');
   return p;
 }
 
@@ -323,6 +321,36 @@ function attempt(fn) {
     return undefined;
   }
 }
+
+function firstThrow(evalName, evalCode) {
+  if (!isEvalFile(evalName) || typeof evalCode !== 'string') return undefined;
+  const lines = evalCode.split('\n');
+  let token;
+  try {
+    for (const t of acorn.tokenizer(evalCode, { ecmaVersion: 'latest', allowHashBang: true, locations: true })) {
+      if (t.type.label === 'throw') {
+        token = t;
+        break;
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  if (!token) return undefined;
+  const { line, column } = token.loc.start;
+  return `${evalName}:${line}\n${lines[line - 1]}\n${lines[line - 1].slice(0, column).replace(/[^\t]/g, ' ')}^`;
+}
+
+const ESM_PRINT_FRAMES = {
+  '[eval]': ['    at node:internal/main/eval_string:38:3'],
+  '[stdin]': [
+    '    at node:internal/main/eval_stdin:36:5',
+    '    at Socket.<anonymous> (node:internal/process/execution:201:5)',
+    '    at Socket.emit (node:events:531:35)',
+    '    at endReadableNT (node:internal/streams/readable:1698:12)',
+    '    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)',
+  ],
+};
 
 function throwSite(evalName, evalCode, shown) {
   let where = `${evalName}:1\nthrow ${shown}\n^`;
@@ -421,6 +449,13 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     };
   }
 
+  if (err.code === 'ERR_EVAL_ESM_CANNOT_PRINT' && ESM_PRINT_FRAMES[evalName] && !/\n {4}at /.test(rawStack)) {
+    const frames = ['    at evalModuleEntryPoint (node:internal/process/execution:69:11)', ...ESM_PRINT_FRAMES[evalName]].join('\n');
+    return {
+      body: `node:internal/process/execution:69\n    throw new ERR_EVAL_ESM_CANNOT_PRINT();\n    ^\n\n${rawStack}\n${frames} {\n  code: 'ERR_EVAL_ESM_CANNOT_PRINT'\n}\n${trailer}`,
+    };
+  }
+
   if (err.code === 'MODULE_NOT_FOUND') {
     head = `node:internal/modules/cjs/loader:1386\n  throw err;\n  ^\n\n`;
     const rs = err.requireStack?.[0];
@@ -479,11 +514,7 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
   // Node 22 uncaught: compact nested props; AggregateError [errors] is multiline.
   const isAgg = err.name === 'AggregateError' || err instanceof AggregateError;
   let inspected = sanitizeInspected(
-    util.inspect(err, {
-      depth: 10,
-      breakLength: 80,
-      compact: isAgg ? false : true,
-    })
+    util.inspect(err, isAgg ? { depth: 10, breakLength: 80, compact: false } : { depth: 10 })
   );
   let props = extractInspectProps(inspected, rawStack);
   // Node omits commas between Error entries in AggregateError's [errors] array.
@@ -494,6 +525,14 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
 
   if (err.cause instanceof Error) {
     body = collapseMatchingCauseFrames(body, err);
+  }
+
+  const where = fromScript && !head && !rawStack.includes('\n    at ') && !(err instanceof SyntaxError) ? firstThrow(evalName, evalCode) : undefined;
+  if (where !== undefined) {
+    const stack = attempt(() => err.stack);
+    if (attempt(() => Reflect.set(err, 'stack', `${where}\n\n${typeof stack === 'string' ? sanitizeStack(stack) : rawStack}`)) === true) {
+      return { body: `${sanitizeInspected(util.inspect(err, { depth: 10 }))}\n${trailer}` };
+    }
   }
 
   return { body: `${head}${body}\n${trailer}` };
@@ -557,7 +596,9 @@ function collapseMatchingCauseFrames(body, err) {
     if (propsLine >= 0) {
       const propText = lines.slice(propsLine).join('\n');
       // If `{` was on the first frame line, recover props from extract.
-      if (propsLine === firstAt) {
+      if (propsLine !== firstAt && /^\s*at\s/.test(lines[propsLine])) {
+        props = lines[propsLine].slice(lines[propsLine].lastIndexOf('{')) + (lines.length > propsLine + 1 ? `\n${lines.slice(propsLine + 1).join('\n')}` : '');
+      } else if (propsLine === firstAt) {
         const braced = lines[firstAt].indexOf('{');
         props = braced >= 0 ? lines[firstAt].slice(braced) + (lines.length > firstAt + 1 ? '\n' + lines.slice(firstAt + 1).join('\n') : '') : propText;
       } else {
