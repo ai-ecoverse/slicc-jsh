@@ -41,7 +41,7 @@ import {
 const kAllowObjects = kValidateObjectAllowArray | kValidateObjectAllowFunction;
 /** lib/internal/vm's own scripts (the REPL's): their importModuleDynamically needs no flag. */
 export const kInternalScript = Symbol('slicc-jsh.vmInternalScript');
-import { registerVmFile } from '../stack.mjs';
+import { errorSource, errorSourceCaret, registerVmFile } from '../stack.mjs';
 
 /**
  * Names a script in this context sees though the realm can't hold them on
@@ -619,8 +619,9 @@ function decorateThrown(err, script) {
   if (text === undefined) return;
   const col = Number(top[3]) - 1;
   const at = text.lastIndexOf('throw', col);
+  const caret = errorSourceCaret(errorSource(err), text) ?? `${' '.repeat(at === -1 ? Math.max(0, col) : at)}^`;
   Object.defineProperty(err, kArrowMessage, {
-    value: `${script._filename}:${line}\n${text}\n${' '.repeat(at === -1 ? Math.max(0, col) : at)}^\n`,
+    value: `${script._filename}:${line}\n${text}\n${caret}\n`,
     configurable: true,
     writable: true,
   });

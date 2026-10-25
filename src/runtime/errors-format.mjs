@@ -4,7 +4,8 @@
  */
 
 import * as acorn from 'acorn';
-import { KERNEL_HINT, functionSource, generatedLocation } from './stack.mjs';
+import { KERNEL_HINT, errorSource, errorSourceCaret, functionSource, generatedLocation } from './stack.mjs';
+import { kDecorated } from './builtins/vm.mjs';
 import { sourceMapErrorSource } from './source-maps.mjs';
 
 function sanitizeStack(stack) {
@@ -126,17 +127,18 @@ function originSource(ctx, origin, frames, evalCode, err) {
   return typeof outer === 'string' ? evalSource(outer, Number(at[2]), Number(at[3])) : undefined;
 }
 
-function evalLocation(ctx, stack, evalCode, err) {
+function evalLocation(ctx, stack, evalCode, err, v8) {
   const lines = stack.split('\n').filter((l) => l.startsWith('    at '));
   if (!lines[0]?.includes('(eval at ')) return undefined;
   const frames = lines.map((l) => EVAL_FRAME.exec(l)).filter(Boolean);
   const top = EVAL_FRAME.exec(lines[0]);
-  const source = top ? originSource(ctx, top[1], frames, evalCode, err) : undefined;
+  let source = top ? originSource(ctx, top[1], frames, evalCode, err) : undefined;
+  if (source === undefined && v8 && v8.lineNumber === Number(top?.[2])) source = `${'\n'.repeat(v8.lineNumber - 1)}${v8.sourceLine}`;
   if (source === undefined) return null;
   return { file: '<anonymous_script>', source, line: Number(top[2]), column: Number(top[3]) };
 }
 
-function snippetFor(ctx, loc, evalCode, fromPromise = false) {
+function snippetFor(ctx, loc, evalCode, fromPromise = false, v8 = undefined) {
   if (!loc) return null;
   let source;
   if (loc.source !== undefined) source = loc.source;
@@ -155,6 +157,8 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false) {
   const n = loc.line >= 1 && loc.line <= lines.length ? loc.line : 1;
   const text = lines[n - 1];
   if (text === undefined) return null;
+  const v8Caret = errorSourceCaret(v8, text);
+  if (v8Caret !== undefined) return { file: loc.url ?? loc.file, lineNo: n, text, caret: v8Caret };
   let col = loc.column;
   const throwAt = text.search(/\bthrow\b/);
   const isAsyncLine = /\basync\b/.test(text);
@@ -179,7 +183,7 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false) {
 }
 
 /** With source maps, the original `file:line`, line and caret of `err`'s throw. */
-function mappedErrorSource(ctx, err, evalCode, fromPromise) {
+function mappedErrorSource(ctx, err, evalCode, fromPromise, v8) {
   const gen = generatedLocation(err);
   if (!gen) return undefined;
   const esm = gen.file.startsWith('file://');
@@ -192,7 +196,7 @@ function mappedErrorSource(ctx, err, evalCode, fromPromise) {
     }
   }
   // The column V8's message has there: as for an unmapped report.
-  const snip = snippetFor(ctx, { file, url: esm ? gen.file : undefined, line: gen.line, column: gen.column, esm }, evalCode, fromPromise);
+  const snip = snippetFor(ctx, { file, url: esm ? gen.file : undefined, line: gen.line, column: gen.column, esm }, evalCode, fromPromise, v8);
   if (!snip) return undefined;
   const source = sourceMapErrorSource(gen.file, gen.line, snip.caret.length - 1);
   // No original source to show: the code as run, as Node falls back to.
@@ -430,13 +434,17 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     }
   }
 
-  const evalLoc = evalLocation(ctx, rawStack, evalCode, err);
+  const v8 = errorSource(err);
+  const evalLoc = evalLocation(ctx, rawStack, evalCode, err, v8);
   const loc = evalLoc === undefined ? frameLocation(rawStack) : evalLoc;
-  const snip = snippetFor(ctx, loc, evalCode, fromPromise);
+  const top = rawStack.split('\n').find((l) => l.startsWith('    at '));
+  const atTop = evalLoc !== undefined || (loc && top?.includes(`:${loc.line}:${loc.column}`));
+  const snip = snippetFor(ctx, loc, evalCode, fromPromise, atTop ? v8 : undefined);
   if (snip) head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
   // Source maps: the position in the code as run, mapped (Node's GetErrorSource).
-  const mapped = mappedErrorSource(ctx, err, evalCode, fromPromise);
+  const mapped = mappedErrorSource(ctx, err, evalCode, fromPromise, v8);
   if (mapped) head = mapped;
+  if (attempt(() => err[kDecorated]) === true) head = '';
 
   // Node 22 uncaught: compact nested props; AggregateError [errors] is multiline.
   const isAgg = err.name === 'AggregateError' || err instanceof AggregateError;

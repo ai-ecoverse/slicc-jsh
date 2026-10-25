@@ -232,7 +232,7 @@ const platformSetTimeout = globalThis.setTimeout.bind(globalThis);
  * (event loop, exit codes, uncaught errors). The kernel `jsh` uses it.
  */
 export async function runNode(ctx, options = {}) {
-  installStackPrepare();
+  installStackPrepare(ctx);
   installPromiseState(ctx);
   useHostContext(ctx.asyncContext);
   const handles = createHandleTable();
