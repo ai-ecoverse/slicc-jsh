@@ -1,0 +1,400 @@
+== ["-e","const f = (o, e) => e;\nthrow f({ a: 1 }, new Error(\"x\"))"]: status 1
+[eval]:2
+throw f({ a: 1 }, new Error("x"))
+^
+
+Error: x
+
+Node.js v22.22.0
+== [] < "const f = (o, e) => e;\nthrow f({ a: 1 }, new Error(\"x\"))": status 1
+[stdin]:2
+throw f({ a: 1 }, new Error("x"))
+^
+
+Error: x
+
+Node.js v22.22.0
+== ["-e","const s = \"const f = (o, e) => e;\\nthrow f({ a: 1 }, new Error(\\\"x\\\"))\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw f({ a: 1 }, new Error("x"))
+^
+
+Error: x
+
+Node.js v22.22.0
+== ["-e","const f = (a, e) => e;\nthrow f(\"a;}\", new Error(\"y\"))"]: status 1
+[eval]:2
+throw f("a;}", new Error("y"))
+^
+
+Error: y
+
+Node.js v22.22.0
+== [] < "const f = (a, e) => e;\nthrow f(\"a;}\", new Error(\"y\"))": status 1
+[stdin]:2
+throw f("a;}", new Error("y"))
+^
+
+Error: y
+
+Node.js v22.22.0
+== ["-e","const s = \"const f = (a, e) => e;\\nthrow f(\\\"a;}\\\", new Error(\\\"y\\\"))\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw f("a;}", new Error("y"))
+^
+
+Error: y
+
+Node.js v22.22.0
+== ["-e","const f = (a, e) => e;\nthrow f(`${1}}`, new Error(\"t\"))"]: status 1
+[eval]:2
+throw f(`${1}}`, new Error("t"))
+^
+
+Error: t
+
+Node.js v22.22.0
+== [] < "const f = (a, e) => e;\nthrow f(`${1}}`, new Error(\"t\"))": status 1
+[stdin]:2
+throw f(`${1}}`, new Error("t"))
+^
+
+Error: t
+
+Node.js v22.22.0
+== ["-e","const s = \"const f = (a, e) => e;\\nthrow f(`${1}}`, new Error(\\\"t\\\"))\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw f(`${1}}`, new Error("t"))
+^
+
+Error: t
+
+Node.js v22.22.0
+== ["-e","const f = (a, e) => e;\nthrow f(() => { return 1 }, new Error(\"z\"))"]: status 1
+[eval]:2
+throw f(() => { return 1 }, new Error("z"))
+^
+
+Error: z
+
+Node.js v22.22.0
+== [] < "const f = (a, e) => e;\nthrow f(() => { return 1 }, new Error(\"z\"))": status 1
+[stdin]:2
+throw f(() => { return 1 }, new Error("z"))
+^
+
+Error: z
+
+Node.js v22.22.0
+== ["-e","const s = \"const f = (a, e) => e;\\nthrow f(() => { return 1 }, new Error(\\\"z\\\"))\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw f(() => { return 1 }, new Error("z"))
+^
+
+Error: z
+
+Node.js v22.22.0
+== ["-e","const TE = TypeError;\nthrow new TE(\"x\")"]: status 1
+[eval]:2
+throw new TE("x")
+^
+
+TypeError: x
+
+Node.js v22.22.0
+== [] < "const TE = TypeError;\nthrow new TE(\"x\")": status 1
+[stdin]:2
+throw new TE("x")
+^
+
+TypeError: x
+
+Node.js v22.22.0
+== ["-e","const s = \"const TE = TypeError;\\nthrow new TE(\\\"x\\\")\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw new TE("x")
+^
+
+TypeError: x
+
+Node.js v22.22.0
+== ["-e","var VE = RangeError;\nthrow new VE(\"v\")"]: status 1
+[eval]:2
+throw new VE("v")
+^
+
+RangeError: v
+
+Node.js v22.22.0
+== [] < "var VE = RangeError;\nthrow new VE(\"v\")": status 1
+[stdin]:2
+throw new VE("v")
+^
+
+RangeError: v
+
+Node.js v22.22.0
+== ["-e","const s = \"var VE = RangeError;\\nthrow new VE(\\\"v\\\")\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw new VE("v")
+^
+
+RangeError: v
+
+Node.js v22.22.0
+== ["-e","const ns = { E: class extends Error {} };\nthrow new ns.E(\"m\")"]: status 1
+[eval]:2
+throw new ns.E("m")
+^
+
+Error: m
+
+Node.js v22.22.0
+== [] < "const ns = { E: class extends Error {} };\nthrow new ns.E(\"m\")": status 1
+[stdin]:2
+throw new ns.E("m")
+^
+
+Error: m
+
+Node.js v22.22.0
+== ["-e","const s = \"const ns = { E: class extends Error {} };\\nthrow new ns.E(\\\"m\\\")\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw new ns.E("m")
+^
+
+Error: m
+
+Node.js v22.22.0
+== ["-e","const o = { g: (e) => e };\nthrow o.g(new TypeError(\"w\"))"]: status 1
+[eval]:2
+throw o.g(new TypeError("w"))
+^
+
+TypeError: w
+
+Node.js v22.22.0
+== [] < "const o = { g: (e) => e };\nthrow o.g(new TypeError(\"w\"))": status 1
+[stdin]:2
+throw o.g(new TypeError("w"))
+^
+
+TypeError: w
+
+Node.js v22.22.0
+== ["-e","const s = \"const o = { g: (e) => e };\\nthrow o.g(new TypeError(\\\"w\\\"))\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw o.g(new TypeError("w"))
+^
+
+TypeError: w
+
+Node.js v22.22.0
+== ["-e","const o = {};\nthrow o.f()"]: status 1
+[eval]:2
+throw o.f()
+        ^
+
+TypeError: o.f is not a function
+
+Node.js v22.22.0
+== [] < "const o = {};\nthrow o.f()": status 1
+[stdin]:2
+throw o.f()
+        ^
+
+TypeError: o.f is not a function
+
+Node.js v22.22.0
+== ["-e","const s = \"const o = {};\\nthrow o.f()\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw o.f()
+        ^
+
+TypeError: o.f is not a function
+
+Node.js v22.22.0
+== ["-e","throw new Array(-1)"]: status 1
+[eval]:1
+throw new Array(-1)
+      ^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== [] < "throw new Array(-1)": status 1
+[stdin]:1
+throw new Array(-1)
+      ^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== ["-e","const s = \"throw new Array(-1)\";\neval(s)"]: status 1
+<anonymous_script>:1
+throw new Array(-1)
+      ^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== ["-e","try { throw 1 } catch {} throw new Error(\"after\")"]: status 1
+[eval]:1
+try { throw 1 } catch {} throw new Error("after")
+                         ^
+
+Error: after
+
+Node.js v22.22.0
+== [] < "try { throw 1 } catch {} throw new Error(\"after\")": status 1
+[stdin]:1
+try { throw 1 } catch {} throw new Error("after")
+                         ^
+
+Error: after
+
+Node.js v22.22.0
+== ["-e","const s = \"try { throw 1 } catch {} throw new Error(\\\"after\\\")\";\neval(s)"]: status 1
+<anonymous_script>:1
+try { throw 1 } catch {} throw new Error("after")
+                         ^
+
+Error: after
+
+Node.js v22.22.0
+== ["-e","const f = (a, e) => e;\nthrow f(/'/, new Error(\"r\"))"]: status 1
+[eval]:2
+throw f(/'/, new Error("r"))
+^
+
+Error: r
+
+Node.js v22.22.0
+== [] < "const f = (a, e) => e;\nthrow f(/'/, new Error(\"r\"))": status 1
+[stdin]:2
+throw f(/'/, new Error("r"))
+^
+
+Error: r
+
+Node.js v22.22.0
+== ["-e","const s = \"const f = (a, e) => e;\\nthrow f(/'/, new Error(\\\"r\\\"))\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw f(/'/, new Error("r"))
+^
+
+Error: r
+
+Node.js v22.22.0
+== ["-e","const f = (e) => e;\nthrow f(/* it's */ new Error(\"c\"))"]: status 1
+[eval]:2
+throw f(/* it's */ new Error("c"))
+^
+
+Error: c
+
+Node.js v22.22.0
+== [] < "const f = (e) => e;\nthrow f(/* it's */ new Error(\"c\"))": status 1
+[stdin]:2
+throw f(/* it's */ new Error("c"))
+^
+
+Error: c
+
+Node.js v22.22.0
+== ["-e","const s = \"const f = (e) => e;\\nthrow f(/* it's */ new Error(\\\"c\\\"))\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw f(/* it's */ new Error("c"))
+^
+
+Error: c
+
+Node.js v22.22.0
+== ["-e","const tag = (s, e) => e;\nthrow tag`x${new Error(\"g\")}`"]: status 1
+[eval]:2
+throw tag`x${new Error("g")}`
+^
+
+Error: g
+
+Node.js v22.22.0
+== [] < "const tag = (s, e) => e;\nthrow tag`x${new Error(\"g\")}`": status 1
+[stdin]:2
+throw tag`x${new Error("g")}`
+^
+
+Error: g
+
+Node.js v22.22.0
+== ["-e","const s = \"const tag = (s, e) => e;\\nthrow tag`x${new Error(\\\"g\\\")}`\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw tag`x${new Error("g")}`
+^
+
+Error: g
+
+Node.js v22.22.0
+== ["-e","const foo = 1;\nthrow new foo()"]: status 1
+[eval]:2
+throw new foo()
+      ^
+
+TypeError: foo is not a constructor
+
+Node.js v22.22.0
+== [] < "const foo = 1;\nthrow new foo()": status 1
+[stdin]:2
+throw new foo()
+      ^
+
+TypeError: foo is not a constructor
+
+Node.js v22.22.0
+== ["-e","const s = \"const foo = 1;\\nthrow new foo()\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw new foo()
+      ^
+
+TypeError: foo is not a constructor
+
+Node.js v22.22.0
+== ["-e","const o = {};\nthrow new o.Missing(\"x\")"]: status 1
+[eval]:2
+throw new o.Missing("x")
+      ^
+
+TypeError: o.Missing is not a constructor
+
+Node.js v22.22.0
+== [] < "const o = {};\nthrow new o.Missing(\"x\")": status 1
+[stdin]:2
+throw new o.Missing("x")
+      ^
+
+TypeError: o.Missing is not a constructor
+
+Node.js v22.22.0
+== ["-e","const s = \"const o = {};\\nthrow new o.Missing(\\\"x\\\")\";\neval(s)"]: status 1
+<anonymous_script>:2
+throw new o.Missing("x")
+      ^
+
+TypeError: o.Missing is not a constructor
+
+Node.js v22.22.0
+== ["cjs.js"]: status 1
+DIR/cjs.js:2
+throw f({ code: "E1" }, new TypeError("c"));
+^
+
+TypeError: c
+
+Node.js v22.22.0
+== ["use.js"]: status 1
+DIR/use.js:2
+throw new NotFound('missing');
+      ^
+
+TypeError: NotFound is not a constructor
+
+Node.js v22.22.0

@@ -7,6 +7,7 @@
  * module; those CallSites are filtered as kernel frames.
  */
 
+import * as acorn from 'acorn';
 import { encodeFilePath } from './builtins/url.mjs';
 
 const KERNEL_HINT =
@@ -665,26 +666,52 @@ let kernelFormatting = false;
 let routedErr = null;
 let routedFrames = null;
 
-const THROW_BEFORE = /\bthrow\b[^;}]*$/;
 const RAISED = new Set([TypeError, RangeError, ReferenceError, SyntaxError, EvalError, URIError].map((type) => type.prototype));
-const BUILT_AT = /^(?:new\s+)?(?:[\w$]+\s*\.\s*)*([\w$]+)/;
+const NOT_CONSTRUCTOR = / is not a constructor$/;
+const BUILT_AT = /^(new\s+)?((?:[\w$]+\s*\.\s*)*([\w$]+))/;
+const OPENS = new Set(['(', '[', '{', '${']);
+const CLOSES = new Set([')', ']', '}']);
 
-function constructorName(err) {
+function enclosingThrow(line, start) {
+  const open = [];
+  let depth = 0;
   try {
-    return err.constructor?.name;
+    for (const token of acorn.tokenizer(line, { ecmaVersion: 'latest', allowHashBang: true })) {
+      if (token.start >= start) break;
+      const label = token.type.label;
+      if (label === 'throw') open.push({ at: token.start, depth });
+      else if (OPENS.has(label)) depth++;
+      else if (CLOSES.has(label)) depth--;
+      while (open.length && (depth < open.at(-1).depth || (label === ';' && depth === open.at(-1).depth))) open.pop();
+    }
   } catch {
-    return undefined;
+    return -1;
   }
+  return open.length ? open.at(-1).at : -1;
+}
+
+function globalFunction(path, except) {
+  let value = globalThis;
+  for (const name of path.split('.')) {
+    const desc = Object.getOwnPropertyDescriptor(value, name.trim());
+    value = desc && 'value' in desc ? desc.value : undefined;
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return false;
+  }
+  return typeof value === 'function' && value !== except;
 }
 
 function raisedByV8(err, at) {
   try {
     if (!RAISED.has(Object.getPrototypeOf(err))) return false;
+    const built = BUILT_AT.exec(at.sourceLine.slice(at.startColumn));
+    if (!built) return true;
+    const made = err.constructor;
+    if (built[3] === made?.name) return false;
+    if (NOT_CONSTRUCTOR.test(err.message)) return true;
+    return !built[1] || globalFunction(built[2], made);
   } catch {
     return false;
   }
-  const built = BUILT_AT.exec(at.sourceLine.slice(at.startColumn))?.[1];
-  return built === undefined || built !== constructorName(err);
 }
 
 export function errorSource(err) {
@@ -696,9 +723,9 @@ export function errorSource(err) {
     return undefined;
   }
   if (typeof at?.sourceLine !== 'string') return at;
-  const thrown = THROW_BEFORE.exec(at.sourceLine.slice(0, at.startColumn));
-  if (!thrown || raisedByV8(err, at)) return at;
-  return { sourceLine: at.sourceLine, lineNumber: at.lineNumber, startColumn: at.startColumn, throwColumn: thrown.index };
+  const thrown = enclosingThrow(at.sourceLine, at.startColumn);
+  if (thrown < 0 || raisedByV8(err, at)) return at;
+  return { sourceLine: at.sourceLine, lineNumber: at.lineNumber, startColumn: at.startColumn, throwColumn: thrown };
 }
 
 export function errorSourceCaret(v8, text, fromPromise = false) {
