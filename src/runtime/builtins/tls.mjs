@@ -946,7 +946,7 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
       return noTls(what, "the kernel upgrades only a plain connection its uplink routes");
     }
     if (code === 'EINVAL') return noTls(what, `the kernel's TLS refuses the server name (${err?.detail ?? 'not a host name'})`);
-    if (code === 'ECONNRESET') return readReset(err) ?? handshakeReset(options);
+    if (code === 'ECONNRESET') return connectReset(err) ?? readReset(err) ?? handshakeReset(options);
     if (typeof code === 'string' && Object.hasOwn(VERIFY_MESSAGES, code)) {
       return Object.assign(new Error(VERIFY_MESSAGES[code]), { code });
     }
@@ -1008,6 +1008,17 @@ export function createTls({ ctx, process, Buffer, net, getCrypto, getFs }) {
   function sslReason(id, reason) {
     const err = new Error(`error:0A0000${id}:SSL routines::${reason}`);
     return Object.assign(err, { library: 'SSL routines', reason, code: `ERR_SSL_${reason.toUpperCase().replaceAll(' ', '_')}` });
+  }
+
+  function connectReset(err) {
+    const detail = String(err?.detail ?? err?.cause?.detail ?? '');
+    const peer = /\bconnect ECONNRESET(?: (\S+):(\d+))?(?!\S)/.exec(detail);
+    if (!peer) return undefined;
+    const [, address, port] = peer;
+    const error = new Error(address === undefined ? 'connect ECONNRESET' : `connect ECONNRESET ${address}:${port}`);
+    Object.assign(error, { errno: -ERRNO.ECONNRESET, code: 'ECONNRESET', syscall: 'connect', address });
+    if (port !== undefined) error.port = Number(port);
+    return error;
   }
 
   function readReset(err) {
