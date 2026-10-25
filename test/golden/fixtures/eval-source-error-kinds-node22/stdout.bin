@@ -334,6 +334,94 @@ if (!s) throw 1; throw new RangeError("q")
 RangeError: q
 
 Node.js v22.22.0
+== ["-e","const x = 1;\nthrow Object.assign(new Error(\"x\"), { code: \"E1\" })"]: status 1
+[eval]:2
+throw Object.assign(new Error("x"), { code: "E1" })
+^
+
+Error: x
+  code: 'E1'
+}
+
+Node.js v22.22.0
+== [] < "const x = 1;\nthrow Object.assign(new Error(\"x\"), { code: \"E1\" })": status 1
+[stdin]:2
+throw Object.assign(new Error("x"), { code: "E1" })
+^
+
+Error: x
+  code: 'E1'
+}
+
+Node.js v22.22.0
+== ["-e","throw new (class Foo extends Error {})(\"e\")"]: status 1
+[eval]:1
+throw new (class Foo extends Error {})("e")
+^
+
+Error: e
+
+Node.js v22.22.0
+== [] < "throw new (class Foo extends Error {})(\"e\")": status 1
+[stdin]:1
+throw new (class Foo extends Error {})("e")
+^
+
+Error: e
+
+Node.js v22.22.0
+== ["-e","const s = \"throw Object.assign(new TypeError(\\\"t\\\"), { code: 1 })\"; eval(s)"]: status 1
+<anonymous_script>:1
+throw Object.assign(new TypeError("t"), { code: 1 })
+^
+
+TypeError: t
+  code: 1
+}
+
+Node.js v22.22.0
+== [] < "const s = \"throw Object.assign(new TypeError(\\\"t\\\"), { code: 1 })\"; eval(s)": status 1
+<anonymous_script>:1
+throw Object.assign(new TypeError("t"), { code: 1 })
+^
+
+TypeError: t
+  code: 1
+}
+
+Node.js v22.22.0
+== ["-e","const s = \"throw Object.assign(new Array(-1), {})\"; eval(s)"]: status 1
+<anonymous_script>:1
+throw Object.assign(new Array(-1), {})
+                    ^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== [] < "const s = \"throw Object.assign(new Array(-1), {})\"; eval(s)": status 1
+<anonymous_script>:1
+throw Object.assign(new Array(-1), {})
+                    ^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== ["-e","const s = \"throw [1].map(() => new Error(\\\"m\\\"))[0]\"; eval(s)"]: status 1
+<anonymous_script>:1
+throw [1].map(() => new Error("m"))[0]
+^
+
+Error: m
+
+Node.js v22.22.0
+== [] < "const s = \"throw [1].map(() => new Error(\\\"m\\\"))[0]\"; eval(s)": status 1
+<anonymous_script>:1
+throw [1].map(() => new Error("m"))[0]
+^
+
+Error: m
+
+Node.js v22.22.0
 == ["-e","undefinedFn()"]: status 1
 [eval]:1
 undefinedFn()
@@ -452,6 +540,16 @@ DIR/cjs-6.js:2
   ^
 
 TypeError: u is not a function
+
+Node.js v22.22.0
+== ["cjs-7.js"]: status 1
+DIR/cjs-7.js:2
+	throw Object.assign(new Error("x"), { code: "E1" });
+	^
+
+Error: x
+  code: 'E1'
+}
 
 Node.js v22.22.0
 == ["esm.mjs"]: status 1

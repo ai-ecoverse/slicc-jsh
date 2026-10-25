@@ -665,7 +665,8 @@ let kernelFormatting = false;
 let routedErr = null;
 let routedFrames = null;
 
-const THROW_BEFORE = /\bthrow\s+$/;
+const THROW_BEFORE = /\bthrow\b[^;}]*$/;
+const RAISED = new Set([TypeError, RangeError, ReferenceError, SyntaxError, EvalError, URIError].map((type) => type.prototype));
 const BUILT_AT = /^(?:new\s+)?(?:[\w$]+\s*\.\s*)*([\w$]+)/;
 
 function constructorName(err) {
@@ -674,6 +675,16 @@ function constructorName(err) {
   } catch {
     return undefined;
   }
+}
+
+function raisedByV8(err, at) {
+  try {
+    if (!RAISED.has(Object.getPrototypeOf(err))) return false;
+  } catch {
+    return false;
+  }
+  const built = BUILT_AT.exec(at.sourceLine.slice(at.startColumn))?.[1];
+  return built === undefined || built !== constructorName(err);
 }
 
 export function errorSource(err) {
@@ -686,8 +697,7 @@ export function errorSource(err) {
   }
   if (typeof at?.sourceLine !== 'string') return at;
   const thrown = THROW_BEFORE.exec(at.sourceLine.slice(0, at.startColumn));
-  const built = BUILT_AT.exec(at.sourceLine.slice(at.startColumn))?.[1];
-  if (!thrown || built === undefined || built !== constructorName(err)) return at;
+  if (!thrown || raisedByV8(err, at)) return at;
   return { sourceLine: at.sourceLine, lineNumber: at.lineNumber, startColumn: at.startColumn, throwColumn: thrown.index };
 }
 

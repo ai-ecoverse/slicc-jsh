@@ -8,6 +8,7 @@ const files = {
   "cjs-3.js": "\tthrow new TypeError(\"c\")\n",
   "cjs-4.js": "function f() {\n\tconst e = new RangeError(\"m\"); e.stack; throw e\n}\nf()\n",
   "cjs-5.js": "setTimeout(() => {\n\tnull.x\n})\n",
+  "cjs-7.js": "const x = 1;\n\tthrow Object.assign(new Error(\"x\"), { code: \"E1\" });\n",
   "esm-file-timer.mjs": "export const w = 1;\nsetTimeout(() => {\n\tthrow new TypeError(\"f\")\n});\n",
 };
 for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(tabbed, name), text);
@@ -40,6 +41,11 @@ const cases = [
   'const s = "throw undefinedFn()"; eval(s)',
   'const s = "(async () => { throw new Error(\\"a\\") })()"; eval(s)',
   'const s = "if (!s) throw 1; throw new RangeError(\\"q\\")"; eval(s)',
+  'const x = 1;\nthrow Object.assign(new Error("x"), { code: "E1" })',
+  'throw new (class Foo extends Error {})("e")',
+  'const s = "throw Object.assign(new TypeError(\\"t\\"), { code: 1 })"; eval(s)',
+  'const s = "throw Object.assign(new Array(-1), {})"; eval(s)',
+  'const s = "throw [1].map(() => new Error(\\"m\\"))[0]"; eval(s)',
   'undefinedFn()',
   '\tthrow new TypeError("t")',
   'const o = {}; o.f()',
@@ -49,7 +55,7 @@ for (const code of cases) {
   run(['-e', code]);
   run([], code);
 }
-for (const file of ['cjs.js', 'cjs-1.js', 'cjs-2.js', 'cjs-3.js', 'cjs-4.js', 'cjs-5.js', 'cjs-6.js', 'esm.mjs', 'esm-throw.mjs', 'esm-timer.mjs', 'esm-file-timer.mjs', 'vm.js']) {
+for (const file of ['cjs.js', 'cjs-1.js', 'cjs-2.js', 'cjs-3.js', 'cjs-4.js', 'cjs-5.js', 'cjs-6.js', 'cjs-7.js', 'esm.mjs', 'esm-throw.mjs', 'esm-timer.mjs', 'esm-file-timer.mjs', 'vm.js']) {
   if (files[file] === undefined) run([file]);
   else run([file], undefined, tabbed);
 }
