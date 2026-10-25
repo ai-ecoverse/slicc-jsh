@@ -1,0 +1,118 @@
+== ["-e","const e = new Error(\"k {\\n j\"); e.stack = \"custom {\\n  z\"; e.code = 2; throw e"]: status 1
+[[eval]:1
+const e = new Error("k {\n j"); e.stack = "custom {\n  z"; e.code = 2; throw e
+                                                                       ^
+
+custom {
+  z] {
+  code: 2
+}
+
+Node.js v22.22.0
+== [] < "const e = new Error(\"k {\\n j\"); e.stack = \"custom {\\n  z\"; e.code = 2; throw e": status 1
+[[stdin]:1
+const e = new Error("k {\n j"); e.stack = "custom {\n  z"; e.code = 2; throw e
+                                                                       ^
+
+custom {
+  z] {
+  code: 2
+}
+
+Node.js v22.22.0
+== ["-e","const e = new Error(\"k\"); e.stack = \"custom\"; throw e"]: status 1
+[[eval]:1
+const e = new Error("k"); e.stack = "custom"; throw e
+                                              ^
+
+custom]
+
+Node.js v22.22.0
+== [] < "const e = new Error(\"k\"); e.stack = \"custom\"; throw e": status 1
+[[stdin]:1
+const e = new Error("k"); e.stack = "custom"; throw e
+                                              ^
+
+custom]
+
+Node.js v22.22.0
+== ["-e","const e = new Error(\"k\"); e.stack = \"\"; throw e"]: status 1
+[[eval]:1
+const e = new Error("k"); e.stack = ""; throw e
+                                        ^
+
+]
+
+Node.js v22.22.0
+== [] < "const e = new Error(\"k\"); e.stack = \"\"; throw e": status 1
+[[stdin]:1
+const e = new Error("k"); e.stack = ""; throw e
+                                        ^
+
+]
+
+Node.js v22.22.0
+== ["-e","Error.stackTraceLimit = 0;\nconst e = new Error(\"x\");\ne.code = 1;\nthrow e"]: status 1
+[[eval]:4
+throw e
+^
+
+Error: x] {
+  code: 1
+}
+
+Node.js v22.22.0
+== [] < "Error.stackTraceLimit = 0;\nconst e = new Error(\"x\");\ne.code = 1;\nthrow e": status 1
+[[stdin]:4
+throw e
+^
+
+Error: x] {
+  code: 1
+}
+
+Node.js v22.22.0
+== ["-e","Error.stackTraceLimit = 0; throw new TypeError(\"t\")"]: status 1
+[[eval]:1
+Error.stackTraceLimit = 0; throw new TypeError("t")
+                           ^
+
+TypeError: t]
+
+Node.js v22.22.0
+== [] < "Error.stackTraceLimit = 0; throw new TypeError(\"t\")": status 1
+[[stdin]:1
+Error.stackTraceLimit = 0; throw new TypeError("t")
+                           ^
+
+TypeError: t]
+
+Node.js v22.22.0
+== ["-e","const e = new RangeError(\"r\"); e.stack = \"RangeError: r\"; e.info = { a: 1, b: [1, 2] }; throw e"]: status 1
+[[eval]:1
+const e = new RangeError("r"); e.stack = "RangeError: r"; e.info = { a: 1, b: [1, 2] }; throw e
+                                                                                        ^
+
+RangeError: r] {
+  info: { a: 1, b: [ 1, 2 ] }
+}
+
+Node.js v22.22.0
+== [] < "const e = new RangeError(\"r\"); e.stack = \"RangeError: r\"; e.info = { a: 1, b: [1, 2] }; throw e": status 1
+[[stdin]:1
+const e = new RangeError("r"); e.stack = "RangeError: r"; e.info = { a: 1, b: [1, 2] }; throw e
+                                                                                        ^
+
+RangeError: r] {
+  info: { a: 1, b: [ 1, 2 ] }
+}
+
+Node.js v22.22.0
+== ["cjs.js"]: status 1
+DIR/cjs.js:4
+throw e;
+^
+
+[replaced] { code: 'F' }
+
+Node.js v22.22.0

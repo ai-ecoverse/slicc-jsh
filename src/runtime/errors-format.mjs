@@ -490,6 +490,15 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     body = collapseMatchingCauseFrames(body, err);
   }
 
+  if (!rawStack.includes('\n    at ') && !head && typeof evalCode === 'string' && /\bthrow\b/.test(evalCode) && !(err instanceof SyntaxError)) {
+    const where = throwSite(evalName, evalCode, '');
+    const stack = attempt(() => err.stack);
+    if (!isEvalFile(evalName)) return { body: `${where}\n\n${sanitizeInspected(util.inspect(err, { depth: 10 }))}\n${trailer}` };
+    if (attempt(() => Reflect.set(err, 'stack', `${where}\n\n${typeof stack === 'string' ? sanitizeStack(stack) : rawStack}`)) === true) {
+      return { body: `${sanitizeInspected(util.inspect(err, { depth: 10 }))}\n${trailer}` };
+    }
+  }
+
   return { body: `${head}${body}\n${trailer}` };
 }
 

@@ -1,0 +1,1 @@
+{ "description": "ai-ecoverse/slicc-jsh#1158: an uncaught Error whose stack has no frames (a reassigned err.stack, an empty one, Error.stackTraceLimit = 0) prints as Node 22.22.0 prints it: the throw's source line and caret, then the stack, all in brackets, then the error's own properties, from -e, piped stdin and a CommonJS main file", "argv": ["main.js"], "shim": true }
