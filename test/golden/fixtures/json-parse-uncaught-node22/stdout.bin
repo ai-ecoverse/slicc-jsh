@@ -1,0 +1,232 @@
+== ["-e","JSON.parse(\"{\")"]: status 1
+<anonymous_script>:1
+{
+
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+Node.js v22.22.0
+== [] < "JSON.parse(\"{\")": status 1
+<anonymous_script>:1
+{
+
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+Node.js v22.22.0
+== ["-e","JSON.parse(\"[1,\\n2,\\n x]\")"]: status 1
+<anonymous_script>:3
+ x]
+ ^
+
+SyntaxError: Unexpected token 'x', "[1,
+2,
+ x]" is not valid JSON
+
+Node.js v22.22.0
+== [] < "JSON.parse(\"[1,\\n2,\\n x]\")": status 1
+<anonymous_script>:3
+ x]
+ ^
+
+SyntaxError: Unexpected token 'x', "[1,
+2,
+ x]" is not valid JSON
+
+Node.js v22.22.0
+== ["-e","JSON.parse(\"\")"]: status 1
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+
+Node.js v22.22.0
+== [] < "JSON.parse(\"\")": status 1
+<anonymous_script>:1
+
+
+SyntaxError: Unexpected end of JSON input
+
+Node.js v22.22.0
+== ["-e","const t = \"{\\\"a\\\": 1}x\";\nJSON.parse(t)"]: status 1
+<anonymous_script>:1
+{"a": 1}x
+        ^
+
+SyntaxError: Unexpected non-whitespace character after JSON at position 8 (line 1 column 9)
+
+Node.js v22.22.0
+== [] < "const t = \"{\\\"a\\\": 1}x\";\nJSON.parse(t)": status 1
+<anonymous_script>:1
+{"a": 1}x
+        ^
+
+SyntaxError: Unexpected non-whitespace character after JSON at position 8 (line 1 column 9)
+
+Node.js v22.22.0
+== ["-e","JSON.parse(undefined)"]: status 1
+<anonymous_script>:1
+undefined
+^
+
+SyntaxError: "undefined" is not valid JSON
+
+Node.js v22.22.0
+== [] < "JSON.parse(undefined)": status 1
+<anonymous_script>:1
+undefined
+^
+
+SyntaxError: "undefined" is not valid JSON
+
+Node.js v22.22.0
+== ["-e","JSON.parse(\"\\t\\t[1,,]\")"]: status 1
+<anonymous_script>:1
+		[1,,]
+		   ^
+
+SyntaxError: Unexpected token ',', "		[1,,]" is not valid JSON
+
+Node.js v22.22.0
+== [] < "JSON.parse(\"\\t\\t[1,,]\")": status 1
+<anonymous_script>:1
+		[1,,]
+		   ^
+
+SyntaxError: Unexpected token ',', "		[1,,]" is not valid JSON
+
+Node.js v22.22.0
+== ["-e","JSON.parse(\"{\", (k, v) => v)"]: status 1
+<anonymous_script>:1
+{
+
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+Node.js v22.22.0
+== [] < "JSON.parse(\"{\", (k, v) => v)": status 1
+<anonymous_script>:1
+{
+
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+Node.js v22.22.0
+== ["-e","JSON.parse(\"{\", () => { throw 1 })"]: status 1
+<anonymous_script>:1
+{
+
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+Node.js v22.22.0
+== [] < "JSON.parse(\"{\", () => { throw 1 })": status 1
+<anonymous_script>:1
+{
+
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+Node.js v22.22.0
+== ["-e","JSON.parse(\"\\\"throw\\\" x\")"]: status 1
+<anonymous_script>:1
+"throw" x
+        ^
+
+SyntaxError: Unexpected non-whitespace character after JSON at position 8 (line 1 column 9)
+
+Node.js v22.22.0
+== [] < "JSON.parse(\"\\\"throw\\\" x\")": status 1
+<anonymous_script>:1
+"throw" x
+        ^
+
+SyntaxError: Unexpected non-whitespace character after JSON at position 8 (line 1 column 9)
+
+Node.js v22.22.0
+== ["-e","function read(s) {\n  return JSON.parse(s);\n}\nread(\"[1 2]\")"]: status 1
+<anonymous_script>:1
+[1 2]
+   ^
+
+SyntaxError: Expected ',' or ']' after array element in JSON at position 3 (line 1 column 4)
+
+Node.js v22.22.0
+== [] < "function read(s) {\n  return JSON.parse(s);\n}\nread(\"[1 2]\")": status 1
+<anonymous_script>:1
+[1 2]
+   ^
+
+SyntaxError: Expected ',' or ']' after array element in JSON at position 3 (line 1 column 4)
+
+Node.js v22.22.0
+== ["-e","setTimeout(() => JSON.parse(\"nul\"))"]: status 1
+<anonymous_script>:1
+nul
+
+SyntaxError: Unexpected end of JSON input
+
+Node.js v22.22.0
+== [] < "setTimeout(() => JSON.parse(\"nul\"))": status 1
+<anonymous_script>:1
+nul
+
+SyntaxError: Unexpected end of JSON input
+
+Node.js v22.22.0
+== ["-e","(async () => { await 1; JSON.parse(\"tru\") })()"]: status 1
+<anonymous_script>:1
+tru
+
+SyntaxError: Unexpected end of JSON input
+
+Node.js v22.22.0
+== [] < "(async () => { await 1; JSON.parse(\"tru\") })()": status 1
+<anonymous_script>:1
+tru
+
+SyntaxError: Unexpected end of JSON input
+
+Node.js v22.22.0
+== ["-e","try { JSON.parse(\"{\") } catch (e) { e.stack; throw e }"]: status 1
+[eval]:1
+try { JSON.parse("{") } catch (e) { e.stack; throw e }
+                                             ^
+
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+Node.js v22.22.0
+== [] < "try { JSON.parse(\"{\") } catch (e) { e.stack; throw e }": status 1
+[stdin]:1
+try { JSON.parse("{") } catch (e) { e.stack; throw e }
+                                             ^
+
+SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+
+Node.js v22.22.0
+== ["-e","const s = \"JSON.parse(\\\"[,]\\\")\";\neval(s)"]: status 1
+<anonymous_script>:1
+[,]
+ ^
+
+SyntaxError: Unexpected token ',', "[,]" is not valid JSON
+
+Node.js v22.22.0
+== [] < "const s = \"JSON.parse(\\\"[,]\\\")\";\neval(s)": status 1
+<anonymous_script>:1
+[,]
+ ^
+
+SyntaxError: Unexpected token ',', "[,]" is not valid JSON
+
+Node.js v22.22.0
+== ["cjs.js"]: status 1
+<anonymous_script>:1
+{"ok": tru}
+          ^
+
+SyntaxError: Unexpected token '}', "{"ok": tru}" is not valid JSON
+
+Node.js v22.22.0
+== ["esm.mjs"]: status 1
+<anonymous_script>:1
+[1, 2,]
+      ^
+
+SyntaxError: Unexpected token ']', "[1, 2,]" is not valid JSON
+
+Node.js v22.22.0
