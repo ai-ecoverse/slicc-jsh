@@ -1,0 +1,496 @@
+== ["-e","const s = \"undefinedFn()\"; eval(s)"]: status 1
+<anonymous_script>:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== [] < "const s = \"undefinedFn()\"; eval(s)": status 1
+<anonymous_script>:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== ["-e","const s = \"const u = 1; u()\"; eval(s)"]: status 1
+<anonymous_script>:1
+const u = 1; u()
+             ^
+
+TypeError: u is not a function
+
+Node.js v22.22.0
+== [] < "const s = \"const u = 1; u()\"; eval(s)": status 1
+<anonymous_script>:1
+const u = 1; u()
+             ^
+
+TypeError: u is not a function
+
+Node.js v22.22.0
+== ["-e","const o = {};\nconst s = \"\\to.f()\";\neval(s)"]: status 1
+<anonymous_script>:1
+	o.f()
+	  ^
+
+TypeError: o.f is not a function
+
+Node.js v22.22.0
+== [] < "const o = {};\nconst s = \"\\to.f()\";\neval(s)": status 1
+<anonymous_script>:1
+	o.f()
+	  ^
+
+TypeError: o.f is not a function
+
+Node.js v22.22.0
+== ["-e","const s = \"x; let x = 1\"; eval(s)"]: status 1
+<anonymous_script>:1
+x; let x = 1
+^
+
+ReferenceError: Cannot access 'x' before initialization
+
+Node.js v22.22.0
+== [] < "const s = \"x; let x = 1\"; eval(s)": status 1
+<anonymous_script>:1
+x; let x = 1
+^
+
+ReferenceError: Cannot access 'x' before initialization
+
+Node.js v22.22.0
+== ["-e","const s = \"new Array(-1)\"; eval(s)"]: status 1
+<anonymous_script>:1
+new Array(-1)
+^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== [] < "const s = \"new Array(-1)\"; eval(s)": status 1
+<anonymous_script>:1
+new Array(-1)
+^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== ["-e","const s = \"throw new Error(\\\"t\\\")\"; eval(s)"]: status 1
+<anonymous_script>:1
+throw new Error("t")
+^
+
+Error: t
+
+Node.js v22.22.0
+== [] < "const s = \"throw new Error(\\\"t\\\")\"; eval(s)": status 1
+<anonymous_script>:1
+throw new Error("t")
+^
+
+Error: t
+
+Node.js v22.22.0
+== ["-e","const s = \"const e = new Error(\\\"n\\\"); throw e\"; eval(s)"]: status 1
+<anonymous_script>:1
+const e = new Error("n"); throw e
+                          ^
+
+Error: n
+
+Node.js v22.22.0
+== [] < "const s = \"const e = new Error(\\\"n\\\"); throw e\"; eval(s)": status 1
+<anonymous_script>:1
+const e = new Error("n"); throw e
+                          ^
+
+Error: n
+
+Node.js v22.22.0
+== ["-e","const s = \"throw new TypeError(\\\"y\\\")\"; eval(s)"]: status 1
+<anonymous_script>:1
+throw new TypeError("y")
+^
+
+TypeError: y
+
+Node.js v22.22.0
+== [] < "const s = \"throw new TypeError(\\\"y\\\")\"; eval(s)": status 1
+<anonymous_script>:1
+throw new TypeError("y")
+^
+
+TypeError: y
+
+Node.js v22.22.0
+== ["-e","const s = \"class E extends Error {}; throw new E(\\\"z\\\")\"; eval(s)"]: status 1
+<anonymous_script>:1
+class E extends Error {}; throw new E("z")
+                          ^
+
+Error: z
+
+Node.js v22.22.0
+== [] < "const s = \"class E extends Error {}; throw new E(\\\"z\\\")\"; eval(s)": status 1
+<anonymous_script>:1
+class E extends Error {}; throw new E("z")
+                          ^
+
+Error: z
+
+Node.js v22.22.0
+== ["-e","const s = \"try { undefinedFn() } catch (e) { e.stack; throw e }\"; eval(s)"]: status 1
+<anonymous_script>:1
+try { undefinedFn() } catch (e) { e.stack; throw e }
+                                           ^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== [] < "const s = \"try { undefinedFn() } catch (e) { e.stack; throw e }\"; eval(s)": status 1
+<anonymous_script>:1
+try { undefinedFn() } catch (e) { e.stack; throw e }
+                                           ^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== ["-e","const s = \"const e = new Error(\\\"r\\\"); e.stack; throw e\"; eval(s)"]: status 1
+<anonymous_script>:1
+const e = new Error("r"); e.stack; throw e
+                                   ^
+
+Error: r
+
+Node.js v22.22.0
+== [] < "const s = \"const e = new Error(\\\"r\\\"); e.stack; throw e\"; eval(s)": status 1
+<anonymous_script>:1
+const e = new Error("r"); e.stack; throw e
+                                   ^
+
+Error: r
+
+Node.js v22.22.0
+== ["-e","const s = \"undefinedFn()\";\n(0, eval)(s)"]: status 1
+<anonymous_script>:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== [] < "const s = \"undefinedFn()\";\n(0, eval)(s)": status 1
+<anonymous_script>:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== ["-e","const s = \"undefinedFn()\";\nsetTimeout(() => eval(s))"]: status 1
+<anonymous_script>:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== [] < "const s = \"undefinedFn()\";\nsetTimeout(() => eval(s))": status 1
+<anonymous_script>:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== ["-e","const s = \"undefinedFn()\";\n(async () => { await 1; eval(s) })()"]: status 1
+<anonymous_script>:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== [] < "const s = \"undefinedFn()\";\n(async () => { await 1; eval(s) })()": status 1
+<anonymous_script>:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== ["-e","const s = \"function g() { return 1n + 1 }\\ng()\"; eval(s)"]: status 1
+<anonymous_script>:1
+function g() { return 1n + 1 }
+                         ^
+
+TypeError: Cannot mix BigInt and other types, use explicit conversions
+
+Node.js v22.22.0
+== [] < "const s = \"function g() { return 1n + 1 }\\ng()\"; eval(s)": status 1
+<anonymous_script>:1
+function g() { return 1n + 1 }
+                         ^
+
+TypeError: Cannot mix BigInt and other types, use explicit conversions
+
+Node.js v22.22.0
+== ["-e","const s = \"\\tfunction g() { g() }\\ng()\"; eval(s)"]: status 1
+<anonymous_script>:1
+	function g() { g() }
+	               ^
+
+RangeError: Maximum call stack size exceeded
+
+Node.js v22.22.0
+== [] < "const s = \"\\tfunction g() { g() }\\ng()\"; eval(s)": status 1
+<anonymous_script>:1
+	function g() { g() }
+	               ^
+
+RangeError: Maximum call stack size exceeded
+
+Node.js v22.22.0
+== ["-e","const s = \"throw new Array(-1)\"; eval(s)"]: status 1
+<anonymous_script>:1
+throw new Array(-1)
+      ^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== [] < "const s = \"throw new Array(-1)\"; eval(s)": status 1
+<anonymous_script>:1
+throw new Array(-1)
+      ^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== ["-e","const s = \"\\tthrow Error(\\\"w\\\")\"; eval(s)"]: status 1
+<anonymous_script>:1
+	throw Error("w")
+	^
+
+Error: w
+
+Node.js v22.22.0
+== [] < "const s = \"\\tthrow Error(\\\"w\\\")\"; eval(s)": status 1
+<anonymous_script>:1
+	throw Error("w")
+	^
+
+Error: w
+
+Node.js v22.22.0
+== ["-e","const s = \"throw undefinedFn()\"; eval(s)"]: status 1
+<anonymous_script>:1
+throw undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== [] < "const s = \"throw undefinedFn()\"; eval(s)": status 1
+<anonymous_script>:1
+throw undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== ["-e","const s = \"(async () => { throw new Error(\\\"a\\\") })()\"; eval(s)"]: status 1
+<anonymous_script>:1
+(async () => { throw new Error("a") })()
+                     ^
+
+Error: a
+
+Node.js v22.22.0
+== [] < "const s = \"(async () => { throw new Error(\\\"a\\\") })()\"; eval(s)": status 1
+<anonymous_script>:1
+(async () => { throw new Error("a") })()
+                     ^
+
+Error: a
+
+Node.js v22.22.0
+== ["-e","const s = \"if (!s) throw 1; throw new RangeError(\\\"q\\\")\"; eval(s)"]: status 1
+<anonymous_script>:1
+if (!s) throw 1; throw new RangeError("q")
+                 ^
+
+RangeError: q
+
+Node.js v22.22.0
+== [] < "const s = \"if (!s) throw 1; throw new RangeError(\\\"q\\\")\"; eval(s)": status 1
+<anonymous_script>:1
+if (!s) throw 1; throw new RangeError("q")
+                 ^
+
+RangeError: q
+
+Node.js v22.22.0
+== ["-e","undefinedFn()"]: status 1
+[eval]:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== [] < "undefinedFn()": status 1
+[stdin]:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== ["-e","\tthrow new TypeError(\"t\")"]: status 1
+[eval]:1
+	throw new TypeError("t")
+	^
+
+TypeError: t
+
+Node.js v22.22.0
+== [] < "\tthrow new TypeError(\"t\")": status 1
+[stdin]:1
+	throw new TypeError("t")
+	^
+
+TypeError: t
+
+Node.js v22.22.0
+== ["-e","const o = {}; o.f()"]: status 1
+[eval]:1
+const o = {}; o.f()
+                ^
+
+TypeError: o.f is not a function
+
+Node.js v22.22.0
+== [] < "const o = {}; o.f()": status 1
+[stdin]:1
+const o = {}; o.f()
+                ^
+
+TypeError: o.f is not a function
+
+Node.js v22.22.0
+== ["-e","throw new Error(\"plain\")"]: status 1
+[eval]:1
+throw new Error("plain")
+^
+
+Error: plain
+
+Node.js v22.22.0
+== [] < "throw new Error(\"plain\")": status 1
+[stdin]:1
+throw new Error("plain")
+^
+
+Error: plain
+
+Node.js v22.22.0
+== ["cjs.js"]: status 1
+<anonymous_script>:1
+undefinedFn()
+^
+
+ReferenceError: undefinedFn is not defined
+
+Node.js v22.22.0
+== ["cjs-1.js"]: status 1
+DIR/cjs-1.js:2
+if (process.argv.length > 9) throw new Error("never"); o.a.b
+                                                           ^
+
+TypeError: Cannot read properties of undefined (reading 'b')
+
+Node.js v22.22.0
+== ["cjs-2.js"]: status 1
+DIR/cjs-2.js:2
+		o.q.r
+		    ^
+
+TypeError: Cannot read properties of undefined (reading 'r')
+
+Node.js v22.22.0
+== ["cjs-3.js"]: status 1
+DIR/cjs-3.js:1
+	throw new TypeError("c")
+	^
+
+TypeError: c
+
+Node.js v22.22.0
+== ["cjs-4.js"]: status 1
+DIR/cjs-4.js:2
+	const e = new RangeError("m"); e.stack; throw e
+	                                        ^
+
+RangeError: m
+
+Node.js v22.22.0
+== ["cjs-5.js"]: status 1
+DIR/cjs-5.js:2
+	null.x
+	     ^
+
+TypeError: Cannot read properties of null (reading 'x')
+
+Node.js v22.22.0
+== ["cjs-6.js"]: status 1
+DIR/cjs-6.js:2
+  u()
+  ^
+
+TypeError: u is not a function
+
+Node.js v22.22.0
+== ["esm.mjs"]: status 1
+<anonymous_script>:1
+	new Array(-1)
+	^
+
+RangeError: Invalid array length
+
+Node.js v22.22.0
+== ["esm-throw.mjs"]: status 1
+<anonymous_script>:1
+	throw new Error('e')
+	      ^
+
+Error: e
+
+Node.js v22.22.0
+== ["esm-timer.mjs"]: status 1
+<anonymous_script>:1
+throw new TypeError('t')
+^
+
+TypeError: t
+
+Node.js v22.22.0
+== ["esm-file-timer.mjs"]: status 1
+file://DIR/esm-file-timer.mjs:3
+	throw new TypeError("f")
+	^
+
+TypeError: f
+
+Node.js v22.22.0
+== ["vm.js"]: status 1
+a.vm:1
+	throw new SyntaxError('v')
+	^
+
+SyntaxError: v
+
+Node.js v22.22.0

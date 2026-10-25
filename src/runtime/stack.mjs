@@ -30,13 +30,13 @@ function isLoaderImplFrame(frame) {
 
 function isKernelFrame(frame) {
   if (frame instanceof CallSite) return false;
-  if (isLoaderImplFrame(frame)) return true;
   // The runtime's own code: the kernel imports it from a data: URL of the
   // whole bundle (MBs), so its frames' file name and text are that long.
   // Decide on the name's start, before anything formats or scans the text
   // (a regex over it per frame made each stack take milliseconds).
   const file = frame.getFileName?.() || '';
-  if (isModuleUrl(file) || file === 'node:vm') return true;
+  if (isModuleUrl(file) || file === 'node:vm' || KERNEL_HINT.test(file)) return true;
+  if (isLoaderImplFrame(frame)) return true;
   // Code the bundle compiles (its vendored builtins) has no file: its eval
   // origin (`eval at evalCjs (data:…)`), and its text, hold the bundle's URL.
   // V8 builds that origin as a rope, and reading any of it copies it whole,
@@ -47,12 +47,12 @@ function isKernelFrame(frame) {
   }
   // An ES module's loader lines (export getters, hoisted imports) come
   // before its own first line: they are the runtime's, not the file's.
-  const esmFile = isEvalCode(frame) ? null : resolveFile(frame, parseSite(frame));
+  const esmFile = isEvalCode(frame) ? null : remapFileName(file) || resolveFile(frame, parseSite(frame));
   const esmExtra = esmFile ? esmFrames.get(esmFile) : undefined;
   if (esmExtra !== undefined && adjustLine(frame.getLineNumber?.()) - esmExtra < 1) return true;
   const text = typeof frame.toString === 'function' ? frame.toString() : '';
   const fn = frame.getFunctionName?.() || '';
-  if (KERNEL_HINT.test(file) || KERNEL_HINT.test(text) || KERNEL_HINT.test(fn)) return true;
+  if (KERNEL_HINT.test(text) || KERNEL_HINT.test(fn)) return true;
   // An eval of the runtime's own (no file, no line, no name): a vm script's caller.
   if (!file && frame.getLineNumber?.() == null && (!fn || fn === 'eval')) return true;
   // Never surface fabricated or accidental node:internal frames from the shim.
@@ -664,22 +664,38 @@ let nodePrepare;
 let kernelFormatting = false;
 let routedErr = null;
 let routedFrames = null;
-const raisedByV8 = (err) => err instanceof Error && Object.getPrototypeOf(err) !== Error.prototype;
 
-export function errorSource(err) {
-  if (!errorSourceOf || !err || typeof err !== 'object' || !ownTops.has(err)) return undefined;
+const THROW_BEFORE = /\bthrow\s+$/;
+const BUILT_AT = /^(?:new\s+)?(?:[\w$]+\s*\.\s*)*([\w$]+)/;
+
+function constructorName(err) {
   try {
-    return errorSourceOf(err) ?? undefined;
+    return err.constructor?.name;
   } catch {
     return undefined;
   }
 }
 
-export function errorSourceCaret(v8, text) {
+export function errorSource(err) {
+  if (!errorSourceOf || !err || typeof err !== 'object' || !ownTops.has(err)) return undefined;
+  let at;
+  try {
+    at = errorSourceOf(err) ?? undefined;
+  } catch {
+    return undefined;
+  }
+  if (typeof at?.sourceLine !== 'string') return at;
+  const thrown = THROW_BEFORE.exec(at.sourceLine.slice(0, at.startColumn));
+  const built = BUILT_AT.exec(at.sourceLine.slice(at.startColumn))?.[1];
+  if (!thrown || built === undefined || built !== constructorName(err)) return at;
+  return { sourceLine: at.sourceLine, lineNumber: at.lineNumber, startColumn: at.startColumn, throwColumn: thrown.index };
+}
+
+export function errorSourceCaret(v8, text, fromPromise = false) {
   if (v8?.sourceLine !== text) return undefined;
   const bytes = new TextEncoder().encode(text);
-  const start = v8.startColumn;
-  if (!Number.isInteger(start) || start < 0 || start >= bytes.length || /\bthrow\b/.test(text.slice(start))) return undefined;
+  const start = v8.throwColumn === undefined || fromPromise ? v8.startColumn : v8.throwColumn;
+  if (!Number.isInteger(start) || start < 0 || start >= bytes.length || /\bthrow\b/.test(text.slice(start === v8.throwColumn ? start + 5 : start))) return undefined;
   let caret = '';
   for (let i = 0; i < start; i++) caret += bytes[i] === 9 ? '\t' : ' ';
   return `${caret}^`;
@@ -722,7 +738,7 @@ export function installStackPrepare(ctx) {
       if (overridden) return overridden.value;
       if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
       if (typeof user === 'function') return user(err, keptFrames(frames).map(wrapCallSite));
-      if (viaKernel && !kernelFormatting && raisedByV8(err) && Array.isArray(frames) && !(frames[0] instanceof CallSite)) {
+      if (viaKernel && !kernelFormatting && err instanceof Error && Array.isArray(frames) && !(frames[0] instanceof CallSite)) {
         routedErr = err;
         routedFrames = frames;
         try {
