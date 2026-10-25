@@ -138,7 +138,7 @@ function evalLocation(ctx, stack, evalCode, err, v8) {
   return { file: '<anonymous_script>', source, line: Number(top[2]), column: Number(top[3]) };
 }
 
-function snippetFor(ctx, loc, evalCode, fromPromise = false, v8 = undefined) {
+function snippetFor(ctx, loc, evalCode, fromPromise = false, v8 = undefined, esmEntry = false) {
   if (!loc) return null;
   let source;
   if (loc.source !== undefined) source = loc.source;
@@ -157,7 +157,7 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false, v8 = undefined) {
   const n = loc.line >= 1 && loc.line <= lines.length ? loc.line : 1;
   const text = lines[n - 1];
   if (text === undefined) return null;
-  const v8Caret = errorSourceCaret(v8, text);
+  const v8Caret = errorSourceCaret(v8, text, fromPromise || esmEntry);
   if (v8Caret !== undefined) return { file: loc.url ?? loc.file, lineNo: n, text, caret: v8Caret };
   let col = loc.column;
   const throwAt = text.search(/\bthrow\b/);
@@ -179,11 +179,11 @@ function snippetFor(ctx, loc, evalCode, fromPromise = false, v8 = undefined) {
     col = 1;
   }
   col = Math.min(Math.max(1, col), Math.max(1, text.length + 1));
-  return { file: loc.url ?? loc.file, lineNo: n, text, caret: `${' '.repeat(col - 1)}^` };
+  return { file: loc.url ?? loc.file, lineNo: n, text, caret: `${text.slice(0, col - 1).replace(/[^\t]/g, ' ')}^` };
 }
 
 /** With source maps, the original `file:line`, line and caret of `err`'s throw. */
-function mappedErrorSource(ctx, err, evalCode, fromPromise, v8) {
+function mappedErrorSource(ctx, err, evalCode, fromPromise, v8, esmEntry) {
   const gen = generatedLocation(err);
   if (!gen) return undefined;
   const esm = gen.file.startsWith('file://');
@@ -196,7 +196,7 @@ function mappedErrorSource(ctx, err, evalCode, fromPromise, v8) {
     }
   }
   // The column V8's message has there: as for an unmapped report.
-  const snip = snippetFor(ctx, { file, url: esm ? gen.file : undefined, line: gen.line, column: gen.column, esm }, evalCode, fromPromise, v8);
+  const snip = snippetFor(ctx, { file, url: esm ? gen.file : undefined, line: gen.line, column: gen.column, esm }, evalCode, fromPromise, v8, esmEntry);
   if (!snip) return undefined;
   const source = sourceMapErrorSource(gen.file, gen.line, snip.caret.length - 1);
   // No original source to show: the code as run, as Node falls back to.
@@ -439,10 +439,10 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
   const loc = evalLoc === undefined ? frameLocation(rawStack) : evalLoc;
   const top = rawStack.split('\n').find((l) => l.startsWith('    at '));
   const atTop = evalLoc !== undefined || (loc && top?.includes(`:${loc.line}:${loc.column}`));
-  const snip = snippetFor(ctx, loc, evalCode, fromPromise, atTop ? v8 : undefined);
+  const snip = snippetFor(ctx, loc, evalCode, fromPromise, atTop ? v8 : undefined, esmEntry);
   if (snip) head = `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}\n\n`;
   // Source maps: the position in the code as run, mapped (Node's GetErrorSource).
-  const mapped = mappedErrorSource(ctx, err, evalCode, fromPromise, v8);
+  const mapped = mappedErrorSource(ctx, err, evalCode, fromPromise, v8, esmEntry);
   if (mapped) head = mapped;
   if (attempt(() => err[kDecorated]) === true) head = '';
 
