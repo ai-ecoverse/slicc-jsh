@@ -1,0 +1,120 @@
+== ["-e","throw new Error(\"a {\\n  b\")"]: status 1
+[eval]:1
+throw new Error("a {\n  b")
+^
+
+Error: a {
+  b
+    at <frames>
+
+Node.js v22.22.0
+== [] < "throw new Error(\"a {\\n  b\")": status 1
+[stdin]:1
+throw new Error("a {\n  b")
+^
+
+Error: a {
+  b
+    at <frames>
+
+Node.js v22.22.0
+== ["-e","const e = new Error(\"a {\\n  b\"); e.code = \"E1\"; throw e"]: status 1
+[eval]:1
+const e = new Error("a {\n  b"); e.code = "E1"; throw e
+                                                ^
+
+Error: a {
+  b
+    at <frames> {
+  code: 'E1'
+}
+
+Node.js v22.22.0
+== [] < "const e = new Error(\"a {\\n  b\"); e.code = \"E1\"; throw e": status 1
+[stdin]:1
+const e = new Error("a {\n  b"); e.code = "E1"; throw e
+                                                ^
+
+Error: a {
+  b
+    at <frames> {
+  code: 'E1'
+}
+
+Node.js v22.22.0
+== ["-e","JSON.parse(`{\\n  \"a\": 1,\\n  \"b\": }`)"]: status 1
+<anonymous_script>:3
+  "b": }
+       ^
+
+SyntaxError: Unexpected token '}', "{
+  "a": 1,
+  "b": }" is not valid JSON
+    at <frames>
+
+Node.js v22.22.0
+== [] < "JSON.parse(`{\\n  \"a\": 1,\\n  \"b\": }`)": status 1
+<anonymous_script>:3
+  "b": }
+       ^
+
+SyntaxError: Unexpected token '}', "{
+  "a": 1,
+  "b": }" is not valid JSON
+    at <frames>
+
+Node.js v22.22.0
+== ["-e","throw new TypeError(\"bad { a: 1,\\n  b: 2 }\")"]: status 1
+[eval]:1
+throw new TypeError("bad { a: 1,\n  b: 2 }")
+^
+
+TypeError: bad { a: 1,
+  b: 2 }
+    at <frames>
+
+Node.js v22.22.0
+== [] < "throw new TypeError(\"bad { a: 1,\\n  b: 2 }\")": status 1
+[stdin]:1
+throw new TypeError("bad { a: 1,\n  b: 2 }")
+^
+
+TypeError: bad { a: 1,
+  b: 2 }
+    at <frames>
+
+Node.js v22.22.0
+== ["-e","const e = new Error(\"one line { a: 1 }\"); e.code = \"E2\"; throw e"]: status 1
+[eval]:1
+const e = new Error("one line { a: 1 }"); e.code = "E2"; throw e
+                                                         ^
+
+Error: one line { a: 1 }
+    at <frames> {
+  code: 'E2'
+}
+
+Node.js v22.22.0
+== [] < "const e = new Error(\"one line { a: 1 }\"); e.code = \"E2\"; throw e": status 1
+[stdin]:1
+const e = new Error("one line { a: 1 }"); e.code = "E2"; throw e
+                                                         ^
+
+Error: one line { a: 1 }
+    at <frames> {
+  code: 'E2'
+}
+
+Node.js v22.22.0
+== ["cjs.js"]: status 1
+DIR/cjs.js:1
+const e = new Error("file {\n  z"); e.code = "E3"; throw e;
+                                                   ^
+
+Error: file {
+  z
+    at <frames> {
+  code: 'E3'
+}
+
+Node.js v22.22.0
