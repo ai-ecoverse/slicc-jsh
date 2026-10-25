@@ -638,9 +638,10 @@ export function callerSites(skip, limit) {
   }
 }
 
-function defaultPrepare(err, frames) {
+function defaultPrepare(err, frames, kernelTop) {
   if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
   const kept = keptFrames(frames);
+  if (kernelTop !== undefined && kept[0] === kernelTop && kernelTop === frames[0] && err && typeof err === 'object') ownTops.add(err);
   noteFunctionSources(err, kept);
   if (internalPrepare) {
     try {
@@ -657,9 +658,62 @@ function defaultPrepare(err, frames) {
   return [stackHeader(err), ...kept.map((f) => formatFrame(wrapCallSite(f)))].join('\n');
 }
 
+const ownTops = new WeakSet();
+let errorSourceOf = null;
+let nodePrepare;
+let kernelFormatting = false;
+let routedErr = null;
+let routedFrames = null;
+const raisedByV8 = (err) => err instanceof Error && Object.getPrototypeOf(err) !== Error.prototype;
+
+export function errorSource(err) {
+  if (!errorSourceOf || !err || typeof err !== 'object' || !ownTops.has(err)) return undefined;
+  try {
+    return errorSourceOf(err) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function errorSourceCaret(v8, text) {
+  if (v8?.sourceLine !== text) return undefined;
+  const bytes = new TextEncoder().encode(text);
+  const start = v8.startColumn;
+  if (!Number.isInteger(start) || start < 0 || start >= bytes.length) return undefined;
+  let caret = '';
+  for (let i = 0; i < start; i++) caret += bytes[i] === 9 ? '\t' : ' ';
+  return `${caret}^`;
+}
+
+function useKernelFormatter(sync) {
+  if (nodePrepare === undefined) {
+    const value = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace')?.value;
+    nodePrepare = typeof value === 'function' ? value : null;
+  }
+  const set = sync?.setStackFormatter;
+  if (!nodePrepare || typeof set !== 'function' || typeof sync.errorSource !== 'function') return null;
+  try {
+    set((err, kept) => {
+      const raw = routedErr === err ? routedFrames : kept;
+      routedErr = routedFrames = null;
+      kernelFormatting = true;
+      try {
+        return defaultPrepare(err, raw, kept[0] ?? null);
+      } finally {
+        kernelFormatting = false;
+      }
+    });
+  } catch {
+    return null;
+  }
+  errorSourceOf = sync.errorSource;
+  return nodePrepare;
+}
+
 /** Install once per runNode — wraps user prepareStackTrace CallSites. */
-export function installStackPrepare() {
+export function installStackPrepare(ctx) {
   let userPrepare = null;
+  const viaKernel = useKernelFormatter(ctx?.sync);
 
   function prepareWith(user) {
     return function prepare(err, frames) {
@@ -668,6 +722,15 @@ export function installStackPrepare() {
       if (overridden) return overridden.value;
       if (err.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
       if (typeof user === 'function') return user(err, keptFrames(frames).map(wrapCallSite));
+      if (viaKernel && !kernelFormatting && raisedByV8(err) && Array.isArray(frames) && !(frames[0] instanceof CallSite)) {
+        routedErr = err;
+        routedFrames = frames;
+        try {
+          return viaKernel(err, frames);
+        } finally {
+          routedErr = routedFrames = null;
+        }
+      }
       return defaultPrepare(err, frames);
     };
   }

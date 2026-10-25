@@ -1,0 +1,184 @@
+== ["-e","const s = \"null.d\"; eval(s)"]: status 1
+<anonymous_script>:1
+null.d
+     ^
+
+TypeError: Cannot read properties of null (reading 'd')
+
+Node.js v22.22.0
+== [] < "const s = \"null.d\"; eval(s)": status 1
+<anonymous_script>:1
+null.d
+     ^
+
+TypeError: Cannot read properties of null (reading 'd')
+
+Node.js v22.22.0
+== ["-e","const o = {};\nconst s = \"\\n\\to.q.r\";\neval(s)"]: status 1
+<anonymous_script>:2
+	o.q.r
+	    ^
+
+TypeError: Cannot read properties of undefined (reading 'r')
+
+Node.js v22.22.0
+== [] < "const o = {};\nconst s = \"\\n\\to.q.r\";\neval(s)": status 1
+<anonymous_script>:2
+	o.q.r
+	    ^
+
+TypeError: Cannot read properties of undefined (reading 'r')
+
+Node.js v22.22.0
+== ["-e","const s = \"function g() { null.g }\\ng()\";\neval(s)"]: status 1
+<anonymous_script>:1
+function g() { null.g }
+                    ^
+
+TypeError: Cannot read properties of null (reading 'g')
+
+Node.js v22.22.0
+== [] < "const s = \"function g() { null.g }\\ng()\";\neval(s)": status 1
+<anonymous_script>:1
+function g() { null.g }
+                    ^
+
+TypeError: Cannot read properties of null (reading 'g')
+
+Node.js v22.22.0
+== ["-e","const s = \"null.i\";\n(0, eval)(s)"]: status 1
+<anonymous_script>:1
+null.i
+     ^
+
+TypeError: Cannot read properties of null (reading 'i')
+
+Node.js v22.22.0
+== [] < "const s = \"null.i\";\n(0, eval)(s)": status 1
+<anonymous_script>:1
+null.i
+     ^
+
+TypeError: Cannot read properties of null (reading 'i')
+
+Node.js v22.22.0
+== ["-e","const t = \"null.n\";\nconst s = \"eval(t)\";\neval(s)"]: status 1
+<anonymous_script>:1
+null.n
+     ^
+
+TypeError: Cannot read properties of null (reading 'n')
+
+Node.js v22.22.0
+== [] < "const t = \"null.n\";\nconst s = \"eval(t)\";\neval(s)": status 1
+<anonymous_script>:1
+null.n
+     ^
+
+TypeError: Cannot read properties of null (reading 'n')
+
+Node.js v22.22.0
+== ["-e","const s = \"null.t\";\nsetTimeout(() => eval(s))"]: status 1
+<anonymous_script>:1
+null.t
+     ^
+
+TypeError: Cannot read properties of null (reading 't')
+
+Node.js v22.22.0
+== [] < "const s = \"null.t\";\nsetTimeout(() => eval(s))": status 1
+<anonymous_script>:1
+null.t
+     ^
+
+TypeError: Cannot read properties of null (reading 't')
+
+Node.js v22.22.0
+== ["-e","const s = \"null.r\";\n(async () => { await 1; eval(s) })()"]: status 1
+<anonymous_script>:1
+null.r
+     ^
+
+TypeError: Cannot read properties of null (reading 'r')
+
+Node.js v22.22.0
+== [] < "const s = \"null.r\";\n(async () => { await 1; eval(s) })()": status 1
+<anonymous_script>:1
+null.r
+     ^
+
+TypeError: Cannot read properties of null (reading 'r')
+
+Node.js v22.22.0
+== ["-e","const o = {};\nif (process.argv.length > 9) throw new Error(\"never\"); o.a.b"]: status 1
+[eval]:2
+if (process.argv.length > 9) throw new Error("never"); o.a.b
+                                                           ^
+
+TypeError: Cannot read properties of undefined (reading 'b')
+
+Node.js v22.22.0
+== [] < "const o = {};\nif (process.argv.length > 9) throw new Error(\"never\"); o.a.b": status 1
+[stdin]:2
+if (process.argv.length > 9) throw new Error("never"); o.a.b
+                                                           ^
+
+TypeError: Cannot read properties of undefined (reading 'b')
+
+Node.js v22.22.0
+== ["-e","const o = {};\n\t\to.q.r"]: status 1
+[eval]:2
+		o.q.r
+		    ^
+
+TypeError: Cannot read properties of undefined (reading 'r')
+
+Node.js v22.22.0
+== [] < "const o = {};\n\t\to.q.r": status 1
+[stdin]:2
+		o.q.r
+		    ^
+
+TypeError: Cannot read properties of undefined (reading 'r')
+
+Node.js v22.22.0
+== ["cjs.js"]: status 1
+<anonymous_script>:1
+o.q.r
+    ^
+
+TypeError: Cannot read properties of undefined (reading 'r')
+
+Node.js v22.22.0
+== ["esm.mjs"]: status 1
+<anonymous_script>:2
+	o.q.m
+	    ^
+
+TypeError: Cannot read properties of undefined (reading 'm')
+
+Node.js v22.22.0
+== ["vm.js"]: status 1
+a.vm:2
+  null.x
+       ^
+
+TypeError: Cannot read properties of null (reading 'x')
+
+Node.js v22.22.0
+== ["vm-throw.js"]: status 1
+b.vm:2
+if (process.argv[2]) throw new Error("never"); null.v
+                                                    ^
+
+t.vm:2
+		null.w
+		     ^
+
+c.vm:2
+if (process.argv[2]) throw new Error("never"); null.v
+                                                    ^
+
+TypeError: Cannot read properties of null (reading 'v')
+
+Node.js v22.22.0
