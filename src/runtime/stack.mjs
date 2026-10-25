@@ -679,7 +679,7 @@ export function errorSourceCaret(v8, text) {
   if (v8?.sourceLine !== text) return undefined;
   const bytes = new TextEncoder().encode(text);
   const start = v8.startColumn;
-  if (!Number.isInteger(start) || start < 0 || start >= bytes.length) return undefined;
+  if (!Number.isInteger(start) || start < 0 || start >= bytes.length || /\bthrow\b/.test(text.slice(start))) return undefined;
   let caret = '';
   for (let i = 0; i < start; i++) caret += bytes[i] === 9 ? '\t' : ' ';
   return `${caret}^`;

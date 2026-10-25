@@ -16,6 +16,8 @@ const cases = [
   'const s = "null.r";\n(async () => { await 1; eval(s) })()',
   'const o = {};\nif (process.argv.length > 9) throw new Error("never"); o.a.b',
   'const o = {};\n\t\to.q.r',
+  'const o = {};\nfunction f() { try { o.a.b } catch (e) { console.log(1); throw e } }\nf()',
+  'const o = {}; try { o.a.b } catch (e) { setTimeout(() => { throw e }) }',
 ];
 for (const code of cases) {
   run(['-e', code]);

@@ -142,6 +142,40 @@ Node.js v22.22.0
 TypeError: Cannot read properties of undefined (reading 'r')
 
 Node.js v22.22.0
+== ["-e","const o = {};\nfunction f() { try { o.a.b } catch (e) { console.log(1); throw e } }\nf()"]: status 1
+1
+[eval]:2
+function f() { try { o.a.b } catch (e) { console.log(1); throw e } }
+                                                         ^
+
+TypeError: Cannot read properties of undefined (reading 'b')
+
+Node.js v22.22.0
+== [] < "const o = {};\nfunction f() { try { o.a.b } catch (e) { console.log(1); throw e } }\nf()": status 1
+1
+[stdin]:2
+function f() { try { o.a.b } catch (e) { console.log(1); throw e } }
+                                                         ^
+
+TypeError: Cannot read properties of undefined (reading 'b')
+
+Node.js v22.22.0
+== ["-e","const o = {}; try { o.a.b } catch (e) { setTimeout(() => { throw e }) }"]: status 1
+[eval]:1
+const o = {}; try { o.a.b } catch (e) { setTimeout(() => { throw e }) }
+                                                           ^
+
+TypeError: Cannot read properties of undefined (reading 'b')
+
+Node.js v22.22.0
+== [] < "const o = {}; try { o.a.b } catch (e) { setTimeout(() => { throw e }) }": status 1
+[stdin]:1
+const o = {}; try { o.a.b } catch (e) { setTimeout(() => { throw e }) }
+                                                           ^
+
+TypeError: Cannot read properties of undefined (reading 'b')
+
+Node.js v22.22.0
 == ["cjs.js"]: status 1
 <anonymous_script>:1
 o.q.r
