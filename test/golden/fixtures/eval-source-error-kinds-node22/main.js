@@ -1,7 +1,19 @@
 const { spawnSync } = require('child_process');
-const run = (args, input) => {
-  const r = spawnSync(process.execPath, args, { cwd: __dirname, encoding: 'utf8', argv0: 'node', input });
-  const shown = r.stderr.split('\n').filter((line) => !line.startsWith('    at ')).join('\n').replaceAll(__dirname, 'DIR');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const tabbed = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kinds-')));
+const files = {
+  "cjs-2.js": "const o = {};\n\t\to.q.r\n",
+  "cjs-3.js": "\tthrow new TypeError(\"c\")\n",
+  "cjs-4.js": "function f() {\n\tconst e = new RangeError(\"m\"); e.stack; throw e\n}\nf()\n",
+  "cjs-5.js": "setTimeout(() => {\n\tnull.x\n})\n",
+  "esm-file-timer.mjs": "export const w = 1;\nsetTimeout(() => {\n\tthrow new TypeError(\"f\")\n});\n",
+};
+for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(tabbed, name), text);
+const run = (args, input, cwd = __dirname) => {
+  const r = spawnSync(process.execPath, args, { cwd, encoding: 'utf8', argv0: 'node', input });
+  const shown = r.stderr.split('\n').filter((line) => !line.startsWith('    at ')).join('\n').replaceAll(cwd, 'DIR');
   console.log(`== ${JSON.stringify(args)}${input === undefined ? '' : ` < ${JSON.stringify(input)}`}: status ${r.status}`);
   process.stdout.write(r.stdout);
   process.stdout.write(shown);
@@ -37,4 +49,8 @@ for (const code of cases) {
   run(['-e', code]);
   run([], code);
 }
-for (const file of ['cjs.js', 'cjs-1.js', 'cjs-2.js', 'cjs-3.js', 'cjs-4.js', 'cjs-5.js', 'cjs-6.js', 'esm.mjs', 'esm-throw.mjs', 'esm-timer.mjs', 'esm-file-timer.mjs', 'vm.js']) run([file]);
+for (const file of ['cjs.js', 'cjs-1.js', 'cjs-2.js', 'cjs-3.js', 'cjs-4.js', 'cjs-5.js', 'cjs-6.js', 'esm.mjs', 'esm-throw.mjs', 'esm-timer.mjs', 'esm-file-timer.mjs', 'vm.js']) {
+  if (files[file] === undefined) run([file]);
+  else run([file], undefined, tabbed);
+}
+fs.rmSync(tabbed, { recursive: true, force: true });

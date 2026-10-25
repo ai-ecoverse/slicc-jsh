@@ -1,3 +1,0 @@
-setTimeout(() => {
-	null.x
-})
