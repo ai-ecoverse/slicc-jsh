@@ -292,7 +292,33 @@ function attempt(fn) {
   }
 }
 
-export function formatUncaughtError(err, { ctx, util, version, evalCode, evalName = '[eval]', fromPromise, esmEntry, fromScript } = {}) {
+function throwSite(evalName, evalCode, shown) {
+  let where = `${evalName}:1\nthrow ${shown}\n^`;
+  if (typeof evalCode === 'string') {
+    const lines = evalCode.split('\n');
+    const n = lines.findIndex((l) => /\bthrow\b/.test(l));
+    if (n >= 0) where = `${evalName}:${n + 1}\n${lines[n]}\n${' '.repeat(lines[n].search(/\bthrow\b/))}^`;
+  }
+  return where;
+}
+
+const MICROTASK_HEAD = '<anonymous_script>:0\n';
+const TICKS_HEAD = 'node:internal/process/task_queues:105\n    runMicrotasks();\n    ^';
+const microtaskHead = (evalName, firstTurn) => (firstTurn && evalName === '[stdin]' ? TICKS_HEAD : MICROTASK_HEAD);
+
+function unreadableStack(err, { evalName, evalCode, fromScript, microtask, firstTurn, hint, trailer }) {
+  const name = attempt(() => err.name);
+  const message = attempt(() => err.message);
+  const named = name !== undefined && message !== undefined;
+  const text = (value) => attempt(() => String(value)) ?? '';
+  const shown = named ? `${text(name)}: ${text(message)}` : text(err);
+  const where = throwSite(evalName, evalCode, shown);
+  if (!(err instanceof Error) && microtask) return { body: `\n${microtaskHead(evalName, firstTurn)}\n${shown}\n${hint}${trailer}` };
+  if (!(err instanceof Error) && !fromScript) return { body: `\n${where}\n${shown}\n${hint}${trailer}` };
+  return { body: named ? `${where}\n\n${shown}\n${hint}${trailer}` : `${shown}\n${hint}${trailer}` };
+}
+
+export function formatUncaughtError(err, { ctx, util, version, evalCode, evalName = '[eval]', fromPromise, esmEntry, fromScript, microtask, firstTurn } = {}) {
   const trailer = `\nNode.js v${version}\n`;
   if (err instanceof Error && err._fsPretty) {
     let body = err._fsPretty;
@@ -306,7 +332,20 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
   }
   const primitive = err === null || (typeof err !== 'object' && typeof err !== 'function');
   const shownThrown = () => (!primitive ? util.inspect(err) : typeof err === 'symbol' ? '' : String(err));
-  const hint = primitive ? `(Use \`node --trace-uncaught ...\` to show where the exception was thrown)\n` : '';
+  const traceHint = `(Use \`node --trace-uncaught ...\` to show where the exception was thrown)\n`;
+  const hint = primitive ? traceHint : '';
+  if (!primitive) {
+    let unreadable = false;
+    try {
+      void err.stack;
+    } catch {
+      unreadable = true;
+    }
+    if (unreadable) return unreadableStack(err, { evalName, evalCode, fromScript, microtask, firstTurn, hint: traceHint, trailer });
+  }
+  if (!(err instanceof Error) && microtask) {
+    return { body: `\n${microtaskHead(evalName, firstTurn)}\n${shownThrown()}\n${hint}${trailer}` };
+  }
   if (!(err instanceof Error) && esmEntry) {
     // Node: a primitive thrown by an ES module entry has no location of its own.
     const shown = shownThrown();
@@ -317,12 +356,7 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
   if (!(err instanceof Error)) {
     // A thrown primitive has no stack: in -e code, point at its first
     // `throw` (V8 gives Node the exact spot); else Node's shape for line 1.
-    let where = `${evalName}:1\nthrow ${shownThrown()}\n^`;
-    if (typeof evalCode === 'string') {
-      const lines = evalCode.split('\n');
-      const n = lines.findIndex((l) => /\bthrow\b/.test(l));
-      if (n >= 0) where = `${evalName}:${n + 1}\n${lines[n]}\n${' '.repeat(lines[n].search(/\bthrow\b/))}^`;
-    }
+    const where = throwSite(evalName, evalCode, shownThrown());
     if (fromScript && !primitive) {
       const stack = attempt(() => err.stack);
       if (typeof stack !== 'string') return { body: `${where}\n\n${shownThrown()}\n${trailer}` };

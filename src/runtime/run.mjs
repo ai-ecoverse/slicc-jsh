@@ -248,6 +248,8 @@ export async function runNode(ctx, options = {}) {
   // Set while the error being reported comes from an ES module entry.
   let uncaughtFromEsm = false;
   let uncaughtFromScript = false;
+  let uncaughtFromMicrotask = false;
+  let mainTurn = true;
   const printUncaught = (err) => {
     const { body } = formatUncaughtError(err, {
       ctx,
@@ -257,6 +259,8 @@ export async function runNode(ctx, options = {}) {
       evalName: lastEvalName,
       esmEntry: uncaughtFromEsm,
       fromScript: uncaughtFromScript,
+      microtask: uncaughtFromMicrotask,
+      firstTurn: mainTurn,
     });
     // process.report.reportOnUncaughtException: Node writes the report
     // between the error and its `Node.js v…` line.
@@ -729,7 +733,12 @@ export async function runNode(ctx, options = {}) {
   if (typeof ctx.onUncaught === 'function') {
     removeCtxHooks.push(
       ctx.onUncaught((error) => {
-        exceptionHandler(error);
+        uncaughtFromMicrotask = true;
+        try {
+          exceptionHandler(error);
+        } finally {
+          uncaughtFromMicrotask = false;
+        }
       })
     );
   }
@@ -1200,7 +1209,10 @@ export async function runNode(ctx, options = {}) {
       onTickError: (err) => exceptionHandler(err),
       freeze: () => timers.freeze(),
       thaw: () => timers.thaw(),
-      onIdle: () => timers.idle(),
+      onIdle: () => {
+        mainTurn = false;
+        timers.idle();
+      },
     });
     loopEnded = true;
 
