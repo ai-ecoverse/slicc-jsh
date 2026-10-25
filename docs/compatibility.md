@@ -124,7 +124,7 @@ The goldens named below are fixtures in `test/golden/fixtures/`, checked byte fo
 - **Paused stdin.** Reading stdin keeps the program alive only while something consumes it, so a paused stdin lets the program end.
 - **`tty.isatty(fd)`** answers for fds 0–2, which the runtime asks the kernel about before the program starts. Any other fd is `false`.
 - **Signal listeners.** A `process.on('SIGINT' | 'SIGTERM' | 'SIGWINCH' | …)` listener installs a kernel signal handler. Removing the last listener puts the default action back. `SIGKILL`/`SIGSTOP` throw `uv_signal_start EINVAL`.
-- **Timing.** The kernel installs a handler a moment after `process.on` returns; Node does it synchronously. `setRawMode` likewise takes effect a moment after it returns, so a key typed in between is still echoed.
+- **Timing.** The kernel installs a handler a moment after `process.on` returns; Node does it synchronously. `setRawMode` is in force when it returns, as in Node: a key typed right after it isn't echoed (the kernel's `ctx.sync.tty.setRaw`; test `browser-tty-raw` in the browser).
 
 ## Warnings
 
