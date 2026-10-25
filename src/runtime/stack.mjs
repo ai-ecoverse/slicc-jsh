@@ -754,9 +754,15 @@ function formatOwn(err, sites, own) {
   const overridden = takeOverride(err, sites);
   if (overridden) return overridden.value;
   if (err?.name === 'SyntaxError' && err._prettyStack) return err._prettyStack;
-  if (typeof own === 'function') return Reflect.apply(own, Error, [err, keptFrames(sites).map(wrapCallSite)]);
+  if (typeof own === 'function' && own !== programDefault) return Reflect.apply(own, Error, [err, keptFrames(sites).map(wrapCallSite)]);
   return defaultPrepare(err, sites, sites[0]);
 }
+
+const programDefault = {
+  ErrorPrepareStackTrace: function (error, trace) {
+    return internalPrepare ? internalPrepare(error, trace) : ErrorPrepareStackTrace(error, trace);
+  },
+}.ErrorPrepareStackTrace;
 
 let trampolineCtx = null;
 
@@ -776,6 +782,8 @@ function useOwnFormatter(ctx) {
   }
   errorSourceOf = sync.errorSource;
   trampolineCtx = ctx;
+  const native = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+  if (typeof native?.value === 'function') Object.defineProperty(Error, 'prepareStackTrace', { ...native, value: programDefault });
   return true;
 }
 

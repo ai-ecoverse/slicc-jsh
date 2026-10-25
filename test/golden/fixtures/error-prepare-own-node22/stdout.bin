@@ -29,15 +29,45 @@ restored: Error: r
     at show (DIR/main.js:7:13)
     at Object.<anonymous> (DIR/main.js:85:1)
 save and restore: [ true, 'ErrorPrepareStackTrace', true ]
+chained to the original: Error: f
+    at formatted (DIR/main.js:50:10)
+    at DIR/main.js:95:46
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:95:1)
+original on saved sites: Error: later
+    at DIR/main.js:98:17
+    at show (DIR/main.js:7:13)
+    at Object.<anonymous> (DIR/main.js:96:1)
+original with no sites: [ 'Error: none', 'N: m' ]
+cloned sites to the original: Error: f
+    at formatted (DIR/main.js:50:10)
+    at <anonymous> (DIR/main.js:112:51)
+    at show (DIR/main.js:7:13)
+    at <anonymous> (DIR/main.js:112:1)
+babel loads: function
+babel transform: const a = 1;
+babel syntax error: [
+  'SyntaxError',
+  'DIR/bad.js: Unexpected token (1:8)',
+  'SyntaxError: DIR/bad.js: Unexpected token (1:8)'
+]
+babel rewriter: [
+  'stackTraceRewriter',
+  'Error: f\n' +
+    '    at formatted (DIR/main.js:50:10)\n' +
+    '    at DIR/main.js:124:68\n' +
+    '    at show (DIR/main.js:7:13)\n' +
+    '    at Object.<anonymous> (DIR/main.js:124:1)'
+]
 subclass formatter: [
   'RangeError: x\n' +
-    '    at DIR/main.js:94:42\n' +
+    '    at DIR/main.js:128:42\n' +
     '    at show (DIR/main.js:7:13)\n' +
-    '    at Object.<anonymous> (DIR/main.js:94:1)',
+    '    at Object.<anonymous> (DIR/main.js:128:1)',
   'Error: y\n' +
-    '    at DIR/main.js:94:77\n' +
+    '    at DIR/main.js:128:77\n' +
     '    at show (DIR/main.js:7:13)\n' +
-    '    at Object.<anonymous> (DIR/main.js:94:1)'
+    '    at Object.<anonymous> (DIR/main.js:128:1)'
 ]
 subclass own: [ 'prepareStackTrace' ]
 delete: true
@@ -45,18 +75,18 @@ typeof after delete: undefined
 in after delete: false
 proto after delete: true
 stack after delete: Error: d
-    at DIR/main.js:102:41
+    at DIR/main.js:136:41
     at show (DIR/main.js:7:13)
-    at Object.<anonymous> (DIR/main.js:102:1)
+    at Object.<anonymous> (DIR/main.js:136:1)
 TypeError after delete: TypeError: Cannot read properties of null (reading 'x')
-    at DIR/main.js:105:10
+    at DIR/main.js:139:10
     at show (DIR/main.js:7:13)
-    at Object.<anonymous> (DIR/main.js:103:1)
-inspect after delete: [Function: Error] { stackTraceLimit: 10 }
+    at Object.<anonymous> (DIR/main.js:137:1)
+inspect after delete: [Function: Error] { stackTraceLimit: 50 }
 set after delete: again s
 keys after set: [ 'stackTraceLimit', 'prepareStackTrace' ]
 inspect after set: [Function: Error] {
-  stackTraceLimit: 10,
+  stackTraceLimit: 50,
   prepareStackTrace: [Function: again]
 }
 descriptor after set: [ 'again', true, true, true, false ]
@@ -65,6 +95,6 @@ strict frozen subclass: THROW TypeError: Cannot add property prepareStackTrace, 
 strict frozen object from Error: THROW TypeError: Cannot add property prepareStackTrace, object is not extensible
 strict frozen subclass with Error own: THROW TypeError: Cannot add property prepareStackTrace, object is not extensible
 final: Error: end
-    at DIR/main.js:146:28
+    at DIR/main.js:180:28
     at show (DIR/main.js:7:13)
-    at Object.<anonymous> (DIR/main.js:146:1)
+    at Object.<anonymous> (DIR/main.js:180:1)

@@ -90,6 +90,40 @@ const raw = new Error('raw').stack;
 Error.prepareStackTrace = p;
 show('save and restore', () => [Error.prepareStackTrace === p, p.name, Array.isArray(raw)]);
 
+const orig = Error.prepareStackTrace;
+Error.prepareStackTrace = (e, s) => orig(e, s);
+show('chained to the original', () => frames(formatted()));
+show('original on saved sites', () => {
+  Error.prepareStackTrace = (_, s) => s;
+  const saved = new Error('saved').stack;
+  Error.prepareStackTrace = orig;
+  return frames(orig(new Error('later'), saved));
+});
+show('original with no sites', () => [orig(new Error('none'), []), orig({ name: 'N', message: 'm' }, [])]);
+function cloneCallSite(frame) {
+  const object = {};
+  for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(frame))) {
+    object[name] = /^(?:is|get)/.test(name) ? () => frame[name]() : frame[name];
+  }
+  object.toString = () => `${frame.getFunctionName() || '<anonymous>'} (${frame.getFileName()}:${frame.getLineNumber()}:${frame.getColumnNumber()})`;
+  return object;
+}
+Error.prepareStackTrace = (e, s) => orig(e, s.map(cloneCallSite));
+show('cloned sites to the original', () => frames(formatted()));
+Error.prepareStackTrace = orig;
+const babel = require('@babel/core');
+show('babel loads', () => typeof babel.transformSync);
+show('babel transform', () => babel.transformSync('const a = 1;', { configFile: false, babelrc: false }).code);
+show('babel syntax error', () => {
+  try {
+    babel.transformSync('let x = ;', { configFile: false, babelrc: false, filename: 'bad.js' });
+  } catch (e) {
+    return [e.constructor.name, own(e.message).split('\n')[0], frames(e.stack).split('\n')[0]];
+  }
+});
+show('babel rewriter', () => [Error.prepareStackTrace.name, frames(formatted())]);
+Error.prepareStackTrace = orig;
+
 RangeError.prepareStackTrace = () => 'range';
 show('subclass formatter', () => [frames(new RangeError('x').stack), frames(new Error('y').stack)]);
 show('subclass own', () => Object.keys(RangeError));
