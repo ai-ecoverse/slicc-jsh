@@ -665,26 +665,63 @@ let kernelFormatting = false;
 let routedErr = null;
 let routedFrames = null;
 
-const THROW_BEFORE = /\bthrow\b[^;}]*$/;
 const RAISED = new Set([TypeError, RangeError, ReferenceError, SyntaxError, EvalError, URIError].map((type) => type.prototype));
-const BUILT_AT = /^(?:new\s+)?(?:[\w$]+\s*\.\s*)*([\w$]+)/;
+const BUILT_AT = /^(new\s+)?((?:[\w$]+\s*\.\s*)*([\w$]+))/;
+const QUOTES = new Set(['"', "'", '`']);
+const OPENS = new Set(['(', '[', '{']);
+const CLOSES = new Set([')', ']', '}']);
 
-function constructorName(err) {
-  try {
-    return err.constructor?.name;
-  } catch {
-    return undefined;
+function quoteEnd(line, at, to) {
+  for (let i = at + 1; i < to; i++) {
+    if (line[i] === '\\') i++;
+    else if (line[i] === line[at]) return i;
   }
+  return -1;
+}
+
+function inStatement(line, from, to) {
+  let depth = 0;
+  for (let i = from; i < to; i++) {
+    const c = line[i];
+    if (QUOTES.has(c)) {
+      i = quoteEnd(line, i, to);
+      if (i < 0) return false;
+    } else if (OPENS.has(c)) depth++;
+    else if (CLOSES.has(c) && --depth < 0) return false;
+    else if (c === ';' && depth === 0) return false;
+  }
+  return true;
+}
+
+function enclosingThrow(line, start) {
+  const throws = [...line.slice(0, start).matchAll(/\bthrow\b/g)];
+  for (let k = throws.length - 1; k >= 0; k--) {
+    if (inStatement(line, throws[k].index + 5, start)) return throws[k].index;
+  }
+  return -1;
+}
+
+function globalFunction(path, except) {
+  let value = globalThis;
+  for (const name of path.split('.')) {
+    const desc = Object.getOwnPropertyDescriptor(value, name.trim());
+    value = desc && 'value' in desc ? desc.value : undefined;
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return false;
+  }
+  return typeof value === 'function' && value !== except;
 }
 
 function raisedByV8(err, at) {
   try {
     if (!RAISED.has(Object.getPrototypeOf(err))) return false;
+    const built = BUILT_AT.exec(at.sourceLine.slice(at.startColumn));
+    if (!built) return true;
+    const made = err.constructor;
+    if (built[3] === made?.name) return false;
+    return !built[1] || globalFunction(built[2], made);
   } catch {
     return false;
   }
-  const built = BUILT_AT.exec(at.sourceLine.slice(at.startColumn))?.[1];
-  return built === undefined || built !== constructorName(err);
 }
 
 export function errorSource(err) {
@@ -696,9 +733,9 @@ export function errorSource(err) {
     return undefined;
   }
   if (typeof at?.sourceLine !== 'string') return at;
-  const thrown = THROW_BEFORE.exec(at.sourceLine.slice(0, at.startColumn));
-  if (!thrown || raisedByV8(err, at)) return at;
-  return { sourceLine: at.sourceLine, lineNumber: at.lineNumber, startColumn: at.startColumn, throwColumn: thrown.index };
+  const thrown = enclosingThrow(at.sourceLine, at.startColumn);
+  if (thrown < 0 || raisedByV8(err, at)) return at;
+  return { sourceLine: at.sourceLine, lineNumber: at.lineNumber, startColumn: at.startColumn, throwColumn: thrown };
 }
 
 export function errorSourceCaret(v8, text, fromPromise = false) {
