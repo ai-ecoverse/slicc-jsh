@@ -1,0 +1,199 @@
+== ["-e","throw new Error(\"outer\", { cause: new Error(\"inner\") })"]: status 1
+[eval]:1
+throw new Error("outer", { cause: new Error("inner") })
+^
+
+Error: outer
+    at <frames> {
+  [cause]: Error: inner
+      at <frames>
+}
+
+Node.js v22.22.0
+== [] < "throw new Error(\"outer\", { cause: new Error(\"inner\") })": status 1
+[stdin]:1
+throw new Error("outer", { cause: new Error("inner") })
+^
+
+Error: outer
+    at <frames> {
+  [cause]: Error: inner
+      at <frames>
+}
+
+Node.js v22.22.0
+== ["-e","throw new Error(\"outer {\\n  x\", { cause: new Error(\"inner {\\n  y\") })"]: status 1
+[eval]:1
+throw new Error("outer {\n  x", { cause: new Error("inner {\n  y") })
+^
+
+Error: outer {
+  x
+    at <frames> {
+  [cause]: Error: inner {
+    y
+      at <frames>
+}
+
+Node.js v22.22.0
+== [] < "throw new Error(\"outer {\\n  x\", { cause: new Error(\"inner {\\n  y\") })": status 1
+[stdin]:1
+throw new Error("outer {\n  x", { cause: new Error("inner {\n  y") })
+^
+
+Error: outer {
+  x
+    at <frames> {
+  [cause]: Error: inner {
+    y
+      at <frames>
+}
+
+Node.js v22.22.0
+== ["-e","throw new Error(\"outer\", { cause: new Error(\"two\\nlines\") })"]: status 1
+[eval]:1
+throw new Error("outer", { cause: new Error("two\nlines") })
+^
+
+Error: outer
+    at <frames> {
+  [cause]: Error: two
+  lines
+      at <frames>
+}
+
+Node.js v22.22.0
+== [] < "throw new Error(\"outer\", { cause: new Error(\"two\\nlines\") })": status 1
+[stdin]:1
+throw new Error("outer", { cause: new Error("two\nlines") })
+^
+
+Error: outer
+    at <frames> {
+  [cause]: Error: two
+  lines
+      at <frames>
+}
+
+Node.js v22.22.0
+== ["-e","function f() { throw new Error(\"o\", { cause: new Error(\"i\") }) } f()"]: status 1
+[eval]:1
+function f() { throw new Error("o", { cause: new Error("i") }) } f()
+               ^
+
+Error: o
+    at <frames> {
+  [cause]: Error: i
+      at <frames>
+}
+
+Node.js v22.22.0
+== [] < "function f() { throw new Error(\"o\", { cause: new Error(\"i\") }) } f()": status 1
+[stdin]:1
+function f() { throw new Error("o", { cause: new Error("i") }) } f()
+               ^
+
+Error: o
+    at <frames> {
+  [cause]: Error: i
+      at <frames>
+}
+
+Node.js v22.22.0
+== ["-e","const c = new Error(\"mid\", { cause: new TypeError(\"deep\") }); c.code = \"C1\"; const e = new Error(\"top\", { cause: c }); e.code = \"E\"; throw e"]: status 1
+[eval]:1
+const c = new Error("mid", { cause: new TypeError("deep") }); c.code = "C1"; const e = new Error("top", { cause: c }); e.code = "E"; throw e
+                                                                                                                                     ^
+
+Error: top
+    at <frames> {
+  code: 'E',
+  [cause]: Error: mid
+      at <frames> {
+    code: 'C1',
+    [cause]: TypeError: deep
+        at <frames>
+  }
+}
+
+Node.js v22.22.0
+== [] < "const c = new Error(\"mid\", { cause: new TypeError(\"deep\") }); c.code = \"C1\"; const e = new Error(\"top\", { cause: c }); e.code = \"E\"; throw e": status 1
+[stdin]:1
+const c = new Error("mid", { cause: new TypeError("deep") }); c.code = "C1"; const e = new Error("top", { cause: c }); e.code = "E"; throw e
+                                                                                                                                     ^
+
+Error: top
+    at <frames> {
+  code: 'E',
+  [cause]: Error: mid
+      at <frames> {
+    code: 'C1',
+    [cause]: TypeError: deep
+        at <frames>
+  }
+}
+
+Node.js v22.22.0
+== ["-e","const c = new RangeError(\"r\"); c.detail = { a: 1 }; throw new Error(\"o\", { cause: c })"]: status 1
+[eval]:1
+const c = new RangeError("r"); c.detail = { a: 1 }; throw new Error("o", { cause: c })
+                                                    ^
+
+Error: o
+    at <frames> {
+  [cause]: RangeError: r
+      at <frames> {
+    detail: { a: 1 }
+  }
+}
+
+Node.js v22.22.0
+== [] < "const c = new RangeError(\"r\"); c.detail = { a: 1 }; throw new Error(\"o\", { cause: c })": status 1
+[stdin]:1
+const c = new RangeError("r"); c.detail = { a: 1 }; throw new Error("o", { cause: c })
+                                                    ^
+
+Error: o
+    at <frames> {
+  [cause]: RangeError: r
+      at <frames> {
+    detail: { a: 1 }
+  }
+}
+
+Node.js v22.22.0
+== ["-e","throw new Error(\"o\", { cause: \"a string\" })"]: status 1
+[eval]:1
+throw new Error("o", { cause: "a string" })
+^
+
+Error: o
+    at <frames> {
+  [cause]: 'a string'
+}
+
+Node.js v22.22.0
+== [] < "throw new Error(\"o\", { cause: \"a string\" })": status 1
+[stdin]:1
+throw new Error("o", { cause: "a string" })
+^
+
+Error: o
+    at <frames> {
+  [cause]: 'a string'
+}
+
+Node.js v22.22.0
+== ["cjs.js"]: status 1
+DIR/cjs.js:2
+  throw new Error("load failed", { cause: new Error("inner {\n  z") });
+  ^
+
+Error: load failed
+    at <frames> {
+  [cause]: Error: inner {
+    z
+      at <frames>
+}
+
+Node.js v22.22.0

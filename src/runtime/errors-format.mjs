@@ -292,8 +292,6 @@ function finalizeProps(props) {
   let p = props.replace(/^\{\n\n/, '{\n');
   // compact inspect leaves `}` on the last prop line — split it out.
   p = p.replace(/([^?\s])\s*\}\s*$/, '$1\n}');
-  // [cause] nested stacks: Node uses 6 spaces before `at` (not 7 from inspect).
-  p = p.replace(/(\[cause\]:[^\n]*\n)[ \t]+at /g, '$1      at ');
   return p;
 }
 
@@ -479,11 +477,7 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
   // Node 22 uncaught: compact nested props; AggregateError [errors] is multiline.
   const isAgg = err.name === 'AggregateError' || err instanceof AggregateError;
   let inspected = sanitizeInspected(
-    util.inspect(err, {
-      depth: 10,
-      breakLength: 80,
-      compact: isAgg ? false : true,
-    })
+    util.inspect(err, isAgg ? { depth: 10, breakLength: 80, compact: false } : { depth: 10 })
   );
   let props = extractInspectProps(inspected, rawStack);
   // Node omits commas between Error entries in AggregateError's [errors] array.
@@ -557,7 +551,9 @@ function collapseMatchingCauseFrames(body, err) {
     if (propsLine >= 0) {
       const propText = lines.slice(propsLine).join('\n');
       // If `{` was on the first frame line, recover props from extract.
-      if (propsLine === firstAt) {
+      if (propsLine !== firstAt && /^\s*at\s/.test(lines[propsLine])) {
+        props = lines[propsLine].slice(lines[propsLine].lastIndexOf('{')) + (lines.length > propsLine + 1 ? `\n${lines.slice(propsLine + 1).join('\n')}` : '');
+      } else if (propsLine === firstAt) {
         const braced = lines[firstAt].indexOf('{');
         props = braced >= 0 ? lines[firstAt].slice(braced) + (lines.length > firstAt + 1 ? '\n' + lines.slice(firstAt + 1).join('\n') : '') : propText;
       } else {
