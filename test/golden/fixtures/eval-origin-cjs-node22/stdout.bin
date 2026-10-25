@@ -1,0 +1,37 @@
+== top.js: status 0
+TypeError: Cannot read properties of null (reading 'c')
+    at eval (eval at <anonymous> (DIR/top.js:2:7), <anonymous>:1:6)
+    at eval (<anonymous>)
+    at Object.<anonymous> (DIR/top.js:2:7)
+== fn.js: status 0
+TypeError: Cannot read properties of null (reading 'f')
+    at eval (eval at load (DIR/fn.js:3:10), <anonymous>:2:8)
+    at eval (<anonymous>)
+    at load (DIR/fn.js:3:10)
+    at Object.<anonymous> (DIR/fn.js:5:7)
+== method.js: status 0
+TypeError: Cannot read properties of null (reading 'm')
+    at eval (eval at go (DIR/method.js:2:28), <anonymous>:1:6)
+    at eval (<anonymous>)
+    at Object.go (DIR/method.js:2:28)
+    at Object.<anonymous> (DIR/method.js:3:9)
+== nested.js: status 0
+TypeError: Cannot read properties of null (reading 'n')
+    at eval (eval at <anonymous> (eval at <anonymous> (DIR/nested.js:2:7)), <anonymous>:1:6)
+    at eval (<anonymous>)
+    at eval (eval at <anonymous> (DIR/nested.js:2:7), <anonymous>:2:1)
+    at eval (<anonymous>)
+    at Object.<anonymous> (DIR/nested.js:2:7)
+== function.js: status 0
+TypeError: Cannot read properties of null (reading 'z')
+    at eval (eval at make (DIR/function.js:2:10), <anonymous>:3:6)
+    at Object.<anonymous> (DIR/function.js:4:21)
+== own.js: status 0
+TypeError: Cannot read properties of undefined (reading 'b')
+    at f (DIR/own.js:3:14)
+    at Object.<anonymous> (DIR/own.js:5:7)
+== hashbang.js: status 0
+TypeError: Cannot read properties of null (reading 'h')
+    at eval (eval at <anonymous> (DIR/hashbang.js:3:7), <anonymous>:1:6)
+    at eval (<anonymous>)
+    at Object.<anonymous> (DIR/hashbang.js:3:7)
