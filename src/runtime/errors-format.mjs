@@ -371,9 +371,12 @@ const RUN_MAIN_HEAD = 'node:internal/modules/run_main:123\n    triggerUncaughtEx
 function esmEntrySite(ctx, err, evalCode) {
   const frame = constructionFrame(err);
   if (frame === null) return RUN_MAIN_HEAD;
-  const snip = snippetFor(ctx, frameLocation(frame), evalCode, false, undefined, true);
+  const loc = (frame && evalLocation(ctx, frame, evalCode, err)) || frameLocation(frame);
+  const snip = snippetFor(ctx, loc, evalCode, false, undefined, true);
   return snip ? `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}` : undefined;
 }
+
+const nativeError = (value) => attempt(() => Object.prototype.toString.call(value)) === '[object Error]';
 
 function unreadableStack(err, { ctx, evalName, evalCode, esmEntry, fromScript, microtask, ticking, hint, trailer }) {
   const name = attempt(() => err.name);
@@ -382,8 +385,9 @@ function unreadableStack(err, { ctx, evalName, evalCode, esmEntry, fromScript, m
   const text = (value) => attempt(() => String(value)) ?? '';
   const shown = named ? `${text(name)}: ${text(message)}` : text(err);
   const where = (esmEntry && esmEntrySite(ctx, err, evalCode)) || throwSite(evalName, evalCode, shown);
-  if (!(err instanceof Error) && microtask) return { body: `\n${microtaskHead(ticking)}\n${shown}\n${hint}${trailer}` };
-  if (!(err instanceof Error) && !fromScript) return { body: `\n${where}\n${shown}\n${hint}${trailer}` };
+  const native = nativeError(err);
+  if (!native && microtask) return { body: `\n${microtaskHead(ticking)}\n${shown}\n${hint}${trailer}` };
+  if (!native && !fromScript) return { body: `\n${where}\n${shown}\n${hint}${trailer}` };
   return { body: named ? `${where}\n\n${shown}\n${hint}${trailer}` : `${shown}\n${hint}${trailer}` };
 }
 

@@ -7,7 +7,7 @@ const run = (args, input) => {
   console.log(JSON.stringify(r.stderr.split(dir).join('DIR').split(__dirname).join('DIR')));
 };
 const inline = 'const e = new Error("x"); Object.defineProperty(e, "stack", { get() { return null.s } }); throw e;';
-for (const file of ['inline.mjs', 'function.mjs', 'await.mjs', 'imported.mjs', 'subclass.mjs', 'prepare.mjs', 'read.mjs', 'read-await.mjs', 'object.mjs', 'timer.mjs']) run([file]);
+for (const file of ['inline.mjs', 'function.mjs', 'await.mjs', 'imported.mjs', 'subclass.mjs', 'prepare.mjs', 'read.mjs', 'read-await.mjs', 'object.mjs', 'timer.mjs', 'eval.mjs', 'function-body.mjs', 'proxy.mjs', 'prototype.mjs']) run([file]);
 run(['--input-type=module', '-e', inline]);
 run(['--input-type=module'], inline);
 run(['--input-type=module', '-e', 'throw {get stack() { throw 1 }}']);

@@ -18,6 +18,14 @@
 "\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\nN: m\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
 == ["timer.mjs"]: status 1
 "file://DIR/timer.mjs:1\nsetTimeout(() => { const e = new Error(\"t\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e; });\n                                                                                                             ^\n\nError: t\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["eval.mjs"]: status 1
+"<anonymous_script>:1\nnew Error(\"ev\")\n^\n\nError: ev\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["function-body.mjs"]: status 1
+"<anonymous_script>:3\nreturn new Error(\"fn\")\n       ^\n\nError: fn\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["proxy.mjs"]: status 1
+"\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\nError: px\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["prototype.mjs"]: status 1
+"\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\nError: fake\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
 == ["--input-type=module","-e","const e = new Error(\"x\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e;"]: status 1
 "file://DIR/[eval1]:1\nconst e = new Error(\"x\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e;\n          ^\n\nError: x\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
 == ["--input-type=module"] < "const e = new Error(\"x\"); Object.defineProperty(e, \"stack\", { get() { return null.s } }); throw e;": status 1
