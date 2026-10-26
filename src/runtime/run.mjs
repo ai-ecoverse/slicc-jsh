@@ -222,6 +222,15 @@ function trackPlatformAsync(handles) {
 // The platform's setTimeout, for the turns after the program's loop ended.
 const platformSetTimeout = globalThis.setTimeout.bind(globalThis);
 
+const CJS_GLOBALS = ['require', 'module', 'exports', '__filename', '__dirname'];
+
+function vacateCjsGlobals() {
+  for (const name of CJS_GLOBALS) {
+    const desc = Object.getOwnPropertyDescriptor(globalThis, name);
+    if (desc?.configurable && 'value' in desc && desc.value === undefined) delete globalThis[name];
+  }
+}
+
 
 /**
  * Run the node CLI against a JsProgramContext. Resolves with an exit status.
@@ -235,6 +244,7 @@ export async function runNode(ctx, options = {}) {
   installStackPrepare(ctx);
   installPromiseState(ctx);
   useHostContext(ctx.asyncContext);
+  vacateCjsGlobals();
   const handles = createHandleTable();
   // A tick wakes the loop when it waits on a handle (drainLoop).
   const nextTick = createNextTick(() => handles.notify());
@@ -876,8 +886,8 @@ export async function runNode(ctx, options = {}) {
           changed: hasImport,
         } = rewriteDynamicImports(code, { callee: EVAL_IMPORT });
         const dynImport = (spec, options) => esm.importDynamic(spec, evalParent, options);
-        const args = ['exports', 'require', 'module', '__filename', '__dirname'];
-        const values = [exports, require, module, evalName, '.'];
+        const args = ['__filename', 'module', 'exports', '__dirname', 'require'];
+        const values = [evalName, module, exports, '.', require];
         if (hasImport) globalThis[kEvalImport] = dynImport;
         const report = syntaxReport(code, { kind: 'script', filename: evalName });
         if (report) {

@@ -1,0 +1,57 @@
+== ["read.mjs"]: status 0
+"ReferenceError require is not defined\nReferenceError require is not defined\nReferenceError module is not defined\nReferenceError exports is not defined\nReferenceError __filename is not defined\nReferenceError __dirname is not defined\nundefined undefined false []\n"
+""
+== ["require.mjs"]: status 1
+""
+"file://DIR/require.mjs:1\nrequire(\"fs\")\n^\n\nReferenceError: require is not defined in ES module scope, you can use import instead\n\nNode.js v22.22.0\n"
+== ["module.mjs"]: status 1
+""
+"file://DIR/module.mjs:1\nmodule.exports = 1\n^\n\nReferenceError: module is not defined in ES module scope\n\nNode.js v22.22.0\n"
+== ["exports.mjs"]: status 1
+""
+"file://DIR/exports.mjs:1\nexports.x = 1\n^\n\nReferenceError: exports is not defined in ES module scope\n\nNode.js v22.22.0\n"
+== ["filename.mjs"]: status 1
+""
+"file://DIR/filename.mjs:1\n__filename\n^\n\nReferenceError: __filename is not defined in ES module scope\n\nNode.js v22.22.0\n"
+== ["dirname.mjs"]: status 1
+""
+"file://DIR/dirname.mjs:1\n__dirname\n^\n\nReferenceError: __dirname is not defined in ES module scope\n\nNode.js v22.22.0\n"
+== ["nested.mjs"]: status 1
+""
+"file://DIR/nested.mjs:1\nconst f = () => require(\"x\");\n                ^\n\nReferenceError: require is not defined in ES module scope, you can use import instead\n\nNode.js v22.22.0\n"
+== ["timer.mjs"]: status 1
+""
+"file://DIR/timer.mjs:1\nsetTimeout(() => require(\"fs\"));\n                 ^\n\nReferenceError: require is not defined\n\nNode.js v22.22.0\n"
+== ["await.mjs"]: status 1
+""
+"file://DIR/await.mjs:2\nrequire(\"fs\");\n^\n\nReferenceError: Cannot determine intended module format because both require() and top-level await are present. If the code is intended to be CommonJS, wrap await in an async function. If the code is intended to be an ES module, replace require() with import.\n  code: 'ERR_AMBIGUOUS_MODULE_SYNTAX'\n}\n\nNode.js v22.22.0\n"
+== ["static.mjs"]: status 1
+""
+"file://DIR/require.mjs:1\nrequire(\"fs\")\n^\n\nReferenceError: require is not defined in ES module scope, you can use import instead\n\nNode.js v22.22.0\n"
+== ["dynamic.mjs"]: status 1
+""
+"file://DIR/require.mjs:1\nrequire(\"fs\")\n^\n\nReferenceError: require is not defined in ES module scope, you can use import instead\n\nNode.js v22.22.0\n"
+== ["dynamic-catch.mjs"]: status 0
+"require is not defined in ES module scope, you can use import instead\n"
+""
+== ["from-cjs.cjs"]: status 0
+"require is not defined in ES module scope, you can use import instead\n"
+""
+== ["require-esm.cjs"]: status 1
+""
+"file://DIR/require.mjs:1\nrequire(\"fs\")\n^\n\nReferenceError: require is not defined in ES module scope, you can use import instead\n\nNode.js v22.22.0\n"
+== ["pkg/c.js"]: status 1
+""
+"file://DIR/pkg/c.js:1\nrequire(\"fs\")\n^\n\nReferenceError: require is not defined in ES module scope, you can use import instead\nThis file is being treated as an ES module because it has a '.js' file extension and 'DIR/pkg/package.json' contains \"type\": \"module\". To treat it as a CommonJS script, rename it to use the '.cjs' file extension.\n\nNode.js v22.22.0\n"
+== ["--input-type=module","-e","require(\"fs\")"]: status 1
+""
+"file://DIR/[eval1]:1\nrequire(\"fs\")\n^\n\nReferenceError: require is not defined in ES module scope, you can use import instead\n\nNode.js v22.22.0\n"
+== ["--input-type=module"] < "try { require } catch (x) { console.log(x.message) }": status 0
+"require is not defined\n"
+""
+== ["-e","console.log(typeof require, typeof module, typeof exports, __filename, __dirname, Object.keys(globalThis).filter((n) => [\"require\", \"module\", \"exports\", \"__filename\", \"__dirname\"].includes(n)))"]: status 0
+"function object object [eval] . [ '__filename', 'module', 'exports', '__dirname', 'require' ]\n"
+""
+== [] < "console.log(typeof require, typeof module, __filename)": status 0
+"function object [stdin]\n"
+""

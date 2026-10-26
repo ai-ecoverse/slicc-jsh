@@ -91,6 +91,10 @@ function requireAsyncModule(filename, parentFilename) {
   return nodeError(Error, 'ERR_REQUIRE_ASYNC_MODULE', message);
 }
 
+const CJS_GLOBAL_LIKE = new Set(['require', 'module', 'exports', '__filename', '__dirname'].map((name) => `${name} is not defined`));
+const AMBIGUOUS_MODULE_SYNTAX =
+  'Cannot determine intended module format because both require() and top-level await are present. If the code is intended to be CommonJS, wrap await in an async function. If the code is intended to be an ES module, replace require() with import.';
+
 export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise } = {}) {
   const path = createPath(() => process.cwd());
   const fs = ctx.sync.fs;
@@ -169,6 +173,57 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       if (parent === dir) return null;
       dir = parent;
     }
+  }
+
+  function topLevelAwaitOf(filename) {
+    try {
+      return transformEsm(decoder.decode(fs.readFile(pathOf(filename))), pathOf(filename)).hasTopLevelAwait;
+    } catch {
+      return false;
+    }
+  }
+
+  function packagePathOf(fromDir) {
+    for (let dir = fromDir; ; dir = path.dirname(dir)) {
+      const pkgPath = path.join(dir, 'package.json');
+      if (packageCache.has(pkgPath) || fs.exists(pkgPath)) return pkgPath;
+      if (path.dirname(dir) === dir) return null;
+    }
+  }
+
+  function explainCjsGlobal(err, filename, topLevelAwait) {
+    try {
+      if (err?.name !== 'ReferenceError' || !CJS_GLOBAL_LIKE.has(err.message)) return;
+      if (topLevelAwait()) {
+        err.message = AMBIGUOUS_MODULE_SYNTAX;
+        err.code = 'ERR_AMBIGUOUS_MODULE_SYNTAX';
+        return;
+      }
+      err.message += ' in ES module scope';
+      if (err.message.startsWith('require ')) err.message += ', you can use import instead';
+      const file = pathOf(filename);
+      const pkgPath = file.endsWith('.js') ? packagePathOf(path.dirname(file)) : null;
+      if (pkgPath && readPackageJson(pkgPath)?.type === 'module') {
+        err.message += `\nThis file is being treated as an ES module because it has a '.js' file extension and '${pkgPath}' contains "type": "module". To treat it as a CommonJS script, rename it to use the '.cjs' file extension.`;
+      }
+    } catch {
+      return;
+    }
+  }
+
+  function explained(filename, topLevelAwait, run) {
+    let result;
+    try {
+      result = run();
+    } catch (err) {
+      explainCjsGlobal(err, filename, () => topLevelAwait);
+      throw err;
+    }
+    if (!topLevelAwait) return result;
+    return result.then(undefined, (err) => {
+      explainCjsGlobal(err, filename, () => topLevelAwait);
+      throw err;
+    });
   }
 
   function isEsmFilename(filename, source) {
@@ -750,7 +805,13 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     // Re-read: loadFileAsync may have already set {evaluating, exportsObj} before
     // suspending; a stale pre-call snapshot would wipe those fields.
     cache.set(filename, { ...(cache.get(filename) || {}), promise });
-    const ns = await awaitTracked(promise);
+    let ns;
+    try {
+      ns = await awaitTracked(promise);
+    } catch (err) {
+      if (dynamic) explainCjsGlobal(err, filename, () => topLevelAwaitOf(filename));
+      throw err;
+    }
     cache.set(filename, { namespace: ns });
     return ns;
   }
@@ -763,15 +824,13 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
     const { hasTopLevelAwait } = transformEsm(src, filename);
     // The entry's top-level await is not a handle: as in Node, a pending
     // await does not keep the program alive (run.mjs reports it, exit 13).
-    if (hasTopLevelAwait) return evaluateEsmAsync(filename, src);
-    return evaluateEsm(filename, src);
+    return explained(filename, hasTopLevelAwait, () => (hasTopLevelAwait ? evaluateEsmAsync(filename, src) : evaluateEsm(filename, src)));
   }
 
   function runEsmEval(code, filename = '[eval]') {
     // Always treat as ESM (covers dynamic import() without static import/export).
     const { hasTopLevelAwait } = transformEsm(code, filename);
-    if (hasTopLevelAwait) return evaluateEsmAsync(filename, code);
-    return evaluateEsm(filename, code);
+    return explained(filename, hasTopLevelAwait, () => (hasTopLevelAwait ? evaluateEsmAsync(filename, code) : evaluateEsm(filename, code)));
   }
 
   /**
@@ -792,6 +851,7 @@ export function createEsm({ ctx, process, handles, builtins, cjs, trackPromise }
       return evaluateEsm(filename, source);
     } catch (err) {
       if (deepAsync.has(err)) throw requireAsyncModule(filename, parentFilename);
+      explainCjsGlobal(err, filename, () => false);
       throw err;
     }
   }
