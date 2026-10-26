@@ -100,3 +100,15 @@
 "\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n15\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
 == ["DIR/module-1.mjs"]: status 1
 "\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n15\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module","-e","process.nextTick(() => {}); queueMicrotask(() => queueMicrotask(() => { throw 16 }))"]: status 1
+"\n<anonymous_script>:0\n\n16\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module"] < "process.nextTick(() => {}); queueMicrotask(() => queueMicrotask(() => { throw 16 }))": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n16\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/module-2.mjs"]: status 1
+"\n<anonymous_script>:0\n\n16\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module","-e","process.nextTick(() => { console.error(\"tick\"); queueMicrotask(() => { throw 17 }) }); Promise.resolve().then(() => console.error(\"then\")); queueMicrotask(() => console.error(\"micro\"))"]: status 1
+"then\nmicro\ntick\n\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n17\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module"] < "process.nextTick(() => { console.error(\"tick\"); queueMicrotask(() => { throw 17 }) }); Promise.resolve().then(() => console.error(\"then\")); queueMicrotask(() => console.error(\"micro\"))": status 1
+"then\nmicro\ntick\n\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n17\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/module-3.mjs"]: status 1
+"then\nmicro\ntick\n\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n17\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"

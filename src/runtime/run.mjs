@@ -1,4 +1,4 @@
-import { mainBegin, mainEnd, queueMicrotask, useHostContext } from './async-context.mjs';
+import { mainBegin, mainEnd, useHostContext } from './async-context.mjs';
 import { initSourceMaps } from './source-maps.mjs';
 import { installProcessMembers } from './process-members.mjs';
 import { installCredentials } from './process-credentials.mjs';
@@ -707,15 +707,6 @@ export async function runNode(ctx, options = {}) {
       }
     }
   };
-  const flushEntryTicks = () => {
-    if (nextTick.depth > 0) {
-      queueMicrotask(() => {
-        nextTick.ticking = true;
-      });
-    }
-    flushTicks();
-    nextTick.ticking = false;
-  };
   const exceptionHandler = (err) => {
     if (isExit(err)) {
       exitStatus = getDidExit() ? getExitCode() : Number(err.code) & 0xff;
@@ -874,7 +865,6 @@ export async function runNode(ctx, options = {}) {
         }
         uncaughtFromEsm = false;
         if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
-        flushEntryTicks();
       } else {
         const { module, require } = cjs.evalModule(evalName);
         const evalParent = module.filename;
@@ -1198,8 +1188,7 @@ export async function runNode(ctx, options = {}) {
           }
         }
         uncaughtFromEsm = false;
-        if (useEsm) flushEntryTicks();
-        else flushTicks();
+        if (!useEsm) flushTicks();
       } catch (err) {
         if (isExitError(err)) throw err;
         if (handleUncaught(err)) {

@@ -35,6 +35,8 @@ cases.forEach((code, i) => {
 const modules = [
   'process.nextTick(() => {}); queueMicrotask(() => { throw 14 })',
   'process.nextTick(() => queueMicrotask(() => { throw 15 }))',
+  'process.nextTick(() => {}); queueMicrotask(() => queueMicrotask(() => { throw 16 }))',
+  'process.nextTick(() => { console.error("tick"); queueMicrotask(() => { throw 17 }) }); Promise.resolve().then(() => console.error("then")); queueMicrotask(() => console.error("micro"))',
 ];
 modules.forEach((code, i) => {
   const file = path.join(dir, `module-${i}.mjs`);
