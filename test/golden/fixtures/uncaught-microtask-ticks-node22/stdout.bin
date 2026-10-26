@@ -1,0 +1,114 @@
+== ["-e","queueMicrotask(() => { throw 1 })"]: status 1
+"\n<anonymous_script>:0\n\n1\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "queueMicrotask(() => { throw 1 })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n1\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-0.js"]: status 1
+"\n<anonymous_script>:0\n\n1\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","require(\"fs\").readFile(__filename + \"x\", () => queueMicrotask(() => { throw 10 }))"]: status 1
+"\n<anonymous_script>:0\n\n10\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "require(\"fs\").readFile(__filename + \"x\", () => queueMicrotask(() => { throw 10 }))": status 1
+"\n<anonymous_script>:0\n\n10\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-1.js"]: status 1
+"\n<anonymous_script>:0\n\n10\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","process.emitWarning(\"w\"); queueMicrotask(() => { throw \"z\" })"]: status 1
+"(node:PID) Warning: w\n(Use `node --trace-warnings ...` to show where the warning was created)\n\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\nz\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "process.emitWarning(\"w\"); queueMicrotask(() => { throw \"z\" })": status 1
+"(node:PID) Warning: w\n(Use `node --trace-warnings ...` to show where the warning was created)\n\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\nz\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-2.js"]: status 1
+"(node:PID) Warning: w\n(Use `node --trace-warnings ...` to show where the warning was created)\n\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\nz\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","process.nextTick(() => {}); queueMicrotask(() => { throw 2 })"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n2\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "process.nextTick(() => {}); queueMicrotask(() => { throw 2 })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n2\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-3.js"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n2\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","queueMicrotask(() => { process.nextTick(() => {}); queueMicrotask(() => { throw 3 }) })"]: status 1
+"\n<anonymous_script>:0\n\n3\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "queueMicrotask(() => { process.nextTick(() => {}); queueMicrotask(() => { throw 3 }) })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n3\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-4.js"]: status 1
+"\n<anonymous_script>:0\n\n3\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","queueMicrotask(() => process.nextTick(() => queueMicrotask(() => { throw 4 })))"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n4\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "queueMicrotask(() => process.nextTick(() => queueMicrotask(() => { throw 4 })))": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n4\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-5.js"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n4\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","Promise.resolve().then(() => { process.nextTick(() => {}) }); queueMicrotask(() => queueMicrotask(() => { throw 5 }))"]: status 1
+"\n<anonymous_script>:0\n\n5\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "Promise.resolve().then(() => { process.nextTick(() => {}) }); queueMicrotask(() => queueMicrotask(() => { throw 5 }))": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n5\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-6.js"]: status 1
+"\n<anonymous_script>:0\n\n5\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","setTimeout(() => { process.nextTick(() => {}); queueMicrotask(() => { throw 6 }) })"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n6\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "setTimeout(() => { process.nextTick(() => {}); queueMicrotask(() => { throw 6 }) })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n6\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-7.js"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n6\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","process.nextTick(() => {}); setTimeout(() => queueMicrotask(() => { throw 7 }))"]: status 1
+"\n<anonymous_script>:0\n\n7\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "process.nextTick(() => {}); setTimeout(() => queueMicrotask(() => { throw 7 }))": status 1
+"\n<anonymous_script>:0\n\n7\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-8.js"]: status 1
+"\n<anonymous_script>:0\n\n7\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","setImmediate(() => { process.nextTick(() => {}); queueMicrotask(() => { throw 8 }) })"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n8\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "setImmediate(() => { process.nextTick(() => {}); queueMicrotask(() => { throw 8 }) })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n8\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-9.js"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n8\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","process.nextTick(() => {}); require(\"fs\").readFile(__filename + \"x\", () => queueMicrotask(() => { throw 9 }))"]: status 1
+"\n<anonymous_script>:0\n\n9\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "process.nextTick(() => {}); require(\"fs\").readFile(__filename + \"x\", () => queueMicrotask(() => { throw 9 }))": status 1
+"\n<anonymous_script>:0\n\n9\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-10.js"]: status 1
+"\n<anonymous_script>:0\n\n9\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","require(\"fs\").readFile(__filename + \"x\", () => { process.nextTick(() => {}); queueMicrotask(() => { throw 11 }) })"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n11\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "require(\"fs\").readFile(__filename + \"x\", () => { process.nextTick(() => {}); queueMicrotask(() => { throw 11 }) })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n11\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-11.js"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n11\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","process.nextTick(() => {}); require(\"dns\").lookup(\"localhost\", () => queueMicrotask(() => { throw 12 }))"]: status 1
+"\n<anonymous_script>:0\n\n12\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "process.nextTick(() => {}); require(\"dns\").lookup(\"localhost\", () => queueMicrotask(() => { throw 12 }))": status 1
+"\n<anonymous_script>:0\n\n12\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-12.js"]: status 1
+"\n<anonymous_script>:0\n\n12\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","require(\"dns\").lookup(\"localhost\", () => { process.nextTick(() => {}); queueMicrotask(() => { throw 13 }) })"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n13\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "require(\"dns\").lookup(\"localhost\", () => { process.nextTick(() => {}); queueMicrotask(() => { throw 13 }) })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n13\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-13.js"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n13\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["-e","process.nextTick(() => {}); queueMicrotask(() => { throw {get stack() { throw 1 }} })"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== [] < "process.nextTick(() => {}); queueMicrotask(() => { throw {get stack() { throw 1 }} })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/case-14.js"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n[object Object]\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module","-e","process.nextTick(() => {}); queueMicrotask(() => { throw 14 })"]: status 1
+"\n<anonymous_script>:0\n\n14\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module"] < "process.nextTick(() => {}); queueMicrotask(() => { throw 14 })": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n14\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/module-0.mjs"]: status 1
+"\n<anonymous_script>:0\n\n14\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module","-e","process.nextTick(() => queueMicrotask(() => { throw 15 }))"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n15\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module"] < "process.nextTick(() => queueMicrotask(() => { throw 15 }))": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n15\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/module-1.mjs"]: status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n15\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module","-e","process.nextTick(() => {}); queueMicrotask(() => queueMicrotask(() => { throw 16 }))"]: status 1
+"\n<anonymous_script>:0\n\n16\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module"] < "process.nextTick(() => {}); queueMicrotask(() => queueMicrotask(() => { throw 16 }))": status 1
+"\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n16\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/module-2.mjs"]: status 1
+"\n<anonymous_script>:0\n\n16\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module","-e","process.nextTick(() => { console.error(\"tick\"); queueMicrotask(() => { throw 17 }) }); Promise.resolve().then(() => console.error(\"then\")); queueMicrotask(() => console.error(\"micro\"))"]: status 1
+"then\nmicro\ntick\n\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n17\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["--input-type=module"] < "process.nextTick(() => { console.error(\"tick\"); queueMicrotask(() => { throw 17 }) }); Promise.resolve().then(() => console.error(\"then\")); queueMicrotask(() => console.error(\"micro\"))": status 1
+"then\nmicro\ntick\n\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n17\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"
+== ["DIR/module-3.mjs"]: status 1
+"then\nmicro\ntick\n\nnode:internal/process/task_queues:105\n    runMicrotasks();\n    ^\n17\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v22.22.0\n"

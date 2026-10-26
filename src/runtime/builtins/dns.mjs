@@ -30,6 +30,7 @@ import {
   validateUint32,
 } from '../node-errors.mjs';
 import { trackPromise } from '../async-handles.mjs';
+import { makeCallback } from '../callback-scope.mjs';
 import { isIP } from './tls.mjs';
 import { kCustomPromisifyArgs } from './util.mjs';
 
@@ -213,8 +214,8 @@ export function createDns({ ctx, process, handles, hostname = 'slicc' }) {
   /** Runs `work` (a promise) keeping the loop alive; `done` on a later tick, outside the promise. */
   function settle(work, done) {
     const p = work.then(
-      (value) => process.nextTick(done, null, value),
-      (err) => process.nextTick(done, err)
+      (value) => process.nextTick(makeCallback, process, null, done, undefined, [null, value]),
+      (err) => process.nextTick(makeCallback, process, null, done, undefined, [err])
     );
     if (handles) void trackPromise(handles, p);
     return p;

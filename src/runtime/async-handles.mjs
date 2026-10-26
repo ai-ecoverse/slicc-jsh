@@ -57,7 +57,10 @@ async function checkpoint(nextTick, onTickError) {
       continue;
     }
     idle++;
-    if (idle >= 6) return false;
+    if (idle >= 6) {
+      nextTick.ticking = false;
+      return false;
+    }
   }
   // Still running ticks after all its turns.
   return true;

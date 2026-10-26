@@ -20,6 +20,7 @@ export function createNextTick(onQueue) {
   let flushing = false;
   // Ticks run so far (the drain loop's measure of progress).
   let ran = 0;
+  let ticking = false;
 
   return {
     nextTick(fn, ...args) {
@@ -69,6 +70,7 @@ export function createNextTick(onQueue) {
           for (let i = 0; i < batch.length; i++) {
             try {
               ran++;
+              ticking = true;
               batch[i]();
             } catch (err) {
               // The rest of the batch still runs (after the error is handled).
@@ -86,6 +88,12 @@ export function createNextTick(onQueue) {
     },
     get ran() {
       return ran;
+    },
+    get ticking() {
+      return ticking;
+    },
+    set ticking(value) {
+      ticking = value;
     },
   };
 }
