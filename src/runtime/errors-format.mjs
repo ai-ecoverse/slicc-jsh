@@ -4,7 +4,7 @@
  */
 
 import * as acorn from 'acorn';
-import { KERNEL_HINT, errorSource, errorSourceCaret, functionSource, generatedLocation } from './stack.mjs';
+import { KERNEL_HINT, constructionFrame, errorSource, errorSourceCaret, functionSource, generatedLocation } from './stack.mjs';
 import { kDecorated } from './builtins/vm.mjs';
 import { sourceMapErrorSource } from './source-maps.mjs';
 
@@ -366,13 +366,22 @@ const MICROTASK_HEAD = '<anonymous_script>:0\n';
 const TICKS_HEAD = 'node:internal/process/task_queues:105\n    runMicrotasks();\n    ^';
 const microtaskHead = (ticking) => (ticking ? TICKS_HEAD : MICROTASK_HEAD);
 
-function unreadableStack(err, { evalName, evalCode, fromScript, microtask, ticking, hint, trailer }) {
+const RUN_MAIN_HEAD = 'node:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^';
+
+function esmEntrySite(ctx, err, evalCode) {
+  const frame = constructionFrame(err);
+  if (frame === null) return RUN_MAIN_HEAD;
+  const snip = snippetFor(ctx, frameLocation(frame), evalCode, false, undefined, true);
+  return snip ? `${snip.file}:${snip.lineNo}\n${snip.text}\n${snip.caret}` : undefined;
+}
+
+function unreadableStack(err, { ctx, evalName, evalCode, esmEntry, fromScript, microtask, ticking, hint, trailer }) {
   const name = attempt(() => err.name);
   const message = attempt(() => err.message);
   const named = name !== undefined && message !== undefined;
   const text = (value) => attempt(() => String(value)) ?? '';
   const shown = named ? `${text(name)}: ${text(message)}` : text(err);
-  const where = throwSite(evalName, evalCode, shown);
+  const where = (esmEntry && esmEntrySite(ctx, err, evalCode)) || throwSite(evalName, evalCode, shown);
   if (!(err instanceof Error) && microtask) return { body: `\n${microtaskHead(ticking)}\n${shown}\n${hint}${trailer}` };
   if (!(err instanceof Error) && !fromScript) return { body: `\n${where}\n${shown}\n${hint}${trailer}` };
   return { body: named ? `${where}\n\n${shown}\n${hint}${trailer}` : `${shown}\n${hint}${trailer}` };
@@ -401,7 +410,7 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     } catch {
       unreadable = true;
     }
-    if (unreadable) return unreadableStack(err, { evalName, evalCode, fromScript, microtask, ticking, hint: traceHint, trailer });
+    if (unreadable) return unreadableStack(err, { ctx, evalName, evalCode, esmEntry, fromScript, microtask, ticking, hint: traceHint, trailer });
   }
   if (!(err instanceof Error) && microtask) {
     return { body: `\n${microtaskHead(ticking)}\n${shownThrown()}\n${hint}${trailer}` };
@@ -410,7 +419,7 @@ export function formatUncaughtError(err, { ctx, util, version, evalCode, evalNam
     // Node: a primitive thrown by an ES module entry has no location of its own.
     const shown = shownThrown();
     return {
-      body: `\nnode:internal/modules/run_main:123\n    triggerUncaughtException(\n    ^\n${shown}\n${hint}${trailer}`,
+      body: `\n${RUN_MAIN_HEAD}\n${shown}\n${hint}${trailer}`,
     };
   }
   if (!(err instanceof Error)) {
