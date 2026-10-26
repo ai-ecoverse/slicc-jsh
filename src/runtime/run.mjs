@@ -1,4 +1,4 @@
-import { mainBegin, mainEnd, useHostContext } from './async-context.mjs';
+import { mainBegin, mainEnd, queueMicrotask, useHostContext } from './async-context.mjs';
 import { initSourceMaps } from './source-maps.mjs';
 import { installProcessMembers } from './process-members.mjs';
 import { installCredentials } from './process-credentials.mjs';
@@ -249,7 +249,6 @@ export async function runNode(ctx, options = {}) {
   let uncaughtFromEsm = false;
   let uncaughtFromScript = false;
   let uncaughtFromMicrotask = false;
-  let mainTurn = true;
   const printUncaught = (err) => {
     const { body } = formatUncaughtError(err, {
       ctx,
@@ -260,7 +259,7 @@ export async function runNode(ctx, options = {}) {
       esmEntry: uncaughtFromEsm,
       fromScript: uncaughtFromScript,
       microtask: uncaughtFromMicrotask,
-      firstTurn: mainTurn,
+      ticking: nextTick.ticking,
     });
     // process.report.reportOnUncaughtException: Node writes the report
     // between the error and its `Node.js v…` line.
@@ -557,7 +556,10 @@ export async function runNode(ctx, options = {}) {
       ((delivering.active || timers.checkPending()) && due > delivering.since) ||
       (delivering.pending && delivering.cut === 0 && due > delivering.postedAt()),
     holdImmediate: (seq) => delivering.active || (delivering.pending && seq >= delivering.cut) || seq >= delivering.closingCut(),
-    afterCallback: () => flushTicks(),
+    afterCallback: () => {
+      nextTick.ticking = false;
+      flushTicks();
+    },
     onCallbackError: (err) => {
       if (isExitError(err) || getDidExit()) {
         exitStatus = getDidExit() ? getExitCode() : err.code;
@@ -579,7 +581,10 @@ export async function runNode(ctx, options = {}) {
       timers.clearPending();
     },
   });
-  onIo(() => timers.endPhase(), { inCheck: () => timers.inCheck(), schedule: (fn) => timers.setImmediatePoll(fn) });
+  onIo(() => {
+    timers.endPhase();
+    nextTick.ticking = false;
+  }, { inCheck: () => timers.inCheck(), schedule: (fn) => timers.setImmediatePoll(fn) });
   // A signal handler runs from the loop, as an immediate (its throw is an
   // uncaught exception, handled as a timer callback's).
   // Like Node's signal handles it doesn't keep the loop alive: a signal
@@ -701,6 +706,15 @@ export async function runNode(ctx, options = {}) {
         if (isExitError(err) || !handleUncaught(err)) throw err;
       }
     }
+  };
+  const flushEntryTicks = () => {
+    if (nextTick.depth > 0) {
+      queueMicrotask(() => {
+        nextTick.ticking = true;
+      });
+    }
+    flushTicks();
+    nextTick.ticking = false;
   };
   const exceptionHandler = (err) => {
     if (isExit(err)) {
@@ -860,7 +874,7 @@ export async function runNode(ctx, options = {}) {
         }
         uncaughtFromEsm = false;
         if (result != null && typeof result.then === 'function') setEntry(result, 'esm');
-        flushTicks();
+        flushEntryTicks();
       } else {
         const { module, require } = cjs.evalModule(evalName);
         const evalParent = module.filename;
@@ -1107,6 +1121,7 @@ export async function runNode(ctx, options = {}) {
       }
       const status = evaluate(source, '[stdin]');
       if (status !== undefined) return status;
+      nextTick.ticking = true;
     } else if (parsed.mode === 'eval') {
       // -i with -e / -p: the REPL starts, then the code runs (Node's order).
       if (parsed.interactive) {
@@ -1183,7 +1198,8 @@ export async function runNode(ctx, options = {}) {
           }
         }
         uncaughtFromEsm = false;
-        flushTicks();
+        if (useEsm) flushEntryTicks();
+        else flushTicks();
       } catch (err) {
         if (isExitError(err)) throw err;
         if (handleUncaught(err)) {
@@ -1209,10 +1225,7 @@ export async function runNode(ctx, options = {}) {
       onTickError: (err) => exceptionHandler(err),
       freeze: () => timers.freeze(),
       thaw: () => timers.thaw(),
-      onIdle: () => {
-        mainTurn = false;
-        timers.idle();
-      },
+      onIdle: () => timers.idle(),
     });
     loopEnded = true;
 
