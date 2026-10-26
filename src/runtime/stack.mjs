@@ -622,6 +622,22 @@ function keptFrames(frames) {
 
 let rawSites = false;
 const captureStackTrace = Error.captureStackTrace;
+const nativeStack = Object.getOwnPropertyDescriptor(new Error(), 'stack')?.get;
+
+export function constructionFrame(err) {
+  if (typeof nativeStack !== 'function') return undefined;
+  rawSites = true;
+  let sites;
+  try {
+    sites = Reflect.apply(nativeStack, err, []);
+  } catch {
+    return undefined;
+  } finally {
+    rawSites = false;
+  }
+  const top = Array.isArray(sites) ? keptFrames(sites)[0] : undefined;
+  return top ? formatFrame(wrapCallSite(top)) : null;
+}
 
 export function callerSites(skip, limit) {
   const holder = {};
