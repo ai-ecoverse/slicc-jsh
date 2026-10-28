@@ -109,7 +109,7 @@
     "monocart-coverage-reports": "2.13.2",
     "nats": "2.29.3",
     "node-inspect-extracted": "3.3.4",
-    "nodemailer": "10.1.7",
+    "nodemailer": "10.2.0",
     "nodemon": "3.1.14",
     "pako": "3.0.2",
     "pg": "8.23.1",
