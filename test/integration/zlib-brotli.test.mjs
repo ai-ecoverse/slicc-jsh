@@ -116,7 +116,7 @@ d.end(fs.readFileSync('/os/second.br'), () => console.log(Buffer.concat(out).toS
   });
 
   it('the real axios asks for br and decodes a br response', async () => {
-    assert.equal(version('axios'), '1.20.0');
+    assert.equal(version('axios'), '1.21.0');
     await jsh.kernel.writeFile(
       '/os/axios-br.cjs',
       `const axios = require('axios');

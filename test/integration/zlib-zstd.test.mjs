@@ -95,7 +95,7 @@ server.close();
   });
 
   it('the real axios decodes a zstd response, unasked and with advertiseZstdAcceptEncoding', async () => {
-    assert.equal(version('axios'), '1.20.0');
+    assert.equal(version('axios'), '1.21.0');
     await jsh.kernel.writeFile(
       '/os/axios-zstd.cjs',
       `const axios = require('axios');
