@@ -28,7 +28,7 @@ const server = http.createServer((req, res) => {
 });`;
 
   it('the real axios loads and GETs and POSTs over http to a loopback server', async () => {
-    assert.equal(version('axios'), '1.20.0');
+    assert.equal(version('axios'), '1.21.0');
     await jsh.kernel.writeFile(
       '/os/axios-get.js',
       `${server}
