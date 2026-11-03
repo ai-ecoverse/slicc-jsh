@@ -19,6 +19,8 @@ On macOS or Linux (x64 or arm64), without npm:
 curl -fsSL https://raw.githubusercontent.com/ai-ecoverse/slicc-jsh/main/install.sh | sh
 ```
 
+Every GitHub release carries the same `install.sh` as an asset, so `https://github.com/ai-ecoverse/slicc-jsh/releases/latest/download/install.sh` is the copy from the latest release.
+
 What [`install.sh`](install.sh) does:
 
 - **Node.** It uses the `node` on `PATH` if that is Node 22 or later. If not, it asks before it downloads the latest Node 22 LTS from nodejs.org into `~/.jsh/node`, and checks it against nodejs.org's `SHASUMS256.txt`. That Node is for jsh only: no sudo, no package manager. No flag skips the question. With no terminal (CI), it stops and says how to install Node 22 (nodejs.org, Homebrew, fnm or nvm). On musl (Alpine) it asks you to install Node 22 with your package manager.
