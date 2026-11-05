@@ -60,7 +60,7 @@ server.listen(0, '127.0.0.1', async () => {
   });
 
   it("the real @smithy/node-http-handler (the AWS SDK v3's) loads, and its NodeHttpHandler sends a request", async () => {
-    assert.equal(version('@smithy/node-http-handler'), '4.13.0');
+    assert.equal(version('@smithy/node-http-handler'), '4.14.0');
     await jsh.kernel.writeFile(
       '/os/smithy.js',
       `${server}
