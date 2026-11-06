@@ -90,7 +90,7 @@ console.log('servers', JSON.stringify(dns.getServers()), 'hints', dns.ADDRCONFIG
   });
 
   it('the real got loads (it needs http2 and dns at load) and GETs and POSTs to a loopback server by name', async () => {
-    assert.equal(version('got'), '16.1.0');
+    assert.equal(version('got'), '16.2.0');
     await jsh.kernel.writeFile(
       '/os/got-get.mjs',
       `import http from 'node:http';
