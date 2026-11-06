@@ -57,7 +57,7 @@ describe('zlib Brotli decompression (kernel)', () => {
   after(() => jsh?.close());
 
   it('the real got asks for br (process.versions.brotli) and decodes a br response, whole and streamed', async () => {
-    assert.equal(version('got'), '16.1.0');
+    assert.equal(version('got'), '16.2.0');
     await jsh.kernel.writeFile(
       '/os/got-br.mjs',
       `import got from 'got';

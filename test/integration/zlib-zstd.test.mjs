@@ -60,7 +60,7 @@ describe('zlib zstd decompression (kernel)', () => {
   after(() => jsh?.close());
 
   it('the real got asks for zstd (process.versions.zstd) and decodes a zstd response, whole and streamed', async () => {
-    assert.equal(version('got'), '16.1.0');
+    assert.equal(version('got'), '16.2.0');
     assert.ok(pageZst.length > 1400, 'the streamed body comes in several pieces');
     await jsh.kernel.writeFile(
       '/os/got-zstd.mjs',
