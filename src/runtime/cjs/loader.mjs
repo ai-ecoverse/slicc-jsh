@@ -8,6 +8,16 @@ import { createResolver, isBuiltinName } from './resolve.mjs';
 
 const decoder = new TextDecoder();
 
+/** npm undici's dispatcher symbols, remapped so they do not share Node's Agent. */
+export function isolateUndiciDispatcher(source, filename) {
+  if (!/\/node_modules\/undici\//.test(filename)) return source;
+  return source
+    .replaceAll("Symbol.for('undici.globalDispatcher.2')", "Symbol.for('slicc-jsh.undici.globalDispatcher.2')")
+    .replaceAll('Symbol.for("undici.globalDispatcher.2")', 'Symbol.for("slicc-jsh.undici.globalDispatcher.2")')
+    .replaceAll("Symbol.for('undici.globalDispatcher.1')", "Symbol.for('slicc-jsh.undici.globalDispatcher.1')")
+    .replaceAll('Symbol.for("undici.globalDispatcher.1")', 'Symbol.for("slicc-jsh.undici.globalDispatcher.1")');
+}
+
 /**
  * Synchronous CJS module system over ctx.sync.
  */
@@ -296,7 +306,7 @@ export function createCjs({
       throw err;
     }
 
-    const stripped = stripHashbang(source);
+    const stripped = stripHashbang(isolateUndiciDispatcher(source, filename));
     // Route import() through the ESM loader with this file as referrer (not data:).
     const {
       code: body,
