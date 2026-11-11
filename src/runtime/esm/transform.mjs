@@ -467,7 +467,9 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
       // Default-value expressions still rewrite free refs not in `inner`.
       if (node.id) visit(node.id, node, inner);
       for (const p of node.params) visit(p, node, inner);
-      visit(node.body, node, inner);
+      const bodyShadows = new Set(inner);
+      collectHoistedVars(node.body, (n) => bodyShadows.add(n));
+      visit(node.body, node, bodyShadows);
       return;
     }
 
@@ -576,6 +578,31 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
       continue;
     }
     visit(stmt, ast, topShadows);
+  }
+}
+
+function collectHoistedVars(node, onName) {
+  if (!node || typeof node !== 'object') return;
+  if (
+    node.type === 'FunctionDeclaration' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'ArrowFunctionExpression'
+  ) {
+    return;
+  }
+  if (node.type === 'VariableDeclaration' && node.kind === 'var') {
+    for (const d of node.declarations) collectBoundNames(d.id, onName);
+  }
+  for (const key of Object.keys(node)) {
+    if (key === 'start' || key === 'end' || key === 'loc' || key === 'range') continue;
+    const val = node[key];
+    if (Array.isArray(val)) {
+      for (const child of val) {
+        if (child && typeof child.type === 'string') collectHoistedVars(child, onName);
+      }
+    } else if (val && typeof val.type === 'string') {
+      collectHoistedVars(val, onName);
+    }
   }
 }
 

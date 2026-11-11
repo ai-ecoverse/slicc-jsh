@@ -1,0 +1,7 @@
+for-of-var 1
+for-var 1
+for-in-var a
+if-var 2
+try-var 3
+nested-fn-var 9 import-ok
+default-param import

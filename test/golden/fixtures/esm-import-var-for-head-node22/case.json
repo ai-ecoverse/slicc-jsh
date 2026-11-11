@@ -1,0 +1,16 @@
+{
+  "description": "a function-scoped var declared only in a for head, or nested under if/try, shadows a same-named import for the whole function; nested functions keep their own vars; default params still see the import",
+  "argv": ["script.mjs"],
+  "shim": true,
+  "files": [
+    { "path": "/os/script.mjs", "from": "script.mjs" },
+    { "path": "/os/for-of-var.mjs", "from": "for-of-var.mjs" },
+    { "path": "/os/for-var.mjs", "from": "for-var.mjs" },
+    { "path": "/os/for-in-var.mjs", "from": "for-in-var.mjs" },
+    { "path": "/os/if-var.mjs", "from": "if-var.mjs" },
+    { "path": "/os/try-var.mjs", "from": "try-var.mjs" },
+    { "path": "/os/nested-fn-var.mjs", "from": "nested-fn-var.mjs" },
+    { "path": "/os/default-param.mjs", "from": "default-param.mjs" },
+    { "path": "/os/package.json", "from": "package.json" }
+  ]
+}
