@@ -505,6 +505,13 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
       return;
     }
 
+    if (node.type === 'StaticBlock') {
+      const inner = new Set(shadows);
+      for (const stmt of node.body) collectHoistedVars(stmt, (n) => inner.add(n));
+      for (const stmt of node.body) visit(stmt, node, inner);
+      return;
+    }
+
     if (node.type === 'ForOfStatement' || node.type === 'ForInStatement') {
       const left = node.left;
       if (left.type === 'VariableDeclaration' && left.kind !== 'var') {
@@ -586,7 +593,8 @@ function collectHoistedVars(node, onName) {
   if (
     node.type === 'FunctionDeclaration' ||
     node.type === 'FunctionExpression' ||
-    node.type === 'ArrowFunctionExpression'
+    node.type === 'ArrowFunctionExpression' ||
+    node.type === 'StaticBlock'
   ) {
     return;
   }

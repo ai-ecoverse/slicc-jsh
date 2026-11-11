@@ -5,3 +5,7 @@ if-var 2
 try-var 3
 nested-fn-var 9 import-ok
 default-param import
+static-block-var block block
+static-block-var sib import
+static-block-var method import
+static-block-var fn import
