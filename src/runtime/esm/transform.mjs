@@ -503,6 +503,34 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
       return;
     }
 
+    if (node.type === 'ForOfStatement' || node.type === 'ForInStatement') {
+      const left = node.left;
+      if (left.type === 'VariableDeclaration' && left.kind !== 'var') {
+        const inner = new Set(shadows);
+        for (const d of left.declarations) collectBoundNames(d.id, (n) => inner.add(n));
+        visit(node.right, node, inner);
+        for (const d of left.declarations) visit(d.id, d, inner);
+        visit(node.body, node, inner);
+        return;
+      }
+    }
+
+    if (node.type === 'ForStatement') {
+      const init = node.init;
+      if (init?.type === 'VariableDeclaration' && init.kind !== 'var') {
+        const inner = new Set(shadows);
+        for (const d of init.declarations) collectBoundNames(d.id, (n) => inner.add(n));
+        for (const d of init.declarations) {
+          visit(d.id, d, inner);
+          if (d.init) visit(d.init, d, inner);
+        }
+        if (node.test) visit(node.test, node, inner);
+        if (node.update) visit(node.update, node, inner);
+        visit(node.body, node, inner);
+        return;
+      }
+    }
+
     for (const key of Object.keys(node)) {
       if (key === 'start' || key === 'end' || key === 'loc' || key === 'range') continue;
       const val = node[key];
@@ -555,6 +583,10 @@ function collectBoundNames(pattern, onName) {
   if (!pattern) return;
   if (pattern.type === 'Identifier') {
     onName(pattern.name);
+    return;
+  }
+  if (pattern.type === 'RestElement') {
+    collectBoundNames(pattern.argument, onName);
     return;
   }
   if (pattern.type === 'ObjectPattern') {

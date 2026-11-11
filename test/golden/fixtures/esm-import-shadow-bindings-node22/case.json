@@ -1,0 +1,21 @@
+{
+  "description": "inner bindings named like an import (for/for-in/for-of let/const, rest params, array rest, closures, nested shadowing) resolve to the local, not the import; default and named imports, not namespace",
+  "argv": ["script.mjs"],
+  "shim": true,
+  "files": [
+    { "path": "/os/script.mjs", "from": "script.mjs" },
+    { "path": "/os/for-of.mjs", "from": "for-of.mjs" },
+    { "path": "/os/for.mjs", "from": "for.mjs" },
+    { "path": "/os/for-in.mjs", "from": "for-in.mjs" },
+    { "path": "/os/rest-fn.mjs", "from": "rest-fn.mjs" },
+    { "path": "/os/rest-arrow.mjs", "from": "rest-arrow.mjs" },
+    { "path": "/os/rest-array.mjs", "from": "rest-array.mjs" },
+    { "path": "/os/closure-loop.mjs", "from": "closure-loop.mjs" },
+    { "path": "/os/nested-shadow.mjs", "from": "nested-shadow.mjs" },
+    { "path": "/os/named-import.mjs", "from": "named-import.mjs" },
+    { "path": "/os/tdz-for-of.mjs", "from": "tdz-for-of.mjs" },
+    { "path": "/os/tdz-for-in.mjs", "from": "tdz-for-in.mjs" },
+    { "path": "/os/tdz-for-init.mjs", "from": "tdz-for-init.mjs" },
+    { "path": "/os/package.json", "from": "package.json" }
+  ]
+}

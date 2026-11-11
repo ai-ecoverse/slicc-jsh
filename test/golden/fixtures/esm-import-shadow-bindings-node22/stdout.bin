@@ -1,0 +1,18 @@
+for-of string
+for number
+for-in string
+rest-fn arr
+rest-arrow arr
+rest-array arr
+closure-loop 1,2 import-ok
+nested-shadow inner import-ok
+named-for-of string
+named-rest arr
+tdz-for-of ReferenceError
+tdz-for-of-import import-ok
+tdz-for-in ReferenceError
+tdz-for-in-import import-ok
+tdz-for-init ReferenceError
+tdz-for-earlier ReferenceError
+tdz-for-closure inner
+tdz-for-import import-ok
