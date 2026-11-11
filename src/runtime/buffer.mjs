@@ -367,10 +367,9 @@ function bufferIndexOutOfRange() {
   throw err;
 }
 
-/** src/node_buffer.cc ParseArrayIndex for *Slice / *Write. */
 function parseArrayIndex(arg, def) {
   if (arg === undefined) return def;
-  const n = Number(arg);
+  const n = +arg;
   if (Number.isNaN(n)) return 0;
   if (n === -Infinity) bufferIndexOutOfRange();
   if (n === Infinity) return Number.MAX_SAFE_INTEGER;
@@ -380,7 +379,6 @@ function parseArrayIndex(arg, def) {
   return tmp;
 }
 
-/** src/node_buffer.cc StringSlice. */
 function stringSlice(buf, enc, startArg, endArg) {
   if (buf.length === 0) return '';
   let start = parseArrayIndex(startArg, 0);
@@ -398,11 +396,10 @@ function writeMustBeString(string) {
   }
 }
 
-/** lib/internal/buffer.js utf8Write / asciiWrite / latin1Write wrappers. */
 function wrappedStringWrite(buf, enc, string, offset = 0, length = buf.byteLength) {
-  writeMustBeString(string);
   if (offset < 0 || offset > buf.byteLength) bufferOutOfBoundsNamed('offset');
   if (length < 0) bufferOutOfBoundsNamed('length');
+  writeMustBeString(string);
   const off = parseArrayIndex(offset, 0);
   if (off > buf.byteLength) bufferOutOfBoundsNamed('offset');
   let max = parseArrayIndex(length, buf.byteLength - off);
@@ -413,7 +410,6 @@ function wrappedStringWrite(buf, enc, string, offset = 0, length = buf.byteLengt
   return bytes.length;
 }
 
-/** src/node_buffer.cc StringWrite (hex / base64 / base64url / ucs2). */
 function nativeStringWrite(buf, enc, string, offsetArg, lengthArg) {
   writeMustBeString(string);
   const offset = parseArrayIndex(offsetArg, 0);
@@ -1278,50 +1274,6 @@ export function createBuffer({ track = true } = {}) {
       return bytes.length;
     }
 
-    utf8Slice(start, end) {
-      return stringSlice(this, 'utf8', start, end);
-    }
-    latin1Slice(start, end) {
-      return stringSlice(this, 'latin1', start, end);
-    }
-    asciiSlice(start, end) {
-      return stringSlice(this, 'ascii', start, end);
-    }
-    hexSlice(start, end) {
-      return stringSlice(this, 'hex', start, end);
-    }
-    base64Slice(start, end) {
-      return stringSlice(this, 'base64', start, end);
-    }
-    base64urlSlice(start, end) {
-      return stringSlice(this, 'base64url', start, end);
-    }
-    ucs2Slice(start, end) {
-      return stringSlice(this, 'utf16le', start, end);
-    }
-
-    utf8Write(string, offset = 0, length = this.byteLength) {
-      return wrappedStringWrite(this, 'utf8', string, offset, length);
-    }
-    latin1Write(string, offset = 0, length = this.byteLength) {
-      return wrappedStringWrite(this, 'latin1', string, offset, length);
-    }
-    asciiWrite(string, offset = 0, length = this.byteLength) {
-      return wrappedStringWrite(this, 'ascii', string, offset, length);
-    }
-    hexWrite(string, offset, length) {
-      return nativeStringWrite(this, 'hex', string, offset, length);
-    }
-    base64Write(string, offset, length) {
-      return nativeStringWrite(this, 'base64', string, offset, length);
-    }
-    base64urlWrite(string, offset, length) {
-      return nativeStringWrite(this, 'base64url', string, offset, length);
-    }
-    ucs2Write(string, offset, length) {
-      return nativeStringWrite(this, 'utf16le', string, offset, length);
-    }
-
     compare(target) {
       if (!isBufView(target)) throwBufferArgType('target', target);
       return Buffer.compare(this, target);
@@ -1589,6 +1541,58 @@ export function createBuffer({ track = true } = {}) {
   Object.defineProperty(Buffer, 'name', { value: 'Buffer', configurable: true });
   for (const key of ['from', 'alloc', 'allocUnsafe', 'allocUnsafeSlow', 'concat', 'byteLength', 'isBuffer', 'isEncoding', 'compare']) {
     Object.defineProperty(Buffer, key, { enumerable: true });
+  }
+  const sliceWrite = {
+    utf8Slice: function () {
+      return stringSlice(this, 'utf8', arguments[0], arguments[1]);
+    },
+    latin1Slice: function () {
+      return stringSlice(this, 'latin1', arguments[0], arguments[1]);
+    },
+    asciiSlice: function () {
+      return stringSlice(this, 'ascii', arguments[0], arguments[1]);
+    },
+    hexSlice: function () {
+      return stringSlice(this, 'hex', arguments[0], arguments[1]);
+    },
+    base64Slice: function () {
+      return stringSlice(this, 'base64', arguments[0], arguments[1]);
+    },
+    base64urlSlice: function () {
+      return stringSlice(this, 'base64url', arguments[0], arguments[1]);
+    },
+    ucs2Slice: function () {
+      return stringSlice(this, 'utf16le', arguments[0], arguments[1]);
+    },
+    utf8Write: function (string, offset = 0, length = this.byteLength) {
+      return wrappedStringWrite(this, 'utf8', string, offset, length);
+    },
+    latin1Write: function (string, offset = 0, length = this.byteLength) {
+      return wrappedStringWrite(this, 'latin1', string, offset, length);
+    },
+    asciiWrite: function (string, offset = 0, length = this.byteLength) {
+      return wrappedStringWrite(this, 'ascii', string, offset, length);
+    },
+    hexWrite: function () {
+      return nativeStringWrite(this, 'hex', arguments[0], arguments[1], arguments[2]);
+    },
+    base64Write: function () {
+      return nativeStringWrite(this, 'base64', arguments[0], arguments[1], arguments[2]);
+    },
+    base64urlWrite: function () {
+      return nativeStringWrite(this, 'base64url', arguments[0], arguments[1], arguments[2]);
+    },
+    ucs2Write: function () {
+      return nativeStringWrite(this, 'utf16le', arguments[0], arguments[1], arguments[2]);
+    },
+  };
+  for (const [name, fn] of Object.entries(sliceWrite)) {
+    Object.defineProperty(Buffer.prototype, name, {
+      value: fn,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
   }
   allocated.set(Buffer, () => held);
 

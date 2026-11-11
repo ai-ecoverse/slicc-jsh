@@ -122,3 +122,29 @@ console.log(
     }),
   ].join(' | ')
 );
+
+console.log(
+  'order-bigint-descriptors',
+  [
+    r(() => Buffer.alloc(10).utf8Write(1, -1)),
+    r(() => Buffer.alloc(10).utf8Write(1, 0, -1)),
+    r(() => Buffer.alloc(10).asciiWrite(1, -1)),
+    r(() => Buffer.alloc(10).asciiWrite(1, 0, -1)),
+    r(() => Buffer.alloc(10).latin1Write(1, -1)),
+    r(() => Buffer.alloc(10).latin1Write(1, 0, -1)),
+    r(() => Buffer.alloc(10).hexWrite(1, -1)),
+    r(() => Buffer.alloc(10).hexWrite(1, 0, -1)),
+    r(() => Buffer.from('hello').utf8Slice(1n)),
+    r(() => Buffer.from('hello').utf8Slice({ valueOf() { return 1n; } })),
+    r(() => Buffer.from('hello').utf8Slice(0, 1n)),
+    r(() => Buffer.alloc(4).utf8Write('x', 1n)),
+    r(() => Buffer.alloc(4).hexWrite('ab', 1n)),
+    r(() => Buffer.alloc(4).hexWrite('ab', { valueOf() { return 1n; } })),
+    r(() =>
+      ['utf8Slice', 'hexSlice', 'utf8Write', 'asciiWrite', 'latin1Write', 'hexWrite', 'base64Write', 'ucs2Write'].map((n) => {
+        const d = Object.getOwnPropertyDescriptor(Buffer.prototype, n);
+        return `${n}:${d.enumerable}:${d.value.length}`;
+      })
+    ),
+  ].join(' | ')
+);
