@@ -187,7 +187,6 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         allowHalfOpen: Boolean(options.allowHalfOpen),
         autoDestroy: true,
         emitClose: false,
-        ...(options.highWaterMark !== undefined ? { highWaterMark: options.highWaterMark } : {}),
       });
       this.#emitsClose = options.emitClose !== false;
       this.connecting = false;
@@ -232,21 +231,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     }
 
     #refed = true;
-    #pauseHold = null;
-    #armPauseHold() {
-      if (this.#pauseHold) return;
-      this.#pauseHold = { kind: 'socket-pause' };
-      handles.add(this.#pauseHold);
-    }
-    #dropPauseHold() {
-      if (!this.#pauseHold) return;
-      handles.delete(this.#pauseHold);
-      this.#pauseHold = null;
-    }
     ref() {
       this.#refed = true;
       if (this.#handle && !this.#readableEof && !this.#readPaused && !this.#lazyRead) handles.add(this.#handle);
-      if (this.#readPaused && this.readableFlowing === false) this.#armPauseHold();
       return this;
     }
     unref() {
@@ -254,7 +241,6 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
       if (this.#handle) handles.delete(this.#handle);
       if (this.#readHold) handles.delete(this.#readHold);
       this.#readHold = null;
-      this.#dropPauseHold();
       return this;
     }
 
@@ -711,10 +697,8 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         handles.delete(this.#handle);
         if (this.#refed) trackPromise(handles, this.#lastWrite).catch(() => {});
       }
-      if (this.#refed && this.readableFlowing === false) this.#armPauseHold();
       return new Promise((resolve) => (this.#readWanted = resolve)).finally(() => {
         this.#readPaused = false;
-        this.#dropPauseHold();
         if (this.#handle && this.#refed && !this.#readableEof) handles.add(this.#handle);
       });
     }
