@@ -8,6 +8,9 @@ const entries = [
   './closure-loop.mjs',
   './nested-shadow.mjs',
   './named-import.mjs',
+  './tdz-for-of.mjs',
+  './tdz-for-in.mjs',
+  './tdz-for-init.mjs',
 ];
 for (const spec of entries) {
   await import(spec);

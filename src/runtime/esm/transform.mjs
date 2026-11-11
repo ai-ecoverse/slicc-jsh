@@ -508,7 +508,7 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
       if (left.type === 'VariableDeclaration' && left.kind !== 'var') {
         const inner = new Set(shadows);
         for (const d of left.declarations) collectBoundNames(d.id, (n) => inner.add(n));
-        visit(node.right, node, shadows);
+        visit(node.right, node, inner);
         for (const d of left.declarations) visit(d.id, d, inner);
         visit(node.body, node, inner);
         return;
@@ -520,11 +520,9 @@ function rewriteLiveIdentifiers(ast, liveLocals, replacements) {
       if (init?.type === 'VariableDeclaration' && init.kind !== 'var') {
         const inner = new Set(shadows);
         for (const d of init.declarations) collectBoundNames(d.id, (n) => inner.add(n));
-        const seen = new Set(shadows);
         for (const d of init.declarations) {
           visit(d.id, d, inner);
-          if (d.init) visit(d.init, d, seen);
-          collectBoundNames(d.id, (n) => seen.add(n));
+          if (d.init) visit(d.init, d, inner);
         }
         if (node.test) visit(node.test, node, inner);
         if (node.update) visit(node.update, node, inner);

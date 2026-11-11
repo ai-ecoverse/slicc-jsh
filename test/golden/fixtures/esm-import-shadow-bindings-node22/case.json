@@ -13,6 +13,9 @@
     { "path": "/os/closure-loop.mjs", "from": "closure-loop.mjs" },
     { "path": "/os/nested-shadow.mjs", "from": "nested-shadow.mjs" },
     { "path": "/os/named-import.mjs", "from": "named-import.mjs" },
+    { "path": "/os/tdz-for-of.mjs", "from": "tdz-for-of.mjs" },
+    { "path": "/os/tdz-for-in.mjs", "from": "tdz-for-in.mjs" },
+    { "path": "/os/tdz-for-init.mjs", "from": "tdz-for-init.mjs" },
     { "path": "/os/package.json", "from": "package.json" }
   ]
 }
