@@ -246,7 +246,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
     ref() {
       this.#refed = true;
       if (this.#handle && !this.#readableEof && !this.#readPaused && !this.#lazyRead) handles.add(this.#handle);
-      if (this.#readPaused) this.#armPauseHold();
+      if (this.#readPaused && this.readableFlowing === false) this.#armPauseHold();
       return this;
     }
     unref() {
@@ -711,7 +711,7 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         handles.delete(this.#handle);
         if (this.#refed) trackPromise(handles, this.#lastWrite).catch(() => {});
       }
-      if (this.#refed) this.#armPauseHold();
+      if (this.#refed && this.readableFlowing === false) this.#armPauseHold();
       return new Promise((resolve) => (this.#readWanted = resolve)).finally(() => {
         this.#readPaused = false;
         this.#dropPauseHold();

@@ -125,7 +125,9 @@ await new Promise((resolve, reject) => {
   socket.once('error', reject);
 });
 socket._readableState.highWaterMark = 64;
-console.log('hwm', socket.readableHighWaterMark);
+socket.on('data', () => {});
+socket.pause();
+console.log('hwm', socket.readableHighWaterMark, 'flowing', socket.readableFlowing);
 socket.write('GET /pause HTTP/1.1\\r\\nHost: slow.test\\r\\nConnection: close\\r\\n\\r\\n');
 await new Promise((resolve) => {
   const t = setTimeout(resolve, 150);
@@ -157,7 +159,7 @@ console.log('DONE');
     );
     const out = await jsh.run(['node', 'tls-hwm-pause.mjs', UPLINK, String(port)]);
     assert.equal(out.status, 0, out.stdout + out.stderr);
-    assert.match(out.stdout, /^hwm 64$/m);
+    assert.match(out.stdout, /^hwm 64 flowing false$/m);
     assert.match(out.stdout, /^after-pause /m);
     assert.match(out.stdout, /^DONE$/m);
     assert.doesNotMatch(out.stderr, /unsettled top-level await/);
