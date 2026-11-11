@@ -355,6 +355,77 @@ function bufferOutOfBounds() {
   throw err;
 }
 
+function bufferOutOfBoundsNamed(name) {
+  const err = new RangeError(`"${name}" is outside of buffer bounds`);
+  err.code = 'ERR_BUFFER_OUT_OF_BOUNDS';
+  throw err;
+}
+
+function bufferIndexOutOfRange() {
+  const err = new RangeError('Index out of range');
+  err.code = 'ERR_OUT_OF_RANGE';
+  throw err;
+}
+
+/** src/node_buffer.cc ParseArrayIndex for *Slice / *Write. */
+function parseArrayIndex(arg, def) {
+  if (arg === undefined) return def;
+  const n = Number(arg);
+  if (Number.isNaN(n)) return 0;
+  if (n === -Infinity) bufferIndexOutOfRange();
+  if (n === Infinity) return Number.MAX_SAFE_INTEGER;
+  const tmp = Math.trunc(n);
+  if (tmp < 0) bufferIndexOutOfRange();
+  if (tmp > Number.MAX_SAFE_INTEGER) return Number.MAX_SAFE_INTEGER;
+  return tmp;
+}
+
+/** src/node_buffer.cc StringSlice. */
+function stringSlice(buf, enc, startArg, endArg) {
+  if (buf.length === 0) return '';
+  let start = parseArrayIndex(startArg, 0);
+  let end = parseArrayIndex(endArg, buf.length);
+  if (end < start) end = start;
+  if (end > buf.length) bufferIndexOutOfRange();
+  return toStringOf(buf, enc, start, end);
+}
+
+function writeMustBeString(string) {
+  if (typeof string !== 'string') {
+    const e = new TypeError('argument must be a string');
+    e.code = 'ERR_INVALID_ARG_TYPE';
+    throw e;
+  }
+}
+
+/** lib/internal/buffer.js utf8Write / asciiWrite / latin1Write wrappers. */
+function wrappedStringWrite(buf, enc, string, offset = 0, length = buf.byteLength) {
+  writeMustBeString(string);
+  if (offset < 0 || offset > buf.byteLength) bufferOutOfBoundsNamed('offset');
+  if (length < 0) bufferOutOfBoundsNamed('length');
+  const off = parseArrayIndex(offset, 0);
+  if (off > buf.byteLength) bufferOutOfBoundsNamed('offset');
+  let max = parseArrayIndex(length, buf.byteLength - off);
+  max = Math.min(buf.byteLength - off, max);
+  if (max === 0) return 0;
+  const bytes = encodeForWrite(string, enc, max);
+  buf.set(bytes, off);
+  return bytes.length;
+}
+
+/** src/node_buffer.cc StringWrite (hex / base64 / base64url / ucs2). */
+function nativeStringWrite(buf, enc, string, offsetArg, lengthArg) {
+  writeMustBeString(string);
+  const offset = parseArrayIndex(offsetArg, 0);
+  if (offset > buf.byteLength) bufferOutOfBoundsNamed('offset');
+  let max = parseArrayIndex(lengthArg, buf.byteLength - offset);
+  max = Math.min(buf.byteLength - offset, max);
+  if (max === 0) return 0;
+  const bytes = encodeForWrite(string, enc, max);
+  buf.set(bytes, offset);
+  return bytes.length;
+}
+
 function bufferInvalidArgType(name, expected, value) {
   let received;
   if (value === undefined) received = 'undefined';
@@ -1205,6 +1276,50 @@ export function createBuffer({ track = true } = {}) {
       const bytes = encodeForWrite(string, enc, length);
       this.set(bytes, offset);
       return bytes.length;
+    }
+
+    utf8Slice(start, end) {
+      return stringSlice(this, 'utf8', start, end);
+    }
+    latin1Slice(start, end) {
+      return stringSlice(this, 'latin1', start, end);
+    }
+    asciiSlice(start, end) {
+      return stringSlice(this, 'ascii', start, end);
+    }
+    hexSlice(start, end) {
+      return stringSlice(this, 'hex', start, end);
+    }
+    base64Slice(start, end) {
+      return stringSlice(this, 'base64', start, end);
+    }
+    base64urlSlice(start, end) {
+      return stringSlice(this, 'base64url', start, end);
+    }
+    ucs2Slice(start, end) {
+      return stringSlice(this, 'utf16le', start, end);
+    }
+
+    utf8Write(string, offset = 0, length = this.byteLength) {
+      return wrappedStringWrite(this, 'utf8', string, offset, length);
+    }
+    latin1Write(string, offset = 0, length = this.byteLength) {
+      return wrappedStringWrite(this, 'latin1', string, offset, length);
+    }
+    asciiWrite(string, offset = 0, length = this.byteLength) {
+      return wrappedStringWrite(this, 'ascii', string, offset, length);
+    }
+    hexWrite(string, offset, length) {
+      return nativeStringWrite(this, 'hex', string, offset, length);
+    }
+    base64Write(string, offset, length) {
+      return nativeStringWrite(this, 'base64', string, offset, length);
+    }
+    base64urlWrite(string, offset, length) {
+      return nativeStringWrite(this, 'base64url', string, offset, length);
+    }
+    ucs2Write(string, offset, length) {
+      return nativeStringWrite(this, 'utf16le', string, offset, length);
     }
 
     compare(target) {
