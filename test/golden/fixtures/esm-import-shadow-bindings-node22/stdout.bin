@@ -1,0 +1,10 @@
+for-of string
+for number
+for-in string
+rest-fn arr
+rest-arrow arr
+rest-array arr
+closure-loop 1,2 import-ok
+nested-shadow inner import-ok
+named-for-of string
+named-rest arr
