@@ -1,0 +1,13 @@
+{
+  "description": "Buffer.prototype undocumented *Slice / *Write methods as Node 22.22.0: utf8/latin1/ascii/hex/base64/base64url/ucs2, argument defaults, Index out of range, ERR_BUFFER_OUT_OF_BOUNDS",
+  "argv": [
+    "script.js"
+  ],
+  "shim": true,
+  "files": [
+    {
+      "path": "/os/script.js",
+      "from": "script.js"
+    }
+  ]
+}

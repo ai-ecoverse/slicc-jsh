@@ -12,7 +12,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { createNodeKernel } from '@ai-ecoverse/slicc-kernel/node';
 import { fakeUplink } from '@ai-ecoverse/slicc-kernel/testing';
-import { packageFiles, withJsh } from './helpers.mjs';
+import { devPackageTree, packageFiles, withJsh } from './helpers.mjs';
 
 const program = (lines) => `(async () => {\n${lines.join('\n')}\n})().catch((e) => { console.error(e); process.exit(1); });\n`;
 const GET = [
@@ -421,5 +421,39 @@ describe('http.request on loopback stays the kernel’s own', () => {
     const r = await jsh.run(['node', 'loop.js']);
     assert.equal(r.status, 0, r.stderr);
     assert.equal(r.stdout, '127.0.0.1 200 loop /z yes object\nlocalhost 200 loop /z yes object\n');
+  });
+});
+
+describe('undici request().body.text() needs Buffer.prototype.utf8Slice', () => {
+  let jsh;
+  before(async () => {
+    jsh = await withJsh();
+    for (const [path, data] of devPackageTree('undici')) {
+      await jsh.kernel.writeFile(`/os${path}`, data);
+    }
+  });
+  after(() => jsh?.close());
+
+  it('decodes the body through utf8Slice', async () => {
+    await jsh.kernel.writeFile(
+      '/os/undici-body.js',
+      program([
+        "const http = require('http');",
+        "const { request, Agent } = require('undici');",
+        "const srv = http.createServer((req, res) => res.end('hello undici'));",
+        'await new Promise((r) => srv.listen(0, "127.0.0.1", r));',
+        'const p = srv.address().port;',
+        'const agent = new Agent({ keepAliveTimeout: 1, keepAliveMaxTimeout: 1, connections: 1 });',
+        'const { statusCode, body } = await request(`http://127.0.0.1:${p}/`, { dispatcher: agent });',
+        'const text = await body.text();',
+        'console.log(statusCode, text, typeof Buffer.prototype.utf8Slice);',
+        'await agent.close();',
+        'srv.close();',
+        'await new Promise((r) => srv.on("close", r));',
+      ])
+    );
+    const r = await jsh.run(['node', 'undici-body.js']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout, '200 hello undici function\n');
   });
 });
