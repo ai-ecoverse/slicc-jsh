@@ -36,15 +36,15 @@ describe('undici https fetch keeps the program alive (#1270)', () => {
 
   before(async () => {
     server = createHttpsServer({ key: leaf.key, cert: leaf.cert }, (req, res) => {
-      res.writeHead(200, { 'Content-Type': 'text/plain', 'Transfer-Encoding': 'chunked' });
-      res.write('A'.repeat(32));
-      setTimeout(() => {
-        res.write('B'.repeat(32));
-      }, 40);
-      setTimeout(() => {
-        res.write('C'.repeat(32));
-        res.end();
-      }, 120);
+      if (req.url === '/pause') {
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Transfer-Encoding': 'chunked' });
+        const chunk = Buffer.alloc(256, 0x41);
+        for (let i = 0; i < 16; i++) res.write(chunk);
+        setTimeout(() => res.end(), 200);
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('ok');
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
     port = server.address().port;
@@ -66,52 +66,100 @@ describe('undici https fetch keeps the program alive (#1270)', () => {
     server?.close();
   });
 
-  it('npm undici fetch over loopback https reads a slow chunked body to the end', async () => {
+  it('npm undici does not reuse Node undici Agent on the shared dispatcher slot', async () => {
     await jsh.kernel.writeFile(
-      '/os/undici-slow.mjs',
-      `import { fetch, Agent, setGlobalDispatcher, getGlobalDispatcher } from '/os/node_modules/undici/index.js';
+      '/os/undici-dispatcher.mjs',
+      `import { createRequire } from 'module';
+const require = createRequire('/os/undici-dispatcher.mjs');
+const nodeSym = Symbol.for('undici.globalDispatcher.2');
+const jshSym = Symbol.for('slicc-jsh.undici.globalDispatcher.2');
+Object.defineProperty(globalThis, nodeSym, {
+  value: { dispatch() { return false; }, close() {}, destroy() {} },
+  writable: true,
+  enumerable: false,
+  configurable: false,
+});
+const undici = require('/os/node_modules/undici/index.js');
+const fs = require('fs');
+if (undici.getGlobalDispatcher() === globalThis[nodeSym]) {
+  throw new Error('npm undici reused Node dispatcher slot');
+}
+if (globalThis[jshSym] == null) {
+  throw new Error('npm undici did not install on slicc-jsh dispatcher slot');
+}
+const ca = fs.readFileSync('/os/ca.pem');
+undici.setGlobalDispatcher(new undici.Agent({
+  connect: { ca, servername: 'slow.test', rejectUnauthorized: true },
+  allowH2: false,
+}));
+const host = process.argv[2];
+const port = Number(process.argv[3]);
+const r = await undici.fetch('https://' + host + ':' + port + '/');
+const text = await r.text();
+console.log('ok', r.status, text, typeof globalThis[nodeSym].dispatch);
+`
+    );
+    const out = await jsh.run(['node', 'undici-dispatcher.mjs', UPLINK, String(port)]);
+    assert.equal(out.status, 0, out.stdout + out.stderr);
+    assert.match(out.stdout, /^ok 200 ok function$/m);
+    assert.doesNotMatch(out.stderr, /unsettled top-level await/);
+  });
+
+  it('a high-water-mark pause on a TLS socket keeps the program alive', async () => {
+    await jsh.kernel.writeFile(
+      '/os/tls-hwm-pause.mjs',
+      `import tls from 'tls';
 import fs from 'fs';
 const ca = fs.readFileSync('/os/ca.pem');
 const host = process.argv[2];
 const port = Number(process.argv[3]);
-if (getGlobalDispatcher()?.constructor?.toString().includes('__name')) {
-  throw new Error('Node undici Agent still installed as global dispatcher');
+const socket = tls.connect({
+  host,
+  port,
+  servername: 'slow.test',
+  ca,
+  rejectUnauthorized: true,
+});
+await new Promise((resolve, reject) => {
+  socket.once('secureConnect', resolve);
+  socket.once('error', reject);
+});
+socket._readableState.highWaterMark = 64;
+console.log('hwm', socket.readableHighWaterMark);
+socket.write('GET /pause HTTP/1.1\\r\\nHost: slow.test\\r\\nConnection: close\\r\\n\\r\\n');
+await new Promise((resolve) => {
+  const t = setTimeout(resolve, 150);
+  t.unref?.();
+});
+console.log('after-pause', socket.readableLength);
+let total = 0;
+const ended = new Promise((resolve) => {
+  if (socket.readableEnded) resolve();
+  else socket.once('end', resolve);
+});
+for (;;) {
+  let chunk = socket.read();
+  while (chunk) {
+    total += chunk.length;
+    chunk = socket.read();
+  }
+  if (socket.readableEnded) break;
+  await Promise.race([
+    ended,
+    new Promise((resolve) => socket.once('readable', resolve)),
+  ]);
+  if (socket.readableEnded && socket.readableLength === 0) break;
 }
-setGlobalDispatcher(new Agent({
-  connect: { ca, servername: 'slow.test', rejectUnauthorized: true },
-  allowH2: false,
-}));
-for (let i = 0; i < 4; i++) {
-  const r = await fetch('https://' + host + ':' + port + '/');
-  const buf = await r.arrayBuffer();
-  console.log('iter', i, r.status, buf.byteLength);
-}
+await ended;
+console.log('body', total);
 console.log('DONE');
 `
     );
-    const out = await jsh.run(['node', 'undici-slow.mjs', UPLINK, String(port)]);
+    const out = await jsh.run(['node', 'tls-hwm-pause.mjs', UPLINK, String(port)]);
     assert.equal(out.status, 0, out.stdout + out.stderr);
-    assert.match(out.stdout, /^iter 0 200 96$/m);
-    assert.match(out.stdout, /^iter 3 200 96$/m);
+    assert.match(out.stdout, /^hwm 64$/m);
+    assert.match(out.stdout, /^after-pause /m);
     assert.match(out.stdout, /^DONE$/m);
-    assert.equal(out.stderr, '');
-  });
-
-  it('npm undici default dispatcher fetch over https completes without exit 13', async () => {
-    await jsh.kernel.writeFile(
-      '/os/undici-default.mjs',
-      `import { fetch, getGlobalDispatcher } from '/os/node_modules/undici/index.js';
-const d = getGlobalDispatcher();
-console.log('bundled', !!(d && d.constructor.toString().includes('__name')));
-const r = await fetch('https://example.com/');
-const buf = await r.arrayBuffer();
-console.log('ok', r.status, buf.byteLength);
-`
-    );
-    const out = await jsh.run(['node', 'undici-default.mjs']);
-    assert.equal(out.status, 0, out.stdout + out.stderr);
-    assert.match(out.stdout, /^bundled false$/m);
-    assert.match(out.stdout, /^ok 200 \d+$/m);
     assert.doesNotMatch(out.stderr, /unsettled top-level await/);
   });
 });

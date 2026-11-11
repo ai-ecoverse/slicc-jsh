@@ -195,14 +195,6 @@ export function installMessageEvent(MessageEvent, scope = globalThis) {
   } catch {
     return () => {};
   }
-  for (const key of ['undici.globalDispatcher.2', 'undici.globalDispatcher.1']) {
-    const sym = Symbol.for(key);
-    try {
-      if (Object.prototype.hasOwnProperty.call(scope, sym)) scope[sym] = undefined;
-    } catch {
-      /* ignore */
-    }
-  }
   return () => {
     if (scope.MessageEvent === MessageEvent) delete scope.MessageEvent;
   };
