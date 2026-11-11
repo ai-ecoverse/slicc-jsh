@@ -697,7 +697,9 @@ export function createNet({ ctx, process, Buffer, handles, getStream, timers = g
         handles.delete(this.#handle);
         if (this.#refed) trackPromise(handles, this.#lastWrite).catch(() => {});
       }
-      return new Promise((resolve) => (this.#readWanted = resolve)).finally(() => {
+      const waiting = new Promise((resolve) => (this.#readWanted = resolve));
+      if (this.#refed) trackPromise(handles, waiting).catch(() => {});
+      return waiting.finally(() => {
         this.#readPaused = false;
         if (this.#handle && this.#refed && !this.#readableEof) handles.add(this.#handle);
       });
