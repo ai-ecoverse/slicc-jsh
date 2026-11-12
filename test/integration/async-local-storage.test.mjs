@@ -94,7 +94,7 @@ setTimeout(() => console.log('next timer', als.getStore()), 5);
   });
 
   it('the real playwright-core loads (it makes an AsyncLocalStorage at load) and its request context GETs a loopback server', async () => {
-    assert.equal(version('playwright-core'), '1.64.1');
+    assert.equal(version('playwright-core'), '1.65.0');
     for (const [path, data] of devPackageTree('playwright-core')) await jsh.kernel.writeFile(`/os${path}`, data);
     await jsh.kernel.writeFile(
       '/os/pw.js',
