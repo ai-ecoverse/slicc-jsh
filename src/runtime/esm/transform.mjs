@@ -265,7 +265,19 @@ export function transformEsm(source, filename, sourceUrl = filename) {
   }
 
   // --- Pass 2: rewrite import.meta and import() anywhere (AST-accurate) ---
+  // undici's dispatcher symbols in a copy a bundle carries (cf's dist) are
+  // remapped too, as the CJS loader remaps them (isolateUndiciDispatcher),
+  // so the copy doesn't share Node's Agent.
+  const remapsUndici = body.includes('undici.globalDispatcher.');
   walk(ast, (node) => {
+    if (remapsUndici && node.type === 'CallExpression') {
+      const key = undiciDispatcherKey(node);
+      if (key) {
+        const [arg] = node.arguments;
+        replacements.push({ start: arg.start, end: arg.end, text: JSON.stringify(`slicc-jsh.${key}`) });
+      }
+      return;
+    }
     if (
       node.type === 'MetaProperty' &&
       node.meta.type === 'Identifier' &&
@@ -350,6 +362,25 @@ export function transformEsm(source, filename, sourceUrl = filename) {
     exportSetup,
     hoistImports,
   };
+}
+
+/** `undici.globalDispatcher.1` or `.2` when `node` is `Symbol.for` of it, in any quotes. */
+function undiciDispatcherKey(node) {
+  const { callee, arguments: args } = node;
+  if (
+    args.length !== 1 ||
+    callee.type !== 'MemberExpression' ||
+    callee.computed ||
+    callee.object.type !== 'Identifier' ||
+    callee.object.name !== 'Symbol' ||
+    callee.property.name !== 'for'
+  ) {
+    return null;
+  }
+  const [arg] = args;
+  const value =
+    arg.type === 'Literal' ? arg.value : arg.type === 'TemplateLiteral' && !arg.expressions.length ? arg.quasis[0].value.cooked : null;
+  return value === 'undici.globalDispatcher.1' || value === 'undici.globalDispatcher.2' ? value : null;
 }
 
 /** True when Identifier is a value reference (not a declaration / property key). */

@@ -64,7 +64,8 @@ describe('undici https fetch keeps the program alive (#1270)', () => {
       '/os/undici-fetch-loop.mjs',
       `import { createRequire } from 'module';
 const require = createRequire('/os/undici-fetch-loop.mjs');
-const nodeSym = Symbol.for('undici.globalDispatcher.2');
+// The host's slot, by a key the loaders don't remap (they remap the literal).
+const nodeSym = Symbol.for(['undici', 'globalDispatcher', '2'].join('.'));
 const jshSym = Symbol.for('slicc-jsh.undici.globalDispatcher.2');
 const planted = { dispatch() { return false; }, close() {}, destroy() {} };
 Object.defineProperty(globalThis, nodeSym, {

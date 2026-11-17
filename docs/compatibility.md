@@ -470,6 +470,8 @@ The golden `dns-node22` checks the surface against Node 22.22.0, and `test/integ
 
 A third difference is fixed from slicc-kernel 1.110.5: before that, an abort no longer reached a body being read once a garbage collection had taken the request ([slicc-kernel#888](https://github.com/ai-ecoverse/slicc-kernel/issues/888)).
 
+**npm undici.** A program's own undici (npm's, or a copy a bundle carries, such as cf's or wrangler's dist) keeps its global dispatcher in a slot of its own. On the Node entry the program's global also holds the host Node's dispatcher, under the same `Symbol.for('undici.globalDispatcher.1')` and `.2`, and a copy that took it sent its requests over the host's sockets. The program's event loop doesn't count those, so `cf auth login` exited 13 as soon as it fetched ([#1270](https://github.com/ai-ecoverse/slicc-jsh/issues/1270)). So the loaders rename those keys wherever a CommonJS or ES module writes `Symbol.for()` of them as a literal, in any quotes; an ES module keeps its stack frames' columns (`undici-bundled-dispatcher.test.mjs`). A key the program computes still reaches the host's slot.
+
 **A refused `WebSocket` connect** (on the Node entry): jsh emits an `error` event and no `close`, and `readyState` stays `CONNECTING`, as Node 22's undici does. The kernel's `cause.code` is passed through on `event.error.cause` (`ECONNREFUSED`, `EAI_NONAME`, `EHOSTUNREACH`/`ENETUNREACH`, `ETIMEDOUT`, `EPROTO`). Node's own `ErrorEvent.error` has no `.code` or `.cause`, so jsh doesn't add one to the event.
 
 ## `crypto`
