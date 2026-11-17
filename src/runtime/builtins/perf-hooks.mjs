@@ -294,6 +294,10 @@ function addNodeExtras(perf) {
     const idle = Math.abs(base.idle - util1.idle);
     return { idle, active, utilization: active + idle === 0 ? 0 : active / (active + idle) };
   });
+  // undici's fetch marks each response's timing when its body ends
+  // (finalizeAndReportTiming), so it must be there. A page's timeline takes
+  // no entry from JS, so it adds none.
+  define('markResourceTiming', function markResourceTiming() {});
 }
 
 export function createPerfHooks(timers = globalThis) {

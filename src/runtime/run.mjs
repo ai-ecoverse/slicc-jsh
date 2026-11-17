@@ -36,6 +36,7 @@ import { setupChildChannel } from './builtins/ipc-channel.mjs';
 import { shadowsGlobal, undoHostArrow } from './builtins/vm.mjs';
 import { createRemotePorts, mailboxSerdes } from './web/remote-ports.mjs';
 import { createMessageEvent, installMessageEvent } from './web/message-event.mjs';
+import { installWebStreamEnds } from './web/stream-ends.mjs';
 
 // The platform's MessageChannel, before the program's own (jsh's) takes the
 // global: worker_threads' ports between threads are its ports.
@@ -481,6 +482,8 @@ export async function runNode(ctx, options = {}) {
     getHttp: () => process._builtin('http'),
     getZlib: () => process._builtin('zlib'),
   });
+  // Node's end hooks on the program's web streams, which stream.finished() reads.
+  const restoreStreamEnds = installWebStreamEnds();
   const restorePlatform = trackPlatformAsync(handles);
   const restoreBuiltins = hideNewerBuiltins();
   const WebSocket = createWebSocket(ctx, { handles, trackPromise, getNet: () => process._builtin('net') });
@@ -1282,6 +1285,7 @@ export async function runNode(ctx, options = {}) {
       restoreGlobals();
       restoreFunctionImport();
       restorePlatform();
+      restoreStreamEnds();
       restoreBuiltins();
       restoreMessageEvent();
       removeJshHandoff();

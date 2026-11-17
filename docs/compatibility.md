@@ -535,6 +535,10 @@ Where it differs:
 
 **Streams.** `stream` and `stream/promises` are readable-stream 4, loaded on first use. `Readable`/`Writable`/`Duplex` `fromWeb`/`toWeb` are Node's adapters. `stream/web` is the platform's WHATWG streams. `stream/consumers` is Node's own. `string_decoder` is the npm `string_decoder`, Node's own code; it accepts any TypedArray. Every stream and `string_decoder` share jsh's `Buffer` class.
 
+**Web streams' ends.** `stream/web` is the platform's WHATWG streams, and a browser's lack the two hooks Node's carry: `Symbol.for('nodejs.webstream.isClosedPromise')`, which `stream.finished()` waits on, and `Symbol.for('nodejs.webstream.controllerErrorFunction')`, which `addAbortSignal()` calls. Without them `finished()` on a web stream threw. undici's `fetch` calls it on every response body and gave up on a body that hadn't fully arrived, so the program exited 13 (`cf auth login`, [#1270](https://github.com/ai-ecoverse/slicc-jsh/issues/1270)). In the browser, the program's `ReadableStream` and `WritableStream` have both hooks now: the constructors are the platform's behind a wrapper that shares its prototype, so `instanceof` and `constructor` hold for every stream (golden `webstream-finished-node22`, also run in the browser by `browser-webstream-finished.test.mjs`). The gaps:
+- streams the platform makes itself (a `Blob`'s, a `TransformStream`'s sides) have no hooks;
+- a readable's end comes when its source closes it, not once its last chunk has been read, which is when Node's comes.
+
 **`Buffer`.**
 - Buffer views share memory with their source, as in Node.
 - `Buffer.allocUnsafe` and `allocUnsafeSlow` zero-fill, and `Buffer.poolSize` is `0` (no pool).
@@ -636,6 +640,7 @@ EventEmitter listeners run in the context of the code that emits, as in Node. `e
 **`perf_hooks`:**
 - `performance` and the `Performance*` classes are the program's own, and `constants` are Node's.
 - `createHistogram` and `monitorEventLoopDelay` are Node's histograms written in JS. Values are counted exactly, so above 2047 a percentile can differ from Node's 3-significant-figure HDR buckets.
+- `performance.markResourceTiming`, which undici's `fetch` calls for each response, is there. In the browser it adds no entry, since a page's timeline takes none from JS.
 
 **`v8`:** heap and code statistics (approximate), `cachedDataVersionTag`, `setFlagsFromString` (changes nothing), `startupSnapshot` (never building one), `isStringOneByteRepresentation`, and the coverage no-ops. Heap snapshots and `queryObjects` need V8's own bindings: they throw `ERR_NOT_SUPPORTED`.
 

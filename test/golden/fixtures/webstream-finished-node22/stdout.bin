@@ -1,0 +1,35 @@
+hooks function function function
+identity true true true true true true true ReadableStream 0 WritableStream 0
+call without new true
+bad pull true
+start threw start threw
+readable closed: finished; read ab
+readable closed later: finished; read late
+readable pulled: finished; read 123
+readable controller error: error Error: boom; read failed Error: boom
+readable start rejects: error RangeError: no start; read failed RangeError: no start
+readable pull rejects: error Error: no pull; read failed Error: no pull
+readable pull throws: error Error: pull threw; read failed Error: pull threw
+enqueue threw bad size
+readable size throws: error Error: bad size; read failed Error: bad size
+readable bytes: finished; read xyz
+readable bytes error: error TypeError: byte boom; read failed TypeError: byte boom
+source cancel enough
+readable canceled: finished
+readable aborted: error AbortError: The operation was aborted; read failed AbortError: The operation was aborted
+promises.finished readable: read p
+promises.finished errored: promised boom
+subclass true true true finished read m
+writable closed: finished; ok
+written a
+writable closed by sink: finished; ok
+writable write rejects: error Error: no write; failed Error: no write
+writable write throws: error Error: write threw; failed Error: write threw
+writable close rejects: error Error: no close; failed Error: no close
+sink abort stop
+writable aborted: error Error: stop; ok
+writable aborted, no sink abort: error Error: halt; ok
+writable controller error: error Error: werr; failed Error: werr
+writable start rejects: error Error: no wstart; failed Error: no wstart
+writable aborted by signal: error AbortError: The operation was aborted
+promises.finished writable: closed
