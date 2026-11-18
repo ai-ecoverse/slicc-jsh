@@ -265,9 +265,6 @@ export function transformEsm(source, filename, sourceUrl = filename) {
   }
 
   // --- Pass 2: rewrite import.meta and import() anywhere (AST-accurate) ---
-  // undici's dispatcher symbols in a copy a bundle carries (cf's dist) are
-  // remapped too, as the CJS loader remaps them (isolateUndiciDispatcher),
-  // so the copy doesn't share Node's Agent.
   const remapsUndici = body.includes('undici.globalDispatcher.');
   walk(ast, (node) => {
     if (remapsUndici && node.type === 'CallExpression') {
@@ -364,7 +361,6 @@ export function transformEsm(source, filename, sourceUrl = filename) {
   };
 }
 
-/** `undici.globalDispatcher.1` or `.2` when `node` is `Symbol.for` of it, in any quotes. */
 function undiciDispatcherKey(node) {
   const { callee, arguments: args } = node;
   if (

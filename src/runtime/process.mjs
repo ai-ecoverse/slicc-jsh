@@ -872,6 +872,13 @@ const Process = { process: class extends EventEmitter {
     throw this._exitError;
   }
 
+  _endUncaught(code) {
+    if (this._didExit) return;
+    this._recordExit(code);
+    this._silenced = true;
+    this._exitError = new NodeExitError(code);
+  }
+
   /**
    * process.reallyExit (the binding under process.exit): the program ends
    * now with `code`, no 'exit' event.

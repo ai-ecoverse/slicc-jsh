@@ -315,7 +315,9 @@ export async function runNode(ctx, options = {}) {
    */
   let finishExitRef;
   let nextTickRef;
+  let diedUncaught = false;
   const dieUncaught = (report, status = 1) => {
+    diedUncaught = true;
     const code = finishExitRef(status);
     try {
       report();
@@ -324,6 +326,7 @@ export async function runNode(ctx, options = {}) {
     }
     // The program is over: no tick queued before or during this runs (Node).
     nextTickRef?.stop();
+    processRef?._endUncaught(code);
     return code;
   };
 
@@ -482,7 +485,6 @@ export async function runNode(ctx, options = {}) {
     getHttp: () => process._builtin('http'),
     getZlib: () => process._builtin('zlib'),
   });
-  // Node's end hooks on the program's web streams, which stream.finished() reads.
   const restoreStreamEnds = installWebStreamEnds();
   const restorePlatform = trackPlatformAsync(handles);
   const restoreBuiltins = hideNewerBuiltins();
@@ -594,6 +596,13 @@ export async function runNode(ctx, options = {}) {
       timers.clearPending();
     },
   });
+  let settled = null;
+  const settleEnd = () => {
+    timers.stop();
+    nextTick.stop();
+    settled ??= new Promise((resolve) => platformSetTimeout(resolve, 0));
+    return settled;
+  };
   onIo(() => {
     timers.endPhase();
     nextTick.ticking = false;
@@ -1252,11 +1261,13 @@ export async function runNode(ctx, options = {}) {
       flushTicks();
     }
 
-    if (exitStatus !== undefined) return finishExit(exitStatus);
+    if (exitStatus !== undefined && diedUncaught) return finishExit(exitStatus);
     if (getDidExit()) {
       return getExitCode();
     }
-    return finishExit(getExitCode());
+    finishExit(exitStatus ?? getExitCode());
+    await settleEnd();
+    return finishExit(exitStatus ?? getExitCode());
   } catch (err) {
     if (isExitError(err)) {
       timers.clearPending();
@@ -1271,14 +1282,7 @@ export async function runNode(ctx, options = {}) {
     });
   } finally {
     timers.clearPending();
-    // The program is over, as after process.exit(): nothing new may be
-    // scheduled for it. What its code already queued still runs, before its
-    // globals go back to the platform's: an idle socket whose peer closed in
-    // the turns above emits 'error', and undici's listener queues a microtask
-    // that calls clearImmediate.
-    timers.stop();
-    nextTick.stop();
-    await new Promise((resolve) => platformSetTimeout(resolve, 0));
+    await settleEnd();
     // Drop hooks only after the turn above; worker teardown follows. After
     // process.exit() keep them: whatever the unwinding code still rejects
     // must not reach the kernel's default report.

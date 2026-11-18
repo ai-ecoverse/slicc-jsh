@@ -8,13 +8,9 @@ import { createResolver, isBuiltinName } from './resolve.mjs';
 
 const decoder = new TextDecoder();
 
-/**
- * undici's dispatcher symbols, remapped so they do not share Node's Agent:
- * npm undici's and any copy a bundle carries (cf's dist, wrangler's), in
- * whichever quotes the bundler wrote them.
- */
 const UNDICI_DISPATCHER = /Symbol\.for\((['"`])undici\.globalDispatcher\.([12])\1\)/g;
 
+/** npm undici's dispatcher symbols, remapped so they do not share Node's Agent. */
 export function isolateUndiciDispatcher(source) {
   if (!source.includes('undici.globalDispatcher.')) return source;
   return source.replace(UNDICI_DISPATCHER, 'Symbol.for($1slicc-jsh.undici.globalDispatcher.$2$1)');

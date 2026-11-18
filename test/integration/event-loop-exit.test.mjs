@@ -78,6 +78,22 @@ describe('event loop and exit (kernel)', () => {
     }
   });
 
+  it("after an uncaught error, a microtask an 'exit' listener queues changes nothing: status 1, no output of its (Node)", async () => {
+    const body =
+      "process.on('exit', (c) => { console.log('exit', c); queueMicrotask(() => { console.log('microtask must not run'); process.exitCode = 5; process.exit(9); }); });\n";
+    for (const [name, src] of [
+      ['exit-mt-fatal.js', body + "throw new Error('fatal');\n"],
+      ['exit-mt-fatal-esm.mjs', body + "await null;\nthrow new Error('fatal');\n"],
+      ['exit-mt-fatal-timer.js', body + "setTimeout(() => { throw new Error('fatal'); }, 5);\n"],
+    ]) {
+      const r = await run(name, src, ['node', name]);
+      assert.equal(r.status, 1, name);
+      assert.equal(r.stdout, 'exit 1\n', name);
+      assert.match(r.stderr, /Error: fatal/, name);
+      assert.doesNotMatch(r.stderr, /microtask|exitCode|^node:/m, name);
+    }
+  });
+
   it('a floating fetch keeps the program alive until its body is read', async () => {
     const r = await run(
       'floating-fetch.jsh',
