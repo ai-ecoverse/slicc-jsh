@@ -1,0 +1,5 @@
+{
+  "description": "Microtasks an 'exit' listener queues still run, with the program's globals (setImmediate, clearImmediate, the timers) and its stdout, as in Node 22; ticks, immediates and timers queued then never run. jsh restored its globals to the platform's while such microtasks were still queued, so they saw setImmediate undefined and wrote nowhere; the same window failed undici-bundled-dispatcher in CI, where an idle socket's late 'error' listener queues a microtask that calls clearImmediate",
+  "argv": ["script.mjs"],
+  "shim": true
+}

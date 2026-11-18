@@ -1271,6 +1271,14 @@ export async function runNode(ctx, options = {}) {
     });
   } finally {
     timers.clearPending();
+    // The program is over, as after process.exit(): nothing new may be
+    // scheduled for it. What its code already queued still runs, before its
+    // globals go back to the platform's: an idle socket whose peer closed in
+    // the turns above emits 'error', and undici's listener queues a microtask
+    // that calls clearImmediate.
+    timers.stop();
+    nextTick.stop();
+    await new Promise((resolve) => platformSetTimeout(resolve, 0));
     // Drop hooks only after the turn above; worker teardown follows. After
     // process.exit() keep them: whatever the unwinding code still rejects
     // must not reach the kernel's default report.

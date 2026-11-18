@@ -1,0 +1,5 @@
+main
+exit 0
+microtask after exit function function function function
+then after exit function
+nested microtask after exit
