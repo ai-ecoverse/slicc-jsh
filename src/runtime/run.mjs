@@ -36,6 +36,7 @@ import { setupChildChannel } from './builtins/ipc-channel.mjs';
 import { shadowsGlobal, undoHostArrow } from './builtins/vm.mjs';
 import { createRemotePorts, mailboxSerdes } from './web/remote-ports.mjs';
 import { createMessageEvent, installMessageEvent } from './web/message-event.mjs';
+import { installWebStreamEnds } from './web/stream-ends.mjs';
 
 // The platform's MessageChannel, before the program's own (jsh's) takes the
 // global: worker_threads' ports between threads are its ports.
@@ -314,7 +315,9 @@ export async function runNode(ctx, options = {}) {
    */
   let finishExitRef;
   let nextTickRef;
+  let diedUncaught = false;
   const dieUncaught = (report, status = 1) => {
+    diedUncaught = true;
     const code = finishExitRef(status);
     try {
       report();
@@ -323,6 +326,7 @@ export async function runNode(ctx, options = {}) {
     }
     // The program is over: no tick queued before or during this runs (Node).
     nextTickRef?.stop();
+    processRef?._endUncaught(code);
     return code;
   };
 
@@ -481,6 +485,7 @@ export async function runNode(ctx, options = {}) {
     getHttp: () => process._builtin('http'),
     getZlib: () => process._builtin('zlib'),
   });
+  const restoreStreamEnds = installWebStreamEnds();
   const restorePlatform = trackPlatformAsync(handles);
   const restoreBuiltins = hideNewerBuiltins();
   const WebSocket = createWebSocket(ctx, { handles, trackPromise, getNet: () => process._builtin('net') });
@@ -591,6 +596,13 @@ export async function runNode(ctx, options = {}) {
       timers.clearPending();
     },
   });
+  let settled = null;
+  const settleEnd = () => {
+    timers.stop();
+    nextTick.stop();
+    settled ??= new Promise((resolve) => platformSetTimeout(resolve, 0));
+    return settled;
+  };
   onIo(() => {
     timers.endPhase();
     nextTick.ticking = false;
@@ -1249,11 +1261,13 @@ export async function runNode(ctx, options = {}) {
       flushTicks();
     }
 
-    if (exitStatus !== undefined) return finishExit(exitStatus);
+    if (exitStatus !== undefined && diedUncaught) return finishExit(exitStatus);
     if (getDidExit()) {
       return getExitCode();
     }
-    return finishExit(getExitCode());
+    finishExit(exitStatus ?? getExitCode());
+    await settleEnd();
+    return finishExit(exitStatus ?? getExitCode());
   } catch (err) {
     if (isExitError(err)) {
       timers.clearPending();
@@ -1268,6 +1282,7 @@ export async function runNode(ctx, options = {}) {
     });
   } finally {
     timers.clearPending();
+    await settleEnd();
     // Drop hooks only after the turn above; worker teardown follows. After
     // process.exit() keep them: whatever the unwinding code still rejects
     // must not reach the kernel's default report.
@@ -1282,6 +1297,7 @@ export async function runNode(ctx, options = {}) {
       restoreGlobals();
       restoreFunctionImport();
       restorePlatform();
+      restoreStreamEnds();
       restoreBuiltins();
       restoreMessageEvent();
       removeJshHandoff();

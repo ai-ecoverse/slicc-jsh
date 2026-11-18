@@ -8,14 +8,12 @@ import { createResolver, isBuiltinName } from './resolve.mjs';
 
 const decoder = new TextDecoder();
 
+const UNDICI_DISPATCHER = /Symbol\.for\((['"`])undici\.globalDispatcher\.([12])\1\)/g;
+
 /** npm undici's dispatcher symbols, remapped so they do not share Node's Agent. */
-export function isolateUndiciDispatcher(source, filename) {
-  if (!/\/node_modules\/undici\//.test(filename)) return source;
-  return source
-    .replaceAll("Symbol.for('undici.globalDispatcher.2')", "Symbol.for('slicc-jsh.undici.globalDispatcher.2')")
-    .replaceAll('Symbol.for("undici.globalDispatcher.2")', 'Symbol.for("slicc-jsh.undici.globalDispatcher.2")')
-    .replaceAll("Symbol.for('undici.globalDispatcher.1')", "Symbol.for('slicc-jsh.undici.globalDispatcher.1')")
-    .replaceAll('Symbol.for("undici.globalDispatcher.1")', 'Symbol.for("slicc-jsh.undici.globalDispatcher.1")');
+export function isolateUndiciDispatcher(source) {
+  if (!source.includes('undici.globalDispatcher.')) return source;
+  return source.replace(UNDICI_DISPATCHER, 'Symbol.for($1slicc-jsh.undici.globalDispatcher.$2$1)');
 }
 
 /**
@@ -306,7 +304,7 @@ export function createCjs({
       throw err;
     }
 
-    const stripped = stripHashbang(isolateUndiciDispatcher(source, filename));
+    const stripped = stripHashbang(isolateUndiciDispatcher(source));
     // Route import() through the ESM loader with this file as referrer (not data:).
     const {
       code: body,

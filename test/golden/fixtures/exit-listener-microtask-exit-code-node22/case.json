@@ -1,0 +1,5 @@
+{
+  "description": "A microtask an 'exit' listener queues sets process.exitCode, and that is the program's status (5), as in Node 22 (jsh ended 0, before that 1, as it read the status before the microtask ran)",
+  "argv": ["script.mjs"],
+  "shim": true
+}

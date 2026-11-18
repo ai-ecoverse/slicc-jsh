@@ -294,6 +294,7 @@ function addNodeExtras(perf) {
     const idle = Math.abs(base.idle - util1.idle);
     return { idle, active, utilization: active + idle === 0 ? 0 : active / (active + idle) };
   });
+  define('markResourceTiming', function markResourceTiming() {});
 }
 
 export function createPerfHooks(timers = globalThis) {

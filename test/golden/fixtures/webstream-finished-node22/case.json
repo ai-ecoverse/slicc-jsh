@@ -1,0 +1,5 @@
+{
+  "description": "stream.finished(), stream/promises.finished() and addAbortSignal() on the program's ReadableStream and WritableStream: each end (closed, canceled, errored by the controller, by a rejected start, pull, write or close, by an abort, by a strategy's size) is reported as Node 22 reports it, and the constructors keep their identity (#1270: a browser's streams lack Node's isClosedPromise, so finished() threw, and undici's fetch, which calls it on every body, left a body unfinished: cf auth login exited 13). The platform's own streams (Response bodies) are still instanceof ReadableStream. browser-webstream-finished.test.mjs runs this in the browser kernel",
+  "argv": ["script.mjs"],
+  "shim": true
+}
