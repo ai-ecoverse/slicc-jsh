@@ -90,6 +90,19 @@ function watched(fn, init, fail, args) {
   return result;
 }
 
+/**
+ * Node's hooks on `stream`. Node's are enumerable, but its streams' custom
+ * inspect hides them; the platform's inspect would print them, so they're not.
+ */
+function hook(stream, closed, errorFunction) {
+  for (const [key, value] of [
+    [kIsClosedPromise, closed],
+    [kControllerErrorFunction, errorFunction],
+  ]) {
+    Object.defineProperty(stream, key, { value, writable: true, configurable: true, enumerable: false });
+  }
+}
+
 /** The platform's constructor behind one that shares its prototype and statics. */
 function wrapConstructor(Platform, name, construct) {
   const Wrapper = {
@@ -176,8 +189,7 @@ export function installWebStreamEnds(scope = globalThis) {
     if (cb.type !== undefined) tracked.type = cb.type;
     if (cb.autoAllocateChunkSize !== undefined) tracked.autoAllocateChunkSize = cb.autoAllocateChunkSize;
     const stream = Reflect.construct(PlatformReadable, [tracked, ...args.slice(1)], newTarget);
-    stream[kIsClosedPromise] = end.hooks;
-    stream[kControllerErrorFunction] = errorFunction;
+    hook(stream, end.hooks, errorFunction);
     return stream;
   });
 
@@ -214,8 +226,7 @@ export function installWebStreamEnds(scope = globalThis) {
     if (cb.write) tracked.write = (chunk, controller) => watched(cb.write, sink, end.fail, [chunk, controller]);
     if (cb.type !== undefined) tracked.type = cb.type;
     const stream = Reflect.construct(PlatformWritable, [tracked, ...args.slice(1)], newTarget);
-    stream[kIsClosedPromise] = end.hooks;
-    stream[kControllerErrorFunction] = errorFunction;
+    hook(stream, end.hooks, errorFunction);
     return stream;
   });
 

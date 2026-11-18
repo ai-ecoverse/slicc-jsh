@@ -61,6 +61,15 @@ test('web streams end as Node 22 says, and a bundled undici gets bodies that com
     stderr: readFileSync(join(golden, 'stderr.bin'), 'utf8'),
   });
 
+  // The hooks aren't enumerable: the platform's inspect prints the streams
+  // as before jsh gave them hooks (Node's custom inspect hides its own).
+  await k.write('/home/t/inspect.mjs', 'console.log(new ReadableStream());\nconsole.log([new WritableStream()]);\n');
+  assert.deepEqual(await k.run(['node', 'inspect.mjs'], { cwd: '/home/t' }), {
+    status: 0,
+    stdout: 'ReadableStream {}\n[ WritableStream {} ]\n',
+    stderr: '',
+  });
+
   await k.write('/home/t/undici.mjs', undici);
   await k.write(
     '/home/t/late-bodies.mjs',
