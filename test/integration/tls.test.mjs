@@ -17,9 +17,9 @@ describe('tls (kernel)', () => {
   });
   after(() => jsh?.close());
 
-  it('the real ws@8.22.2 loads, and its server and client echo over http upgrade', async () => {
+  it('the real ws@8.23.0 loads, and its server and client echo over http upgrade', async () => {
     const version = JSON.parse(readFileSync(join(root, 'node_modules/ws/package.json'), 'utf8')).version;
-    assert.equal(version, '8.22.2');
+    assert.equal(version, '8.23.0');
     for (const [path, data] of devPackageFiles('ws')) {
       await jsh.kernel.writeFile(`/os${path}`, data);
     }
